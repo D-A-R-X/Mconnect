@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="14dp"
+    android:background="@drawable/bg_home_group_card"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="14dp">
+
+    <FrameLayout
+        android:id="@+id/iconGroupTile"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:background="@drawable/bg_home_group_icon_pink">
+
+        <ImageView
+            android:id="@+id/ivGroupIcon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_calendar_days"
+            app:tint="#F36BB1" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvGroupTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Attendance"
+            android:textColor="#24252C"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvGroupSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="00:00 today"
+            android:textColor="#6E6A7C"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="42dp"
+        android:layout_height="42dp">
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/progressGroup"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:indicatorColor="#F36BB1"
+            app:indicatorInset="0dp"
+            app:indicatorSize="42dp"
+            app:indicatorTrackGapSize="0dp"
+            app:trackThickness="5dp"
+            app:trackColor="#FFF2F5FA" />
+
+        <TextView
+            android:id="@+id/tvGroupPercent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="70%"
+            android:textColor="#24252C"
+            android:textSize="11sp" />
+    </FrameLayout>
+</LinearLayout>

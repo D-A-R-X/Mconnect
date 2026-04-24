@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Chat"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="22sp" />
+
+        <FrameLayout
+            android:id="@+id/btnNewChat"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:includeFontPadding="false"
+                android:fontFamily="@font/inter_bold"
+                android:text="+"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="22sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/etSearchChats"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="20dp"
+        android:background="@drawable/bg_search_bar"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Search chats"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:paddingHorizontal="16dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textCursorDrawable="@null"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginHorizontal="20dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/chipAll"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_chip_active"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:paddingHorizontal="14dp"
+            android:text="All"
+            android:textColor="?attr/colorForegroundInverse"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/chipDirect"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_chip_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:paddingHorizontal="14dp"
+            android:text="Direct"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/chipChannels"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_chip_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:paddingHorizontal="14dp"
+            android:text="Channels"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:paddingBottom="20dp">
+
+            <LinearLayout
+                android:id="@+id/chatList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp" />
+
+            <LinearLayout
+                android:id="@+id/emptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingHorizontal="28dp"
+                android:paddingTop="88dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/bg_chat_empty_avatar"
+                    android:gravity="center"
+                    android:text="C"
+                    android:textColor="?attr/colorAccentPrimary"
+                    android:textSize="24sp" />
+
+                <TextView
+                    android:id="@+id/tvEmptyState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="No chats yet"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvEmptyStateSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center"
+                    android:text="Start a new conversation or join a channel to begin."
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </FrameLayout>
+    </ScrollView>
+</LinearLayout>

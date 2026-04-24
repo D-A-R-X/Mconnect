@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="24dp"
+    android:background="?attr/colorSurfacePrimary">
+
+    <ImageView
+        android:id="@+id/iconLocation"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/ic_tab_home"
+        android:layout_marginTop="48dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:tint="?attr/colorAccentPrimary" />
+
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Location Tracking"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:gravity="center"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/iconLocation"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/descriptionText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="M-Connect needs to track your location during work hours for field operations management.\n\n• GPS location, movement type, and battery level will be collected\n• Tracking is active only during your scheduled work hours\n• Your manager and operations admin can view your location\n• Raw data is retained for 90 days, summaries for 1 year\n• You can view your own travel history in the app"
+        android:textSize="15sp"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:lineSpacingExtra="4dp"
+        android:layout_marginTop="20dp"
+        app:layout_constraintTop_toBottomOf="@id/titleText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnConsent"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="I Understand and Agree"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:layout_marginBottom="16dp"
+        app:cornerRadius="12dp"
+        app:layout_constraintBottom_toTopOf="@id/btnDecline"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDecline"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="Decline"
+        android:textAllCaps="false"
+        android:textSize="14sp"
+        android:layout_marginBottom="24dp"
+        app:cornerRadius="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

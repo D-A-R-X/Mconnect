@@ -1,0 +1,45 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Light theme (default) -->
+    <style name="Theme.Mconnect" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <!-- Material color mapping -->
+        <item name="colorPrimary">@color/lt_accent_primary</item>
+        <item name="colorPrimaryVariant">@color/lt_accent_secondary</item>
+        <item name="colorOnPrimary">@color/lt_foreground_inverse</item>
+        <item name="colorSecondary">@color/lt_accent_secondary</item>
+        <item name="colorOnSecondary">@color/lt_foreground_inverse</item>
+        <item name="android:colorBackground">@color/lt_surface_primary</item>
+        <item name="colorSurface">@color/lt_surface_secondary</item>
+        <item name="colorOnSurface">@color/lt_foreground_primary</item>
+
+        <!-- System bars -->
+        <item name="android:statusBarColor">@color/lt_surface_primary</item>
+        <item name="android:navigationBarColor">@color/lt_surface_primary</item>
+        <item name="android:windowLightStatusBar">true</item>
+
+        <!-- Custom semantic attributes -->
+        <item name="colorAccentPrimary">@color/lt_accent_primary</item>
+        <item name="colorAccentPrimaryHover">@color/lt_accent_primary_hover</item>
+        <item name="colorAccentSecondary">@color/lt_accent_secondary</item>
+        <item name="colorSurfacePrimary">@color/lt_surface_primary</item>
+        <item name="colorSurfaceSecondary">@color/lt_surface_secondary</item>
+        <item name="colorSurfaceTertiary">@color/lt_surface_tertiary</item>
+        <item name="colorSurfaceInverse">@color/lt_surface_inverse</item>
+        <item name="colorForegroundPrimary">@color/lt_foreground_primary</item>
+        <item name="colorForegroundSecondary">@color/lt_foreground_secondary</item>
+        <item name="colorForegroundMuted">@color/lt_foreground_muted</item>
+        <item name="colorForegroundInverse">@color/lt_foreground_inverse</item>
+        <item name="colorBorder">@color/lt_border</item>
+        <item name="colorBorderLight">@color/lt_border_light</item>
+        <item name="colorError">@color/lt_error</item>
+        <item name="colorSuccess">@color/lt_success</item>
+        <item name="colorWarning">@color/lt_warning</item>
+        <item name="colorInfo">@color/lt_info</item>
+        <item name="colorAccentLight">@color/lt_accent_light</item>
+        <item name="colorSuccessLight">@color/lt_success_light</item>
+        <item name="colorWarningLight">@color/lt_warning_light</item>
+        <item name="colorErrorLight">@color/lt_error_light</item>
+        <item name="colorInfoLight">@color/lt_info_light</item>
+    </style>
+
+</resources>

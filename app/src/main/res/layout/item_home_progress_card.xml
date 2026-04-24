@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="202dp"
+    android:layout_height="116dp"
+    android:layout_marginEnd="16dp"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tvProgressBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_home_soft_pill"
+        android:fontFamily="@font/inter_medium"
+        android:paddingHorizontal="9dp"
+        android:paddingVertical="4dp"
+        android:text="Scheduled"
+        android:textColor="#6E6A7C"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/tvProgressTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="@font/inter_semibold"
+        android:maxLines="2"
+        android:text="Visit title"
+        android:textColor="#24252C"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/tvProgressSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_regular"
+        android:maxLines="1"
+        android:text="Support text"
+        android:textColor="#6E6A7C"
+        android:textSize="11sp" />
+
+    <ProgressBar
+        android:id="@+id/progressBarInline"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="14dp"
+        android:max="100"
+        android:progress="40"
+        android:progressTint="#0087FF"
+        android:progressBackgroundTint="#FFFFFFFF" />
+
+    <TextView
+        android:id="@+id/btnProgressAction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Start Trip"
+        android:textColor="#0087FF"
+        android:textSize="12sp" />
+</LinearLayout>

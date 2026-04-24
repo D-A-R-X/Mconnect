@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="OtpBox">
+        <item name="android:background">@drawable/bg_otp_box</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">number</item>
+        <item name="android:maxLength">1</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">@font/geist_mono_semibold</item>
+        <item name="android:textCursorDrawable">@null</item>
+        <item name="android:importantForAutofill">no</item>
+    </style>
+
+    <style name="OtpBoxAuth">
+        <item name="android:background">@drawable/bg_auth_otp_box</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">number</item>
+        <item name="android:maxLength">1</item>
+        <item name="android:textColor">#161B23</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:fontFamily">@font/inter_medium</item>
+        <item name="android:textCursorDrawable">@null</item>
+        <item name="android:importantForAutofill">no</item>
+    </style>
+</resources>

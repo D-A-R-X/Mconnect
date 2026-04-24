@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_arrow_left"
+            android:contentDescription="Back"
+            android:clickable="true"
+            android:focusable="true"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:fontFamily="@font/inter_bold"
+            android:text="Apply for Leave"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingBottom="24dp">
+
+            <!-- Leave type -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Leave Type"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/spinnerLeaveType"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/input_height"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="16dp" />
+
+            <!-- From date -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="From Date"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/etFromDate"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/input_height"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:clickable="true"
+                android:focusable="false"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select date"
+                android:paddingHorizontal="16dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textColorHint="?attr/colorForegroundMuted"
+                android:textSize="15sp" />
+
+            <!-- To date -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="To Date"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/etToDate"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/input_height"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:clickable="true"
+                android:focusable="false"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select date"
+                android:paddingHorizontal="16dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textColorHint="?attr/colorForegroundMuted"
+                android:textSize="15sp" />
+
+            <!-- Reason -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Reason"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/etReason"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="top|start"
+                android:hint="Enter reason for leave"
+                android:inputType="textMultiLine"
+                android:padding="16dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textColorHint="?attr/colorForegroundMuted"
+                android:textSize="15sp" />
+
+            <!-- Submit button -->
+            <FrameLayout
+                android:id="@+id/btnSubmit"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/button_height"
+                android:layout_marginTop="32dp"
+                android:background="@drawable/bg_button_primary"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/tvSubmit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Submit Leave Request"
+                    android:textColor="?attr/colorForegroundInverse"
+                    android:textSize="15sp" />
+
+                <ProgressBar
+                    android:id="@+id/progressSubmit"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:indeterminateTint="?attr/colorForegroundInverse"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

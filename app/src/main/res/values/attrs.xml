@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent -->
+    <attr name="colorAccentPrimary" format="color" />
+    <attr name="colorAccentPrimaryHover" format="color" />
+    <attr name="colorAccentSecondary" format="color" />
+
+    <!-- Surface -->
+    <attr name="colorSurfacePrimary" format="color" />
+    <attr name="colorSurfaceSecondary" format="color" />
+    <attr name="colorSurfaceTertiary" format="color" />
+    <attr name="colorSurfaceInverse" format="color" />
+
+    <!-- Foreground -->
+    <attr name="colorForegroundPrimary" format="color" />
+    <attr name="colorForegroundSecondary" format="color" />
+    <attr name="colorForegroundMuted" format="color" />
+    <attr name="colorForegroundInverse" format="color" />
+
+    <!-- Border -->
+    <attr name="colorBorder" format="color" />
+    <attr name="colorBorderLight" format="color" />
+
+    <!-- Status -->
+    <attr name="colorError" format="color" />
+    <attr name="colorSuccess" format="color" />
+    <attr name="colorWarning" format="color" />
+    <attr name="colorInfo" format="color" />
+
+    <!-- Light tints -->
+    <attr name="colorAccentLight" format="color" />
+    <attr name="colorSuccessLight" format="color" />
+    <attr name="colorWarningLight" format="color" />
+    <attr name="colorErrorLight" format="color" />
+    <attr name="colorInfoLight" format="color" />
+</resources>

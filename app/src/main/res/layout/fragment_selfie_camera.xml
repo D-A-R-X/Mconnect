@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <View
+        android:id="@+id/cameraPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_attendance_checker_placeholder" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="top"
+        android:background="#CC000000"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp">
+
+        <FrameLayout
+            android:id="@+id/btnBackCamera"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_attendance_camera_chip"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_arrow_left"
+                android:tint="#FFFFFF" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:text="Camera"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/btnCloseCamera"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_attendance_camera_chip"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="×"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="124dp"
+        android:layout_gravity="bottom"
+        android:background="#B2000000"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="24dp">
+
+        <TextView
+            android:id="@+id/btnZoom"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:background="@drawable/bg_attendance_camera_chip"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:text="2x"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <FrameLayout
+            android:id="@+id/btnCapture"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
+            android:layout_marginStart="72dp"
+            android:layout_marginEnd="72dp"
+            android:background="@drawable/bg_attendance_camera_capture_outer"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_attendance_camera_capture_inner" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/btnFlash"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:background="@drawable/bg_attendance_camera_flash"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="⚡"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+</FrameLayout>

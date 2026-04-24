@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Screen padding -->
+    <dimen name="screen_padding_horizontal">24dp</dimen>
+    <dimen name="screen_padding_top">40dp</dimen>
+    <dimen name="screen_padding_bottom">32dp</dimen>
+
+    <!-- Spacing -->
+    <dimen name="section_gap">32dp</dimen>
+    <dimen name="field_gap">8dp</dimen>
+    <dimen name="otp_gap">10dp</dimen>
+
+    <!-- Logo -->
+    <dimen name="logo_size">64dp</dimen>
+    <dimen name="logo_corner">16dp</dimen>
+
+    <!-- Input -->
+    <dimen name="input_height">52dp</dimen>
+    <dimen name="input_corner">12dp</dimen>
+    <dimen name="input_padding_horizontal">16dp</dimen>
+
+    <!-- Button -->
+    <dimen name="button_height">52dp</dimen>
+    <dimen name="button_corner">12dp</dimen>
+
+    <!-- OTP Box -->
+    <dimen name="otp_box_width">48dp</dimen>
+    <dimen name="otp_box_height">56dp</dimen>
+    <dimen name="otp_box_corner">12dp</dimen>
+
+    <!-- Icons -->
+    <dimen name="back_icon_size">24dp</dimen>
+    <dimen name="divider_height">24dp</dimen>
+</resources>

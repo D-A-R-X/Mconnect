@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Apply for Leave"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="18sp" />
+
+    <!-- Leave type spinner -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="Leave Type"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp" />
+
+    <Spinner
+        android:id="@+id/spinnerLeaveType"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="From Date"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etFromDate"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:focusable="false"
+        android:fontFamily="@font/inter_regular"
+        android:hint="YYYY-MM-DD"
+        android:paddingHorizontal="14dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="To Date"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etToDate"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:focusable="false"
+        android:fontFamily="@font/inter_regular"
+        android:hint="YYYY-MM-DD"
+        android:paddingHorizontal="14dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="Reason"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etReason"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="top"
+        android:hint="Enter reason..."
+        android:inputType="textMultiLine"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textSize="14sp" />
+</LinearLayout>

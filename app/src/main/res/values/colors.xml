@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================ -->
+    <!-- Raw color values — NEVER reference directly  -->
+    <!-- Use ?attr/colorXxx in layouts and drawables  -->
+    <!-- ============================================ -->
+
+    <!-- Dark theme palette -->
+    <color name="dk_accent_primary">#FFA855F7</color>
+    <color name="dk_accent_primary_hover">#FF9333EA</color>
+    <color name="dk_accent_secondary">#FF7C3AED</color>
+    <color name="dk_surface_primary">#FF0A0A0A</color>
+    <color name="dk_surface_secondary">#FF1A1A1A</color>
+    <color name="dk_surface_tertiary">#FF262626</color>
+    <color name="dk_surface_inverse">#FFFFFFFF</color>
+    <color name="dk_foreground_primary">#FFFFFFFF</color>
+    <color name="dk_foreground_secondary">#FFA1A1AA</color>
+    <color name="dk_foreground_muted">#FF71717A</color>
+    <color name="dk_foreground_inverse">#FF0A0A0A</color>
+    <color name="dk_border">#FF27272A</color>
+    <color name="dk_border_light">#FF3F3F46</color>
+    <color name="dk_error">#FFEF4444</color>
+    <color name="dk_success">#FF22C55E</color>
+    <color name="dk_warning">#FFF59E0B</color>
+    <color name="dk_info">#FF3B82F6</color>
+
+    <!-- Light theme palette -->
+    <color name="lt_accent_primary">#FF7C3AED</color>
+    <color name="lt_accent_primary_hover">#FF6D28D9</color>
+    <color name="lt_accent_secondary">#FFA855F7</color>
+    <color name="lt_surface_primary">#FFFFFFFF</color>
+    <color name="lt_surface_secondary">#FFF4F4F5</color>
+    <color name="lt_surface_tertiary">#FFE4E4E7</color>
+    <color name="lt_surface_inverse">#FF18181B</color>
+    <color name="lt_foreground_primary">#FF18181B</color>
+    <color name="lt_foreground_secondary">#FF52525B</color>
+    <color name="lt_foreground_muted">#FFA1A1AA</color>
+    <color name="lt_foreground_inverse">#FFFFFFFF</color>
+    <color name="lt_border">#FFE4E4E7</color>
+    <color name="lt_border_light">#FFF4F4F5</color>
+    <color name="lt_error">#FFDC2626</color>
+    <color name="lt_success">#FF16A34A</color>
+    <color name="lt_warning">#FFD97706</color>
+    <color name="lt_info">#FF2563EB</color>
+
+    <!-- Light theme - light status tints -->
+    <color name="lt_accent_light">#FFEDE9FE</color>
+    <color name="lt_success_light">#FFDCFCE7</color>
+    <color name="lt_warning_light">#FFFEF3C7</color>
+    <color name="lt_error_light">#FFFEE2E2</color>
+    <color name="lt_info_light">#FFDBEAFE</color>
+
+    <!-- Dark theme - light status tints -->
+    <color name="dk_accent_light">#FF2E1065</color>
+    <color name="dk_success_light">#FF052E16</color>
+    <color name="dk_warning_light">#FF451A03</color>
+    <color name="dk_error_light">#FF450A0A</color>
+    <color name="dk_info_light">#FF1E3A5F</color>
+</resources>

@@ -1,0 +1,45 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Dark theme -->
+    <style name="Theme.Mconnect" parent="Theme.MaterialComponents.NoActionBar">
+        <!-- Material color mapping -->
+        <item name="colorPrimary">@color/dk_accent_primary</item>
+        <item name="colorPrimaryVariant">@color/dk_accent_secondary</item>
+        <item name="colorOnPrimary">@color/dk_foreground_inverse</item>
+        <item name="colorSecondary">@color/dk_accent_secondary</item>
+        <item name="colorOnSecondary">@color/dk_foreground_inverse</item>
+        <item name="android:colorBackground">@color/dk_surface_primary</item>
+        <item name="colorSurface">@color/dk_surface_secondary</item>
+        <item name="colorOnSurface">@color/dk_foreground_primary</item>
+
+        <!-- System bars -->
+        <item name="android:statusBarColor">@color/dk_surface_primary</item>
+        <item name="android:navigationBarColor">@color/dk_surface_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Custom semantic attributes -->
+        <item name="colorAccentPrimary">@color/dk_accent_primary</item>
+        <item name="colorAccentPrimaryHover">@color/dk_accent_primary_hover</item>
+        <item name="colorAccentSecondary">@color/dk_accent_secondary</item>
+        <item name="colorSurfacePrimary">@color/dk_surface_primary</item>
+        <item name="colorSurfaceSecondary">@color/dk_surface_secondary</item>
+        <item name="colorSurfaceTertiary">@color/dk_surface_tertiary</item>
+        <item name="colorSurfaceInverse">@color/dk_surface_inverse</item>
+        <item name="colorForegroundPrimary">@color/dk_foreground_primary</item>
+        <item name="colorForegroundSecondary">@color/dk_foreground_secondary</item>
+        <item name="colorForegroundMuted">@color/dk_foreground_muted</item>
+        <item name="colorForegroundInverse">@color/dk_foreground_inverse</item>
+        <item name="colorBorder">@color/dk_border</item>
+        <item name="colorBorderLight">@color/dk_border_light</item>
+        <item name="colorError">@color/dk_error</item>
+        <item name="colorSuccess">@color/dk_success</item>
+        <item name="colorWarning">@color/dk_warning</item>
+        <item name="colorInfo">@color/dk_info</item>
+        <item name="colorAccentLight">@color/dk_accent_light</item>
+        <item name="colorSuccessLight">@color/dk_success_light</item>
+        <item name="colorWarningLight">@color/dk_warning_light</item>
+        <item name="colorErrorLight">@color/dk_error_light</item>
+        <item name="colorInfoLight">@color/dk_info_light</item>
+    </style>
+
+</resources>
