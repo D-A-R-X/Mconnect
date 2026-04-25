@@ -10,7 +10,8 @@ import com.manjugroups.m_connect.notifications.PushTokenManager
 class MconnectApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        // Force a single visual mode for now: app always runs in light mode.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         PushTokenManager.ensureFirebaseInitialized(this)
         createNotificationChannel()
     }

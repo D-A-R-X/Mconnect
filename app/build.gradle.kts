@@ -8,7 +8,22 @@ fun envOrDefault(name: String, defaultValue: String): String = System.getenv(nam
 fun ensureTrailingSlash(url: String): String = if (url.endsWith("/")) url else "$url/"
 fun gradleProp(name: String): String = (project.findProperty(name) as String?) ?: ""
 
-val googleMapsApiKey = envOrDefault("GOOGLE_MAPS_ANDROID_KEY", gradleProp("GOOGLE_MAPS_ANDROID_KEY"))
+val googleMapsApiKey = envOrDefault(
+    "GOOGLE_MAPS_ANDROID_KEY",
+    envOrDefault(
+        "CONVEX_GOOGLE_MAPS_ANDROID_KEY",
+        envOrDefault(
+            "GOOGLE_MAPS_API_KEY",
+            envOrDefault(
+                "NEXT_PUBLIC_GOOGLE_MAPS_WEB_KEY",
+                envOrDefault(
+                    "NEXT_PUBLIC_GOOGLE_MAPS_ANDROID_KEY",
+                    gradleProp("GOOGLE_MAPS_ANDROID_KEY")
+                )
+            )
+        )
+    )
+)
 val defaultBaseUrl = ensureTrailingSlash(
     envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://opulent-cricket-895.convex.site/")
 )

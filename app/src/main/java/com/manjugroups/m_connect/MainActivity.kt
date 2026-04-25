@@ -36,7 +36,7 @@ import com.manjugroups.m_connect.ui.home.HomeFragment
 import com.manjugroups.m_connect.ui.hr.HrDashboardFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
-import com.manjugroups.m_connect.ui.profile.ProfileFragment
+import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -45,13 +45,13 @@ class MainActivity : AppCompatActivity() {
         const val TAB_HOME = 0
         const val TAB_HR = 1
         const val TAB_CHAT = 2
-        const val TAB_PROFILE = 3
+        const val TAB_LIBRARY = 3
 
         private const val KEY_CURRENT_TAB = "current_tab"
         private const val TAG_HOME = "root_tab_home"
         private const val TAG_HR = "root_tab_hr"
         private const val TAG_CHAT = "root_tab_chat"
-        private const val TAG_PROFILE = "root_tab_profile"
+        private const val TAG_LIBRARY = "root_tab_library"
     }
 
     private lateinit var session: SessionManager
@@ -64,7 +64,8 @@ class MainActivity : AppCompatActivity() {
         val icon: ImageView,
         val indicator: View,
         val text: TextView,
-        val iconRes: Int
+        val activeIconRes: Int,
+        val inactiveIconRes: Int
     )
     private lateinit var tabs: List<TabConfig>
     private lateinit var tabBarContainer: FrameLayout
@@ -112,13 +113,15 @@ class MainActivity : AppCompatActivity() {
                 findViewById(R.id.tabHomeIcon),
                 findViewById(R.id.tabHomeIndicator),
                 findViewById(R.id.tabHomeText),
-                R.drawable.ic_tab_home_pencil
+                R.drawable.ic_tab_home_pencil,
+                R.drawable.ic_tab_home
             ),
             TabConfig(
                 findViewById(R.id.tabHr),
                 findViewById(R.id.tabHrIcon),
                 findViewById(R.id.tabHrIndicator),
                 findViewById(R.id.tabHrText),
+                R.drawable.ic_tab_calendar_pencil,
                 R.drawable.ic_tab_calendar_pencil
             ),
             TabConfig(
@@ -126,19 +129,21 @@ class MainActivity : AppCompatActivity() {
                 findViewById(R.id.tabChatIcon),
                 findViewById(R.id.tabChatIndicator),
                 findViewById(R.id.tabChatText),
-                R.drawable.ic_tab_note_pencil
+                R.drawable.ic_home_messages_exact,
+                R.drawable.ic_tab_chat
             ),
             TabConfig(
                 findViewById(R.id.tabProfile),
                 findViewById(R.id.tabProfileIcon),
                 findViewById(R.id.tabProfileIndicator),
                 findViewById(R.id.tabProfileText),
-                R.drawable.ic_tab_profile
+                R.drawable.ic_tab_apps_bnydh,
+                R.drawable.ic_tab_apps_bnydh
             )
         )
 
-        // Set icons
-        tabs.forEach { it.icon.setImageResource(it.iconRes) }
+        // Initialize all tabs with inactive icon variant.
+        tabs.forEach { it.icon.setImageResource(it.inactiveIconRes) }
 
         // Tab click listeners
         tabs.forEachIndexed { index, config ->
@@ -211,8 +216,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
-            TAB_HR -> setTopBarAppearance(Color.parseColor("#7155FF"), false)
-            TAB_PROFILE -> setTopBarAppearance(Color.parseColor("#7155FF"), false)
+            TAB_HR -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
+            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
             else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
         }
     }
@@ -224,6 +229,9 @@ class MainActivity : AppCompatActivity() {
         tabs.forEachIndexed { i, config ->
             val isActive = i == index
             config.tab.background = null
+            config.icon.setImageResource(
+                if (isActive) config.activeIconRes else config.inactiveIconRes
+            )
             config.icon.imageTintList = ColorStateList.valueOf(iconColor)
             config.icon.alpha = if (isActive) 1f else mutedAlpha
             config.indicator.visibility = if (isActive) View.VISIBLE else View.INVISIBLE
@@ -235,7 +243,7 @@ class MainActivity : AppCompatActivity() {
         TAB_HOME -> HomeFragment()
         TAB_HR -> HrDashboardFragment()
         TAB_CHAT -> ChatListFragment()
-        TAB_PROFILE -> ProfileFragment()
+        TAB_LIBRARY -> AppLibraryFragment()
         else -> HomeFragment()
     }
 
@@ -243,14 +251,14 @@ class MainActivity : AppCompatActivity() {
         TAB_HOME -> TAG_HOME
         TAB_HR -> TAG_HR
         TAB_CHAT -> TAG_CHAT
-        TAB_PROFILE -> TAG_PROFILE
+        TAB_LIBRARY -> TAG_LIBRARY
         else -> TAG_HOME
     }
 
-    private fun rootTabTags(): List<String> = listOf(TAG_HOME, TAG_HR, TAG_CHAT, TAG_PROFILE)
+    private fun rootTabTags(): List<String> = listOf(TAG_HOME, TAG_HR, TAG_CHAT, TAG_LIBRARY)
 
     private fun normalizeTab(index: Int): Int = when (index) {
-        TAB_HOME, TAB_HR, TAB_CHAT, TAB_PROFILE -> index
+        TAB_HOME, TAB_HR, TAB_CHAT, TAB_LIBRARY -> index
         else -> TAB_HOME
     }
 

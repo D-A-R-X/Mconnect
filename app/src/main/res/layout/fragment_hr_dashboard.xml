@@ -63,6 +63,7 @@
             android:paddingHorizontal="12dp">
 
             <LinearLayout
+                android:id="@+id/cardAttendanceSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_attendance_card"
@@ -209,6 +210,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/cardHistory1"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -232,6 +234,7 @@
                         android:tint="#7A5AF8" />
 
                     <TextView
+                        android:id="@+id/tvHistoryDate1"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
@@ -252,7 +255,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="0.9"
                         android:orientation="vertical">
 
                         <TextView
@@ -277,7 +280,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="1.1"
                         android:orientation="vertical">
 
                         <TextView
@@ -293,15 +296,19 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
-                            android:text="09:00 AM  — 05:00 PM"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="13sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/cardHistory2"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -325,6 +332,7 @@
                         android:tint="#7A5AF8" />
 
                     <TextView
+                        android:id="@+id/tvHistoryDate2"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
@@ -345,7 +353,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="0.9"
                         android:orientation="vertical">
 
                         <TextView
@@ -357,6 +365,7 @@
                             android:textSize="12sp" />
 
                         <TextView
+                            android:id="@+id/tvHistoryHours2"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
@@ -369,7 +378,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="1.1"
                         android:orientation="vertical">
 
                         <TextView
@@ -381,18 +390,23 @@
                             android:textSize="12sp" />
 
                         <TextView
+                            android:id="@+id/tvHistoryRange2"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
-                            android:text="09:00 AM  — 05:00 PM"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="13sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/cardHistory3"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -416,6 +430,7 @@
                         android:tint="#7A5AF8" />
 
                     <TextView
+                        android:id="@+id/tvHistoryDate3"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
@@ -436,7 +451,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="0.9"
                         android:orientation="vertical">
 
                         <TextView
@@ -448,6 +463,7 @@
                             android:textSize="12sp" />
 
                         <TextView
+                            android:id="@+id/tvHistoryHours3"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
@@ -460,7 +476,7 @@
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_weight="1.1"
                         android:orientation="vertical">
 
                         <TextView
@@ -472,14 +488,131 @@
                             android:textSize="12sp" />
 
                         <TextView
+                            android:id="@+id/tvHistoryRange3"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
-                            android:text="09:00 AM  — 05:00 PM"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="13sp" />
                     </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/attendanceSkeletonContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="140dp"
+                        android:layout_height="14dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="200dp"
+                        android:layout_height="10dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_attendance_skeleton_block" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_attendance_skeleton_block" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>

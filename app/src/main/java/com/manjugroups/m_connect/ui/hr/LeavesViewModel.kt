@@ -21,6 +21,7 @@ data class LeavesState(
     val myLeaves: List<LeaveData> = emptyList(),
     val pendingApprovals: List<LeaveData> = emptyList(),
     val leaveTypes: List<String> = listOf("casual", "sick", "earned"),
+    val isLoading: Boolean = false,
     val isApplying: Boolean = false
 )
 
@@ -34,45 +35,50 @@ class LeavesViewModel : ViewModel() {
     val event: SharedFlow<String> = _event.asSharedFlow()
 
     fun load(bearerToken: String, canApprove: Boolean) {
+        _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
-            val balance = try { api.getLeaveBalance(bearerToken) } catch (_: Exception) { null }
-            val history = try { api.getMyLeaves(bearerToken) } catch (_: Exception) { null }
-            val pending = if (canApprove) {
-                try { api.getPendingLeaveApprovals(bearerToken) } catch (_: Exception) { null }
-            } else {
-                null
+            try {
+                val balance = try { api.getLeaveBalance(bearerToken) } catch (_: Exception) { null }
+                val history = try { api.getMyLeaves(bearerToken) } catch (_: Exception) { null }
+                val pending = if (canApprove) {
+                    try { api.getPendingLeaveApprovals(bearerToken) } catch (_: Exception) { null }
+                } else {
+                    null
+                }
+                val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
+
+                val b = balance?.balance
+                val policy = policyResp?.policy?.leave
+
+                // Filter leave types — only show types with >0 allocation
+                val types = mutableListOf<String>()
+                if ((policy?.casualPerYear ?: 1) > 0) types.add("casual")
+                if ((policy?.sickPerYear ?: 1) > 0) types.add("sick")
+                if ((policy?.earnedPerYear ?: 1) > 0) types.add("earned")
+                // Add extra types from policy (unpaid, compensatory, etc)
+                policy?.types?.forEach { t ->
+                    if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
+                }
+
+                // Only show balance for types that have >0 allocation in policy
+                val casualAlloc = policy?.casualPerYear ?: 0
+                val sickAlloc = policy?.sickPerYear ?: 0
+                val earnedAlloc = policy?.earnedPerYear ?: 0
+
+                _uiState.value = _uiState.value.copy(
+                    casualLeft = if (casualAlloc > 0) (b?.casual ?: 0) - (b?.casualUsed ?: 0) else 0,
+                    sickLeft = if (sickAlloc > 0) (b?.sick ?: 0) - (b?.sickUsed ?: 0) else 0,
+                    earnedLeft = if (earnedAlloc > 0) (b?.earned ?: 0) - (b?.earnedUsed ?: 0) else 0,
+                    casualTotal = if (casualAlloc > 0) b?.casual ?: 0 else 0,
+                    sickTotal = if (sickAlloc > 0) b?.sick ?: 0 else 0,
+                    earnedTotal = if (earnedAlloc > 0) b?.earned ?: 0 else 0,
+                    myLeaves = history?.leaves ?: emptyList(),
+                    pendingApprovals = pending?.leaves ?: emptyList(),
+                    leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
-            val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
-
-            val b = balance?.balance
-            val policy = policyResp?.policy?.leave
-
-            // Filter leave types — only show types with >0 allocation
-            val types = mutableListOf<String>()
-            if ((policy?.casualPerYear ?: 1) > 0) types.add("casual")
-            if ((policy?.sickPerYear ?: 1) > 0) types.add("sick")
-            if ((policy?.earnedPerYear ?: 1) > 0) types.add("earned")
-            // Add extra types from policy (unpaid, compensatory, etc)
-            policy?.types?.forEach { t ->
-                if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
-            }
-
-            // Only show balance for types that have >0 allocation in policy
-            val casualAlloc = policy?.casualPerYear ?: 0
-            val sickAlloc = policy?.sickPerYear ?: 0
-            val earnedAlloc = policy?.earnedPerYear ?: 0
-
-            _uiState.value = _uiState.value.copy(
-                casualLeft = if (casualAlloc > 0) (b?.casual ?: 0) - (b?.casualUsed ?: 0) else 0,
-                sickLeft = if (sickAlloc > 0) (b?.sick ?: 0) - (b?.sickUsed ?: 0) else 0,
-                earnedLeft = if (earnedAlloc > 0) (b?.earned ?: 0) - (b?.earnedUsed ?: 0) else 0,
-                casualTotal = if (casualAlloc > 0) b?.casual ?: 0 else 0,
-                sickTotal = if (sickAlloc > 0) b?.sick ?: 0 else 0,
-                earnedTotal = if (earnedAlloc > 0) b?.earned ?: 0 else 0,
-                myLeaves = history?.leaves ?: emptyList(),
-                pendingApprovals = pending?.leaves ?: emptyList(),
-                leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")
-            )
         }
     }
 

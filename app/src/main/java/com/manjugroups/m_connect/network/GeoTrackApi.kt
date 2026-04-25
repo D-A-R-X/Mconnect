@@ -438,7 +438,17 @@ data class TodayVisit(
     val status: String,
     val placeName: String? = null,
     val placeAddress: String? = null,
-    val placeType: String? = null
+    val placeType: String? = null,
+    @com.google.gson.annotations.SerializedName(
+        value = "scheduledStartTime",
+        alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt"]
+    )
+    val scheduledStartTime: String? = null,
+    @com.google.gson.annotations.SerializedName(
+        value = "scheduledEndTime",
+        alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt"]
+    )
+    val scheduledEndTime: String? = null
 )
 
 data class TodayVisitsResponse(
