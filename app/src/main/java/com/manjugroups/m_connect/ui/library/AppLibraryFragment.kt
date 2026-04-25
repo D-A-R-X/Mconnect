@@ -37,7 +37,7 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
 
         binding.itemMarketingSiteVisits.setOnClickListener { comingSoon("Site Visits") }
-        binding.itemMarketingClientPlace.setOnClickListener { comingSoon("Client Place") }
+        binding.itemMarketingClientPlace.setOnClickListener { comingSoon("Places") }
         binding.itemMarketingDialer.setOnClickListener { comingSoon("Dialer") }
         binding.itemMarketingCall.setOnClickListener { comingSoon("Call") }
 
