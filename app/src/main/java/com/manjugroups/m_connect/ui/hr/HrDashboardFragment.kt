@@ -508,12 +508,22 @@ class HrDashboardFragment : Fragment() {
             binding.cardHistory3.visibility = View.GONE
             if (!wasShowingSkeleton) {
                 val pulse = AnimationUtils.loadAnimation(requireContext(), R.anim.skeleton_pulse)
-                binding.attendanceSkeletonContainer.startAnimation(pulse)
+                // Only fade the leaf block Views — keep white card backgrounds
+                // fully opaque so the blue header gradient doesn't bleed through.
+                forEachLeafBlock(binding.attendanceSkeletonContainer) { it.startAnimation(pulse) }
             }
         } else if (!showSkeleton && wasShowingSkeleton) {
-            binding.attendanceSkeletonContainer.clearAnimation()
+            forEachLeafBlock(binding.attendanceSkeletonContainer) { it.clearAnimation() }
             bindRecentHistoryCards(recentHistoryRecords)
         }
         wasShowingSkeleton = showSkeleton
+    }
+
+    private fun forEachLeafBlock(group: android.view.ViewGroup, action: (View) -> Unit) {
+        for (i in 0 until group.childCount) {
+            val child = group.getChildAt(i)
+            if (child is android.view.ViewGroup) forEachLeafBlock(child, action)
+            else action(child)
+        }
     }
 }

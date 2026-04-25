@@ -57,7 +57,11 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Defensive: restore tab bar in case a child fragment hid it.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
         loadUnreadNotifications()
+        // Refresh visit list — covers returning from TripNavigationFragment
+        viewModel.loadTodayVisits(session.bearerToken)
     }
 
     private fun setupHeader() {
@@ -98,7 +102,9 @@ class HomeFragment : Fragment() {
                             binding.homeLoading.visibility = View.GONE
                             binding.homeContent.visibility = View.VISIBLE
                             renderSummary(state)
-                            renderVisitCard(state)
+                            if (!viewModel.isVisitsLoading.value) {
+                                renderVisitCard(state)
+                            }
                         }
 
                         is HomeUiState.Error -> {
@@ -114,6 +120,50 @@ class HomeFragment : Fragment() {
                     }
                 }
             }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.isVisitsLoading.collect { loading ->
+                    setVisitSkeletonVisible(loading)
+                    if (!loading) {
+                        // Re-render once loading finishes so the real cards appear.
+                        (viewModel.uiState.value as? HomeUiState.Loaded)?.let(::renderVisitCard)
+                    }
+                }
+            }
+        }
+    }
+
+    private var visitSkeletonAnimating = false
+
+    private fun setVisitSkeletonVisible(visible: Boolean) {
+        val skeleton = binding.visitSkeletonContainer
+        if (visible) {
+            binding.visitListContent.visibility = View.GONE
+            binding.visitEmptyContent.visibility = View.GONE
+            skeleton.visibility = View.VISIBLE
+            if (!visitSkeletonAnimating) {
+                val pulse = android.view.animation.AnimationUtils.loadAnimation(
+                    requireContext(), R.anim.skeleton_pulse
+                )
+                forEachLeafBlock(skeleton) { it.startAnimation(pulse) }
+                visitSkeletonAnimating = true
+            }
+        } else {
+            if (visitSkeletonAnimating) {
+                forEachLeafBlock(skeleton) { it.clearAnimation() }
+                visitSkeletonAnimating = false
+            }
+            skeleton.visibility = View.GONE
+        }
+    }
+
+    private fun forEachLeafBlock(group: ViewGroup, action: (View) -> Unit) {
+        for (i in 0 until group.childCount) {
+            val child = group.getChildAt(i)
+            if (child is ViewGroup) forEachLeafBlock(child, action)
+            else action(child)
         }
     }
 
@@ -191,26 +241,51 @@ class HomeFragment : Fragment() {
         time.text = formatVisitTimeOrDate(visit)
 
         val status = visit.status.lowercase(Locale.getDefault())
+        val isCompleted = status in setOf("completed", "complete", "done", "closed")
+        val isInProgress = status in setOf(
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+        )
+
         when {
-            status in setOf("in-progress", "in_progress", "ongoing", "started", "active") -> {
-                action.text = "Complete"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
-                action.setOnClickListener {
-                    viewModel.completeVisit(requireContext(), session.bearerToken, visit.id, null, null)
-                }
+            isInProgress -> {
+                action.text = "In progress"
+                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_progress)
+                action.setTextColor(android.graphics.Color.parseColor("#B54708"))
             }
-            status in setOf("completed", "complete", "done", "closed") -> {
+            isCompleted -> {
                 action.text = "Completed"
                 action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
-                action.setOnClickListener(null)
+                action.setTextColor(android.graphics.Color.parseColor("#475467"))
             }
             else -> {
                 action.text = "Start Trip"
                 action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
-                action.setOnClickListener {
-                    viewModel.startVisit(requireContext(), session.bearerToken, visit.id, null, null)
-                }
+                action.setTextColor(android.graphics.Color.WHITE)
             }
+        }
+
+        // Card is the navigation target for both scheduled and in-progress
+        // visits. Pill is informational: clickable only for scheduled (where it
+        // reads "Start Trip"); a status badge otherwise.
+        val canOpen = !isCompleted
+        if (canOpen) {
+            val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+            itemView.isClickable = true
+            itemView.isFocusable = true
+            itemView.setOnClickListener(openNav)
+            if (isInProgress) {
+                action.isClickable = false
+                action.setOnClickListener(null)
+            } else {
+                action.isClickable = true
+                action.setOnClickListener(openNav)
+            }
+        } else {
+            itemView.isClickable = false
+            itemView.isFocusable = false
+            itemView.setOnClickListener(null)
+            action.isClickable = false
+            action.setOnClickListener(null)
         }
 
         applyItemSpacing(itemView, index, total)
@@ -227,19 +302,45 @@ class HomeFragment : Fragment() {
         time.text = "Available Today"
         action.text = "Start Trip"
         action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
-        action.setOnClickListener {
-            viewModel.startTripToPlace(
-                requireContext(),
-                session.bearerToken,
-                place.id,
-                place.name,
-                place.lat,
-                place.lng
-            )
-        }
+        action.setTextColor(android.graphics.Color.WHITE)
+
+        val openNav: (View) -> Unit = { openTripNavigationForPlace(place) }
+        itemView.isClickable = true
+        itemView.isFocusable = true
+        itemView.setOnClickListener(openNav)
+        action.isClickable = true
+        action.setOnClickListener(openNav)
 
         applyItemSpacing(itemView, index, total)
         return itemView
+    }
+
+    private fun openTripNavigationForVisit(visit: TodayVisit) {
+        val fragment = TripNavigationFragment.forVisit(
+            visitId = visit.id,
+            placeName = visit.placeName,
+            placeAddress = visit.placeAddress,
+            destLat = visit.placeLat,
+            destLng = visit.placeLng
+        )
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openTripNavigationForPlace(place: AssignedPlace) {
+        val fragment = TripNavigationFragment.forPlace(
+            placeId = place.id,
+            placeName = place.name,
+            placeAddress = place.address,
+            destLat = place.lat,
+            destLng = place.lng
+        )
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun applyItemSpacing(itemView: View, index: Int, total: Int) {
