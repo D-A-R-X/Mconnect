@@ -109,6 +109,12 @@ interface GeoTrackApi {
         @Body body: CompleteVisitRequest
     ): GeoTrackResponse
 
+    @POST("api/geotrack/route")
+    suspend fun getRoute(
+        @Header("Authorization") token: String,
+        @Body body: RouteRequest
+    ): RouteResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -415,6 +421,21 @@ data class CompleteVisitRequest(
     val remarks: String? = null
 )
 
+data class RouteRequest(
+    val originLat: Double,
+    val originLng: Double,
+    val destLat: Double,
+    val destLng: Double
+)
+
+data class RouteResponse(
+    val success: Boolean,
+    val encodedPolyline: String? = null,
+    val distanceMeters: Double? = null,
+    val durationSeconds: Double? = null,
+    val error: String? = null
+)
+
 data class AssignedPlace(
     @com.google.gson.annotations.SerializedName("_id") val id: String,
     val name: String,
@@ -438,7 +459,19 @@ data class TodayVisit(
     val status: String,
     val placeName: String? = null,
     val placeAddress: String? = null,
-    val placeType: String? = null
+    val placeType: String? = null,
+    val placeLat: Double? = null,
+    val placeLng: Double? = null,
+    @com.google.gson.annotations.SerializedName(
+        value = "scheduledStartTime",
+        alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt"]
+    )
+    val scheduledStartTime: String? = null,
+    @com.google.gson.annotations.SerializedName(
+        value = "scheduledEndTime",
+        alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt"]
+    )
+    val scheduledEndTime: String? = null
 )
 
 data class TodayVisitsResponse(

@@ -83,7 +83,12 @@ class AttendanceHistoryFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvAttDate).text = dateStr
 
             val mins = record.totalMinutes ?: 0
-            card.findViewById<TextView>(R.id.tvAttHours).text = "${mins / 60}h ${mins % 60}m"
+            val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
+            val lastOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+            val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
+            val outLabel = if (record.hasOpenSession == true) "--" else (lastOut?.let(::formatIsoTime) ?: "--")
+            val durationLabel = "${mins / 60}h ${mins % 60}m"
+            card.findViewById<TextView>(R.id.tvAttHours).text = "In $inLabel • Out $outLabel • $durationLabel"
 
             val badge = card.findViewById<TextView>(R.id.tvAttStatus)
             val status = record.approvedAttendance ?: record.status ?: "pending"
@@ -107,6 +112,32 @@ class AttendanceHistoryFragment : Fragment() {
 
             binding.attendanceList.addView(card)
         }
+    }
+
+    private fun formatIsoTime(iso: String): String {
+        val millis = parseIsoMillis(iso) ?: return "--"
+        return SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
+    }
+
+    private fun parseIsoMillis(iso: String): Long? {
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        )
+        for (pattern in patterns) {
+            try {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                return fmt.parse(iso)?.time
+            } catch (_: Exception) {
+                // try next format
+            }
+        }
+        return null
     }
 
     private fun resolveColor(attr: Int): Int {

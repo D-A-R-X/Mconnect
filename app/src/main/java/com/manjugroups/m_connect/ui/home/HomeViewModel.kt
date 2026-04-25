@@ -72,6 +72,9 @@ class HomeViewModel : ViewModel() {
     private val _punchEvent = MutableSharedFlow<PunchEvent>()
     val punchEvent: SharedFlow<PunchEvent> = _punchEvent.asSharedFlow()
 
+    private val _isVisitsLoading = MutableStateFlow(false)
+    val isVisitsLoading: StateFlow<Boolean> = _isVisitsLoading.asStateFlow()
+
     private var cachedState: HomeUiState.Loaded? = null
 
     fun loadHomeData(bearerToken: String) {
@@ -200,6 +203,7 @@ class HomeViewModel : ViewModel() {
     // ── Trip / Visit Selection ──
 
     private suspend fun loadTodayVisitsInternal(bearerToken: String) {
+        _isVisitsLoading.value = true
         try {
             // Load assigned places
             val placesResp = geoApi.getAssignedPlaces(bearerToken)
@@ -222,6 +226,8 @@ class HomeViewModel : ViewModel() {
             _uiState.value = updated
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load visits/places: ${e.message}", e)
+        } finally {
+            _isVisitsLoading.value = false
         }
     }
 

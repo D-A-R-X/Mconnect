@@ -1,16 +1,15 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
+import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.EditText
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -23,9 +22,14 @@ import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class LeavesFragment : Fragment() {
+
+    private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
+    private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
 
     private var _binding: FragmentLeavesBinding? = null
     private val binding get() = _binding!!
@@ -33,6 +37,8 @@ class LeavesFragment : Fragment() {
     private lateinit var session: SessionManager
     private var screenMode: String = MODE_HISTORY
     private var focusedEntityId: String? = null
+    private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -56,7 +62,11 @@ class LeavesFragment : Fragment() {
         focusedEntityId = arguments?.getString(ARG_ENTITY_ID)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         _binding = FragmentLeavesBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -66,45 +76,174 @@ class LeavesFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ApplyLeaveFragment())
                 .addToBackStack(null)
                 .commit()
         }
-        binding.tvYear.text = Calendar.getInstance().get(Calendar.YEAR).toString()
-        binding.tvHeaderTitle.text = if (screenMode == MODE_APPROVAL) "Leave Approvals" else "Leaves"
-        binding.tvSectionTitle.text = if (screenMode == MODE_APPROVAL) "Pending Approvals" else "Leave History"
+
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        binding.tvYear.text = "Period 1 Jan $year - 30 Dec $year"
+
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvHeaderTitle.text = "Leave Approvals"
+            binding.tvHeaderSubtitle.text = "In Review"
+            binding.tvSectionTitle.text = "Leave Approvals"
+            binding.tvSectionSubtitle.visibility = View.GONE
+            binding.filterRow.visibility = View.GONE
+        } else {
+            binding.tvHeaderTitle.text = "Leave Summary"
+            binding.tvHeaderSubtitle.text = "Submit Leave"
+            binding.tvSectionTitle.text = "Leave Submitted"
+            binding.tvSectionSubtitle.visibility = View.VISIBLE
+            binding.filterRow.visibility = View.VISIBLE
+            setupFilterTabs()
+            updateFilterUi()
+        }
 
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
     }
 
+    private fun setupFilterTabs() {
+        binding.tabReview.setOnClickListener {
+            historyFilter = HistoryFilter.REVIEW
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabApproved.setOnClickListener {
+            historyFilter = HistoryFilter.APPROVED
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabRejected.setOnClickListener {
+            historyFilter = HistoryFilter.REJECTED
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+    }
+
+    private fun updateFilterUi() {
+        styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
+        styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
+        styleFilterTab(binding.tabRejected, historyFilter == HistoryFilter.REJECTED)
+    }
+
+    private fun styleFilterTab(tab: TextView, selected: Boolean) {
+        if (selected) {
+            tab.setBackgroundResource(R.drawable.bg_leave_filter_active)
+            tab.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
+        } else {
+            tab.background = null
+            tab.setTextColor(resolveColor(R.attr.colorForegroundSecondary))
+        }
+    }
+
     private fun collectState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    val canApprove = session.hasPermission("leaves.approve")
-                    val displayLeaves = if (screenMode == MODE_APPROVAL) state.pendingApprovals else state.myLeaves
+                viewModel.uiState.collect { state -> renderState(state) }
+            }
+        }
+    }
 
-                    // Hide balance section if all allocations are 0
-                    val hasAllocation = state.casualTotal > 0 || state.sickTotal > 0 || state.earnedTotal > 0
-                    binding.balanceCard.visibility = if (screenMode == MODE_HISTORY && hasAllocation) View.VISIBLE else View.GONE
-                    binding.btnApplyLeave.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+    private fun renderState(state: LeavesState) {
+        val canApprove = session.hasPermission("leaves.approve")
+        val displayLeaves = if (screenMode == MODE_APPROVAL) {
+            state.pendingApprovals
+        } else {
+            filterHistoryLeaves(state.myLeaves)
+        }
+        val isLoading = state.isLoading
 
-                    if (hasAllocation) {
-                        binding.tvCasual.text = "${state.casualLeft}/${state.casualTotal}"
-                        binding.tvSick.text = "${state.sickLeft}/${state.sickTotal}"
-                        binding.tvEarned.text = "${state.earnedLeft}/${state.earnedTotal}"
-                    }
-                    binding.tvEmpty.text = if (screenMode == MODE_APPROVAL) {
-                        "No leave approvals pending"
-                    } else {
-                        "No leave records yet"
-                    }
-                    renderLeaves(displayLeaves, canApprove && screenMode == MODE_APPROVAL)
+        val hasAllocation = state.casualTotal > 0 || state.sickTotal > 0 || state.earnedTotal > 0
+        binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+        binding.btnApplyLeave.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+
+        if (hasAllocation) {
+            val available = state.casualLeft + state.sickLeft + state.earnedLeft
+            val used = (state.casualTotal - state.casualLeft).coerceAtLeast(0) +
+                (state.sickTotal - state.sickLeft).coerceAtLeast(0) +
+                (state.earnedTotal - state.earnedLeft).coerceAtLeast(0)
+            binding.tvLeaveAvailable.text = available.toString()
+            binding.tvLeaveUsed.text = used.toString()
+        } else {
+            binding.tvLeaveAvailable.text = "0"
+            binding.tvLeaveUsed.text = "0"
+        }
+
+        configureHistoryCard(displayLeaves.isEmpty() && !isLoading)
+
+        binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
+        binding.leaveList.visibility = if (isLoading) View.GONE else View.VISIBLE
+        if (isLoading) {
+            startSkeletonPulse()
+            binding.emptyState.visibility = View.GONE
+            return
+        }
+
+        stopSkeletonPulse()
+        setEmptyCopy(displayLeaves.isEmpty())
+        renderLeaves(displayLeaves, canApprove && screenMode == MODE_APPROVAL)
+    }
+
+    private fun configureHistoryCard(isEmpty: Boolean) {
+        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
+        binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
+        binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
+
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvSectionTitle.text = "Leave Approvals"
+            binding.tvSectionSubtitle.visibility = View.GONE
+        } else {
+            when (historyFilter) {
+                HistoryFilter.REVIEW -> {
+                    binding.tvSectionTitle.text = "Leave Submitted"
+                    binding.tvSectionSubtitle.text = "Leave information"
                 }
+                HistoryFilter.APPROVED -> {
+                    binding.tvSectionTitle.text = "Approved Leave"
+                    binding.tvSectionSubtitle.text = "Approved leave information"
+                }
+                HistoryFilter.REJECTED -> {
+                    binding.tvSectionTitle.text = "Rejected Leave"
+                    binding.tvSectionSubtitle.text = "Rejected leave information"
+                }
+            }
+        }
+
+        if (showHeader) {
+            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
+            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
+        } else {
+            binding.historyCard.background = null
+            binding.historyCard.setPadding(0, 0, 0, 0)
+        }
+    }
+
+    private fun setEmptyCopy(isEmpty: Boolean) {
+        if (!isEmpty) return
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvEmpty.text = "No Leave Approvals"
+            binding.tvEmptyHint.text = "There are no pending leave requests in review right now."
+            return
+        }
+        when (historyFilter) {
+            HistoryFilter.REVIEW -> {
+                binding.tvEmpty.text = "No Leave Submitted!"
+                binding.tvEmptyHint.text =
+                    "Ready to catch some fresh air? Click 'Submit Leave' and take that well-deserved break!"
+            }
+            HistoryFilter.APPROVED -> {
+                binding.tvEmpty.text = "No Approved Leave"
+                binding.tvEmptyHint.text = "Your approved leave requests will appear here."
+            }
+            HistoryFilter.REJECTED -> {
+                binding.tvEmpty.text = "No Rejected Leave"
+                binding.tvEmptyHint.text = "If any leave gets rejected, you'll find it listed here."
             }
         }
     }
@@ -119,36 +258,100 @@ class LeavesFragment : Fragment() {
         }
     }
 
+    private fun filterHistoryLeaves(leaves: List<LeaveData>): List<LeaveData> {
+        return leaves.filter { leave ->
+            when (historyFilter) {
+                HistoryFilter.REVIEW -> bucketForStatus(leave.status) == StatusBucket.REVIEW
+                HistoryFilter.APPROVED -> bucketForStatus(leave.status) == StatusBucket.APPROVED
+                HistoryFilter.REJECTED -> bucketForStatus(leave.status) == StatusBucket.REJECTED
+            }
+        }
+    }
+
     private fun renderLeaves(leaves: List<LeaveData>, approvalMode: Boolean) {
         binding.leaveList.removeAllViews()
-        binding.tvEmpty.visibility = if (leaves.isEmpty()) View.VISIBLE else View.GONE
+        binding.emptyState.visibility = if (leaves.isEmpty()) View.VISIBLE else View.GONE
 
-        val dateFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+        val headingFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
+        val rangeFmt = SimpleDateFormat("d MMM", Locale.getDefault())
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
         leaves.forEach { leave ->
-            val card = LayoutInflater.from(requireContext()).inflate(R.layout.item_leave, binding.leaveList, false)
+            val card = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_leave, binding.leaveList, false)
 
-            val from = leave.fromDate?.let { try { dateFmt.format(parseFmt.parse(it)!!) } catch (_: Exception) { it } } ?: ""
-            val to = leave.toDate?.let { try { dateFmt.format(parseFmt.parse(it)!!) } catch (_: Exception) { it } } ?: ""
+            val fromDate = parseServerDate(parseFmt, leave.fromDate)
+            val toDate = parseServerDate(parseFmt, leave.toDate)
 
-            val days = try {
-                val d1 = parseFmt.parse(leave.fromDate!!)!!
-                val d2 = parseFmt.parse(leave.toDate!!)!!
-                ((d2.time - d1.time) / (1000 * 60 * 60 * 24) + 1).toInt()
-            } catch (_: Exception) { 1 }
+            val headingDate = fromDate ?: toDate
+            val dateHeadingText = headingDate?.let { headingFmt.format(it) } ?: "Leave Date"
 
-            card.findViewById<TextView>(R.id.tvLeaveDate).text = if (from == to) from else "$from - $to"
-            card.findViewById<TextView>(R.id.tvLeaveType).text = "${leave.leaveType?.replaceFirstChar { it.uppercase() }} Leave · $days day${if (days > 1) "s" else ""}"
-            card.findViewById<TextView>(R.id.tvLeaveReason).text = leave.reason ?: ""
+            val rangeText = when {
+                fromDate != null && toDate != null && sameDate(fromDate, toDate) -> rangeFmt.format(fromDate)
+                fromDate != null && toDate != null -> "${rangeFmt.format(fromDate)} - ${rangeFmt.format(toDate)}"
+                leave.fromDate != null && leave.toDate != null && leave.fromDate == leave.toDate -> leave.fromDate
+                leave.fromDate != null && leave.toDate != null -> "${leave.fromDate} - ${leave.toDate}"
+                else -> leave.fromDate ?: leave.toDate ?: "-"
+            }
+
+            val days = if (fromDate != null && toDate != null) {
+                ((toDate.time - fromDate.time) / (1000 * 60 * 60 * 24) + 1).toInt().coerceAtLeast(1)
+            } else {
+                1
+            }
+
+            val bucket = bucketForStatus(leave.status)
+            val statusDate = parseCreationDate(leave.createdAt)
+            val statusDateText = statusDate?.let { statusFmt.format(it) }
+
+            val statusNote: String
+            val statusColor: Int
+            val statusIconRes: Int
+            when (bucket) {
+                StatusBucket.APPROVED -> {
+                    statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
+                    statusIconRes = R.drawable.ic_leave_status_approved
+                }
+                StatusBucket.REJECTED -> {
+                    statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
+                    statusIconRes = R.drawable.ic_leave_status_rejected
+                }
+                StatusBucket.REVIEW -> {
+                    statusNote = "In Review"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
+                    statusIconRes = R.drawable.ic_leave_status_review
+                }
+            }
+
+            card.findViewById<TextView>(R.id.tvLeaveDate).text = dateHeadingText
+            card.findViewById<TextView>(R.id.tvLeaveType).text = rangeText
+            card.findViewById<TextView>(R.id.tvLeaveStatus).text = "$days Day${if (days > 1) "s" else ""}"
+
+            val reasonText = card.findViewById<TextView>(R.id.tvLeaveReason)
+            reasonText.text = statusNote
+            reasonText.setTextColor(statusColor)
+            card.findViewById<android.widget.ImageView>(R.id.ivLeaveStatusIcon).setImageResource(statusIconRes)
+
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
+            val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
+            val staffRow = card.findViewById<View>(R.id.staffInfoRow)
+            val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
             val approveButton = card.findViewById<TextView>(R.id.btnApproveLeave)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectLeave)
 
+            val displayName = leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+            staffRow.visibility = View.VISIBLE
+            byLabel.visibility = View.VISIBLE
+            staffName.visibility = View.VISIBLE
+            staffName.text = displayName
+            staffInitial.text = initial
+
             if (approvalMode) {
-                staffName.visibility = View.VISIBLE
-                staffName.text = leave.staffName ?: ""
                 actionRow.visibility = View.VISIBLE
                 approveButton.setOnClickListener {
                     leave.id?.let { id ->
@@ -163,26 +366,7 @@ class LeavesFragment : Fragment() {
                     leave.id?.let { id -> showRejectDialog(id) }
                 }
             } else {
-                staffName.visibility = View.GONE
                 actionRow.visibility = View.GONE
-            }
-
-            val badge = card.findViewById<TextView>(R.id.tvLeaveStatus)
-            val status = leave.status ?: "pending"
-            badge.text = status.replaceFirstChar { it.uppercase() }
-            when (status) {
-                "approved" -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_success)
-                    badge.setTextColor(resolveColor(R.attr.colorSuccess))
-                }
-                "rejected" -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_error)
-                    badge.setTextColor(resolveColor(R.attr.colorError))
-                }
-                else -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_warning)
-                    badge.setTextColor(resolveColor(R.attr.colorWarning))
-                }
             }
 
             if (leave.id == focusedEntityId) {
@@ -190,6 +374,35 @@ class LeavesFragment : Fragment() {
             }
 
             binding.leaveList.addView(card)
+        }
+    }
+
+    private fun parseServerDate(parseFmt: SimpleDateFormat, raw: String?): Date? {
+        return raw?.let { runCatching { parseFmt.parse(it) }.getOrNull() }
+    }
+
+    private fun parseCreationDate(raw: Double?): Date? {
+        if (raw == null) return null
+        val millis = when {
+            raw > 1_000_000_000_000 -> raw.toLong()
+            raw > 1_000_000_000 -> (raw * 1000).toLong()
+            else -> raw.toLong()
+        }
+        return runCatching { Date(millis) }.getOrNull()
+    }
+
+    private fun sameDate(date1: Date, date2: Date): Boolean {
+        val c1 = Calendar.getInstance().apply { time = date1 }
+        val c2 = Calendar.getInstance().apply { time = date2 }
+        return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
+            c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun bucketForStatus(status: String?): StatusBucket {
+        return when (status?.trim()?.lowercase(Locale.getDefault())) {
+            "approved" -> StatusBucket.APPROVED
+            "rejected" -> StatusBucket.REJECTED
+            else -> StatusBucket.REVIEW
         }
     }
 
@@ -213,51 +426,36 @@ class LeavesFragment : Fragment() {
             .show()
     }
 
-    private fun showApplyDialog() {
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_apply_leave, null)
-        val spinner = dialogView.findViewById<Spinner>(R.id.spinnerLeaveType)
-        val etFrom = dialogView.findViewById<EditText>(R.id.etFromDate)
-        val etTo = dialogView.findViewById<EditText>(R.id.etToDate)
-        val etReason = dialogView.findViewById<EditText>(R.id.etReason)
-
-        val types = viewModel.uiState.value.leaveTypes
-        spinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, types.map { it.replaceFirstChar { c -> c.uppercase() } })
-
-        etFrom.setOnClickListener { showDatePicker(etFrom) }
-        etTo.setOnClickListener { showDatePicker(etTo) }
-
-        AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .setPositiveButton("Apply") { _, _ ->
-                val type = types.getOrElse(spinner.selectedItemPosition) { "casual" }
-                val from = etFrom.text.toString()
-                val to = etTo.text.toString()
-                val reason = etReason.text.toString()
-                if (from.isNotBlank() && to.isNotBlank() && reason.isNotBlank()) {
-                    viewModel.applyLeave(session.bearerToken, type, from, to, reason)
-                } else {
-                    Toast.makeText(requireContext(), "Fill all fields", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showDatePicker(target: EditText) {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(requireContext(), { _, y, m, d ->
-            target.setText(String.format("%04d-%02d-%02d", y, m + 1, d))
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-    }
-
     private fun resolveColor(attr: Int): Int {
         val tv = android.util.TypedValue()
         requireContext().theme.resolveAttribute(attr, tv, true)
         return tv.data
     }
 
+    private fun dp(value: Int): Int {
+        val density = resources.displayMetrics.density
+        return (value * density).toInt()
+    }
+
+    private fun startSkeletonPulse() {
+        if (skeletonAnimator?.isRunning == true) return
+        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
+            duration = 650L
+            repeatMode = ObjectAnimator.REVERSE
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
+    }
+
+    private fun stopSkeletonPulse() {
+        skeletonAnimator?.cancel()
+        skeletonAnimator = null
+        binding.skeletonContainer.alpha = 1f
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        stopSkeletonPulse()
         _binding = null
     }
 }

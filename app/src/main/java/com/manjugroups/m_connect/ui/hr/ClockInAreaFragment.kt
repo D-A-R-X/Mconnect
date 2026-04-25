@@ -1,19 +1,147 @@
 package com.manjugroups.m_connect.ui.hr
 
+import android.app.Activity
+import android.Manifest
+import android.content.ClipData
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Geocoder
+import android.location.Location
+import android.provider.MediaStore
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentClockInAreaBinding
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-class ClockInAreaFragment : Fragment() {
+class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
 
     private var _binding: FragmentClockInAreaBinding? = null
     private val binding get() = _binding!!
+    private lateinit var session: SessionManager
+    private var googleMap: GoogleMap? = null
+    private var pendingPunchMode: PunchMode? = null
+    private var pendingPunchImageFile: File? = null
+    private var pendingPunchImageUri: android.net.Uri? = null
+    private var isLaunchingCamera = false
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        if (!isAdded || _binding == null) return@registerForActivityResult
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineGranted || coarseGranted) {
+            updateUserLocationOnMap()
+        } else {
+            binding.tvProfileLatLng.text = "Location permission not granted"
+            Toast.makeText(requireContext(), "Location permission is needed to show your map position.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val capturePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        if (!isAdded || _binding == null) return@registerForActivityResult
+        val cameraGranted = permissions[Manifest.permission.CAMERA] == true
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (cameraGranted && (fineGranted || coarseGranted)) {
+            launchSystemCamera()
+        } else {
+            isLaunchingCamera = false
+            Toast.makeText(
+                requireContext(),
+                "Camera and GPS permissions are required for punch.",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private val captureSelfieLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (!isAdded || _binding == null) return@registerForActivityResult
+        val imageUri = pendingPunchImageUri
+        if (imageUri != null) {
+            runCatching {
+                requireContext().revokeUriPermission(
+                    imageUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+
+        val mode = pendingPunchMode
+        val imageFile = pendingPunchImageFile
+        if (mode == null || imageFile == null) {
+            isLaunchingCamera = false
+            return@registerForActivityResult
+        }
+
+        val success = result.resultCode == Activity.RESULT_OK
+        if (!success) {
+            isLaunchingCamera = false
+            Toast.makeText(requireContext(), "Selfie capture cancelled.", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
+        if (!imageFile.exists()) {
+            isLaunchingCamera = false
+            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val location = fetchLocationOrNull()
+            if (location == null) {
+                isLaunchingCamera = false
+                Toast.makeText(
+                    requireContext(),
+                    "Unable to fetch GPS location. Please try again in open sky.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return@launch
+            }
+            val address = resolveAddress(location)
+            isLaunchingCamera = false
+            navigateToPunchDetail(
+                mode = mode,
+                photoPath = imageFile.absolutePath,
+                latitude = location.latitude,
+                longitude = location.longitude,
+                address = address,
+            )
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -26,27 +154,239 @@ class ClockInAreaFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
+
+        val extraBottomSpacingPx = (8 * resources.displayMetrics.density).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
+            val bottomInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+            root.updatePadding(bottom = bottomInset + extraBottomSpacingPx)
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
+        renderProfileInfo()
+
+        binding.mapViewClockIn.onCreate(savedInstanceState)
+        binding.mapViewClockIn.getMapAsync(this)
 
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
 
         binding.btnSelfieClockIn.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, SelfieCameraFragment())
-                .addToBackStack(null)
-                .commit()
+            beginPunchCapture(PunchMode.PUNCH_IN)
         }
     }
 
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
-        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
+        (activity as? MainActivity)?.setTopBarAppearance(Color.TRANSPARENT, true)
+        _binding?.mapViewClockIn?.onResume()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        _binding?.mapViewClockIn?.onStart()
+    }
+
+    override fun onPause() {
+        _binding?.mapViewClockIn?.onPause()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        _binding?.mapViewClockIn?.onStop()
+        super.onStop()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        _binding?.mapViewClockIn?.onLowMemory()
     }
 
     override fun onDestroyView() {
+        _binding?.mapViewClockIn?.onDestroy()
+        googleMap = null
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onMapReady(map: GoogleMap) {
+        googleMap = map.apply {
+            uiSettings.isMapToolbarEnabled = false
+            uiSettings.isCompassEnabled = true
+            uiSettings.isZoomControlsEnabled = false
+        }
+        updateUserLocationOnMap()
+    }
+
+    private fun renderProfileInfo() {
+        val rawName = (session.userName ?: "User").ifBlank { "User" }
+        val normalized = rawName
+            .lowercase()
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { segment -> segment.replaceFirstChar { it.titlecase() } }
+        binding.tvProfileName.text = normalized
+        binding.tvProfileDate.text = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(Date())
+        binding.tvProfileLatLng.text = "Fetching current location..."
+    }
+
+    private fun updateUserLocationOnMap() {
+        if (!hasLocationPermission()) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+            return
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val location = fetchLocationOrNull()
+            if (location == null) {
+                binding.tvProfileLatLng.text = "Unable to fetch current GPS location"
+                return@launch
+            }
+            val lat = location.latitude
+            val lng = location.longitude
+            binding.tvProfileLatLng.text = String.format(Locale.US, "Lat %.6f Long %.6f", lat, lng)
+
+            val map = googleMap ?: return@launch
+            val point = LatLng(lat, lng)
+            map.clear()
+            map.addMarker(
+                MarkerOptions()
+                    .position(point)
+                    .title("You are here"),
+            )
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 16f))
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        return fineGranted || coarseGranted
+    }
+
+    private fun hasPunchPermissions(): Boolean {
+        val cameraGranted = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+        return cameraGranted && hasLocationPermission()
+    }
+
+    private fun beginPunchCapture(mode: PunchMode) {
+        if (isLaunchingCamera) return
+        pendingPunchMode = mode
+        if (hasPunchPermissions()) {
+            launchSystemCamera()
+            return
+        }
+        isLaunchingCamera = true
+        capturePermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
+        )
+    }
+
+    private fun launchSystemCamera() {
+        val imageFile = createPunchPhotoFile()
+        if (imageFile == null) {
+            isLaunchingCamera = false
+            Toast.makeText(requireContext(), "Unable to create selfie file.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingPunchImageFile = imageFile
+        val imageUri = FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            imageFile,
+        )
+        pendingPunchImageUri = imageUri
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            clipData = ClipData.newUri(
+                requireContext().contentResolver,
+                "PunchSelfie",
+                imageUri,
+            )
+        }
+        try {
+            isLaunchingCamera = true
+            captureSelfieLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            isLaunchingCamera = false
+            Toast.makeText(requireContext(), "No camera app available.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun createPunchPhotoFile(): File? {
+        return try {
+            val dir = File(requireContext().cacheDir, "punch_photos")
+            if (!dir.exists()) dir.mkdirs()
+            File.createTempFile("punch_selfie_", ".jpg", dir)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun resolveAddress(location: Location): String? {
+        return try {
+            if (!Geocoder.isPresent()) return null
+            val geocoder = Geocoder(requireContext(), Locale.getDefault())
+            val results = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+            results?.firstOrNull()?.getAddressLine(0)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun navigateToPunchDetail(
+        mode: PunchMode,
+        photoPath: String,
+        latitude: Double,
+        longitude: Double,
+        address: String?,
+    ) {
+        if (!isAdded || parentFragmentManager.isStateSaved) return
+        parentFragmentManager.beginTransaction()
+            .replace(
+                R.id.fragmentContainer,
+                SelfieClockInDetailFragment.newInstance(
+                    mode = mode.name,
+                    photoPath = photoPath,
+                    latitude = latitude,
+                    longitude = longitude,
+                    address = address,
+                ),
+            )
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private suspend fun fetchLocationOrNull(): Location? {
+        return try {
+            val fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())
+            val token = CancellationTokenSource().token
+            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+                ?: fusedClient.lastLocation.await()
+        } catch (_: Exception) {
+            null
+        }
     }
 }

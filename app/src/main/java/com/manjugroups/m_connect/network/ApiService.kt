@@ -383,7 +383,11 @@ data class AttendanceRecord(
     val date: String?,
     val status: String?,
     val totalMinutes: Int?,
-    val approvedAttendance: String?
+    val approvedAttendance: String?,
+    val punchInTime: String? = null,
+    val punchOutTime: String? = null,
+    val hasOpenSession: Boolean? = null,
+    val sessions: List<SessionData>? = emptyList(),
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -399,7 +403,16 @@ data class SessionData(
     val source: String?,
     val totalMinutes: Int?
 )
-data class DaySessionsResponse(val success: Boolean, val sessions: List<SessionData>?, val totalHours: Double?)
+data class DaySessionsResponse(
+    val success: Boolean,
+    val sessions: List<SessionData>? = emptyList(),
+    val totalHours: Double? = null,
+    val cumulativeMinutes: Int? = null,
+    val sessionCount: Int? = null,
+    val hasOpenSession: Boolean? = null,
+    val firstPunchIn: String? = null,
+    val lastPunchOut: String? = null,
+)
 
 // Punch models
 data class PunchRequest(

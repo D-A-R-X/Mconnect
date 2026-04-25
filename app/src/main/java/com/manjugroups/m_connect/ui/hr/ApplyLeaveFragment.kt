@@ -1,22 +1,28 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.gson.Gson
+import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentApplyLeaveBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyLeaveRequest
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
-import java.util.*
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 class ApplyLeaveFragment : Fragment() {
 
@@ -31,9 +37,20 @@ class ApplyLeaveFragment : Fragment() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val gson = Gson()
-    private var leaveTypes = listOf("casual", "sick", "earned")
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    private var leaveTypes = listOf("casual", "sick", "earned")
+    private var selectedLeaveType: String = "casual"
+    private var selectedFromMillis: Long? = null
+    private var selectedToMillis: Long? = null
+
+    private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val labelDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         _binding = FragmentApplyLeaveBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -43,12 +60,12 @@ class ApplyLeaveFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
-        binding.etFromDate.setOnClickListener { showDatePicker(binding.etFromDate) }
-        binding.etToDate.setOnClickListener { showDatePicker(binding.etToDate) }
-
-        loadLeaveTypes()
-
+        binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
+        binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
         binding.btnSubmit.setOnClickListener { submitLeave() }
+
+        updateDurationLabel()
+        loadLeaveTypes()
     }
 
     private fun loadLeaveTypes() {
@@ -63,31 +80,38 @@ class ApplyLeaveFragment : Fragment() {
                 lp?.types?.forEach { t ->
                     if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
                 }
-                if (types.isNotEmpty()) leaveTypes = types
-            } catch (_: Exception) { }
+                if (types.isNotEmpty()) {
+                    leaveTypes = types
+                }
+            } catch (_: Exception) {
+                // Keep defaults when policy isn't available.
+            }
 
-            binding.spinnerLeaveType.adapter = ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_spinner_dropdown_item,
-                leaveTypes.map { it.replaceFirstChar { c -> c.uppercase() } }
-            )
+            selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
+            binding.tvLeaveCategoryValue.text = prettyType(selectedLeaveType)
         }
     }
 
     private fun submitLeave() {
-        val type = leaveTypes.getOrElse(binding.spinnerLeaveType.selectedItemPosition) { "casual" }
-        val from = binding.etFromDate.text.toString()
-        val to = binding.etToDate.text.toString()
+        val fromMillis = selectedFromMillis
+        val toMillis = selectedToMillis
         val reason = binding.etReason.text.toString().trim()
 
-        if (from.isBlank() || to.isBlank() || reason.isBlank()) {
-            Toast.makeText(requireContext(), "Fill all fields", Toast.LENGTH_SHORT).show()
+        if (fromMillis == null || toMillis == null) {
+            Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
             return
         }
-        if (to < from) {
+        if (toMillis < fromMillis) {
             Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
             return
         }
+        if (reason.isBlank()) {
+            Toast.makeText(requireContext(), "Enter leave description", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val from = apiDateFormat.format(fromMillis)
+        val to = apiDateFormat.format(toMillis)
 
         binding.tvSubmit.visibility = View.INVISIBLE
         binding.progressSubmit.visibility = View.VISIBLE
@@ -95,7 +119,10 @@ class ApplyLeaveFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.applyLeave(session.bearerToken, ApplyLeaveRequest(type, from, to, reason))
+                val resp = api.applyLeave(
+                    session.bearerToken,
+                    ApplyLeaveRequest(selectedLeaveType, from, to, reason)
+                )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Leave applied!", Toast.LENGTH_SHORT).show()
                     parentFragmentManager.popBackStack()
@@ -111,11 +138,211 @@ class ApplyLeaveFragment : Fragment() {
         }
     }
 
-    private fun showDatePicker(target: android.widget.EditText) {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(requireContext(), { _, y, m, d ->
-            target.setText(String.format("%04d-%02d-%02d", y, m + 1, d))
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    private fun showCategorySheet() {
+        val dialog = BottomSheetDialog(requireContext())
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_leave_category, null)
+        dialog.setContentView(content)
+
+        val container = content.findViewById<LinearLayout>(R.id.leaveCategoryContainer)
+        val closeButton = content.findViewById<TextView>(R.id.btnCloseSheet)
+        val submitButton = content.findViewById<TextView>(R.id.btnSubmitSheet)
+
+        var selectedIndex = leaveTypes.indexOf(selectedLeaveType).coerceAtLeast(0)
+
+        val rows = mutableListOf<View>()
+        leaveTypes.forEachIndexed { index, type ->
+            val row = layoutInflater.inflate(R.layout.item_leave_sheet_option, container, false)
+            row.findViewById<TextView>(R.id.tvOption).text = prettyType(type)
+            row.setOnClickListener {
+                selectedIndex = index
+                rows.forEachIndexed { rowIndex, view ->
+                    val icon = view.findViewById<ImageView>(R.id.ivOptionCheck)
+                    icon.setImageResource(
+                        if (rowIndex == selectedIndex) R.drawable.ic_leave_radio_selected
+                        else R.drawable.ic_leave_radio_unselected
+                    )
+                }
+            }
+            row.findViewById<ImageView>(R.id.ivOptionCheck).setImageResource(
+                if (index == selectedIndex) R.drawable.ic_leave_radio_selected
+                else R.drawable.ic_leave_radio_unselected
+            )
+            rows.add(row)
+            container.addView(row)
+        }
+
+        closeButton.setOnClickListener { dialog.dismiss() }
+        submitButton.setOnClickListener {
+            val selected = leaveTypes.getOrElse(selectedIndex) { leaveTypes.firstOrNull() ?: "casual" }
+            selectedLeaveType = selected
+            binding.tvLeaveCategoryValue.text = prettyType(selected)
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun showDurationSheet() {
+        val dialog = BottomSheetDialog(requireContext())
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_leave_duration, null)
+        dialog.setContentView(content)
+
+        val monthLabel = content.findViewById<TextView>(R.id.tvMonthLabel)
+        val prevMonth = content.findViewById<ImageView>(R.id.btnPrevMonth)
+        val nextMonth = content.findViewById<ImageView>(R.id.btnNextMonth)
+        val grid = content.findViewById<android.widget.GridLayout>(R.id.calendarGrid)
+        val submitButton = content.findViewById<TextView>(R.id.btnDurationSubmit)
+        val closeButton = content.findViewById<TextView>(R.id.btnDurationClose)
+
+        val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+        val dayFormat = SimpleDateFormat("d", Locale.getDefault())
+
+        val displayMonth = Calendar.getInstance().apply {
+            timeInMillis = selectedFromMillis ?: System.currentTimeMillis()
+            set(Calendar.DAY_OF_MONTH, 1)
+            clearTime()
+        }
+
+        var tempFrom = selectedFromMillis
+        var tempTo = selectedToMillis
+
+        lateinit var renderCalendar: () -> Unit
+
+        fun buildDayCell(dayMillis: Long?, inCurrentMonth: Boolean): TextView {
+            val cell = TextView(requireContext())
+            val col = grid.childCount % 7
+            val params = android.widget.GridLayout.LayoutParams(
+                android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f),
+                android.widget.GridLayout.spec(col, 1f)
+            )
+            params.width = 0
+            params.height = dp(30)
+            params.setMargins(dp(1), dp(1), dp(1), dp(1))
+            cell.layoutParams = params
+            cell.gravity = android.view.Gravity.CENTER
+            cell.textSize = 12f
+
+            if (dayMillis == null) {
+                cell.text = ""
+                return cell
+            }
+
+            val dayCalendar = Calendar.getInstance().apply { timeInMillis = dayMillis }
+            cell.text = dayFormat.format(dayCalendar.time)
+
+            val from = tempFrom
+            val to = tempTo
+            val isStart = from != null && sameDay(dayMillis, from)
+            val isEnd = to != null && sameDay(dayMillis, to)
+            val inRange = from != null && to != null && dayMillis in minOf(from, to)..maxOf(from, to)
+
+            when {
+                !inCurrentMonth -> {
+                    cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_muted))
+                }
+                isStart || isEnd -> {
+                    cell.setBackgroundResource(R.drawable.bg_leave_day_selected)
+                    cell.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
+                }
+                inRange -> {
+                    cell.setBackgroundResource(R.drawable.bg_leave_day_range)
+                    cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_primary))
+                }
+                else -> {
+                    cell.background = null
+                    cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_primary))
+                }
+            }
+
+            if (inCurrentMonth) {
+                cell.setOnClickListener {
+                    if (tempFrom == null || tempTo != null) {
+                        tempFrom = dayMillis
+                        tempTo = null
+                    } else if (dayMillis < tempFrom!!) {
+                        tempTo = tempFrom
+                        tempFrom = dayMillis
+                    } else {
+                        tempTo = dayMillis
+                    }
+                    renderCalendar()
+                }
+            }
+            return cell
+        }
+
+        renderCalendar = {
+            monthLabel.text = monthFormat.format(displayMonth.time)
+            grid.removeAllViews()
+
+            val firstVisible = displayMonth.clone() as Calendar
+            val monthStartWeekday = firstVisible.get(Calendar.DAY_OF_WEEK) - 1
+            firstVisible.add(Calendar.DAY_OF_MONTH, -monthStartWeekday)
+
+            repeat(42) { offset ->
+                val day = firstVisible.clone() as Calendar
+                day.add(Calendar.DAY_OF_MONTH, offset)
+                day.clearTime()
+                val inCurrent =
+                    day.get(Calendar.MONTH) == displayMonth.get(Calendar.MONTH) &&
+                        day.get(Calendar.YEAR) == displayMonth.get(Calendar.YEAR)
+                grid.addView(buildDayCell(day.timeInMillis, inCurrent))
+            }
+        }
+
+        prevMonth.setOnClickListener {
+            displayMonth.add(Calendar.MONTH, -1)
+            displayMonth.set(Calendar.DAY_OF_MONTH, 1)
+            displayMonth.clearTime()
+            renderCalendar()
+        }
+
+        nextMonth.setOnClickListener {
+            displayMonth.add(Calendar.MONTH, 1)
+            displayMonth.set(Calendar.DAY_OF_MONTH, 1)
+            displayMonth.clearTime()
+            renderCalendar()
+        }
+
+        submitButton.setOnClickListener {
+            val pickedFrom = tempFrom
+            if (pickedFrom == null) {
+                Toast.makeText(requireContext(), "Select leave start date", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val pickedTo = tempTo ?: pickedFrom
+            selectedFromMillis = minOf(pickedFrom, pickedTo)
+            selectedToMillis = maxOf(pickedFrom, pickedTo)
+            updateDurationLabel()
+            dialog.dismiss()
+        }
+
+        closeButton.setOnClickListener { dialog.dismiss() }
+
+        renderCalendar()
+        dialog.show()
+    }
+
+    private fun updateDurationLabel() {
+        val fromMillis = selectedFromMillis
+        val toMillis = selectedToMillis
+        binding.tvLeaveDurationValue.text = when {
+            fromMillis == null || toMillis == null -> "Select Duration"
+            sameDay(fromMillis, toMillis) -> labelDateFormat.format(fromMillis)
+            else -> "${labelDateFormat.format(fromMillis)} - ${labelDateFormat.format(toMillis)}"
+        }
+    }
+
+    private fun prettyType(value: String): String {
+        return value
+            .replace('_', ' ')
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { part ->
+                part.replaceFirstChar { char ->
+                    if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
+                }
+            }
     }
 
     private fun parseErrorMessage(error: Throwable): String {
@@ -131,6 +358,24 @@ class ApplyLeaveFragment : Fragment() {
             }
         }
         return error.message ?: "Network error"
+    }
+
+    private fun sameDay(firstMillis: Long, secondMillis: Long): Boolean {
+        val first = Calendar.getInstance().apply { timeInMillis = firstMillis }
+        val second = Calendar.getInstance().apply { timeInMillis = secondMillis }
+        return first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+            first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun Calendar.clearTime() {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     override fun onDestroyView() {

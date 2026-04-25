@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.profile
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -9,6 +10,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.BuildConfig
+import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.databinding.FragmentProfileBinding
@@ -107,6 +109,11 @@ class ProfileFragment : Fragment() {
             .takeIf { it.isNotBlank() }
             ?: "tonald"
         return "$slug@gmail.com"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
     }
 
     override fun onDestroyView() {
