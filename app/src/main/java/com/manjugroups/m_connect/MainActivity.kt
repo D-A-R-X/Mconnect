@@ -98,10 +98,15 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
                 height = sys.top
             }
-            fragmentContainer.updatePadding(top = 0)
+            // When the keyboard is open, lift the fragment content (and the
+            // chat input row anchored to its bottom) above the IME by adding
+            // bottom padding equal to the extra IME height beyond system nav.
+            val extraImeBottom = (ime.bottom - sys.bottom).coerceAtLeast(0)
+            fragmentContainer.updatePadding(top = 0, bottom = extraImeBottom)
             tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom)
             insets
         }

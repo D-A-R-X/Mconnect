@@ -8,9 +8,11 @@ import androidx.fragment.app.Fragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentAppLibraryBinding
 import com.manjugroups.m_connect.ui.PlaceholderFragment
+import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
+import com.manjugroups.m_connect.ui.tasks.TasksFragment
 
 class AppLibraryFragment : Fragment() {
 
@@ -32,6 +34,7 @@ class AppLibraryFragment : Fragment() {
     }
 
     private fun setupClickActions() {
+        binding.itemHrAttendance.setOnClickListener { openScreen(AttendanceHistoryFragment()) }
         binding.itemHrLeave.setOnClickListener { openScreen(LeavesFragment()) }
         binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
         binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
@@ -41,7 +44,7 @@ class AppLibraryFragment : Fragment() {
         binding.itemMarketingDialer.setOnClickListener { comingSoon("Dialer") }
         binding.itemMarketingCall.setOnClickListener { comingSoon("Call") }
 
-        binding.itemProjectTasks.setOnClickListener { comingSoon("Tasks") }
+        binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
 
         // Keep existing profile/settings capabilities reachable from the new Apps tab.
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }

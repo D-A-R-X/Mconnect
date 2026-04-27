@@ -13,7 +13,10 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -58,6 +61,14 @@ class OtpActivity : AppCompatActivity() {
         setContentView(binding.root)
         window.statusBarColor = Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+
+        // Edge-to-edge keyboard handling: lift the OTP sheet above the keyboard.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.updatePadding(bottom = maxOf(ime.bottom, sys.bottom))
+            insets
+        }
 
         session = SessionManager(this)
 

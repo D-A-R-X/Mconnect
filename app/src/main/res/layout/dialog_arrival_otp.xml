@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="18dp"
+    android:paddingBottom="24dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="#E4E7EC" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Enter Client OTP"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="20sp" />
+
+    <TextView
+        android:id="@+id/tvArrivalOtpSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Ask the client for the 4-digit OTP they received and enter it below to confirm your arrival."
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="22dp"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/arrivalOtpBox1"
+            android:layout_width="@dimen/otp_box_width"
+            android:layout_height="@dimen/otp_box_height"
+            android:background="@drawable/bg_auth_otp_box"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:inputType="number"
+            android:maxLength="1"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <EditText
+            android:id="@+id/arrivalOtpBox2"
+            android:layout_width="@dimen/otp_box_width"
+            android:layout_height="@dimen/otp_box_height"
+            android:layout_marginStart="@dimen/otp_gap"
+            android:background="@drawable/bg_auth_otp_box"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:inputType="number"
+            android:maxLength="1"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <EditText
+            android:id="@+id/arrivalOtpBox3"
+            android:layout_width="@dimen/otp_box_width"
+            android:layout_height="@dimen/otp_box_height"
+            android:layout_marginStart="@dimen/otp_gap"
+            android:background="@drawable/bg_auth_otp_box"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:inputType="number"
+            android:maxLength="1"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <EditText
+            android:id="@+id/arrivalOtpBox4"
+            android:layout_width="@dimen/otp_box_width"
+            android:layout_height="@dimen/otp_box_height"
+            android:layout_marginStart="@dimen/otp_gap"
+            android:background="@drawable/bg_auth_otp_box"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:inputType="number"
+            android:maxLength="1"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvArrivalOtpError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:textColor="?attr/colorError"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnArrivalOtpVerify"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/button_height"
+        android:layout_marginTop="22dp"
+        android:background="@drawable/bg_button_primary"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Verify &amp; Complete"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/btnArrivalOtpCancel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="Cancel"
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="13sp"
+        android:clickable="true"
+        android:focusable="true" />
+</LinearLayout>

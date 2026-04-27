@@ -1,13 +1,16 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,8 +19,11 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -37,14 +43,21 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.ArrivalOtpRequestBody
 import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.CreateVisitRequest
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,6 +81,7 @@ import kotlin.math.sqrt
 class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private val geoApi = GeoTrackApi.create()
+    private val api = ApiService.create()
     private lateinit var session: SessionManager
 
     private var mapView: MapView? = null
@@ -78,6 +92,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var destination: LatLng? = null
     private var visitId: String? = null
     private var visitStarted = false
+    private var arrivalInProgress = false
+    private var pendingArrivalPhoto: File? = null
+    private var pendingArrivalPhotoUri: Uri? = null
 
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
@@ -87,8 +104,49 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tvStatus: TextView? = null
     private var btnBack: ImageView? = null
     private var btnOpenMaps: Button? = null
-    private var btnArrived: Button? = null
+    private var swipeArrived: SwipeToConfirmButton? = null
     private var loadingOverlay: FrameLayout? = null
+
+    private val arrivalCameraLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val photoFile = pendingArrivalPhoto
+        val uri = pendingArrivalPhotoUri
+        if (uri != null) {
+            runCatching {
+                requireContext().revokeUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+        }
+        if (!isAdded) return@registerForActivityResult
+
+        val ok = result.resultCode == Activity.RESULT_OK && photoFile != null && photoFile.exists()
+        if (!ok) {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            Toast.makeText(requireContext(), "Photo capture cancelled", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        // Photo captured — upload then prompt for OTP.
+        uploadArrivalPhotoThenAskOtp(photoFile!!)
+    }
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) launchArrivalCamera()
+        else {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            Toast.makeText(
+                requireContext(),
+                "Camera permission required to mark arrival",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -110,7 +168,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tvStatus = view.findViewById(R.id.tvTripStatus)
         btnBack = view.findViewById(R.id.btnTripBack)
         btnOpenMaps = view.findViewById(R.id.btnOpenInMaps)
-        btnArrived = view.findViewById(R.id.btnMarkArrived)
+        swipeArrived = view.findViewById(R.id.swipeArrived)
         loadingOverlay = view.findViewById(R.id.tripLoadingOverlay)
         mapView = view.findViewById(R.id.mapViewTrip)
 
@@ -130,7 +188,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         btnBack?.setOnClickListener { parentFragmentManager.popBackStack() }
         btnOpenMaps?.setOnClickListener { openInGoogleMaps() }
-        btnArrived?.setOnClickListener { onArrivedTapped() }
+        swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
+
+        // Listen for OTP verify result from the bottom sheet.
+        setFragmentResultListener(ArrivalOtpBottomSheet.RESULT_KEY) { _, bundle ->
+            val otp = bundle.getString(ArrivalOtpBottomSheet.KEY_OTP).orEmpty()
+            onArrivalOtpVerified(otp)
+        }
 
         mapView?.onCreate(savedInstanceState)
         mapView?.getMapAsync(this)
@@ -197,6 +261,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val args = requireArguments()
         val placeId = args.getString(ARG_PLACE_ID)
         val existingVisit = visitId
+        val existingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
+        val alreadyInFlight = existingStatus in setOf(
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+        )
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -227,10 +295,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
                 visitId = effectiveVisitId
 
-                geoApi.startVisit(
-                    session.bearerToken,
-                    StartVisitRequest(effectiveVisitId, location?.latitude, location?.longitude)
-                )
+                if (!alreadyInFlight) {
+                    geoApi.startVisit(
+                        session.bearerToken,
+                        StartVisitRequest(effectiveVisitId, location?.latitude, location?.longitude)
+                    )
+                }
 
                 // Refresh tracking session + start GeoTrackService
                 val bootstrap = geoApi
@@ -241,9 +311,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 visitStarted = true
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
                 loadingOverlay?.visibility = View.GONE
-                tvStatus?.text = "On the way"
+                tvStatus?.text = if (alreadyInFlight) "In progress" else "On the way"
                 renderMapMarkersAndRoute()
-                Toast.makeText(requireContext(), "Trip started", Toast.LENGTH_SHORT).show()
+                if (!alreadyInFlight) {
+                    Toast.makeText(requireContext(), "Trip started", Toast.LENGTH_SHORT).show()
+                }
             } catch (e: Exception) {
                 failAndClose("Failed to start trip: ${e.message}")
             }
@@ -389,24 +461,166 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private fun onArrivedTapped() {
-        // TODO(step-3): replace with arrival OTP flow.
-        // For now: complete the visit as a placeholder so the existing UI works.
-        val id = visitId ?: run {
+    // ── Arrival flow: swipe → camera → upload → OTP → completeVisit ──────────
+
+    private fun onArrivalSwipeConfirmed() {
+        if (visitId == null) {
             Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
             return
         }
         if (!visitStarted) {
             Toast.makeText(requireContext(), "Trip is still starting", Toast.LENGTH_SHORT).show()
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
             return
         }
-        btnArrived?.isEnabled = false
+        if (arrivalInProgress) return
+        arrivalInProgress = true
+        swipeArrived?.lockAsBusy("Opening camera…")
+
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+        launchArrivalCamera()
+    }
+
+    private fun launchArrivalCamera() {
+        val photoFile = createArrivalPhotoFile()
+        if (photoFile == null) {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            Toast.makeText(requireContext(), "Unable to create photo file", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingArrivalPhoto = photoFile
+        val uri = FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            photoFile
+        )
+        pendingArrivalPhotoUri = uri
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            clipData = ClipData.newUri(
+                requireContext().contentResolver,
+                "ArrivalSelfie",
+                uri
+            )
+        }
+        try {
+            arrivalCameraLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            Toast.makeText(requireContext(), "No camera app available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun uploadArrivalPhotoThenAskOtp(photoFile: File) {
+        val id = visitId ?: run {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            return
+        }
+        swipeArrived?.lockAsBusy("Uploading photo…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val storageId = uploadArrivalPhoto(photoFile)
+            if (storageId == null) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                Toast.makeText(
+                    requireContext(),
+                    "Photo upload failed. Try again.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            pendingArrivalStorageId = storageId
+
+            // Use freshest GPS for geofence check on the server.
+            swipeArrived?.lockAsBusy("Sending OTP to client…")
+            val freshLocation = fetchCurrentLocation()
+            val effLat = freshLocation?.latitude ?: currentLocation?.latitude
+            val effLng = freshLocation?.longitude ?: currentLocation?.longitude
+            if (effLat == null || effLng == null) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                Toast.makeText(
+                    requireContext(),
+                    "Could not read your GPS. Try again in open sky.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
+            try {
+                val resp = geoApi.requestArrivalOtp(
+                    session.bearerToken,
+                    ArrivalOtpRequestBody(visitId = id, lat = effLat, lng = effLng)
+                )
+                if (!resp.success) {
+                    arrivalInProgress = false
+                    swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Failed to send OTP",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+                swipeArrived?.lockAsBusy("Enter OTP to confirm")
+                ArrivalOtpBottomSheet.newInstance(
+                    visitId = id,
+                    phoneMasked = resp.contactPhoneMasked,
+                    expiresInSeconds = resp.otpExpiresInSeconds ?: 600,
+                    resendCooldownSeconds = resp.resendCooldownSeconds ?: 60,
+                    lat = effLat,
+                    lng = effLng,
+                ).show(parentFragmentManager, "arrival_otp")
+            } catch (e: Exception) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                Toast.makeText(
+                    requireContext(),
+                    "Network error: ${e.message ?: "unknown"}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private suspend fun uploadArrivalPhoto(file: File): String? = withContext(Dispatchers.IO) {
+        try {
+            val body = file.asRequestBody("image/jpeg".toMediaType())
+            val resp = api.uploadStorageFile(session.bearerToken, body)
+            resp.storageId
+        } catch (e: Exception) {
+            android.util.Log.w("TripNav", "Arrival photo upload failed", e)
+            null
+        }
+    }
+
+    private fun onArrivalOtpVerified(otp: String) {
+        val id = visitId ?: return
+        val storageId = pendingArrivalStorageId
+        swipeArrived?.lockAsBusy("Completing visit…")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val loc = fetchCurrentLocation()
+                val remarks = buildString {
+                    append("Arrival verified")
+                    if (!storageId.isNullOrBlank()) append(" | photo:").append(storageId)
+                    if (otp.isNotBlank()) append(" | otp:").append(otp)
+                }
                 geoApi.completeVisit(
                     session.bearerToken,
-                    CompleteVisitRequest(id, loc?.latitude, loc?.longitude)
+                    CompleteVisitRequest(id, loc?.latitude, loc?.longitude, remarks)
                 )
                 val bootstrap = geoApi
                     .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
@@ -415,7 +629,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
                 parentFragmentManager.popBackStack()
             } catch (e: Exception) {
-                btnArrived?.isEnabled = true
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
                 Toast.makeText(
                     requireContext(),
                     "Failed to complete: ${e.message}",
@@ -424,6 +639,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
         }
     }
+
+    private fun createArrivalPhotoFile(): File? {
+        return try {
+            val dir = File(requireContext().cacheDir, "arrival_photos")
+            if (!dir.exists()) dir.mkdirs()
+            File.createTempFile("arrival_", ".jpg", dir)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private var pendingArrivalStorageId: String? = null
 
     private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?) {
         session.activeTrackingSessionId = bootstrap?.activeSession?.id
@@ -478,13 +705,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_PLACE_ADDRESS = "arg_place_address"
         private const val ARG_DEST_LAT = "arg_dest_lat"
         private const val ARG_DEST_LNG = "arg_dest_lng"
+        private const val ARG_STATUS = "arg_status"
 
         fun forVisit(
             visitId: String,
             placeName: String?,
             placeAddress: String?,
             destLat: Double?,
-            destLng: Double?
+            destLng: Double?,
+            status: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -492,6 +721,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 putString(ARG_PLACE_ADDRESS, placeAddress)
                 if (destLat != null) putDouble(ARG_DEST_LAT, destLat)
                 if (destLng != null) putDouble(ARG_DEST_LNG, destLng)
+                if (status != null) putString(ARG_STATUS, status)
             }
         }
 

@@ -1,233 +1,420 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurfacePrimary"
-    android:orientation="vertical">
+    android:background="?attr/colorSurfaceSecondary">
 
-    <!-- Header -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp">
-
-        <ImageView
-            android:id="@+id/btnBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_arrow_left"
-            android:contentDescription="Back"
-            android:clickable="true"
-            android:focusable="true"
-            app:tint="?attr/colorForegroundPrimary" />
-
-        <TextView
-            android:id="@+id/tvHeaderTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:fontFamily="@font/inter_bold"
-            android:text="Permissions"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="18sp" />
-    </LinearLayout>
-
-    <ScrollView
-        android:layout_width="match_parent"
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/contentScroll"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls"
+        app:layout_constraintBottom_toTopOf="@id/btnApplyPermission"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingBottom="24dp">
+            android:orientation="vertical">
 
-            <!-- Usage card -->
-            <LinearLayout
-                android:id="@+id/usageCard"
+            <FrameLayout
+                android:id="@+id/headerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_stat_card"
-                android:orientation="vertical"
-                android:padding="24dp">
+                android:layout_height="202dp"
+                android:background="@drawable/bg_attendance_header_gradient"
+                android:paddingStart="28dp"
+                android:paddingTop="24dp">
+
+                <FrameLayout
+                    android:id="@+id/ivPermissionBanner"
+                    android:layout_width="181dp"
+                    android:layout_height="93dp"
+                    android:layout_gravity="top|start"
+                    android:layout_marginStart="250dp"
+                    android:layout_marginTop="45dp"
+                    android:contentDescription="Permission banner">
+
+                    <ImageView
+                        android:layout_width="181dp"
+                        android:layout_height="93dp"
+                        android:adjustViewBounds="true"
+                        android:contentDescription="Banner art"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/leavebannergroup" />
+
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="83dp"
+                        android:layout_gravity="top|start"
+                        android:layout_marginStart="53dp"
+                        android:layout_marginTop="-1dp"
+                        android:adjustViewBounds="true"
+                        android:contentDescription="Suitcase"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/leave_banner_suitcase" />
+                </FrameLayout>
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical">
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/btnBack"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:clickable="true"
+                        android:contentDescription="Back"
+                        android:focusable="true"
+                        android:src="@drawable/ic_arrow_left"
+                        android:visibility="gone"
+                        app:tint="@android:color/white" />
 
                     <TextView
-                        android:layout_width="0dp"
+                        android:id="@+id/tvHeaderTitle"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="Permission Summary"
+                        android:textColor="@android:color/white"
+                        android:textSize="22sp" />
+
+                    <TextView
+                        android:id="@+id/tvHeaderSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Submit Permission"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/topContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-58dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/balanceCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@drawable/bg_stat_card"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:fontFamily="@font/inter_semibold"
                         android:text="Monthly Usage"
                         android:textColor="?attr/colorForegroundPrimary"
-                        android:textSize="16sp" />
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/tvMonth"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_medium"
-                        android:textColor="?attr/colorAccentPrimary"
-                        android:textSize="13sp" />
+                        android:layout_marginTop="1dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="10sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_leave_metric_card"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="8dp">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical">
+
+                                <View
+                                    android:layout_width="6dp"
+                                    android:layout_height="6dp"
+                                    android:background="@drawable/bg_icon_success" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:fontFamily="@font/inter_regular"
+                                    android:text="Available"
+                                    android:textColor="?attr/colorForegroundSecondary"
+                                    android:textSize="9sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvPermAvailable"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="0 hrs"
+                                android:textColor="?attr/colorForegroundPrimary"
+                                android:textSize="24sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_leave_metric_card"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="8dp">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical">
+
+                                <View
+                                    android:layout_width="6dp"
+                                    android:layout_height="6dp"
+                                    android:background="@drawable/bg_icon_accent" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:fontFamily="@font/inter_regular"
+                                    android:text="Used"
+                                    android:textColor="?attr/colorForegroundSecondary"
+                                    android:textSize="9sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvPermUsed"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="0 hrs"
+                                android:textColor="?attr/colorForegroundPrimary"
+                                android:textSize="24sp" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </LinearLayout>
 
-                <!-- Usage row: Used, Allowed, Requests -->
                 <LinearLayout
+                    android:id="@+id/filterRow"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:orientation="horizontal">
+                    android:layout_height="38dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_leave_filter_container"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="3dp">
 
-                    <LinearLayout
+                    <TextView
+                        android:id="@+id/tabReview"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_stat_card"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:background="@drawable/bg_leave_filter_active"
+                        android:fontFamily="@font/inter_semibold"
+                        android:gravity="center"
+                        android:text="Review"
+                        android:textColor="@android:color/white"
+                        android:textSize="11sp" />
 
-                        <TextView
-                            android:id="@+id/tvUsedHours"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0 hrs"
-                            android:textColor="?attr/colorWarning"
-                            android:textSize="24sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Used"
-                            android:textColor="?attr/colorForegroundSecondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
+                    <TextView
+                        android:id="@+id/tabApproved"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_stat_card"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:text="Approved"
+                        android:textColor="?attr/colorForegroundSecondary"
+                        android:textSize="11sp" />
 
-                        <TextView
-                            android:id="@+id/tvAllowedHours"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0 hrs"
-                            android:textColor="?attr/colorForegroundPrimary"
-                            android:textSize="24sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Allowed"
-                            android:textColor="?attr/colorForegroundSecondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
+                    <TextView
+                        android:id="@+id/tabRejected"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_stat_card"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:id="@+id/tvRequestCount"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0"
-                            android:textColor="?attr/colorAccentPrimary"
-                            android:textSize="24sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Requests"
-                            android:textColor="?attr/colorForegroundSecondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:text="Rejected"
+                        android:textColor="?attr/colorForegroundSecondary"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Apply button -->
-            <FrameLayout
-                android:id="@+id/btnApplyPermission"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/bg_button_primary"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="+ Apply for Permission"
-                    android:textColor="?attr/colorForegroundInverse"
-                    android:textSize="14sp" />
-            </FrameLayout>
-
-            <!-- History -->
             <LinearLayout
+                android:id="@+id/historyCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:gravity="center_vertical">
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/bg_stat_card"
+                android:orientation="vertical"
+                android:padding="12dp">
 
                 <TextView
                     android:id="@+id/tvSectionTitle"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:fontFamily="@font/inter_semibold"
                     android:text="Recent Requests"
                     android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="16sp" />
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/tvSectionSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Permission information"
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="11sp" />
+
+                <LinearLayout
+                    android:id="@+id/skeletonContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:orientation="vertical">
+
+                        <View
+                            android:layout_width="140dp"
+                            android:layout_height="16dp"
+                            android:background="@drawable/bg_leave_skeleton_block" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="110dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_leave_skeleton_block" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <View
+                            android:layout_width="120dp"
+                            android:layout_height="16dp"
+                            android:background="@drawable/bg_leave_skeleton_block" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="110dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_leave_skeleton_block" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/permissionList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+                <LinearLayout
+                    android:id="@+id/emptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingTop="16dp"
+                    android:paddingBottom="12dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="74dp"
+                        android:layout_height="74dp"
+                        android:contentDescription="No permissions"
+                        android:src="@drawable/ic_leave_empty_js1pm" />
+
+                    <TextView
+                        android:id="@+id/tvEmpty"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="No Permissions Yet!"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="27sp" />
+
+                    <TextView
+                        android:id="@+id/tvEmptyHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="Need a short break? Tap 'Apply for Permission' and we'll handle the rest!"
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="10sp" />
+                </LinearLayout>
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/permissionList"
+            <Space
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="vertical" />
-
-            <TextView
-                android:id="@+id/tvEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:padding="32dp"
-                android:fontFamily="@font/inter_regular"
-                android:text="No permission records yet"
-                android:textColor="?attr/colorForegroundMuted"
-                android:textSize="14sp"
-                android:visibility="gone" />
-
+                android:layout_height="8dp" />
         </LinearLayout>
-    </ScrollView>
-</LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <FrameLayout
+        android:id="@+id/btnApplyPermission"
+        android:layout_width="0dp"
+        android:layout_height="46dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_welcome_button"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/tvApplyPermission"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Apply Permission"
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

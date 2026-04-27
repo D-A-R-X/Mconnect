@@ -34,6 +34,9 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrDashboardBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -58,6 +61,7 @@ class HrDashboardFragment : Fragment() {
     private var isHistoryLoading = true
     private var wasShowingSkeleton = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
+    private var liveTickerJob: Job? = null
 
     private val capturePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -209,19 +213,68 @@ class HrDashboardFragment : Fragment() {
                     binding.tvTodayHours.text = state.todayHours
                     binding.tvLatestTotalHours.text = state.latestTotalHours
                     binding.tvLatestRange.text = state.latestRange
+                    binding.tvPayPeriodLabel.text = state.payPeriodLabel
+                        .ifBlank { binding.tvPayPeriodLabel.text }
+                    binding.tvPayPeriodHours.text = state.payPeriodHours
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
                     if (state.isClockedIn) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
+                        startLiveTodayTicker(state.firstPunchInIso)
                     } else {
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
+                        stopLiveTodayTicker()
                     }
                 }
             }
         }
+    }
+
+    /**
+     * While clocked-in, refresh the "Today" stat every second as
+     * `now - firstPunchIn`. Falls back to the server-reported total
+     * when no first-punch timestamp is available.
+     */
+    private fun startLiveTodayTicker(firstPunchIso: String?) {
+        if (liveTickerJob?.isActive == true) return
+        if (firstPunchIso.isNullOrBlank()) return
+        val firstMillis = parseIsoMillisOrNull(firstPunchIso) ?: return
+
+        liveTickerJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && _binding != null) {
+                val elapsedMs = (System.currentTimeMillis() - firstMillis).coerceAtLeast(0)
+                val totalMinutes = (elapsedMs / 60_000L).toInt()
+                _binding?.tvTodayHours?.text =
+                    AttendanceFlowViewModel.formatMinutesForToday(totalMinutes)
+                delay(1000L)
+            }
+        }
+    }
+
+    private fun stopLiveTodayTicker() {
+        liveTickerJob?.cancel()
+        liveTickerJob = null
+    }
+
+    private fun parseIsoMillisOrNull(iso: String): Long? {
+        // Handle both "2026-04-27T09:30:00+05:30" and "...Z" / no offset.
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+        )
+        for (p in patterns) {
+            try {
+                return SimpleDateFormat(p, Locale.US).parse(iso)?.time
+            } catch (_: Exception) {
+                /* try next */
+            }
+        }
+        return null
     }
 
     private fun collectEvents() {
@@ -246,6 +299,7 @@ class HrDashboardFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        stopLiveTodayTicker()
         _binding = null
     }
 
@@ -329,10 +383,16 @@ class HrDashboardFragment : Fragment() {
         updateAttendanceLoadingUi()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Show the full current calendar month, not just the trailing 31 days.
                 val cal = Calendar.getInstance()
-                val toDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
-                cal.add(Calendar.DAY_OF_YEAR, -31)
-                val fromDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+                val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val toDate = ymd.format(cal.time)
+                val fromDate = String.format(
+                    Locale.US,
+                    "%04d-%02d-01",
+                    cal.get(Calendar.YEAR),
+                    cal.get(Calendar.MONTH) + 1
+                )
                 val response = api.getMyAttendance(
                     token = session.bearerToken,
                     fromDate = fromDate,
@@ -366,21 +426,23 @@ class HrDashboardFragment : Fragment() {
             binding.tvLatestRange.text = "-- - --"
         }
 
-        bindHistoryCard(
-            card = binding.cardHistory2,
-            dateView = binding.tvHistoryDate2,
-            hoursView = binding.tvHistoryHours2,
-            rangeView = binding.tvHistoryRange2,
-            record = sorted.getOrNull(1),
-        )
-
-        bindHistoryCard(
-            card = binding.cardHistory3,
-            dateView = binding.tvHistoryDate3,
-            hoursView = binding.tvHistoryHours3,
-            rangeView = binding.tvHistoryRange3,
-            record = sorted.getOrNull(2),
-        )
+        // Render the rest of the month with the same rich-card visual style
+        // (calendar icon + date + inner Total Hours / Clock in & Out card).
+        binding.historyListContainer.removeAllViews()
+        sorted.drop(1).forEach { record ->
+            val card = LayoutInflater.from(requireContext()).inflate(
+                R.layout.item_attendance_history_card,
+                binding.historyListContainer,
+                false
+            )
+            card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
+                formatDashboardDate(record.date)
+            card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
+                formatMinutesAsPeriod(record.totalMinutes ?: 0)
+            card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
+                buildPunchRange(record)
+            binding.historyListContainer.addView(card)
+        }
     }
 
     private fun bindHistoryCard(

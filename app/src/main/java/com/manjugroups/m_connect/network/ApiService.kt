@@ -328,6 +328,64 @@ interface ApiService {
         @Query("conversationId") conversationId: String? = null
     ): TypingResponse
 
+    @GET("api/chat/messages/search")
+    suspend fun searchMessages(
+        @Header("Authorization") token: String,
+        @Query("q") query: String,
+        @Query("channelId") channelId: String? = null,
+        @Query("conversationId") conversationId: String? = null
+    ): ChatSearchResponse
+
+    @GET("api/chat/messages/attachments")
+    suspend fun listChatAttachments(
+        @Header("Authorization") token: String,
+        @Query("channelId") channelId: String? = null,
+        @Query("conversationId") conversationId: String? = null
+    ): ChatAttachmentsResponse
+
+    @POST("api/staff/me/update")
+    suspend fun updateMyProfile(
+        @Header("Authorization") token: String,
+        @Body body: UpdateMyProfileRequest
+    ): UpdateMyProfileResponse
+
+    // ── Project Management: My Tasks ──
+
+    @GET("api/tasks/my")
+    suspend fun getMyTasks(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = null
+    ): MyTasksResponse
+
+    @GET("api/tasks/my/summary")
+    suspend fun getMyTasksSummary(
+        @Header("Authorization") token: String
+    ): MyTaskSummaryResponse
+
+    @GET("api/projects/tasks/get")
+    suspend fun getTaskDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): TaskDetailResponse
+
+    @POST("api/projects/tasks/update-progress")
+    suspend fun updateTaskProgress(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTaskProgressRequest
+    ): TaskMutationResponse
+
+    @POST("api/projects/tasks/update")
+    suspend fun updateTask(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTaskRequest
+    ): TaskMutationResponse
+
+    @POST("api/projects/tasks/add-update")
+    suspend fun addTaskUpdate(
+        @Header("Authorization") token: String,
+        @Body body: AddTaskUpdateRequest
+    ): TaskMutationResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -696,4 +754,166 @@ data class TypingIndicatorData(
     val staffId: String?,
     val staffName: String?,
     val expiresAt: Long?
+)
+
+// ── Chat search + attachments ──────────────────────────────────────────────
+
+data class ChatSearchMessage(
+    @SerializedName("_id") val id: String?,
+    val senderId: String?,
+    val senderName: String?,
+    val body: String?,
+    @SerializedName("_creationTime") val sentAt: Double?
+)
+
+data class ChatSearchResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val messages: List<ChatSearchMessage> = emptyList(),
+    val error: String? = null
+)
+
+data class ChatAttachmentItem(
+    @SerializedName("_id") val id: String?,
+    val messageId: String?,
+    val storageId: String?,
+    val fileName: String?,
+    val fileType: String?,
+    val fileSize: Long?,
+    val url: String?
+)
+
+data class ChatAttachmentMessage(
+    val messageId: String?,
+    val senderId: String?,
+    val senderName: String?,
+    val body: String?,
+    val sentAt: Double?,
+    val attachments: List<ChatAttachmentItem> = emptyList()
+)
+
+data class ChatAttachmentsResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val messages: List<ChatAttachmentMessage> = emptyList(),
+    val error: String? = null
+)
+
+// ── Staff self-edit (personal + family fields) ─────────────────────────────
+
+data class UpdateMyProfileRequest(
+    val name: String? = null,
+    val dateOfBirth: String? = null,
+    val gender: String? = null,
+    val maritalStatus: String? = null,
+    val spouseName: String? = null,
+    val fatherName: String? = null,
+    val motherName: String? = null,
+    val religion: String? = null,
+    val nationality: String? = null,
+    val bloodGroup: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null,
+    val anniversary: String? = null,
+    val emergencyContact: EmergencyContact? = null
+)
+
+data class UpdateMyProfileResponse(
+    val success: Boolean,
+    val staff: StaffFullData? = null,
+    val error: String? = null
+)
+
+// ── Project Tasks (mobile My Tasks) ─────────────────────────────────────────
+
+data class TaskData(
+    @SerializedName("_id") val id: String,
+    val taskId: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val name: String? = null,
+    val description: String? = null,
+    val workCategory: String? = null,
+    val status: String? = null,
+    val priority: String? = null,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val actualStartDate: String? = null,
+    val actualEndDate: String? = null,
+    val duration: Int? = null,
+    val progress: Int? = null,
+    val assignedToName: String? = null,
+    val staffAssignedTo: String? = null,
+    val achievedQuantity: Double? = null,
+    val totalQuantity: Double? = null,
+    val unit: String? = null,
+    val todaysUpdate: String? = null,
+    val blocker: String? = null,
+    val tomorrowsPlan: String? = null,
+    @SerializedName("_creationTime") val createdAt: Double? = null
+)
+
+data class MyTasksResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val tasks: List<TaskData> = emptyList(),
+    val error: String? = null
+)
+
+data class TaskSummaryData(
+    val total: Int = 0,
+    val notStarted: Int = 0,
+    val inProgress: Int = 0,
+    val completed: Int = 0,
+    val delayed: Int = 0,
+    val overallProgress: Int = 0
+)
+
+data class MyTaskSummaryResponse(
+    val success: Boolean,
+    val summary: TaskSummaryData? = null,
+    val error: String? = null
+)
+
+data class TaskDetailResponse(
+    val success: Boolean,
+    val task: TaskData? = null,
+    val error: String? = null
+)
+
+data class UpdateTaskProgressRequest(
+    val id: String,
+    val progress: Int,
+    val actualStartDate: String? = null,
+    val actualEndDate: String? = null
+)
+
+data class UpdateTaskRequest(
+    val id: String,
+    val status: String? = null,
+    val progress: Int? = null,
+    val actualStartDate: String? = null,
+    val actualEndDate: String? = null,
+    val achievedQuantity: Double? = null,
+    val todaysUpdate: String? = null,
+    val blocker: String? = null,
+    val tomorrowsPlan: String? = null
+)
+
+data class AddTaskUpdateRequest(
+    val taskId: String,
+    val date: String? = null,
+    val todaysUpdate: String? = null,
+    val blocker: String? = null,
+    val tomorrowsPlan: String? = null,
+    val progressSnapshot: Int? = null
+)
+
+data class TaskMutationResponse(
+    val success: Boolean,
+    val updateId: String? = null,
+    val task: TaskData? = null,
+    val error: String? = null
 )

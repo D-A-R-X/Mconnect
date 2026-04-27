@@ -13,6 +13,16 @@
         <item name="android:importantForAutofill">no</item>
     </style>
 
+    <style name="EditFormSection">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">@font/inter_bold</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
+    </style>
+
     <style name="OtpBoxAuth">
         <item name="android:background">@drawable/bg_auth_otp_box</item>
         <item name="android:gravity">center</item>

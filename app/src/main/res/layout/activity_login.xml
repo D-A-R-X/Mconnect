@@ -62,19 +62,27 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <LinearLayout
-        android:id="@+id/signInSheet"
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/signInScroll"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_auth_sheet"
+        android:clipToPadding="false"
+        android:fillViewport="false"
+        android:overScrollMode="ifContentScrolls"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+    <LinearLayout
+        android:id="@+id/signInSheet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="32dp"
         android:paddingTop="40dp"
         android:paddingEnd="32dp"
-        android:paddingBottom="32dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        android:paddingBottom="32dp">
 
         <TextView
             android:layout_width="match_parent"
@@ -305,5 +313,6 @@
             android:textColor="#6938EF"
             android:textSize="11sp" />
     </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

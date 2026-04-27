@@ -6,8 +6,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.graphics.Color
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
@@ -24,6 +27,9 @@ class AttendanceHistoryFragment : Fragment() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
 
+    private var filterFromDate: String = ""
+    private var filterToDate: String = ""
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentAttendanceHistoryBinding.inflate(inflater, container, false)
         return binding.root
@@ -35,21 +41,65 @@ class AttendanceHistoryFragment : Fragment() {
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
 
+        // Default range = current calendar month
         val cal = Calendar.getInstance()
-        val monthFmt = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-        binding.tvMonth.text = monthFmt.format(cal.time)
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        filterToDate = ymd.format(cal.time)
+        filterFromDate = String.format(
+            Locale.US,
+            "%04d-%02d-01",
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH) + 1
+        )
+        updateRangeLabel()
+
+        binding.btnAttendanceFilter.setOnClickListener {
+            AttendanceFilterSheet
+                .newInstance(filterFromDate, filterToDate)
+                .show(parentFragmentManager, "attendance_filter")
+        }
+
+        setFragmentResultListener(AttendanceFilterSheet.RESULT_KEY) { _, bundle ->
+            filterFromDate = bundle.getString(AttendanceFilterSheet.KEY_FROM).orEmpty()
+            filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
+            updateRangeLabel()
+            loadData()
+        }
 
         loadData()
     }
 
-    private fun loadData() {
-        val cal = Calendar.getInstance()
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
-        val monthStart = String.format("%04d-%02d-01", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+    private fun updateRangeLabel() {
+        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val display = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+        val from = runCatching { parseFmt.parse(filterFromDate) }.getOrNull()
+        val to = runCatching { parseFmt.parse(filterToDate) }.getOrNull()
+        binding.tvMonth.text = when {
+            from != null && to != null && sameMonthYear(from, to) ->
+                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(from)
+            from != null && to != null ->
+                "${display.format(from)} – ${display.format(to)}"
+            else -> ""
+        }
+    }
 
+    private fun sameMonthYear(a: Date, b: Date): Boolean {
+        val ca = Calendar.getInstance().apply { time = a }
+        val cb = Calendar.getInstance().apply { time = b }
+        return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
+            ca.get(Calendar.MONTH) == cb.get(Calendar.MONTH) &&
+            ca.get(Calendar.DAY_OF_MONTH) == 1 &&
+            cb.get(Calendar.DAY_OF_MONTH) == cb.getActualMaximum(Calendar.DAY_OF_MONTH)
+    }
+
+    private fun loadData() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getMyAttendance(session.bearerToken, fromDate = monthStart, toDate = today)
+                val resp = api.getMyAttendance(
+                    session.bearerToken,
+                    fromDate = filterFromDate,
+                    toDate = filterToDate
+                )
                 if (resp.success) {
                     val records = resp.records
 
@@ -71,44 +121,30 @@ class AttendanceHistoryFragment : Fragment() {
     private fun renderRecords(records: List<AttendanceRecord>) {
         binding.attendanceList.removeAllViews()
 
-        val dateFmt = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
-        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dateFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
 
         records.forEach { record ->
-            val card = LayoutInflater.from(requireContext()).inflate(R.layout.item_attendance, binding.attendanceList, false)
+            val card = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_attendance_history_card, binding.attendanceList, false)
 
-            val dateStr = record.date?.let {
-                try { dateFmt.format(parseFmt.parse(it)!!) } catch (_: Exception) { it }
-            } ?: ""
-            card.findViewById<TextView>(R.id.tvAttDate).text = dateStr
+            val parsed = record.date?.let { runCatching { parseFmt.parse(it) }.getOrNull() }
+            card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
+                parsed?.let { dateFmt.format(it) } ?: (record.date ?: "")
 
             val mins = record.totalMinutes ?: 0
+            val hours = mins / 60
+            val minutes = mins % 60
+            card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
+                String.format(Locale.getDefault(), "%02d:%02d:00 hrs", hours, minutes)
+
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
             val lastOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
-            val outLabel = if (record.hasOpenSession == true) "--" else (lastOut?.let(::formatIsoTime) ?: "--")
-            val durationLabel = "${mins / 60}h ${mins % 60}m"
-            card.findViewById<TextView>(R.id.tvAttHours).text = "In $inLabel • Out $outLabel • $durationLabel"
-
-            val badge = card.findViewById<TextView>(R.id.tvAttStatus)
-            val status = record.approvedAttendance ?: record.status ?: "pending"
-            when {
-                status == "present" || status == "auto-approved" || status == "approved" -> {
-                    badge.text = "Present"
-                    badge.setBackgroundResource(R.drawable.bg_badge_success)
-                    badge.setTextColor(resolveColor(R.attr.colorSuccess))
-                }
-                status == "half-day" -> {
-                    badge.text = "Half Day"
-                    badge.setBackgroundResource(R.drawable.bg_badge_warning)
-                    badge.setTextColor(resolveColor(R.attr.colorWarning))
-                }
-                else -> {
-                    badge.text = status.replaceFirstChar { it.uppercase() }
-                    badge.setBackgroundResource(R.drawable.bg_badge_error)
-                    badge.setTextColor(resolveColor(R.attr.colorError))
-                }
-            }
+            val outLabel = if (record.hasOpenSession == true) "--"
+                else (lastOut?.let(::formatIsoTime) ?: "--")
+            card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
+                "$inLabel - $outLabel"
 
             binding.attendanceList.addView(card)
         }
@@ -144,6 +180,20 @@ class AttendanceHistoryFragment : Fragment() {
         val tv = TypedValue()
         requireContext().theme.resolveAttribute(attr, tv, true)
         return tv.data
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // White system status bar with dark icons to match the white in-app header.
+        (activity as? MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+    }
+
+    override fun onPause() {
+        // Restore the default tab top-bar look for sibling tabs.
+        (activity as? MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#FEFEFE"), true
+        )
+        super.onPause()
     }
 
     override fun onDestroyView() {

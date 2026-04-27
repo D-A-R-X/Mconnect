@@ -119,8 +119,12 @@
                 android:orientation="vertical">
 
                 <LinearLayout
+                    android:id="@+id/rowMedia"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="16dp">
@@ -149,8 +153,12 @@
                     android:background="?attr/colorBorder" />
 
                 <LinearLayout
+                    android:id="@+id/rowSearch"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="16dp">
@@ -170,38 +178,6 @@
                         android:contentDescription="Open"
                         android:src="@drawable/ic_chevron_right"
                         android:tint="?attr/colorForegroundMuted" />
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginStart="16dp"
-                    android:background="?attr/colorBorder" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="16dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:text="Mute Notifications"
-                        android:textColor="?attr/colorForegroundPrimary"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:id="@+id/tvMuteValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_regular"
-                        android:text="Off"
-                        android:textColor="?attr/colorForegroundMuted"
-                        android:textSize="13sp" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_task_inner_card"
+    android:foreground="?attr/selectableItemBackground"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvTaskName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="2"
+            android:text="Task name"
+            android:textColor="#101828"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvTaskPriority"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_task_priority_medium"
+            android:fontFamily="@font/inter_medium"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="Medium"
+            android:textColor="#B54708"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvTaskProject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="Project name"
+        android:textColor="#667085"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvTaskProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="0%"
+            android:textColor="#7A5AF8"
+            android:textSize="12sp" />
+
+        <View
+            android:id="@+id/progressTrack"
+            android:layout_width="0dp"
+            android:layout_height="6dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="#EAECF0" />
+
+        <TextView
+            android:id="@+id/tvTaskDueDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="-"
+            android:textColor="#475467"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/progressFill"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+</LinearLayout>

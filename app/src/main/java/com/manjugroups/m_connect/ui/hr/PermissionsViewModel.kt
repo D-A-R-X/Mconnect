@@ -17,7 +17,8 @@ data class PermissionsState(
     val count: Int = 0,
     val myPermissions: List<PermissionData> = emptyList(),
     val pendingApprovals: List<PermissionData> = emptyList(),
-    val isApplying: Boolean = false
+    val isApplying: Boolean = false,
+    val isLoading: Boolean = false,
 )
 
 class PermissionsViewModel : ViewModel() {
@@ -30,25 +31,30 @@ class PermissionsViewModel : ViewModel() {
     val event: SharedFlow<String> = _event.asSharedFlow()
 
     fun load(bearerToken: String, canApprove: Boolean) {
+        _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
-            val usage = try { api.getPermissionUsage(bearerToken) } catch (_: Exception) { null }
-            val history = try { api.getMyPermissions(bearerToken) } catch (_: Exception) { null }
-            val pending = if (canApprove) {
-                try { api.getPendingPermissionApprovals(bearerToken) } catch (_: Exception) { null }
-            } else {
-                null
+            try {
+                val usage = try { api.getPermissionUsage(bearerToken) } catch (_: Exception) { null }
+                val history = try { api.getMyPermissions(bearerToken) } catch (_: Exception) { null }
+                val pending = if (canApprove) {
+                    try { api.getPendingPermissionApprovals(bearerToken) } catch (_: Exception) { null }
+                } else {
+                    null
+                }
+                val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
+
+                val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0
+
+                _uiState.value = _uiState.value.copy(
+                    usedHours = usage?.usedHours ?: usage?.totalHours ?: 0,
+                    limitHours = limitFromApi,
+                    count = usage?.count ?: 0,
+                    myPermissions = history?.permissions ?: emptyList(),
+                    pendingApprovals = pending?.permissions ?: emptyList()
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
-            val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
-
-            val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0
-
-            _uiState.value = _uiState.value.copy(
-                usedHours = usage?.usedHours ?: usage?.totalHours ?: 0,
-                limitHours = limitFromApi,
-                count = usage?.count ?: 0,
-                myPermissions = history?.permissions ?: emptyList(),
-                pendingApprovals = pending?.permissions ?: emptyList()
-            )
         }
     }
 

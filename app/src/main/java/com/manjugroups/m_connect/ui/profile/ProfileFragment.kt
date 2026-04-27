@@ -11,18 +11,21 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.MainActivity
+import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.databinding.FragmentProfileBinding
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 class ProfileFragment : Fragment() {
 
     private var _binding: FragmentProfileBinding? = null
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
+    private val api = ApiService.create()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -37,19 +40,69 @@ class ProfileFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        val name = session.userName?.trim().orEmpty().ifBlank { "Tonald Drump" }
-        binding.tvProfileName.text = name
-        binding.tvProfileAvatar.text = initialsFor(name)
-        binding.tvProfileRole.text = if (session.isAdmin) {
-            "Administrator"
-        } else {
-            "Junior Full Stack Developer"
-        }
-
-        binding.tvContactEmail.text = buildEmail(name)
-        binding.tvContactAddress.text = "Taman Anggrek"
+        // Optimistic render from cached session, then refresh from API.
+        val cachedName = session.userName?.trim().orEmpty().ifBlank { "User" }
+        binding.tvProfileName.text = cachedName
+        binding.tvProfileAvatar.text = initialsFor(cachedName)
+        binding.tvProfileRole.text = "Loading…"
+        binding.tvContactEmail.text = session.userPhone?.takeIf { it.isNotBlank() } ?: "—"
+        binding.tvContactAddress.text = "—"
 
         bindActions()
+        loadStaffProfile()
+    }
+
+    private fun loadStaffProfile() {
+        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: run {
+            binding.tvProfileRole.text =
+                if (session.isAdmin) "Administrator" else "Staff"
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaffDetail(session.bearerToken, staffId)
+                if (resp.success) resp.staff?.let(::renderStaff)
+            } catch (_: Exception) {
+                // Keep cached values; surface a soft fallback role string.
+                if (_binding != null) {
+                    binding.tvProfileRole.text =
+                        if (session.isAdmin) "Administrator" else "Staff"
+                }
+            }
+        }
+    }
+
+    private fun renderStaff(staff: StaffFullData) {
+        if (_binding == null) return
+        val name = staff.name?.trim().orEmpty().ifBlank {
+            session.userName?.trim().orEmpty().ifBlank { "User" }
+        }
+        binding.tvProfileName.text = name
+        binding.tvProfileAvatar.text = initialsFor(name)
+
+        binding.tvProfileRole.text = listOfNotNull(
+            staff.designation?.takeIf { it.isNotBlank() },
+            staff.department?.takeIf { it.isNotBlank() }
+        ).joinToString(" • ").ifBlank {
+            if (session.isAdmin) "Administrator" else "Staff"
+        }
+
+        binding.tvContactEmail.text = staff.email?.takeIf { it.isNotBlank() }
+            ?: staff.phone?.takeIf { it.isNotBlank() }
+            ?: "—"
+
+        val locationParts = listOfNotNull(
+            staff.address?.takeIf { it.isNotBlank() },
+            staff.city?.takeIf { it.isNotBlank() },
+            staff.state?.takeIf { it.isNotBlank() }
+        )
+        binding.tvContactAddress.text = locationParts
+            .joinToString(", ")
+            .ifBlank {
+                staff.branch?.takeIf { it.isNotBlank() }
+                    ?: staff.company?.takeIf { it.isNotBlank() }
+                    ?: "—"
+            }
     }
 
     private fun bindActions() {
@@ -57,7 +110,12 @@ class ProfileFragment : Fragment() {
             parentFragmentManager.popBackStackImmediate()
         }
 
-        binding.rowPersonalData.setOnClickListener { showSoon("Personal Data") }
+        binding.rowPersonalData.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, ProfileEditFragment())
+                .addToBackStack(null)
+                .commit()
+        }
         binding.rowOfficeAssets.setOnClickListener { showSoon("Office Assets") }
         binding.rowPayrollTax.setOnClickListener { showSoon("Payroll & Tax") }
         binding.rowChangePassword.setOnClickListener { showSoon("Change Password") }
@@ -102,18 +160,10 @@ class ProfileFragment : Fragment() {
         return initials.ifBlank { "TD" }
     }
 
-    private fun buildEmail(name: String): String {
-        val slug = name
-            .lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9]+"), "")
-            .takeIf { it.isNotBlank() }
-            ?: "tonald"
-        return "$slug@gmail.com"
-    }
-
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
+        if (_binding != null) loadStaffProfile()
     }
 
     override fun onDestroyView() {

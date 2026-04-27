@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurfacePrimary"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="24dp">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:background="#E4E7EC" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="Update Task"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Set status, progress, and notes for today."
+            android:textColor="?attr/colorForegroundSecondary"
+            android:textSize="12sp" />
+
+        <!-- Status -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Status"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/statusGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/statusNotStarted"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_task_inner_card"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Not Started"
+                android:textColor="#475467"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/statusInProgress"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_task_inner_card"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="In Progress"
+                android:textColor="#475467"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/statusCompleted"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_task_inner_card"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Completed"
+                android:textColor="#475467"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/statusDelayed"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_task_inner_card"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Delayed"
+                android:textColor="#475467"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- Progress -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Progress"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvProgressValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="0%"
+                android:textColor="#7A5AF8"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/seekProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progressTint="#7A5AF8"
+            android:thumbTint="#7A5AF8" />
+
+        <!-- Today's update -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Today's Update"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etTodaysUpdate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_task_inner_card"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="top"
+            android:hint="What did you accomplish today?"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="3"
+            android:padding="12dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="#98A2B3"
+            android:textSize="13sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <!-- Blocker -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Blocker (optional)"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etBlocker"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_task_inner_card"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="top"
+            android:hint="What's blocking progress?"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="2"
+            android:padding="12dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="#98A2B3"
+            android:textSize="13sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <!-- Tomorrow's plan -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Tomorrow's Plan"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etTomorrowsPlan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_task_inner_card"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="top"
+            android:hint="What will you work on tomorrow?"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="2"
+            android:padding="12dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="#98A2B3"
+            android:textSize="13sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <TextView
+            android:id="@+id/tvUpdateError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:textColor="?attr/colorError"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSubmitUpdate"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/button_height"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_button_primary"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Save Update"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btnCancelUpdate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:padding="8dp"
+            android:text="Cancel"
+            android:textColor="?attr/colorForegroundSecondary"
+            android:textSize="13sp"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

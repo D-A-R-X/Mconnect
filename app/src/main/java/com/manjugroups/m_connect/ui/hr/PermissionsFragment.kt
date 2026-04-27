@@ -1,15 +1,16 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
+import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -22,15 +23,24 @@ import com.manjugroups.m_connect.network.PermissionData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.max
 
 class PermissionsFragment : Fragment() {
+
+    private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
+    private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
 
     private var _binding: FragmentPermissionsBinding? = null
     private val binding get() = _binding!!
     private val viewModel: PermissionsViewModel by viewModels()
     private lateinit var session: SessionManager
     private var screenMode: String = MODE_HISTORY
+    private var focusedEntityId: String? = null
+    private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -51,9 +61,14 @@ class PermissionsFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         screenMode = arguments?.getString(ARG_MODE) ?: MODE_HISTORY
+        focusedEntityId = arguments?.getString(ARG_ENTITY_ID)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         _binding = FragmentPermissionsBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -63,6 +78,7 @@ class PermissionsFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ApplyPermissionFragment())
@@ -71,37 +87,156 @@ class PermissionsFragment : Fragment() {
         }
 
         val cal = Calendar.getInstance()
-        val monthFmt = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-        binding.tvMonth.text = monthFmt.format(cal.time)
-        binding.tvHeaderTitle.text = if (screenMode == MODE_APPROVAL) "Permission Approvals" else "Permissions"
-        binding.tvSectionTitle.text = if (screenMode == MODE_APPROVAL) "Pending Approvals" else "Recent Requests"
+        binding.tvMonth.text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvHeaderTitle.text = "Permission Approvals"
+            binding.tvHeaderSubtitle.text = "In Review"
+            binding.tvSectionTitle.text = "Permission Approvals"
+            binding.tvSectionSubtitle.visibility = View.GONE
+            binding.filterRow.visibility = View.GONE
+        } else {
+            binding.tvHeaderTitle.text = "Permission Summary"
+            binding.tvHeaderSubtitle.text = "Submit Permission"
+            binding.tvSectionTitle.text = "Recent Requests"
+            binding.tvSectionSubtitle.visibility = View.VISIBLE
+            binding.filterRow.visibility = View.VISIBLE
+            setupFilterTabs()
+            updateFilterUi()
+        }
 
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
     }
 
+    private fun setupFilterTabs() {
+        binding.tabReview.setOnClickListener {
+            historyFilter = HistoryFilter.REVIEW
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabApproved.setOnClickListener {
+            historyFilter = HistoryFilter.APPROVED
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabRejected.setOnClickListener {
+            historyFilter = HistoryFilter.REJECTED
+            updateFilterUi()
+            renderState(viewModel.uiState.value)
+        }
+    }
+
+    private fun updateFilterUi() {
+        styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
+        styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
+        styleFilterTab(binding.tabRejected, historyFilter == HistoryFilter.REJECTED)
+    }
+
+    private fun styleFilterTab(tab: TextView, selected: Boolean) {
+        if (selected) {
+            tab.setBackgroundResource(R.drawable.bg_leave_filter_active)
+            tab.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
+        } else {
+            tab.background = null
+            tab.setTextColor(resolveColor(R.attr.colorForegroundSecondary))
+        }
+    }
+
     private fun collectState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    val canApprove = session.hasPermission("permissions.approve")
-                    val displayPermissions = if (screenMode == MODE_APPROVAL) {
-                        state.pendingApprovals
-                    } else {
-                        state.myPermissions
-                    }
-                    binding.tvUsedHours.text = "${state.usedHours} hrs"
-                    binding.tvAllowedHours.text = "${state.limitHours} hrs"
-                    binding.tvRequestCount.text = state.count.toString()
-                    binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
-                    binding.tvEmpty.text = if (screenMode == MODE_APPROVAL) {
-                        "No permission approvals pending"
-                    } else {
-                        "No permission records yet"
-                    }
-                    renderPermissions(displayPermissions, canApprove && screenMode == MODE_APPROVAL)
+                viewModel.uiState.collect { state -> renderState(state) }
+            }
+        }
+    }
+
+    private fun renderState(state: PermissionsState) {
+        val canApprove = session.hasPermission("permissions.approve")
+        val displayPermissions = if (screenMode == MODE_APPROVAL) {
+            state.pendingApprovals
+        } else {
+            filterHistoryPermissions(state.myPermissions)
+        }
+        val isLoading = state.isLoading
+
+        binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+        binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+
+        val available = max(state.limitHours - state.usedHours, 0)
+        binding.tvPermAvailable.text = "$available hrs"
+        binding.tvPermUsed.text = "${state.usedHours} hrs"
+
+        configureHistoryCard(displayPermissions.isEmpty() && !isLoading)
+
+        binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
+        binding.permissionList.visibility = if (isLoading) View.GONE else View.VISIBLE
+        if (isLoading) {
+            startSkeletonPulse()
+            binding.emptyState.visibility = View.GONE
+            return
+        }
+
+        stopSkeletonPulse()
+        setEmptyCopy(displayPermissions.isEmpty())
+        renderPermissions(displayPermissions, canApprove && screenMode == MODE_APPROVAL)
+    }
+
+    private fun configureHistoryCard(isEmpty: Boolean) {
+        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
+        binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
+        binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
+
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvSectionTitle.text = "Permission Approvals"
+            binding.tvSectionSubtitle.visibility = View.GONE
+        } else {
+            when (historyFilter) {
+                HistoryFilter.REVIEW -> {
+                    binding.tvSectionTitle.text = "Recent Requests"
+                    binding.tvSectionSubtitle.text = "Permission information"
                 }
+                HistoryFilter.APPROVED -> {
+                    binding.tvSectionTitle.text = "Approved Permissions"
+                    binding.tvSectionSubtitle.text = "Approved permission information"
+                }
+                HistoryFilter.REJECTED -> {
+                    binding.tvSectionTitle.text = "Rejected Permissions"
+                    binding.tvSectionSubtitle.text = "Rejected permission information"
+                }
+            }
+        }
+
+        if (showHeader) {
+            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
+            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
+        } else {
+            binding.historyCard.background = null
+            binding.historyCard.setPadding(0, 0, 0, 0)
+        }
+    }
+
+    private fun setEmptyCopy(isEmpty: Boolean) {
+        if (!isEmpty) return
+        if (screenMode == MODE_APPROVAL) {
+            binding.tvEmpty.text = "No Permission Approvals"
+            binding.tvEmptyHint.text = "There are no pending permission requests in review right now."
+            return
+        }
+        when (historyFilter) {
+            HistoryFilter.REVIEW -> {
+                binding.tvEmpty.text = "No Permissions Yet!"
+                binding.tvEmptyHint.text =
+                    "Need a short break? Tap 'Apply Permission' and we'll handle the rest!"
+            }
+            HistoryFilter.APPROVED -> {
+                binding.tvEmpty.text = "No Approved Permissions"
+                binding.tvEmptyHint.text = "Your approved permission requests will appear here."
+            }
+            HistoryFilter.REJECTED -> {
+                binding.tvEmpty.text = "No Rejected Permissions"
+                binding.tvEmptyHint.text = "If any permission gets rejected, you'll find it listed here."
             }
         }
     }
@@ -116,28 +251,89 @@ class PermissionsFragment : Fragment() {
         }
     }
 
-    private fun renderPermissions(list: List<PermissionData>, approvalMode: Boolean) {
+    private fun filterHistoryPermissions(items: List<PermissionData>): List<PermissionData> {
+        return items.filter { perm ->
+            when (historyFilter) {
+                HistoryFilter.REVIEW -> bucketForStatus(perm.status) == StatusBucket.REVIEW
+                HistoryFilter.APPROVED -> bucketForStatus(perm.status) == StatusBucket.APPROVED
+                HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
+            }
+        }
+    }
+
+    private fun renderPermissions(items: List<PermissionData>, approvalMode: Boolean) {
         binding.permissionList.removeAllViews()
-        binding.tvEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
 
-        val dateFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+        val headingFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-        list.forEach { perm ->
-            val card = LayoutInflater.from(requireContext()).inflate(R.layout.item_permission, binding.permissionList, false)
+        items.forEach { perm ->
+            val card = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_permission, binding.permissionList, false)
 
-            val date = perm.date?.let { try { dateFmt.format(parseFmt.parse(it)!!) } catch (_: Exception) { it } } ?: ""
-            card.findViewById<TextView>(R.id.tvPermDate).text = date
-            card.findViewById<TextView>(R.id.tvPermTime).text = "${perm.fromTime ?: ""} - ${perm.toTime ?: ""}"
-            card.findViewById<TextView>(R.id.tvPermReason).text = perm.reason ?: ""
+            val date = parseServerDate(parseFmt, perm.date)
+            val dateHeadingText = date?.let { headingFmt.format(it) } ?: perm.date ?: "Permission Date"
+
+            val rangeText = buildString {
+                append(perm.fromTime ?: "—")
+                append(" - ")
+                append(perm.toTime ?: "—")
+            }
+            val hoursText = perm.hours?.let { formatHours(it) } ?: "—"
+
+            val bucket = bucketForStatus(perm.status)
+            val statusDate = parseCreationDate(perm.createdAt)
+            val statusDateText = statusDate?.let { statusFmt.format(it) }
+
+            val statusNote: String
+            val statusColor: Int
+            val statusIconRes: Int
+            when (bucket) {
+                StatusBucket.APPROVED -> {
+                    statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
+                    statusIconRes = R.drawable.ic_leave_status_approved
+                }
+                StatusBucket.REJECTED -> {
+                    statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
+                    statusIconRes = R.drawable.ic_leave_status_rejected
+                }
+                StatusBucket.REVIEW -> {
+                    statusNote = "In Review"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
+                    statusIconRes = R.drawable.ic_leave_status_review
+                }
+            }
+
+            card.findViewById<TextView>(R.id.tvPermDate).text = dateHeadingText
+            card.findViewById<TextView>(R.id.tvPermTime).text = rangeText
+            card.findViewById<TextView>(R.id.tvPermHours).text = hoursText
+
+            val reasonText = card.findViewById<TextView>(R.id.tvPermReason)
+            reasonText.text = statusNote
+            reasonText.setTextColor(statusColor)
+            card.findViewById<ImageView>(R.id.ivPermStatusIcon).setImageResource(statusIconRes)
+
             val staffName = card.findViewById<TextView>(R.id.tvPermStaffName)
+            val staffInitial = card.findViewById<TextView>(R.id.tvPermStaffInitial)
+            val staffRow = card.findViewById<View>(R.id.staffInfoRow)
+            val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.permissionActionRow)
             val approveButton = card.findViewById<TextView>(R.id.btnApprovePermission)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectPermission)
 
+            val displayName = perm.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+            staffRow.visibility = View.VISIBLE
+            byLabel.visibility = View.VISIBLE
+            staffName.visibility = View.VISIBLE
+            staffName.text = displayName
+            staffInitial.text = initial
+
             if (approvalMode) {
-                staffName.visibility = View.VISIBLE
-                staffName.text = perm.staffName ?: ""
                 actionRow.visibility = View.VISIBLE
                 approveButton.setOnClickListener {
                     perm.id?.let { id ->
@@ -152,30 +348,45 @@ class PermissionsFragment : Fragment() {
                     perm.id?.let { id -> showRejectDialog(id) }
                 }
             } else {
-                staffName.visibility = View.GONE
                 actionRow.visibility = View.GONE
             }
 
-            val badge = card.findViewById<TextView>(R.id.tvPermStatus)
-            val status = perm.status ?: "pending"
-            badge.text = status.replaceFirstChar { it.uppercase() }
-            when (status) {
-                "approved" -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_success)
-                    badge.setTextColor(resolveColor(R.attr.colorSuccess))
-                }
-                "rejected" -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_error)
-                    badge.setTextColor(resolveColor(R.attr.colorError))
-                }
-                else -> {
-                    badge.setBackgroundResource(R.drawable.bg_badge_warning)
-                    badge.setTextColor(resolveColor(R.attr.colorWarning))
-                }
+            if (perm.id == focusedEntityId) {
+                card.alpha = 1f
             }
 
             binding.permissionList.addView(card)
         }
+    }
+
+    private fun parseServerDate(parseFmt: SimpleDateFormat, raw: String?): Date? {
+        return raw?.let { runCatching { parseFmt.parse(it) }.getOrNull() }
+    }
+
+    private fun parseCreationDate(raw: Double?): Date? {
+        if (raw == null) return null
+        val millis = when {
+            raw > 1_000_000_000_000 -> raw.toLong()
+            raw > 1_000_000_000 -> (raw * 1000).toLong()
+            else -> raw.toLong()
+        }
+        return runCatching { Date(millis) }.getOrNull()
+    }
+
+    private fun bucketForStatus(status: String?): StatusBucket {
+        return when (status?.trim()?.lowercase(Locale.getDefault())) {
+            "approved" -> StatusBucket.APPROVED
+            "rejected" -> StatusBucket.REJECTED
+            else -> StatusBucket.REVIEW
+        }
+    }
+
+    private fun formatHours(hours: Double): String {
+        // Show "1.5 Hrs" for fractional hours, "2 Hrs" for whole.
+        val whole = hours.toInt()
+        val isWhole = hours - whole == 0.0
+        return if (isWhole) "$whole Hr${if (whole == 1) "" else "s"}"
+        else String.format(Locale.getDefault(), "%.1f Hrs", hours)
     }
 
     private fun showRejectDialog(permissionId: String) {
@@ -198,56 +409,36 @@ class PermissionsFragment : Fragment() {
             .show()
     }
 
-    private fun showApplyDialog() {
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_apply_permission, null)
-        val etDate = dialogView.findViewById<EditText>(R.id.etDate)
-        val etFrom = dialogView.findViewById<EditText>(R.id.etFromTime)
-        val etTo = dialogView.findViewById<EditText>(R.id.etToTime)
-        val etReason = dialogView.findViewById<EditText>(R.id.etReason)
-
-        etDate.setOnClickListener { showDatePicker(etDate) }
-        etFrom.setOnClickListener { showTimePicker(etFrom) }
-        etTo.setOnClickListener { showTimePicker(etTo) }
-
-        AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .setPositiveButton("Apply") { _, _ ->
-                val date = etDate.text.toString()
-                val from = etFrom.text.toString()
-                val to = etTo.text.toString()
-                val reason = etReason.text.toString()
-                if (date.isNotBlank() && from.isNotBlank() && to.isNotBlank() && reason.isNotBlank()) {
-                    viewModel.applyPermission(session.bearerToken, date, from, to, reason)
-                } else {
-                    Toast.makeText(requireContext(), "Fill all fields", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showDatePicker(target: EditText) {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(requireContext(), { _, y, m, d ->
-            target.setText(String.format("%04d-%02d-%02d", y, m + 1, d))
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-    }
-
-    private fun showTimePicker(target: EditText) {
-        val cal = Calendar.getInstance()
-        TimePickerDialog(requireContext(), { _, h, m ->
-            target.setText(String.format("%02d:%02d", h, m))
-        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
-    }
-
     private fun resolveColor(attr: Int): Int {
         val tv = android.util.TypedValue()
         requireContext().theme.resolveAttribute(attr, tv, true)
         return tv.data
     }
 
+    private fun dp(value: Int): Int {
+        val density = resources.displayMetrics.density
+        return (value * density).toInt()
+    }
+
+    private fun startSkeletonPulse() {
+        if (skeletonAnimator?.isRunning == true) return
+        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
+            duration = 650L
+            repeatMode = ObjectAnimator.REVERSE
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
+    }
+
+    private fun stopSkeletonPulse() {
+        skeletonAnimator?.cancel()
+        skeletonAnimator = null
+        binding.skeletonContainer.alpha = 1f
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        stopSkeletonPulse()
         _binding = null
     }
 }

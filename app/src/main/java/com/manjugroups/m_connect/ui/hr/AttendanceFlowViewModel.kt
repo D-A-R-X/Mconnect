@@ -26,7 +26,16 @@ data class AttendanceFlowState(
     val todayMinutes: Int = 0,
     val todayHours: String = "00:00 Hrs",
     val latestTotalHours: String = "00:00:00 hrs",
-    val latestRange: String = "--"
+    val latestRange: String = "--",
+    /** ISO timestamp of the first punch-in today, used to drive a live ticker. */
+    val firstPunchInIso: String? = null,
+    /** Sum of today's already-closed session minutes. While clocked-in we
+     *  still tick `now - firstPunchIn` for live display, but on punch-out
+     *  this becomes the source of truth. */
+    val closedTodayMinutes: Int = 0,
+    val payPeriodLabel: String = "",
+    val payPeriodMinutes: Int = 0,
+    val payPeriodHours: String = "00:00 Hrs",
 )
 
 enum class PunchMode {
@@ -66,6 +75,10 @@ class AttendanceFlowViewModel(
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, hasOpenSession)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
+
+                // Pay period = current calendar month sum
+                val (periodLabel, periodMinutes) = loadCurrentMonthSummary(token)
+
                 _uiState.value = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
@@ -74,11 +87,48 @@ class AttendanceFlowViewModel(
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
                     latestRange = range,
+                    firstPunchInIso = firstPunchIn,
+                    closedTodayMinutes = totalMinutes,
+                    payPeriodLabel = periodLabel,
+                    payPeriodMinutes = periodMinutes,
+                    payPeriodHours = formatMinutesForToday(periodMinutes),
                 )
             } catch (_: Exception) {
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
+    }
+
+    /**
+     * Fetches the current calendar month's daily attendance and returns
+     * (humanLabel, summedMinutes). Falls back to today-only on any failure.
+     */
+    private suspend fun loadCurrentMonthSummary(token: String): Pair<String, Int> {
+        val tz = TimeZone.getTimeZone("Asia/Kolkata")
+        val cal = java.util.Calendar.getInstance(tz)
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }
+        val from = ymd.format(cal.time)
+        val firstDate = cal.time
+        cal.set(
+            java.util.Calendar.DAY_OF_MONTH,
+            cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        )
+        val to = ymd.format(cal.time)
+        val lastDate = cal.time
+
+        val labelFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).apply {
+            timeZone = tz
+        }
+        val label = "Period ${labelFmt.format(firstDate)} – ${labelFmt.format(lastDate)}"
+
+        val summed = try {
+            val resp = api.getMyAttendance(token, fromDate = from, toDate = to)
+            resp.records.sumOf { it.totalMinutes ?: 0 }
+        } catch (_: Exception) {
+            0
+        }
+        return label to summed
     }
 
     fun punchIn(

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="punch_photos" path="punch_photos/" />
+    <cache-path name="arrival_photos" path="arrival_photos/" />
 </paths>

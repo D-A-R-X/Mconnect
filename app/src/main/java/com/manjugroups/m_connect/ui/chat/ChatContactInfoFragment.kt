@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
+import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
 import com.manjugroups.m_connect.network.ApiService
 import kotlinx.coroutines.launch
@@ -56,6 +57,26 @@ class ChatContactInfoFragment : Fragment() {
         val channelId = arguments?.getString("channelId")
         val conversationId = arguments?.getString("conversationId")
         val otherStaffId = arguments?.getString("otherStaffId")
+
+        // Wire Media + Search rows to the new fragments.
+        view.findViewById<View>(R.id.rowMedia)?.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(
+                    R.id.fragmentContainer,
+                    ChatMediaFragment.newInstance(channelId, conversationId, title)
+                )
+                .addToBackStack(null)
+                .commit()
+        }
+        view.findViewById<View>(R.id.rowSearch)?.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(
+                    R.id.fragmentContainer,
+                    ChatSearchFragment.newInstance(channelId, conversationId, title)
+                )
+                .addToBackStack(null)
+                .commit()
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             when {

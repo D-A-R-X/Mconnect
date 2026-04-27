@@ -54,7 +54,8 @@
 
         <activity
             android:name=".MainActivity"
-            android:launchMode="singleTop" />
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity android:name=".geotrack.GeoTrackConsentActivity"
             android:theme="@style/Theme.Mconnect" />

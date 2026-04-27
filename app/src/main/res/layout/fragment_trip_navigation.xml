@@ -238,17 +238,11 @@
             android:textColor="?attr/colorAccentPrimary"
             android:textSize="14sp" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btnMarkArrived"
+        <com.manjugroups.m_connect.ui.home.SwipeToConfirmButton
+            android:id="@+id/swipeArrived"
             android:layout_width="match_parent"
             android:layout_height="@dimen/button_height"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_button_primary"
-            android:fontFamily="@font/inter_semibold"
-            android:text="I've Arrived"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="14sp" />
+            android:layout_marginTop="10dp" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
