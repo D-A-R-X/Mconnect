@@ -321,7 +321,8 @@ class HomeFragment : Fragment() {
             placeName = visit.placeName,
             placeAddress = visit.placeAddress,
             destLat = visit.placeLat,
-            destLng = visit.placeLng
+            destLng = visit.placeLng,
+            status = visit.status
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
@@ -373,8 +374,14 @@ class HomeFragment : Fragment() {
     private fun formatVisitDate(scheduledDate: String?): String {
         if (scheduledDate.isNullOrBlank()) return "Today"
         val parsed = runCatching {
-            val input = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            input.parse(scheduledDate)
+            // Try ISO 8601 first, then plain date
+            val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            iso.isLenient = false
+            iso.parse(scheduledDate.substringBefore(".").substringBefore("Z"))
+        }.getOrNull() ?: runCatching {
+            val plain = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            plain.isLenient = false
+            plain.parse(scheduledDate.take(10))
         }.getOrNull() ?: return "Today"
         return SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(parsed)
     }
@@ -382,6 +389,21 @@ class HomeFragment : Fragment() {
     private fun formatTimeValue(raw: String): String? {
         val value = raw.trim()
         if (value.isBlank()) return null
+
+        // ISO 8601 datetime: extract time after the 'T' separator before any regex
+        // (word-boundary \b fails between 'T' and a digit, and timezone '+HH:MM' can false-match)
+        val isoMatch = Regex("""^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})""").find(value)
+        if (isoMatch != null) {
+            val hour24 = isoMatch.groupValues[1].toIntOrNull() ?: return null
+            val minute = isoMatch.groupValues[2]
+            val hour12 = when {
+                hour24 == 0 -> 12
+                hour24 > 12 -> hour24 - 12
+                else -> hour24
+            }
+            val suffix = if (hour24 < 12) "AM" else "PM"
+            return String.format(Locale.getDefault(), "%02d:%s %s", hour12, minute, suffix)
+        }
 
         val amPmMatch = Regex("(?i)\\b(\\d{1,2}:\\d{2})(?::\\d{2})?\\s*(AM|PM)\\b").find(value)
         if (amPmMatch != null) {

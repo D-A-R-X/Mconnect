@@ -115,6 +115,24 @@ interface GeoTrackApi {
         @Body body: RouteRequest
     ): RouteResponse
 
+    @POST("api/geotrack/visit/arrival-otp/request")
+    suspend fun requestArrivalOtp(
+        @Header("Authorization") token: String,
+        @Body body: ArrivalOtpRequestBody
+    ): ArrivalOtpRequestResponse
+
+    @POST("api/geotrack/visit/arrival-otp/verify")
+    suspend fun verifyArrivalOtp(
+        @Header("Authorization") token: String,
+        @Body body: ArrivalOtpVerifyBody
+    ): ArrivalOtpVerifyResponse
+
+    @POST("api/geotrack/visit/arrival-otp/cancel")
+    suspend fun cancelArrivalOtp(
+        @Header("Authorization") token: String,
+        @Body body: ArrivalOtpCancelBody
+    ): GeoTrackResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -436,6 +454,40 @@ data class RouteResponse(
     val error: String? = null
 )
 
+data class ArrivalOtpRequestBody(
+    val visitId: String,
+    val lat: Double,
+    val lng: Double
+)
+
+data class ArrivalOtpRequestResponse(
+    val success: Boolean,
+    val error: String? = null,
+    val contactPhoneMasked: String? = null,
+    val otpExpiresInSeconds: Int? = null,
+    val resendCooldownSeconds: Int? = null,
+    val maxResends: Int? = null,
+    val attemptsRemaining: Int? = null,
+    val distance: Int? = null,
+    val radius: Int? = null
+)
+
+data class ArrivalOtpVerifyBody(
+    val visitId: String,
+    val otp: String,
+    val lat: Double? = null,
+    val lng: Double? = null
+)
+
+data class ArrivalOtpVerifyResponse(
+    val success: Boolean,
+    val error: String? = null,
+    val attemptsRemaining: Int? = null,
+    val arrivalDistanceFromPlaceMeters: Int? = null
+)
+
+data class ArrivalOtpCancelBody(val visitId: String)
+
 data class AssignedPlace(
     @com.google.gson.annotations.SerializedName("_id") val id: String,
     val name: String,
@@ -464,12 +516,12 @@ data class TodayVisit(
     val placeLng: Double? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledStartTime",
-        alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt"]
+        alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt", "scheduledTime", "time", "visitTime", "timeFrom", "appointmentTime"]
     )
     val scheduledStartTime: String? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledEndTime",
-        alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt"]
+        alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
     val scheduledEndTime: String? = null
 )
