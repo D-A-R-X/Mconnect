@@ -11,7 +11,10 @@ import com.manjugroups.m_connect.ui.PlaceholderFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsListFragment
+import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.telecaller.DialerFragment
@@ -48,10 +51,32 @@ class AppLibraryFragment : Fragment() {
             openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))
         }
 
+        // KOS-52: Inventory + Bookings entries. Gated client-side by the same
+        // IAM permissions the web side enforces (lib/iam-model.ts).
+        val session = SessionManager(requireContext())
+        bindIamEntry(
+            row = binding.itemMarketingInventory,
+            allowed = session.hasPermission("projects.view"),
+        ) { openScreen(InventoryProjectsListFragment()) }
+        bindIamEntry(
+            row = binding.itemMarketingNewBooking,
+            allowed = session.hasPermission("marketing.bookings.create"),
+        ) { openScreen(BookingCreateFragment.newEmpty()) }
+
         binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
 
         // Keep existing profile/settings capabilities reachable from the new Apps tab.
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }
+    }
+
+    private fun bindIamEntry(row: View, allowed: Boolean, onClick: () -> Unit) {
+        if (allowed) {
+            row.visibility = View.VISIBLE
+            row.setOnClickListener { onClick() }
+        } else {
+            row.visibility = View.GONE
+            row.setOnClickListener(null)
+        }
     }
 
     private fun openScreen(fragment: Fragment) {

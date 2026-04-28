@@ -402,6 +402,53 @@ interface ApiService {
         @Body body: DialDooctiRequest,
     ): DialDooctiResponse
 
+    // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────
+    @GET("api/marketing/projects")
+    suspend fun getMarketingProjects(
+        @Header("Authorization") token: String,
+    ): MarketingProjectsResponse
+
+    @GET("api/marketing/inventory-units")
+    suspend fun listInventoryUnits(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("unitType") unitType: String? = null,
+        @Query("facing") facing: String? = null,
+        @Query("status") status: String? = null,
+    ): InventoryUnitsResponse
+
+    @GET("api/marketing/inventory-units/get")
+    suspend fun getInventoryUnit(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): InventoryUnitResponse
+
+    @GET("api/marketing/inventory-units/layout")
+    suspend fun getInventoryLayout(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("layoutId") layoutId: String? = null,
+    ): InventoryLayoutResponse
+
+    @POST("api/marketing/inventory-units/hold")
+    suspend fun holdInventoryUnit(
+        @Header("Authorization") token: String,
+        @Body body: InventoryUnitIdRequest,
+    ): InventoryUnitResponse
+
+    @POST("api/marketing/inventory-units/release")
+    suspend fun releaseInventoryUnit(
+        @Header("Authorization") token: String,
+        @Body body: InventoryUnitIdRequest,
+    ): InventoryUnitResponse
+
+    // ── Marketing: Bookings (KOS-52 — wires plotId always) ──────────────────
+    @POST("api/bookings")
+    suspend fun createBooking(
+        @Header("Authorization") token: String,
+        @Body body: CreateBookingRequest,
+    ): CreateBookingResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -987,4 +1034,105 @@ data class DialDooctiResponse(
     val error: String? = null,
     val stage: String? = null,
     val status: Int? = null,
+)
+
+// ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────
+data class MarketingProject(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val scope: String? = null,
+    val status: String? = null,
+    val location: String? = null,
+)
+
+data class MarketingProjectsResponse(
+    val success: Boolean,
+    val projects: List<MarketingProject> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryLayoutCoordinates(
+    val shape: String? = null,
+    val x: Double? = null,
+    val y: Double? = null,
+    val width: Double? = null,
+    val height: Double? = null,
+    val rotation: Double? = null,
+    val svgViewBox: String? = null,
+    val points: List<LayoutPoint>? = null,
+)
+
+data class LayoutPoint(val x: Double, val y: Double)
+
+data class InventoryUnit(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val unitNumber: String? = null,
+    val unitType: String? = null,           // plot|villa|flat
+    val facing: String? = null,             // N|E|S|W|NE|NW|SE|SW
+    val area: Double? = null,
+    val dimensions: String? = null,
+    val floor: Int? = null,
+    val block: String? = null,
+    val priceSnapshot: Double? = null,
+    val status: String,                     // available|held|booked|sold
+    val rawStatus: String? = null,
+    val reservedByBookingId: String? = null,
+    val soldByBookingId: String? = null,
+    val customerName: String? = null,
+    val layoutId: String? = null,
+    val layoutCoordinates: InventoryLayoutCoordinates? = null,
+)
+
+data class InventoryUnitsResponse(
+    val success: Boolean,
+    val units: List<InventoryUnit> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryUnitResponse(
+    val success: Boolean,
+    val unit: InventoryUnit? = null,
+    val error: String? = null,
+)
+
+data class InventoryLayoutProject(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val scope: String? = null,
+)
+
+data class InventoryLayoutResponse(
+    val success: Boolean,
+    val project: InventoryLayoutProject? = null,
+    val units: List<InventoryUnit> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryUnitIdRequest(val id: String)
+
+// ── Marketing: Bookings (KOS-52) ────────────────────────────────────────────
+// Mobile sends only the fields the booking picker collects. plotId is always
+// included when the user selected an inventory unit — server-side validator
+// (KOS-40) rejects mismatched project + sold/booked rows.
+data class CreateBookingRequest(
+    val clientName: String,
+    val mobileNumber: String,
+    val bookingDate: String,                // yyyy-MM-dd
+    val projectId: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val bookingType: String? = null,
+    val bookingMode: String? = null,
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val email: String? = null,
+    val homeAddress: String? = null,
+)
+
+data class CreateBookingResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val error: String? = null,
 )

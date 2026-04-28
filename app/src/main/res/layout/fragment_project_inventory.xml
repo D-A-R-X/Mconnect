@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="12dp">
+
+        <ImageView
+            android:id="@+id/btnProjectInventoryBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="Back"
+            android:clickable="true"
+            android:focusable="true"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvProjectInventoryTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="18sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvProjectInventoryScope"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvProjectInventoryCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="?attr/colorAccentPrimary"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/btnOpenLayoutMap"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_attendance_history_inner"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:padding="12dp"
+        android:text="Open 2D layout map"
+        android:textColor="?attr/colorAccentPrimary"
+        android:textSize="13sp" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/chipsUnitType"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        app:singleLine="true"
+        app:singleSelection="true" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/chipsFacing"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="6dp"
+        app:singleLine="true"
+        app:singleSelection="true" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/chipsStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="6dp"
+        app:singleLine="true"
+        app:singleSelection="true" />
+
+    <ProgressBar
+        android:id="@+id/projectInventoryLoading"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="16dp"
+        android:indeterminateTint="?attr/colorAccentPrimary"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvProjectInventoryEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="24dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/projectInventoryList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="16dp" />
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
