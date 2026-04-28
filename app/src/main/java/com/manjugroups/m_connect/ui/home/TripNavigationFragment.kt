@@ -95,6 +95,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var arrivalInProgress = false
     private var pendingArrivalPhoto: File? = null
     private var pendingArrivalPhotoUri: Uri? = null
+    // KOS-37: CP-visit context — set from fragment args. The decision flag
+    // tracks whether we already collected Client Met + Outcome for this run.
+    private var tripType: String? = null
+    private var cpVisitId: String? = null
+    private var cpVisitDecisionCaptured: Boolean = false
 
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
@@ -181,6 +186,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (destLat != null && destLng != null) {
             destination = LatLng(destLat, destLng)
         }
+        tripType = args.getString(ARG_TRIP_TYPE)
+        cpVisitId = args.getString(ARG_CP_VISIT_ID)
+        // If a prior session already recorded Client Met for this CP visit,
+        // skip the bottom sheet on this run — we only need it once per visit.
+        cpVisitDecisionCaptured = args.containsKey(ARG_CP_CLIENT_MET)
 
         tvTitle?.text = "Trip to $placeName"
         tvDestName?.text = placeName
@@ -194,6 +204,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         setFragmentResultListener(ArrivalOtpBottomSheet.RESULT_KEY) { _, bundle ->
             val otp = bundle.getString(ArrivalOtpBottomSheet.KEY_OTP).orEmpty()
             onArrivalOtpVerified(otp)
+        }
+
+        // KOS-37: CP-visit only — listen for the Client Met / Outcome sheet
+        // result and finalize completion afterward.
+        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
+            cpVisitDecisionCaptured = true
+            finalizeCompleteVisit()
         }
 
         mapView?.onCreate(savedInstanceState)
@@ -608,7 +625,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun onArrivalOtpVerified(@Suppress("UNUSED_PARAMETER") otp: String) {
         // The OTP itself is already verified server-side by /verify; here we
-        // only need to finalize the visit with the photo proof.
+        // route through the CP-visit decision sheet when applicable, then
+        // finalize the visit with the photo proof.
+        if (visitId == null) return
+
+        val isCpVisit = tripType == "client_place" && !cpVisitId.isNullOrBlank()
+        if (isCpVisit && !cpVisitDecisionCaptured) {
+            swipeArrived?.lockAsBusy("Capturing visit outcome…")
+            CompleteCpVisitBottomSheet
+                .newInstance(cpVisitId!!)
+                .show(parentFragmentManager, "cp_visit_complete")
+            return
+        }
+        finalizeCompleteVisit()
+    }
+
+    private fun finalizeCompleteVisit() {
         val id = visitId ?: return
         val storageId = pendingArrivalStorageId
         swipeArrived?.lockAsBusy("Completing visit…")
@@ -713,6 +745,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_DEST_LAT = "arg_dest_lat"
         private const val ARG_DEST_LNG = "arg_dest_lng"
         private const val ARG_STATUS = "arg_status"
+        // KOS-37: CP-visit context. tripType=client_place gates the
+        // Client-Met / Outcome flow on completion. cpClientMet / cpOutcome let
+        // us skip the bottom sheet when those decisions are already recorded
+        // (e.g. resuming a visit that was partially completed).
+        private const val ARG_TRIP_TYPE = "arg_trip_type"
+        private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
+        private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
+        private const val ARG_CP_OUTCOME = "arg_cp_outcome"
 
         fun forVisit(
             visitId: String,
@@ -721,6 +761,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             destLat: Double?,
             destLng: Double?,
             status: String? = null,
+            tripType: String? = null,
+            clientPlaceVisitId: String? = null,
+            cpClientMet: Boolean? = null,
+            cpOutcome: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -729,6 +773,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (destLat != null) putDouble(ARG_DEST_LAT, destLat)
                 if (destLng != null) putDouble(ARG_DEST_LNG, destLng)
                 if (status != null) putString(ARG_STATUS, status)
+                if (tripType != null) putString(ARG_TRIP_TYPE, tripType)
+                if (clientPlaceVisitId != null) putString(ARG_CP_VISIT_ID, clientPlaceVisitId)
+                if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
+                if (cpOutcome != null) putString(ARG_CP_OUTCOME, cpOutcome)
             }
         }
 

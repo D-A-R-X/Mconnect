@@ -263,7 +263,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:fontFamily="@font/inter_medium"
-                            android:text="Site Visits"
+                            android:text="Field Visits"
                             android:textColor="#1D2939"
                             android:textSize="13sp" />
 

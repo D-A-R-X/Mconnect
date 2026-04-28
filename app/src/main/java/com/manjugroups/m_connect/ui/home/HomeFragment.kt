@@ -218,7 +218,7 @@ class HomeFragment : Fragment() {
     private fun renderVisitCard(state: HomeUiState.Loaded) {
         // Home shows today's visits only. If nothing is scheduled for today,
         // we surface the empty state — yesterday's in-progress trips don't
-        // bleed into "Today's Visits" (Site Visits page is the place to find
+        // bleed into "Today's Visits" (Field Visits page is the place to find
         // history / cross-day work).
         val visits = state.todayVisits.filter { it.status != "cancelled" }
         val displayCount = visits.size
@@ -253,9 +253,28 @@ class HomeFragment : Fragment() {
         val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
         val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
         val action = itemView.findViewById<TextView>(R.id.btnVisitItemAction)
+        val cpBadge = itemView.findViewById<TextView>(R.id.tvVisitItemCpBadge)
+        val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
 
         title.text = visit.placeName ?: "Scheduled Visit"
         time.text = formatVisitTimeOrDate(visit)
+
+        // KOS-37: badge + lead line are CP-visit-only. The today feed marks the
+        // row with a clientPlaceVisitId only when this trip was spawned by a
+        // marketing CP-visit (PRD §10 Phase B).
+        val isCpVisit = visit.clientPlaceVisitId != null
+        cpBadge.visibility = if (isCpVisit) View.VISIBLE else View.GONE
+        if (isCpVisit) {
+            val parts = listOfNotNull(visit.leadName?.takeIf { it.isNotBlank() }, visit.leadPhone?.takeIf { it.isNotBlank() })
+            if (parts.isNotEmpty()) {
+                lead.text = parts.joinToString(" · ")
+                lead.visibility = View.VISIBLE
+            } else {
+                lead.visibility = View.GONE
+            }
+        } else {
+            lead.visibility = View.GONE
+        }
 
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
@@ -339,7 +358,11 @@ class HomeFragment : Fragment() {
             placeAddress = visit.placeAddress,
             destLat = visit.placeLat,
             destLng = visit.placeLng,
-            status = visit.status
+            status = visit.status,
+            tripType = visit.tripType,
+            clientPlaceVisitId = visit.clientPlaceVisitId,
+            cpClientMet = visit.cpVisit?.clientMet,
+            cpOutcome = visit.cpVisit?.outcome,
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)

@@ -140,6 +140,20 @@ interface GeoTrackApi {
         @Body body: ArrivalOtpCancelBody
     ): GeoTrackResponse
 
+    // ── KOS-37: marketing CP-visit decisions from mobile ──
+
+    @POST("api/marketing/clientPlaceVisits/markClientMet")
+    suspend fun markClientMet(
+        @Header("Authorization") token: String,
+        @Body body: MarkClientMetRequest
+    ): GeoTrackResponse
+
+    @POST("api/marketing/clientPlaceVisits/setOutcome")
+    suspend fun setCpVisitOutcome(
+        @Header("Authorization") token: String,
+        @Body body: SetOutcomeRequest
+    ): GeoTrackResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -496,6 +510,20 @@ data class ArrivalOtpVerifyResponse(
 
 data class ArrivalOtpCancelBody(val visitId: String)
 
+// KOS-37: marketing CP-visit mutations exposed over HTTP for the mobile client.
+data class MarkClientMetRequest(
+    val id: String,
+    val clientMet: Boolean,
+    val clientNoShowReason: String? = null
+)
+
+data class SetOutcomeRequest(
+    val id: String,
+    val outcome: String,
+    val postponeReasons: List<String>? = null,
+    val notes: String? = null
+)
+
 data class AssignedPlace(
     @com.google.gson.annotations.SerializedName("_id") val id: String,
     val name: String,
@@ -522,6 +550,12 @@ data class TodayVisit(
     val placeType: String? = null,
     val placeLat: Double? = null,
     val placeLng: Double? = null,
+    // KOS-37: surfaced for CP-visit aware UI on home today-card and Complete-Visit screen.
+    val tripType: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val leadName: String? = null,
+    val leadPhone: String? = null,
+    val cpVisit: CpVisitState? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledStartTime",
         alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt", "scheduledTime", "time", "visitTime", "timeFrom", "appointmentTime"]
@@ -532,6 +566,14 @@ data class TodayVisit(
         alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
     val scheduledEndTime: String? = null
+)
+
+data class CpVisitState(
+    val clientMet: Boolean? = null,
+    val clientMetAt: Long? = null,
+    val clientNoShowReason: String? = null,
+    val outcome: String? = null,
+    val postponeReasons: List<String>? = null
 )
 
 data class TodayVisitsResponse(

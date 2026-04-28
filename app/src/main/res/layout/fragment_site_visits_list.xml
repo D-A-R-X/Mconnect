@@ -28,7 +28,7 @@
             android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:fontFamily="@font/inter_bold"
-            android:text="Site Visits"
+            android:text="Field Visits"
             android:textColor="?attr/colorForegroundPrimary"
             android:textSize="18sp"
             android:singleLine="true"

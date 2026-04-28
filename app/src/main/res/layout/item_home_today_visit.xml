@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="86dp"
+    android:layout_height="wrap_content"
+    android:minHeight="86dp"
     android:layout_marginBottom="10dp"
     android:background="@drawable/bg_home_today_visit_item"
     android:foreground="?attr/selectableItemBackground"
@@ -34,6 +35,21 @@
                     android:contentDescription="@null"
                     android:src="@drawable/ic_home_today_video" />
             </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvVisitItemCpBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_active"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:text="CP Visit"
+                android:textColor="#FFFFFF"
+                android:textSize="9sp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/tvVisitItemTitle"
@@ -74,6 +90,20 @@
                 android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvVisitItemLead"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="#475467"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
