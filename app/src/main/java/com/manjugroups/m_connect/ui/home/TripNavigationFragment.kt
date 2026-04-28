@@ -606,21 +606,28 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private fun onArrivalOtpVerified(otp: String) {
+    private fun onArrivalOtpVerified(@Suppress("UNUSED_PARAMETER") otp: String) {
+        // The OTP itself is already verified server-side by /verify; here we
+        // only need to finalize the visit with the photo proof.
         val id = visitId ?: return
         val storageId = pendingArrivalStorageId
         swipeArrived?.lockAsBusy("Completing visit…")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val loc = fetchCurrentLocation()
-                val remarks = buildString {
-                    append("Arrival verified")
-                    if (!storageId.isNullOrBlank()) append(" | photo:").append(storageId)
-                    if (otp.isNotBlank()) append(" | otp:").append(otp)
-                }
+                // Photo + OTP are tracked in dedicated columns
+                // (arrivalPhotoStorageId, arrivalVerifiedAt). `remarks` stays
+                // human-readable so it can carry future free-text notes
+                // without us having to parse it again.
                 geoApi.completeVisit(
                     session.bearerToken,
-                    CompleteVisitRequest(id, loc?.latitude, loc?.longitude, remarks)
+                    CompleteVisitRequest(
+                        visitId = id,
+                        lat = loc?.latitude,
+                        lng = loc?.longitude,
+                        remarks = "Arrival verified",
+                        arrivalPhotoStorageId = storageId,
+                    )
                 )
                 val bootstrap = geoApi
                     .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)

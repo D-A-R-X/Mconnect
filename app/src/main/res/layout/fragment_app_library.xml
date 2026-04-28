@@ -275,34 +275,6 @@
                     </LinearLayout>
 
                     <LinearLayout
-                        android:id="@+id/itemMarketingClientPlace"
-                        android:layout_width="match_parent"
-                        android:layout_height="46dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/bg_attendance_history_inner"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="12dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="Places"
-                            android:textColor="#1D2939"
-                            android:textSize="13sp" />
-
-                        <ImageView
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_chevron_right" />
-                    </LinearLayout>
-
-                    <LinearLayout
                         android:id="@+id/itemMarketingDialer"
                         android:layout_width="match_parent"
                         android:layout_height="46dp"
@@ -331,7 +303,7 @@
                     </LinearLayout>
 
                     <LinearLayout
-                        android:id="@+id/itemMarketingCall"
+                        android:id="@+id/itemMarketingMyLeads"
                         android:layout_width="match_parent"
                         android:layout_height="46dp"
                         android:layout_marginTop="8dp"
@@ -347,7 +319,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:fontFamily="@font/inter_medium"
-                            android:text="Call"
+                            android:text="My Leads"
                             android:textColor="#1D2939"
                             android:textSize="13sp" />
 

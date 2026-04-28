@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp">
+
+        <ImageView
+            android:id="@+id/btnDialerBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="Back"
+            android:clickable="true"
+            android:focusable="true"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:singleLine="true"
+            android:text="Dialer"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/btnDialerSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_medium"
+            android:padding="6dp"
+            android:text="Station"
+            android:textColor="?attr/colorAccentPrimary"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Station bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:background="@drawable/bg_task_inner_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_regular"
+            android:text="Station:"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvDialerStation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/geist_mono_semibold"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Phone display -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="20dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvDialerNumber"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="start"
+            android:fontFamily="@font/geist_mono_semibold"
+            android:gravity="center"
+            android:hint="Enter number"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textSize="32sp" />
+
+        <ImageView
+            android:id="@+id/btnDialerBackspace"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Backspace"
+            android:focusable="true"
+            android:padding="6dp"
+            android:src="@drawable/ic_arrow_left"
+            android:visibility="invisible"
+            app:tint="?attr/colorForegroundMuted" />
+    </LinearLayout>
+
+    <!-- Dialpad — 4 rows × 3 cols of LinearLayouts; rows + cells filled at runtime -->
+    <LinearLayout
+        android:id="@+id/dialpadGrid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="22dp"
+        android:orientation="vertical" />
+
+    <!-- Call button -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:layout_marginBottom="20dp"
+        android:gravity="center">
+
+        <FrameLayout
+            android:id="@+id/btnDialerCall"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_dialer_call"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:contentDescription="Call"
+                android:src="@drawable/ic_send"
+                android:rotation="-45"
+                app:tint="@android:color/white" />
+
+            <ProgressBar
+                android:id="@+id/dialerCalling"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@android:color/white"
+                android:visibility="gone" />
+        </FrameLayout>
+    </FrameLayout>
+
+</LinearLayout>

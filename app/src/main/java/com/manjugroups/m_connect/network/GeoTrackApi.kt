@@ -80,6 +80,13 @@ interface GeoTrackApi {
         @Query("date") date: String
     ): TodayVisitsResponse
 
+    @GET("api/sitevisits/my")
+    suspend fun getMySiteVisits(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null
+    ): MySiteVisitsResponse
+
     @GET("api/tracking/places/search")
     suspend fun searchPlaces(
         @Header("Authorization") token: String,
@@ -436,7 +443,8 @@ data class CompleteVisitRequest(
     val visitId: String,
     val lat: Double? = null,
     val lng: Double? = null,
-    val remarks: String? = null
+    val remarks: String? = null,
+    val arrivalPhotoStorageId: String? = null,
 )
 
 data class RouteRequest(
@@ -529,6 +537,13 @@ data class TodayVisit(
 data class TodayVisitsResponse(
     val success: Boolean,
     val data: List<TodayVisit>? = null
+)
+
+data class MySiteVisitsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val visits: List<TodayVisit> = emptyList(),
+    val error: String? = null
 )
 
 data class TripsResponse(

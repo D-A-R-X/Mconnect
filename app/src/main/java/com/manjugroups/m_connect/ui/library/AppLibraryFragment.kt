@@ -11,8 +11,11 @@ import com.manjugroups.m_connect.ui.PlaceholderFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
+import com.manjugroups.m_connect.ui.marketing.SiteVisitsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
+import com.manjugroups.m_connect.ui.telecaller.DialerFragment
+import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
 
 class AppLibraryFragment : Fragment() {
 
@@ -39,10 +42,11 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
         binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
 
-        binding.itemMarketingSiteVisits.setOnClickListener { comingSoon("Site Visits") }
-        binding.itemMarketingClientPlace.setOnClickListener { comingSoon("Places") }
-        binding.itemMarketingDialer.setOnClickListener { comingSoon("Dialer") }
-        binding.itemMarketingCall.setOnClickListener { comingSoon("Call") }
+        binding.itemMarketingSiteVisits.setOnClickListener { openScreen(SiteVisitsListFragment()) }
+        binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }
+        binding.itemMarketingMyLeads.setOnClickListener {
+            openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))
+        }
 
         binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
 

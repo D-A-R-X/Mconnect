@@ -386,6 +386,22 @@ interface ApiService {
         @Body body: AddTaskUpdateRequest
     ): TaskMutationResponse
 
+    // ── Telecaller (mobile My Leads + Dialer) ──
+
+    @GET("api/telecaller/leads/my")
+    suspend fun getMyLeads(
+        @Header("Authorization") token: String,
+        @Query("limit") limit: Int? = null
+    ): MyLeadsResponse
+
+    // Doocti click-to-call. The endpoint lives on the Next.js admin host
+    // (mms.aivida.in/api/doocti-call), not Convex, so we pass the full URL.
+    @POST
+    suspend fun dialDoocti(
+        @Url url: String,
+        @Body body: DialDooctiRequest,
+    ): DialDooctiResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -916,4 +932,59 @@ data class TaskMutationResponse(
     val updateId: String? = null,
     val task: TaskData? = null,
     val error: String? = null
+)
+
+// ── Telecaller leads (mobile) ──────────────────────────────────────────────
+
+data class TelecallerLeadData(
+    @SerializedName("_id") val id: String,
+    val source: String? = null,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val mobileNumberNormalized: String? = null,
+    val emailId: String? = null,
+    val alternateNumber: String? = null,
+    val campaignName: String? = null,
+    val primaryCampaign: String? = null,
+    val secondaryCampaign: String? = null,
+    val assignedToStaffName: String? = null,
+    val assignedDate: String? = null,
+    val assignedTime: String? = null,
+    val assignedDateTime: Double? = null,
+    val leadReceivedAt: Double? = null,
+    val followUpStatus: String? = null,
+    val followUpRemarks: String? = null,
+    val followUpDate: Double? = null,
+    val asterCallStatus: String? = null,
+    val callType: String? = null,
+    val callDuration: Double? = null,
+    val recordingUrl: String? = null,
+    val transcriptionStatus: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val budget: String? = null,
+    val isAutoClosed: Boolean? = null,
+    @SerializedName("_creationTime") val createdAt: Double? = null
+)
+
+data class MyLeadsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val leads: List<TelecallerLeadData> = emptyList(),
+    val error: String? = null
+)
+
+data class DialDooctiRequest(
+    val phone_number: String,
+    val station: String? = null,
+    val cli_number: String? = null,
+    val agent: String? = null,
+)
+
+data class DialDooctiResponse(
+    val ok: Boolean? = null,
+    val data: Any? = null,
+    val error: String? = null,
+    val stage: String? = null,
+    val status: Int? = null,
 )

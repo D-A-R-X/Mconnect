@@ -69,8 +69,30 @@ class HomeFragment : Fragment() {
         val name = rawName.lowercase().split(" ").filter { it.isNotBlank() }
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
-        binding.tvHeaderRole.text = "Junior Full Stack Developer"
         binding.tvAvatarInitial.text = name.first().uppercase()
+        // Show a soft fallback while we fetch the real designation; the API
+        // call below replaces it with the staff's actual designation/department.
+        binding.tvHeaderRole.text =
+            if (session.isAdmin) "Administrator" else "Staff"
+        loadHeaderDesignation()
+    }
+
+    private fun loadHeaderDesignation() {
+        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaffDetail(session.bearerToken, staffId)
+                val staff = resp.staff ?: return@launch
+                if (_binding == null) return@launch
+                val role = listOfNotNull(
+                    staff.designation?.takeIf { it.isNotBlank() },
+                    staff.department?.takeIf { it.isNotBlank() },
+                ).joinToString(" • ")
+                if (role.isNotBlank()) binding.tvHeaderRole.text = role
+            } catch (_: Exception) {
+                // Keep the fallback; not worth a toast on a soft header field.
+            }
+        }
     }
 
     private fun setupActions() {
@@ -182,7 +204,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun renderSummary(state: HomeUiState.Loaded) {
-        val totalTasks = state.todayVisits.count { it.status != "cancelled" } + state.assignedPlaces.size
+        val totalTasks = state.todayVisits.count { it.status != "cancelled" }
         val presenceState = when {
             state.hasOpenSession -> "active presence"
             state.totalMinutes > 0 -> "presence activity"
@@ -194,9 +216,12 @@ class HomeFragment : Fragment() {
     }
 
     private fun renderVisitCard(state: HomeUiState.Loaded) {
+        // Home shows today's visits only. If nothing is scheduled for today,
+        // we surface the empty state — yesterday's in-progress trips don't
+        // bleed into "Today's Visits" (Site Visits page is the place to find
+        // history / cross-day work).
         val visits = state.todayVisits.filter { it.status != "cancelled" }
-        val places = state.assignedPlaces
-        val displayCount = if (visits.isNotEmpty()) visits.size else places.size
+        val displayCount = visits.size
 
         if (displayCount > 0) {
             binding.tvVisitCountBadge.visibility = View.VISIBLE
@@ -205,7 +230,7 @@ class HomeFragment : Fragment() {
             binding.tvVisitCountBadge.visibility = View.GONE
         }
 
-        if (visits.isEmpty() && places.isEmpty()) {
+        if (displayCount == 0) {
             binding.visitListContent.visibility = View.GONE
             binding.visitEmptyContent.visibility = View.VISIBLE
             binding.tvVisitEmptyTitle.text = "No Visits Available"
@@ -217,16 +242,8 @@ class HomeFragment : Fragment() {
         binding.visitEmptyContent.visibility = View.GONE
         binding.visitListContent.removeAllViews()
 
-        if (visits.isNotEmpty()) {
-            visits.forEachIndexed { index, visit ->
-                val itemView = createVisitItem(visit, index, visits.size)
-                binding.visitListContent.addView(itemView)
-            }
-            return
-        }
-
-        places.forEachIndexed { index, place ->
-            val itemView = createAssignedPlaceItem(place, index, places.size)
+        visits.forEachIndexed { index, visit ->
+            val itemView = createVisitItem(visit, index, displayCount)
             binding.visitListContent.addView(itemView)
         }
     }
