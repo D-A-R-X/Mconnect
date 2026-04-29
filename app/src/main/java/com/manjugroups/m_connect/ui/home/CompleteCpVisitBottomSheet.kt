@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.app.Dialog
+import android.app.AlertDialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -18,10 +21,15 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
+import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 /**
  * KOS-37: collects clientMet + outcome (+ postpone reasons) for a CP visit at
@@ -37,11 +45,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var clientMet: Boolean? = null
     private var selectedOutcome: String? = null
     private val selectedPostponeReasons = linkedSetOf<String>()
+    private var selectedProject: MarketingProject? = null
+    private var siteVisitDate: String = todayYmd()
+    private var siteVisitTime: String = defaultTime()
 
     private var btnYes: TextView? = null
     private var btnNo: TextView? = null
     private var etReason: EditText? = null
     private var outcomeRow: LinearLayout? = null
+    private var siteVisitDetailsGroup: View? = null
+    private var siteVisitProject: TextView? = null
+    private var siteVisitDateView: TextView? = null
+    private var siteVisitTimeView: TextView? = null
     private var postponeLabel: TextView? = null
     private var postponeScroll: View? = null
     private var postponeRow: LinearLayout? = null
@@ -77,6 +92,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnNo = view.findViewById(R.id.btnCpClientMetNo)
         etReason = view.findViewById(R.id.etCpClientNoShowReason)
         outcomeRow = view.findViewById(R.id.outcomeChipRow)
+        siteVisitDetailsGroup = view.findViewById(R.id.siteVisitDetailsGroup)
+        siteVisitProject = view.findViewById(R.id.tvCpSiteVisitProject)
+        siteVisitDateView = view.findViewById(R.id.tvCpSiteVisitDate)
+        siteVisitTimeView = view.findViewById(R.id.tvCpSiteVisitTime)
         postponeLabel = view.findViewById(R.id.tvPostponeReasonsLabel)
         postponeScroll = view.findViewById(R.id.postponeReasonScroll)
         postponeRow = view.findViewById(R.id.postponeReasonRow)
@@ -85,6 +104,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         btnYes?.setOnClickListener { setClientMet(true) }
         btnNo?.setOnClickListener { setClientMet(false) }
+        siteVisitProject?.setOnClickListener { pickProject() }
+        siteVisitDateView?.apply {
+            text = siteVisitDate
+            setOnClickListener { pickSiteVisitDate() }
+        }
+        siteVisitTimeView?.apply {
+            text = siteVisitTime
+            setOnClickListener { pickSiteVisitTime() }
+        }
 
         renderOutcomeChips()
         renderPostponeReasonChips()
@@ -140,9 +168,70 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
         }
         val isPostpone = outcome == OUTCOME_POSTPONED
+        val isSiteVisit = outcome == OUTCOME_SITE_VISIT
+        siteVisitDetailsGroup?.visibility = if (isSiteVisit) View.VISIBLE else View.GONE
         postponeLabel?.visibility = if (isPostpone) View.VISIBLE else View.GONE
         postponeScroll?.visibility = if (isPostpone) View.VISIBLE else View.GONE
         if (!isPostpone) selectedPostponeReasons.clear()
+    }
+
+    private fun pickProject() {
+        siteVisitProject?.text = "Loading projects..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getMarketingProjects(session.bearerToken)
+                if (!resp.success) {
+                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
+                    showError(resp.error ?: "Failed to load projects")
+                    return@launch
+                }
+                if (resp.projects.isEmpty()) {
+                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
+                    showError("No projects available")
+                    return@launch
+                }
+                val names = resp.projects.map { it.name ?: "Unnamed project" }.toTypedArray()
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Select site project")
+                    .setItems(names) { _, idx ->
+                        selectedProject = resp.projects[idx]
+                        siteVisitProject?.text = selectedProject?.name ?: "Select project"
+                    }
+                    .show()
+            } catch (e: Exception) {
+                siteVisitProject?.text = selectedProject?.name ?: "Select project"
+                showError(e.message ?: "Failed to load projects")
+            }
+        }
+    }
+
+    private fun pickSiteVisitDate() {
+        val cal = Calendar.getInstance()
+        DatePickerDialog(
+            requireContext(),
+            { _, y, m, d ->
+                cal.set(y, m, d)
+                siteVisitDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+                siteVisitDateView?.text = siteVisitDate
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH),
+        ).show()
+    }
+
+    private fun pickSiteVisitTime() {
+        val cal = Calendar.getInstance()
+        TimePickerDialog(
+            requireContext(),
+            { _, hour, minute ->
+                siteVisitTime = String.format(Locale.US, "%02d:%02d", hour, minute)
+                siteVisitTimeView?.text = siteVisitTime
+            },
+            cal.get(Calendar.HOUR_OF_DAY),
+            cal.get(Calendar.MINUTE),
+            false,
+        ).show()
     }
 
     private fun togglePostponeReason(reason: String) {
@@ -178,6 +267,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun dp(v: Int): Int =
         (v * resources.displayMetrics.density).toInt()
 
+    private fun todayYmd(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+
+    private fun defaultTime(): String =
+        SimpleDateFormat("HH:mm", Locale.US).format(Calendar.getInstance().time)
+
     private fun showError(msg: String) {
         errorText?.text = msg
         errorText?.visibility = View.VISIBLE
@@ -198,6 +293,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (outcome == OUTCOME_POSTPONED && selectedPostponeReasons.isEmpty()) {
             return showError("Pick at least one postpone reason")
         }
+        if (outcome == OUTCOME_SITE_VISIT) {
+            if (!met) return showError("Site visit can be created only after meeting the client")
+            if (selectedProject == null) return showError("Please select a project for the site visit")
+        }
 
         submitBtn?.isClickable = false
         submitBtn?.text = "Saving…"
@@ -216,6 +315,41 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     submitBtn?.isClickable = true
                     submitBtn?.text = "Save and complete"
                     showError(metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+
+                if (outcome == OUTCOME_SITE_VISIT) {
+                    val project = selectedProject
+                    if (project == null) {
+                        submitBtn?.isClickable = true
+                        submitBtn?.text = "Save and complete"
+                        showError("Please select a project for the site visit")
+                        return@launch
+                    }
+                    val convertResp = geoApi.convertCpVisitToSiteVisit(
+                        session.bearerToken,
+                        ConvertCpVisitToSiteVisitRequest(
+                            id = cpVisitId,
+                            projectId = project.id,
+                            scheduledDate = siteVisitDate,
+                            scheduledTime = siteVisitTime,
+                            notes = "Created from mobile CP visit"
+                        )
+                    )
+                    if (!convertResp.success) {
+                        submitBtn?.isClickable = true
+                        submitBtn?.text = "Save and complete"
+                        showError(convertResp.error ?: "Failed to create site visit")
+                        return@launch
+                    }
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(
+                            KEY_CLIENT_MET to met,
+                            KEY_OUTCOME to outcome
+                        )
+                    )
+                    dismissAllowingStateLoss()
                     return@launch
                 }
 
@@ -259,12 +393,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Mapping from PRD §10 Phase B labels to backend outcomeValidator literals.
         private const val OUTCOME_BOOKING = "converted_to_booking"
+        private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         private const val OUTCOME_WAIT = "interested"
 
         private val OUTCOME_OPTIONS = listOf(
             "Booking" to OUTCOME_BOOKING,
+            "Site Visit" to OUTCOME_SITE_VISIT,
             "Postpone" to OUTCOME_POSTPONED,
             "Not Interested" to OUTCOME_NOT_INTERESTED,
             "Wait" to OUTCOME_WAIT,

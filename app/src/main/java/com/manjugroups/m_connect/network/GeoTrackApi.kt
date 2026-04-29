@@ -87,6 +87,11 @@ interface GeoTrackApi {
         @Query("toDate") toDate: String? = null
     ): MySiteVisitsResponse
 
+    @GET("api/marketing/projects")
+    suspend fun getMarketingProjects(
+        @Header("Authorization") token: String
+    ): MarketingProjectsResponse
+
     @GET("api/tracking/places/search")
     suspend fun searchPlaces(
         @Header("Authorization") token: String,
@@ -159,6 +164,12 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
         @Body body: SetOutcomeRequest
     ): GeoTrackResponse
+
+    @POST("api/marketing/clientPlaceVisits/convertToSiteVisit")
+    suspend fun convertCpVisitToSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: ConvertCpVisitToSiteVisitRequest
+    ): ConvertCpVisitToSiteVisitResponse
 
     // ── Timeline (self-view) ──
 
@@ -542,6 +553,21 @@ data class SetOutcomeRequest(
     val outcome: String,
     val postponeReasons: List<String>? = null,
     val notes: String? = null
+)
+
+data class ConvertCpVisitToSiteVisitRequest(
+    val id: String,
+    val projectId: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val notes: String? = null,
+)
+
+data class ConvertCpVisitToSiteVisitResponse(
+    val success: Boolean,
+    val siteVisitId: String? = null,
+    val visitId: String? = null,
+    val error: String? = null,
 )
 
 data class AssignedPlace(

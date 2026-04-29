@@ -121,6 +121,75 @@
                 android:orientation="horizontal" />
         </HorizontalScrollView>
 
+        <LinearLayout
+            android:id="@+id/siteVisitDetailsGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Site visit details"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvCpSiteVisitProject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="12dp"
+                android:text="Select project"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvCpSiteVisitDate"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvCpSiteVisitTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="Pick time"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvPostponeReasonsLabel"
             android:layout_width="wrap_content"
