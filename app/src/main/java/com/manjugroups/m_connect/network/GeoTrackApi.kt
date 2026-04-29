@@ -122,6 +122,12 @@ interface GeoTrackApi {
         @Body body: RouteRequest
     ): RouteResponse
 
+    @POST("api/geotrack/geocode-address")
+    suspend fun geocodeAddress(
+        @Header("Authorization") token: String,
+        @Body body: GeocodeAddressRequest
+    ): GeocodeAddressResponse
+
     @POST("api/geotrack/visit/arrival-otp/request")
     suspend fun requestArrivalOtp(
         @Header("Authorization") token: String,
@@ -473,6 +479,20 @@ data class RouteResponse(
     val encodedPolyline: String? = null,
     val distanceMeters: Double? = null,
     val durationSeconds: Double? = null,
+    val error: String? = null
+)
+
+data class GeocodeAddressRequest(
+    val address: String
+)
+
+data class GeocodeAddressResponse(
+    val success: Boolean,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val formattedAddress: String? = null,
+    val placeId: String? = null,
+    val name: String? = null,
     val error: String? = null
 )
 

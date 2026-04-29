@@ -90,11 +90,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private var currentLocation: LatLng? = null
     private var destination: LatLng? = null
+    private var destinationAddress: String? = null
+    private var geocodeAttempted = false
     private var visitId: String? = null
     private var visitStarted = false
     private var arrivalInProgress = false
     private var pendingArrivalPhoto: File? = null
     private var pendingArrivalPhotoUri: Uri? = null
+    private var pendingArrivalOtpPhoneMasked: String? = null
+    private var pendingArrivalOtpExpiresInSeconds: Int = 600
+    private var pendingArrivalOtpResendCooldownSeconds: Int = 60
+    private var pendingArrivalLat: Double? = null
+    private var pendingArrivalLng: Double? = null
     // KOS-37: CP-visit context — set from fragment args. The decision flag
     // tracks whether we already collected Client Met + Outcome for this run.
     private var tripType: String? = null
@@ -141,7 +148,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) launchArrivalCamera()
+        if (granted) requestArrivalOtpThenOpenCamera()
         else {
             arrivalInProgress = false
             swipeArrived?.reset(newLabel = "Swipe to mark arrived")
@@ -181,6 +188,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         visitId = args.getString(ARG_VISIT_ID)
         val placeName = args.getString(ARG_PLACE_NAME) ?: "Destination"
         val placeAddress = args.getString(ARG_PLACE_ADDRESS)
+        destinationAddress = placeAddress
         val destLat = if (args.containsKey(ARG_DEST_LAT)) args.getDouble(ARG_DEST_LAT) else null
         val destLng = if (args.containsKey(ARG_DEST_LNG)) args.getDouble(ARG_DEST_LNG) else null
         if (destLat != null && destLng != null) {
@@ -268,6 +276,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             } catch (_: SecurityException) { /* race: permission revoked */ }
         }
         renderMapMarkersAndRoute()
+        geocodeDestinationIfNeeded()
         fetchCurrentLocationAndUpdate()
     }
 
@@ -330,6 +339,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 loadingOverlay?.visibility = View.GONE
                 tvStatus?.text = if (alreadyInFlight) "In progress" else "On the way"
                 renderMapMarkersAndRoute()
+                geocodeDestinationIfNeeded()
                 if (!alreadyInFlight) {
                     Toast.makeText(requireContext(), "Trip started", Toast.LENGTH_SHORT).show()
                 }
@@ -352,6 +362,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val location = fetchCurrentLocation() ?: return@launch
             currentLocation = LatLng(location.latitude, location.longitude)
             renderMapMarkersAndRoute()
+            geocodeDestinationIfNeeded()
         }
     }
 
@@ -368,7 +379,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun renderMapMarkersAndRoute() {
         val map = googleMap ?: return
-        val dest = destination ?: return
+        val dest = destination
+        if (dest == null) {
+            tvDistance?.text = "—"
+            tvEta?.text = "—"
+            return
+        }
         map.clear()
         routePolyline = null
 
@@ -397,6 +413,35 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(dest, 14f))
             tvDistance?.text = "—"
             tvEta?.text = "—"
+        }
+    }
+
+    private fun geocodeDestinationIfNeeded() {
+        if (destination != null || geocodeAttempted) return
+        val address = destinationAddress?.takeIf { it.isNotBlank() } ?: return
+        geocodeAttempted = true
+        tvDistance?.text = "Resolving…"
+        tvEta?.text = "—"
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = DirectionsClient.geocodeAddress(session.bearerToken, address)
+            if (!isAdded) return@launch
+            if (result == null) {
+                tvDistance?.text = "—"
+                tvEta?.text = "—"
+                Toast.makeText(
+                    requireContext(),
+                    "Could not locate address on map. Paste exact Maps link for best route.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            destination = result.latLng
+            val formatted = result.formattedAddress?.takeIf { it.isNotBlank() }
+            if (formatted != null) {
+                destinationAddress = formatted
+                tvDestAddress?.text = formatted
+            }
+            renderMapMarkersAndRoute()
         }
     }
 
@@ -493,7 +538,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         if (arrivalInProgress) return
         arrivalInProgress = true
-        swipeArrived?.lockAsBusy("Opening camera…")
 
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
@@ -503,7 +547,73 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             return
         }
-        launchArrivalCamera()
+        requestArrivalOtpThenOpenCamera()
+    }
+
+    private fun requestArrivalOtpThenOpenCamera() {
+        val id = visitId ?: run {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+            return
+        }
+        swipeArrived?.lockAsBusy("Checking location…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val freshLocation = fetchCurrentLocation()
+            val effLat = freshLocation?.latitude ?: currentLocation?.latitude
+            val effLng = freshLocation?.longitude ?: currentLocation?.longitude
+            if (effLat == null || effLng == null) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                Toast.makeText(
+                    requireContext(),
+                    "Could not read your GPS. Try again in open sky.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
+            try {
+                val resp = geoApi.requestArrivalOtp(
+                    session.bearerToken,
+                    ArrivalOtpRequestBody(visitId = id, lat = effLat, lng = effLng)
+                )
+                if (!resp.success) {
+                    arrivalInProgress = false
+                    swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                    Toast.makeText(
+                        requireContext(),
+                        arrivalBlockedMessage(resp),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                pendingArrivalOtpPhoneMasked = resp.contactPhoneMasked
+                pendingArrivalOtpExpiresInSeconds = resp.otpExpiresInSeconds ?: 600
+                pendingArrivalOtpResendCooldownSeconds = resp.resendCooldownSeconds ?: 60
+                pendingArrivalLat = effLat
+                pendingArrivalLng = effLng
+                swipeArrived?.lockAsBusy("Opening camera…")
+                launchArrivalCamera()
+            } catch (e: Exception) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+                Toast.makeText(
+                    requireContext(),
+                    "Network error: ${e.message ?: "unknown"}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun arrivalBlockedMessage(resp: com.manjugroups.m_connect.network.ArrivalOtpRequestResponse): String {
+        val distance = resp.distance
+        val radius = resp.radius
+        if (distance != null && radius != null) {
+            return "You are ${formatDistance(distance.toDouble())} away. Move within ${formatDistance(radius.toDouble())} to mark arrival."
+        }
+        return resp.error ?: "Could not verify arrival location"
     }
 
     private fun launchArrivalCamera() {
@@ -560,55 +670,27 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
             pendingArrivalStorageId = storageId
 
-            // Use freshest GPS for geofence check on the server.
-            swipeArrived?.lockAsBusy("Sending OTP to client…")
-            val freshLocation = fetchCurrentLocation()
-            val effLat = freshLocation?.latitude ?: currentLocation?.latitude
-            val effLng = freshLocation?.longitude ?: currentLocation?.longitude
-            if (effLat == null || effLng == null) {
+            val otpLat = pendingArrivalLat
+            val otpLng = pendingArrivalLng
+            if (otpLat == null || otpLng == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to mark arrived")
                 Toast.makeText(
                     requireContext(),
-                    "Could not read your GPS. Try again in open sky.",
+                    "Arrival location expired. Swipe again.",
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
             }
-
-            try {
-                val resp = geoApi.requestArrivalOtp(
-                    session.bearerToken,
-                    ArrivalOtpRequestBody(visitId = id, lat = effLat, lng = effLng)
-                )
-                if (!resp.success) {
-                    arrivalInProgress = false
-                    swipeArrived?.reset(newLabel = "Swipe to mark arrived")
-                    Toast.makeText(
-                        requireContext(),
-                        resp.error ?: "Failed to send OTP",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@launch
-                }
-                swipeArrived?.lockAsBusy("Enter OTP to confirm")
-                ArrivalOtpBottomSheet.newInstance(
-                    visitId = id,
-                    phoneMasked = resp.contactPhoneMasked,
-                    expiresInSeconds = resp.otpExpiresInSeconds ?: 600,
-                    resendCooldownSeconds = resp.resendCooldownSeconds ?: 60,
-                    lat = effLat,
-                    lng = effLng,
-                ).show(parentFragmentManager, "arrival_otp")
-            } catch (e: Exception) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to mark arrived")
-                Toast.makeText(
-                    requireContext(),
-                    "Network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            swipeArrived?.lockAsBusy("Enter OTP to confirm")
+            ArrivalOtpBottomSheet.newInstance(
+                visitId = id,
+                phoneMasked = pendingArrivalOtpPhoneMasked,
+                expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
+                resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
+                lat = otpLat,
+                lng = otpLng,
+            ).show(parentFragmentManager, "arrival_otp")
         }
     }
 

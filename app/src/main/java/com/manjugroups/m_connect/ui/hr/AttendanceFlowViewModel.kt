@@ -67,12 +67,18 @@ class AttendanceFlowViewModel(
                 val dayResp = runCatching { api.getDaySessions(token) }.getOrNull()
 
                 val attendance = if (todayResp.success) todayResp.attendance else null
-                val hasOpenSession = attendance?.hasOpenSession == true
                 val totalMinutes = attendance?.totalMinutes ?: 0
 
                 val firstPunchIn = dayResp?.firstPunchIn ?: attendance?.firstPunchIn
                 val lastPunchOut = dayResp?.lastPunchOut ?: attendance?.lastPunchOut
-                val range = buildRangeLabel(firstPunchIn, lastPunchOut, hasOpenSession)
+                val hasOpenSession = attendance?.hasOpenSession == true ||
+                    dayResp?.hasOpenSession == true
+                val isClockedInForToday = shouldTreatAsClockedIn(
+                    firstPunchIn = firstPunchIn,
+                    lastPunchOut = lastPunchOut,
+                    hasOpenSession = hasOpenSession,
+                )
+                val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForToday)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
 
@@ -82,7 +88,7 @@ class AttendanceFlowViewModel(
                 _uiState.value = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
-                    isClockedIn = hasOpenSession,
+                    isClockedIn = isClockedInForToday,
                     todayMinutes = totalMinutes,
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
@@ -285,6 +291,15 @@ class AttendanceFlowViewModel(
                 else -> "--"
             }
             return "$inLabel - $outLabel"
+        }
+
+        internal fun shouldTreatAsClockedIn(
+            firstPunchIn: String?,
+            lastPunchOut: String?,
+            hasOpenSession: Boolean,
+        ): Boolean {
+            if (hasOpenSession) return true
+            return !firstPunchIn.isNullOrBlank() && lastPunchOut.isNullOrBlank()
         }
 
         private fun formatIsoToTime(iso: String): String {
