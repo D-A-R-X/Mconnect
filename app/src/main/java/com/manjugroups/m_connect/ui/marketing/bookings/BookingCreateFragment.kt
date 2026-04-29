@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.graphics.Color
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -19,6 +21,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -39,6 +42,9 @@ class BookingCreateFragment : Fragment() {
 
     private var selectedProject: MarketingProject? = null
     private var selectedUnit: InventoryUnit? = null
+    private var selectedLead: TelecallerLeadSearchData? = null
+    private var leadMatches: List<TelecallerLeadSearchData> = emptyList()
+    private var lastLeadLookupPhone: String? = null
     private var bookingDate: String = todayYmd()
 
     override fun onCreateView(
@@ -84,6 +90,7 @@ class BookingCreateFragment : Fragment() {
             text = bookingDate
             setOnClickListener { pickDate(this) }
         }
+        setupLeadLookup(view)
 
         view.findViewById<View>(R.id.btnBookingSubmit).setOnClickListener {
             submitBooking(view)
@@ -96,6 +103,94 @@ class BookingCreateFragment : Fragment() {
                 Toast.LENGTH_LONG,
             ).show()
             view.findViewById<View>(R.id.btnBookingSubmit).isEnabled = false
+        }
+    }
+
+    private fun setupLeadLookup(root: View) {
+        val mobileInput = root.findViewById<EditText>(R.id.etBookingMobile)
+        val leadRow = root.findViewById<TextView>(R.id.tvBookingLinkedLead)
+        leadRow.setOnClickListener {
+            if (leadMatches.size > 1) {
+                showLeadPicker(root)
+            } else if (selectedLead != null) {
+                applyLead(root, selectedLead)
+            }
+        }
+        mobileInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val phone = normalizePhone(s?.toString().orEmpty())
+                if (phone.length < 10) {
+                    selectedLead = null
+                    leadMatches = emptyList()
+                    lastLeadLookupPhone = null
+                    leadRow.visibility = View.GONE
+                    return
+                }
+                if (phone == lastLeadLookupPhone) return
+                lastLeadLookupPhone = phone
+                searchLeadByPhone(root, phone)
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+    }
+
+    private fun searchLeadByPhone(root: View, phone: String) {
+        val leadRow = root.findViewById<TextView>(R.id.tvBookingLinkedLead)
+        selectedLead = null
+        leadMatches = emptyList()
+        leadRow.visibility = View.VISIBLE
+        leadRow.text = "Searching lead..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+                if (normalizePhone(root.findViewById<EditText>(R.id.etBookingMobile).text.toString()) != phone) {
+                    return@launch
+                }
+                if (!resp.success) {
+                    leadRow.text = resp.error ?: "Lead search failed"
+                    return@launch
+                }
+                leadMatches = resp.leads
+                if (leadMatches.isEmpty()) {
+                    leadRow.text = "No linked lead found"
+                    return@launch
+                }
+                applyLead(root, leadMatches.first())
+                if (leadMatches.size > 1) {
+                    leadRow.text = "${leadRow.text} · tap to change"
+                }
+            } catch (e: Exception) {
+                leadRow.text = "Lead search failed"
+            }
+        }
+    }
+
+    private fun showLeadPicker(root: View) {
+        val labels = leadMatches.map { lead ->
+            val name = lead.displayName()
+            val phone = lead.mobileNumber ?: "No phone"
+            listOf(name, phone).filter { it.isNotBlank() }.joinToString(" · ")
+        }.toTypedArray()
+        AlertDialog.Builder(requireContext())
+            .setTitle("Select linked lead")
+            .setItems(labels) { _, idx ->
+                applyLead(root, leadMatches[idx])
+            }
+            .show()
+    }
+
+    private fun applyLead(root: View, lead: TelecallerLeadSearchData?) {
+        if (lead == null) return
+        selectedLead = lead
+        val nameInput = root.findViewById<EditText>(R.id.etBookingClientName)
+        val name = lead.displayName()
+        if (name.isNotBlank() && nameInput.text.toString().trim().isBlank()) {
+            nameInput.setText(name)
+        }
+        root.findViewById<TextView>(R.id.tvBookingLinkedLead).apply {
+            visibility = View.VISIBLE
+            text = "Linked lead: ${name.ifBlank { lead.mobileNumber ?: lead.id }}"
         }
     }
 
@@ -226,6 +321,7 @@ class BookingCreateFragment : Fragment() {
             clientName = name,
             mobileNumber = mobile,
             bookingDate = bookingDate,
+            leadId = selectedLead?.id,
             projectId = proj.id,
             // KOS-52 acceptance: always pass plotId when a unit was selected.
             plotId = unit?.id,
@@ -261,6 +357,14 @@ class BookingCreateFragment : Fragment() {
     private fun toast(message: String) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
     }
+
+    private fun normalizePhone(value: String): String =
+        value.filter { it.isDigit() }.takeLast(10)
+
+    private fun TelecallerLeadSearchData.displayName(): String =
+        latestAnalysisProfile?.clientName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: contactName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: mobileNumber?.trim().orEmpty()
 
     private fun todayYmd(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)

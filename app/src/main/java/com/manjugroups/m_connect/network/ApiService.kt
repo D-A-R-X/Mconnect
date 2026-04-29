@@ -449,6 +449,12 @@ interface ApiService {
         @Body body: CreateBookingRequest,
     ): CreateBookingResponse
 
+    @GET("api/telecaller/leads/search-by-phone")
+    suspend fun searchTelecallerLeadsByPhone(
+        @Header("Authorization") token: String,
+        @Query("phone") phone: String,
+    ): TelecallerLeadSearchResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -1021,6 +1027,42 @@ data class MyLeadsResponse(
     val error: String? = null
 )
 
+data class TelecallerLeadSearchResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val leads: List<TelecallerLeadSearchData> = emptyList(),
+    val error: String? = null
+)
+
+data class TelecallerLeadSearchData(
+    @SerializedName("_id") val id: String,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val emailId: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val suggestedVisitAddress: String? = null,
+    val latestAnalysisProfile: LeadAnalysisProfile? = null,
+)
+
+data class LeadAnalysisProfile(
+    val clientName: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val landmark: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val alternateMobileNumber: String? = null,
+    val propertyType: String? = null,
+    val propertyInterest: LeadPropertyInterest? = null,
+)
+
+data class LeadPropertyInterest(
+    val location: String? = null,
+    val priceRangeLakhs: String? = null,
+    val extentInSqft: String? = null,
+)
+
 data class DialDooctiRequest(
     val phone_number: String,
     val station: String? = null,
@@ -1119,6 +1161,7 @@ data class CreateBookingRequest(
     val clientName: String,
     val mobileNumber: String,
     val bookingDate: String,                // yyyy-MM-dd
+    val leadId: String? = null,
     val projectId: String? = null,
     val plotId: String? = null,
     val plotNo: String? = null,

@@ -95,6 +95,13 @@
                 android:hint="10-digit mobile" />
 
             <TextView
+                android:id="@+id/tvBookingLinkedLead"
+                style="@style/BookingFieldRow"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                android:text="Search lead by phone" />
+
+            <TextView
                 style="@style/BookingFieldLabel"
                 android:text="Booking cost (₹)" />
 
