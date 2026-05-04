@@ -99,6 +99,7 @@ class WelcomeActivity : AppCompatActivity() {
     }
 
     private fun goToLogin() {
+        OnboardingPrefs(this).onboardingCompleted = true
         startActivity(Intent(this, LoginActivity::class.java).also { it.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP })
         overridePendingTransition(0, 0)
         finish()

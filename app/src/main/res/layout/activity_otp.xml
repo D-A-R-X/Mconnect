@@ -217,9 +217,8 @@
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:layout_gravity="center"
-            android:src="@drawable/ic_auth_phone"
-            android:contentDescription="@null"
-            app:tint="#FFFFFF" />
+            android:src="@drawable/ic_auth_secure"
+            android:contentDescription="@null" />
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

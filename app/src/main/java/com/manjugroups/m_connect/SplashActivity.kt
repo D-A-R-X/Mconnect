@@ -9,6 +9,8 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import com.manjugroups.m_connect.auth.LoginActivity
+import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.databinding.ActivitySplashBinding
@@ -30,6 +32,14 @@ class SplashActivity : AppCompatActivity() {
 
         window.statusBarColor = Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+
+        // First-launch experience (logo video + onboarding screens) shows once.
+        // Subsequent launches skip straight to login/main.
+        if (OnboardingPrefs(this).onboardingCompleted) {
+            binding.videoSplash.visibility = android.view.View.INVISIBLE
+            navigateNext()
+            return
+        }
 
         val videoUri = Uri.parse("android.resource://$packageName/${R.raw.logo}")
         binding.videoSplash.setVideoURI(videoUri)
@@ -67,7 +77,12 @@ class SplashActivity : AppCompatActivity() {
         handler.removeCallbacksAndMessages(null)
 
         val session = SessionManager(this)
-        val next = if (session.isLoggedIn) MainActivity::class.java else WelcomeActivity::class.java
+        val onboarded = OnboardingPrefs(this).onboardingCompleted
+        val next = when {
+            session.isLoggedIn -> MainActivity::class.java
+            onboarded -> LoginActivity::class.java
+            else -> WelcomeActivity::class.java
+        }
         startActivity(Intent(this, next))
         overridePendingTransition(0, 0)
         finish()
