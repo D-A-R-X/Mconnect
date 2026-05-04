@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma Rectangle 2 — stays solid blue ~70% of height, then fades to white -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#1DA1F2"
+        android:centerColor="#1DA1F2"
+        android:endColor="#FFFFFF"
+        android:centerY="0.65" />
+</shape>

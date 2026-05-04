@@ -17,6 +17,7 @@ playServicesLocation = "21.3.0"
 playServicesMaps = "19.2.0"
 firebaseBom = "33.15.0"
 room = "2.7.1"
+workmanager = "2.10.1"
 ksp = "2.1.20-1.0.32"
 
 [libraries]
@@ -45,6 +46,7 @@ firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

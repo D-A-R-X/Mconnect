@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
@@ -37,6 +38,7 @@ import com.manjugroups.m_connect.ui.hr.HrDashboardFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.library.AppLibraryFragment
+import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -83,6 +85,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        TrackingCheckWorker.enqueue(this)
         setContentView(R.layout.activity_main)
         mainRoot = findViewById(R.id.mainRoot)
         statusBarBackground = findViewById(R.id.statusBarBackground)
@@ -221,6 +224,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
+            TAB_HOME -> setTopBarAppearance(Color.WHITE, true)
             TAB_HR -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
             TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
             else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
@@ -307,22 +311,26 @@ class MainActivity : AppCompatActivity() {
             )
         )
         val bootstrap = deviceSync.bootstrap ?: geoApi.getTrackingBootstrap(session.bearerToken, deviceId).data
-        applyTrackingBootstrap(bootstrap)
+        val attendanceActive = runCatching {
+            AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
+        }.getOrDefault(false)
+        applyTrackingBootstrap(bootstrap, attendanceActive)
     }
 
-    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?) {
+    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
         session.geoTrackingEnabled = bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
         session.geoConsentGiven = bootstrap?.consent?.status == "granted"
         session.geoConsentDeclined = bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
         session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = bootstrap?.shouldTrack == true
+        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
 
-        if (bootstrap?.shouldPromptConsent == true && !isFinishing) {
+        if (attendanceActive && bootstrap?.shouldPromptConsent == true && !isFinishing) {
             startActivity(Intent(this, GeoTrackConsentActivity::class.java))
             return
         }
 
-        val canStartTracking = bootstrap?.shouldTrack == true &&
+        val canStartTracking = attendanceActive &&
+            bootstrap?.shouldTrack == true &&
             !bootstrap.activeSession?.id.isNullOrBlank() &&
             GeoTrackService.hasRequiredLocationPermissions(this)
 

@@ -56,4 +56,5 @@
     <color name="dk_warning_light">#FF451A03</color>
     <color name="dk_error_light">#FF450A0A</color>
     <color name="dk_info_light">#FF1E3A5F</color>
+    <color name="splash_bg">#FFFFFFFF</color>
 </resources>

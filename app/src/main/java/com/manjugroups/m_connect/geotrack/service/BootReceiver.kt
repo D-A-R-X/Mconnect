@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TamperReportRequest
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +32,14 @@ class BootReceiver : BroadcastReceiver() {
                             session.bearerToken,
                             session.trackingDeviceId
                         ).data
+                        val attendanceActive = AttendanceTrackingGate.isClockedInForToday(
+                            session.bearerToken,
+                            ApiService.create(),
+                        )
                         session.activeTrackingSessionId = bootstrap?.activeSession?.id
-                        session.shouldTrackNow = bootstrap?.shouldTrack == true
-                        if (bootstrap?.shouldTrack == true &&
+                        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
+                        if (attendanceActive &&
+                            bootstrap?.shouldTrack == true &&
                             !bootstrap.activeSession?.id.isNullOrBlank() &&
                             GeoTrackService.hasRequiredLocationPermissions(context)
                         ) {

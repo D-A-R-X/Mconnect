@@ -1,9 +1,17 @@
 package com.manjugroups.m_connect.ui.hr
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
+import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
+import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
+import com.manjugroups.m_connect.network.TrackingBootstrapData
+import com.manjugroups.m_connect.auth.SessionManager
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -51,6 +59,7 @@ sealed interface AttendanceFlowEvent {
 
 class AttendanceFlowViewModel(
     private val api: ApiService = ApiService.create(),
+    private val geoApi: GeoTrackApi = GeoTrackApi.create(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AttendanceFlowState())
@@ -75,7 +84,6 @@ class AttendanceFlowViewModel(
                     dayResp?.hasOpenSession == true
                 val isClockedInForToday = shouldTreatAsClockedIn(
                     firstPunchIn = firstPunchIn,
-                    lastPunchOut = lastPunchOut,
                     hasOpenSession = hasOpenSession,
                 )
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForToday)
@@ -144,6 +152,7 @@ class AttendanceFlowViewModel(
         address: String?,
         selfieFile: File?,
         deviceId: String?,
+        context: Context? = null,
     ) {
         submitPunch(
             mode = PunchMode.PUNCH_IN,
@@ -153,6 +162,7 @@ class AttendanceFlowViewModel(
             address = address,
             selfieFile = selfieFile,
             deviceId = deviceId,
+            context = context,
         )
     }
 
@@ -163,6 +173,7 @@ class AttendanceFlowViewModel(
         address: String?,
         selfieFile: File?,
         deviceId: String?,
+        context: Context? = null,
     ) {
         submitPunch(
             mode = PunchMode.PUNCH_OUT,
@@ -172,6 +183,7 @@ class AttendanceFlowViewModel(
             address = address,
             selfieFile = selfieFile,
             deviceId = deviceId,
+            context = context,
         )
     }
 
@@ -183,6 +195,7 @@ class AttendanceFlowViewModel(
         address: String?,
         selfieFile: File?,
         deviceId: String?,
+        context: Context?,
     ) {
         viewModelScope.launch {
             if (selfieFile == null || !selfieFile.exists()) {
@@ -236,6 +249,17 @@ class AttendanceFlowViewModel(
                     return@launch
                 }
 
+                context?.let {
+                    val bootstrap = response.trackingBootstrap ?: runCatching {
+                        geoApi.getTrackingBootstrap(token, deviceId ?: SessionManager(it).trackingDeviceId).data
+                    }.getOrNull()
+                    applyTrackingBootstrap(
+                        context = it.applicationContext,
+                        bootstrap = bootstrap,
+                        attendanceActive = true,
+                    )
+                }
+
                 _events.emit(
                     AttendanceFlowEvent.Success(
                         mode,
@@ -263,6 +287,34 @@ class AttendanceFlowViewModel(
             response.storageId
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun applyTrackingBootstrap(
+        context: Context,
+        bootstrap: TrackingBootstrapData?,
+        attendanceActive: Boolean,
+    ) {
+        val session = SessionManager(context)
+        session.activeTrackingSessionId = bootstrap?.activeSession?.id
+        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
+        session.geoTrackingEnabled =
+            bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
+        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
+        session.geoConsentDeclined =
+            bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
+
+        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
+            context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+            return
+        }
+
+        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
+            GeoTrackService.start(context)
+        } else {
+            GeoTrackService.stop(context)
         }
     }
 
@@ -295,11 +347,9 @@ class AttendanceFlowViewModel(
 
         internal fun shouldTreatAsClockedIn(
             firstPunchIn: String?,
-            lastPunchOut: String?,
             hasOpenSession: Boolean,
         ): Boolean {
-            if (hasOpenSession) return true
-            return !firstPunchIn.isNullOrBlank() && lastPunchOut.isNullOrBlank()
+            return AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
         }
 
         private fun formatIsoToTime(iso: String): String {

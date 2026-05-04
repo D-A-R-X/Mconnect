@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.home
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -51,7 +52,7 @@ class HomeFragment : Fragment() {
         setupActions()
         collectState()
         collectEvents()
-        viewModel.loadHomeData(session.bearerToken)
+        viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
     }
 
@@ -59,9 +60,10 @@ class HomeFragment : Fragment() {
         super.onResume()
         // Defensive: restore tab bar in case a child fragment hid it.
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(Color.WHITE, true)
         loadUnreadNotifications()
-        // Refresh visit list — covers returning from TripNavigationFragment
-        viewModel.loadTodayVisits(session.bearerToken)
+        // Refresh attendance and visits — covers biometric punches and returning from trips.
+        viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
     }
 
     private fun setupHeader() {
@@ -243,12 +245,17 @@ class HomeFragment : Fragment() {
         binding.visitListContent.removeAllViews()
 
         visits.forEachIndexed { index, visit ->
-            val itemView = createVisitItem(visit, index, displayCount)
+            val itemView = createVisitItem(visit, index, displayCount, state.hasOpenSession)
             binding.visitListContent.addView(itemView)
         }
     }
 
-    private fun createVisitItem(visit: TodayVisit, index: Int, total: Int): View {
+    private fun createVisitItem(
+        visit: TodayVisit,
+        index: Int,
+        total: Int,
+        canStartTrip: Boolean,
+    ): View {
         val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, binding.visitListContent, false)
         val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
         val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
@@ -278,11 +285,17 @@ class HomeFragment : Fragment() {
 
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
+        val needsCpDetails = isCpVisit && status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         val isInProgress = status in setOf(
             "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
         )
 
         when {
+            needsCpDetails -> {
+                action.text = "Complete CP details"
+                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
+                action.setTextColor(android.graphics.Color.WHITE)
+            }
             isInProgress -> {
                 action.text = "In progress"
                 action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_progress)
@@ -293,6 +306,11 @@ class HomeFragment : Fragment() {
                 action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
                 action.setTextColor(android.graphics.Color.parseColor("#475467"))
             }
+            !canStartTrip -> {
+                action.text = "Clock In First"
+                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
+                action.setTextColor(android.graphics.Color.parseColor("#475467"))
+            }
             else -> {
                 action.text = "Start Trip"
                 action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
@@ -300,19 +318,28 @@ class HomeFragment : Fragment() {
             }
         }
 
-        // Card is the navigation target for both scheduled and in-progress
-        // visits. Pill is informational: clickable only for scheduled (where it
-        // reads "Start Trip"); a status badge otherwise.
         val canOpen = !isCompleted
         if (canOpen) {
             val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
-            itemView.isClickable = true
-            itemView.isFocusable = true
-            itemView.setOnClickListener(openNav)
-            if (isInProgress) {
+            val clockInRequired: (View) -> Unit = {
+                Toast.makeText(requireContext(), "Please clock in before starting a trip.", Toast.LENGTH_SHORT).show()
+            }
+            if (!canStartTrip && !isInProgress) {
+                itemView.isClickable = false
+                itemView.isFocusable = false
+                itemView.setOnClickListener(null)
+                action.isClickable = true
+                action.setOnClickListener(clockInRequired)
+            } else if (isInProgress) {
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openNav)
                 action.isClickable = false
                 action.setOnClickListener(null)
             } else {
+                itemView.isClickable = false
+                itemView.isFocusable = false
+                itemView.setOnClickListener(null)
                 action.isClickable = true
                 action.setOnClickListener(openNav)
             }
@@ -341,9 +368,9 @@ class HomeFragment : Fragment() {
         action.setTextColor(android.graphics.Color.WHITE)
 
         val openNav: (View) -> Unit = { openTripNavigationForPlace(place) }
-        itemView.isClickable = true
-        itemView.isFocusable = true
-        itemView.setOnClickListener(openNav)
+        itemView.isClickable = false
+        itemView.isFocusable = false
+        itemView.setOnClickListener(null)
         action.isClickable = true
         action.setOnClickListener(openNav)
 

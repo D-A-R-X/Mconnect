@@ -1,10 +1,11 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.app.Dialog
-import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -21,11 +22,16 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
+import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.ui.common.SearchableOption
+import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -40,14 +46,25 @@ import java.util.Locale
 class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private val geoApi = GeoTrackApi.create()
+    private val api = ApiService.create()
     private lateinit var session: SessionManager
 
     private var clientMet: Boolean? = null
     private var selectedOutcome: String? = null
     private val selectedPostponeReasons = linkedSetOf<String>()
     private var selectedProject: MarketingProject? = null
+    private var selectedBdo: StaffData? = null
+    private var selectedIncharge: StaffData? = null
+    private var selectedHod: StaffData? = null
+    private var selectedAvp: StaffData? = null
+    private var selectedGm: StaffData? = null
+    private var selectedSeniorManager: StaffData? = null
+    private var salesStaff: List<StaffData> = emptyList()
+    private var projects: List<MarketingProject> = emptyList()
+    private var projectsLoading = false
     private var siteVisitDate: String = todayYmd()
     private var siteVisitTime: String = defaultTime()
+    private var selectedTravelMode: String = "cab"
 
     private var btnYes: TextView? = null
     private var btnNo: TextView? = null
@@ -57,6 +74,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var siteVisitProject: TextView? = null
     private var siteVisitDateView: TextView? = null
     private var siteVisitTimeView: TextView? = null
+    private var siteVisitTravelMode: TextView? = null
+    private var pickupAddress: EditText? = null
+    private var siteVisitBdo: TextView? = null
+    private var siteVisitIncharge: TextView? = null
+    private var siteVisitHod: TextView? = null
+    private var siteVisitAvp: TextView? = null
+    private var siteVisitGm: TextView? = null
+    private var siteVisitSeniorManager: TextView? = null
+    private var visitorCount: EditText? = null
+    private var visitorRows: LinearLayout? = null
+    private var foodPreference: EditText? = null
     private var postponeLabel: TextView? = null
     private var postponeScroll: View? = null
     private var postponeRow: LinearLayout? = null
@@ -96,15 +124,60 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         siteVisitProject = view.findViewById(R.id.tvCpSiteVisitProject)
         siteVisitDateView = view.findViewById(R.id.tvCpSiteVisitDate)
         siteVisitTimeView = view.findViewById(R.id.tvCpSiteVisitTime)
+        siteVisitTravelMode = view.findViewById(R.id.tvCpSiteVisitTravelMode)
+        pickupAddress = view.findViewById(R.id.etCpSiteVisitPickupAddress)
+        siteVisitBdo = view.findViewById(R.id.tvCpSiteVisitBdo)
+        siteVisitIncharge = view.findViewById(R.id.tvCpSiteVisitIncharge)
+        siteVisitHod = view.findViewById(R.id.tvCpSiteVisitHod)
+        siteVisitAvp = view.findViewById(R.id.tvCpSiteVisitAvp)
+        siteVisitGm = view.findViewById(R.id.tvCpSiteVisitGm)
+        siteVisitSeniorManager = view.findViewById(R.id.tvCpSiteVisitSeniorManager)
+        visitorCount = view.findViewById(R.id.etCpSiteVisitVisitorCount)
+        visitorRows = view.findViewById(R.id.visitorRows)
+        foodPreference = view.findViewById(R.id.etCpSiteVisitFoodPreference)
         postponeLabel = view.findViewById(R.id.tvPostponeReasonsLabel)
         postponeScroll = view.findViewById(R.id.postponeReasonScroll)
         postponeRow = view.findViewById(R.id.postponeReasonRow)
         errorText = view.findViewById(R.id.tvCpError)
         submitBtn = view.findViewById(R.id.btnCpSubmit)
 
+        arguments?.let { args ->
+            if (args.containsKey(ARG_CP_CLIENT_MET)) {
+                setClientMet(args.getBoolean(ARG_CP_CLIENT_MET))
+            }
+            args.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }?.let(::setOutcome)
+        }
         btnYes?.setOnClickListener { setClientMet(true) }
         btnNo?.setOnClickListener { setClientMet(false) }
         siteVisitProject?.setOnClickListener { pickProject() }
+        siteVisitBdo?.isClickable = false
+        siteVisitIncharge?.setOnClickListener {
+            pickStaff("Select SiteIncharge") {
+                selectedIncharge = it
+                siteVisitIncharge?.text = "SiteIncharge: ${it.name ?: "Selected"}"
+                val reportingTo = it.reportingToId ?: it.reportingTo
+                if (selectedHod == null && reportingTo != null) {
+                    selectedHod = salesStaff.firstOrNull { staff -> staff.id == reportingTo }
+                    selectedHod?.let { hod -> siteVisitHod?.text = "HOD: ${hod.name ?: "Selected"}" }
+                }
+            }
+        }
+        siteVisitHod?.setOnClickListener { pickStaff("Select HOD") { selectedHod = it; siteVisitHod?.text = "HOD: ${it.name ?: "Selected"}" } }
+        siteVisitAvp?.setOnClickListener { pickStaff("Select AVP") { selectedAvp = it; siteVisitAvp?.text = "AVP: ${it.name ?: "Selected"}" } }
+        siteVisitGm?.setOnClickListener { pickStaff("Select GM") { selectedGm = it; siteVisitGm?.text = "GM: ${it.name ?: "Selected"}" } }
+        siteVisitSeniorManager?.setOnClickListener {
+            pickStaff("Select Senior Manager") {
+                selectedSeniorManager = it
+                siteVisitSeniorManager?.text = "Senior Manager: ${it.name ?: "Selected"}"
+            }
+        }
+        visitorCount?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                renderVisitorRows(s?.toString()?.toIntOrNull() ?: 0)
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
         siteVisitDateView?.apply {
             text = siteVisitDate
             setOnClickListener { pickSiteVisitDate() }
@@ -113,9 +186,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             text = siteVisitTime
             setOnClickListener { pickSiteVisitTime() }
         }
+        siteVisitTravelMode?.setOnClickListener { toggleTravelMode() }
+        renderTravelMode()
 
         renderOutcomeChips()
         renderPostponeReasonChips()
+        loadSalesStaff()
+        loadProjects(showErrors = false)
 
         submitBtn?.setOnClickListener { onSubmit() }
     }
@@ -176,33 +253,172 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickProject() {
+        if (projects.isNotEmpty()) {
+            showProjectPicker(projects)
+            return
+        }
+        loadProjects(showErrors = true)
+    }
+
+    private fun loadProjects(showErrors: Boolean) {
+        if (projectsLoading) return
+        projectsLoading = true
         siteVisitProject?.text = "Loading projects..."
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getMarketingProjects(session.bearerToken)
+                val resp = api.getMarketingProjects(session.bearerToken)
                 if (!resp.success) {
                     siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                    showError(resp.error ?: "Failed to load projects")
+                    if (showErrors) showError(resp.error ?: "Failed to load projects")
                     return@launch
                 }
                 if (resp.projects.isEmpty()) {
                     siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                    showError("No projects available")
+                    if (showErrors) showError("No projects available")
                     return@launch
                 }
-                val names = resp.projects.map { it.name ?: "Unnamed project" }.toTypedArray()
-                AlertDialog.Builder(requireContext())
-                    .setTitle("Select site project")
-                    .setItems(names) { _, idx ->
-                        selectedProject = resp.projects[idx]
-                        siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                    }
-                    .show()
+                projects = resp.projects
+                siteVisitProject?.text = selectedProject?.name ?: "Select project"
+                if (showErrors) showProjectPicker(projects)
             } catch (e: Exception) {
                 siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                showError(e.message ?: "Failed to load projects")
+                if (showErrors) showError(e.message ?: "Failed to load projects")
+            } finally {
+                projectsLoading = false
             }
         }
+    }
+
+    private fun showProjectPicker(items: List<MarketingProject>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select project",
+            options = items.map { project ->
+                SearchableOption(
+                    item = project,
+                    title = project.name ?: "Unnamed project",
+                    subtitle = listOfNotNull(project.location, project.status).joinToString(" • ").takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(project.id, project.scope, project.location, project.status).joinToString(" ")
+                )
+            },
+            emptyMessage = "No projects found"
+        ) { project ->
+            selectedProject = project
+            siteVisitProject?.text = project.name ?: "Select project"
+        }
+    }
+
+    private fun loadSalesStaff() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                salesStaff = resp.staff.filter {
+                    val dept = it.department.orEmpty().lowercase(Locale.US)
+                    dept.contains("telesales") || dept.contains("sales")
+                }
+            } catch (_: Exception) {
+                salesStaff = emptyList()
+            }
+        }
+    }
+
+    private fun pickStaff(title: String, onPicked: (StaffData) -> Unit) {
+        if (salesStaff.isEmpty()) {
+            showError("No Sales & Marketing / Telesales staff found")
+            loadSalesStaff()
+            return
+        }
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = title,
+            options = salesStaff.map { staff ->
+                SearchableOption(
+                    item = staff,
+                    title = staff.name ?: "Unnamed staff",
+                    subtitle = listOfNotNull(staff.designation, staff.department, staff.employeeId).joinToString(" • ")
+                        .takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(staff.phone, staff.role, staff.status).joinToString(" ")
+                )
+            },
+            emptyMessage = "No staff found"
+        ) { onPicked(it) }
+    }
+
+    private fun renderVisitorRows(count: Int) {
+        val rows = visitorRows ?: return
+        rows.removeAllViews()
+        repeat(count.coerceIn(0, 12)) { index ->
+            val group = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setBackgroundResource(R.drawable.bg_stat_card)
+                tag = "visitor_row"
+            }
+            val title = TextView(requireContext()).apply {
+                text = "Visitor ${index + 1}"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(android.graphics.Color.parseColor("#667085"))
+                typeface = resources.getFont(R.font.inter_semibold)
+            }
+            val name = makeVisitorEdit("Visitor ${index + 1} name").apply { tag = "name" }
+            val relation = makeVisitorEdit("Relation").apply { tag = "relation" }
+            val age = makeVisitorEdit("Age").apply {
+                tag = "age"
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            }
+            val food = makeChip("Food: Veg") {
+                val current = group.findViewWithTag<TextView>("food")
+                val next = current?.text?.toString() != "Food: Veg"
+                current?.text = if (next) "Food: Veg" else "Food: Non-veg"
+            }.apply { tag = "food" }
+            applyChipState(food, false)
+            group.addView(title)
+            group.addView(name)
+            group.addView(relation)
+            group.addView(age)
+            group.addView(food)
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(10) }
+            rows.addView(group, params)
+        }
+    }
+
+    private fun makeVisitorEdit(hint: String): EditText =
+        EditText(requireContext()).apply {
+            this.hint = hint
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(android.graphics.Color.parseColor("#1D2939"))
+            setHintTextColor(android.graphics.Color.parseColor("#98A2B3"))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setBackgroundResource(R.drawable.bg_chip_inactive)
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) }
+            layoutParams = params
+        }
+
+    private fun collectVisitors(): List<SiteVisitAttendeeRequest> {
+        val rows = visitorRows ?: return emptyList()
+        val result = mutableListOf<SiteVisitAttendeeRequest>()
+        for (i in 0 until rows.childCount) {
+            val group = rows.getChildAt(i) as? LinearLayout ?: continue
+            val name = group.findViewWithTag<EditText>("name")?.text?.toString()?.trim().orEmpty()
+            val relation = group.findViewWithTag<EditText>("relation")?.text?.toString()?.trim().orEmpty()
+            val age = group.findViewWithTag<EditText>("age")?.text?.toString()?.trim().orEmpty()
+            val isVeg = !group.findViewWithTag<TextView>("food")?.text?.toString().orEmpty().contains("Non-veg")
+            result.add(
+                SiteVisitAttendeeRequest(
+                    name = name.takeIf { it.isNotEmpty() },
+                    relation = relation.takeIf { it.isNotEmpty() },
+                    age = age.takeIf { it.isNotEmpty() },
+                    isVeg = isVeg
+                )
+            )
+        }
+        return result
     }
 
     private fun pickSiteVisitDate() {
@@ -232,6 +448,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cal.get(Calendar.MINUTE),
             false,
         ).show()
+    }
+
+    private fun toggleTravelMode() {
+        selectedTravelMode = if (selectedTravelMode == "cab") "own_vehicle" else "cab"
+        renderTravelMode()
+    }
+
+    private fun renderTravelMode() {
+        siteVisitTravelMode?.text =
+            if (selectedTravelMode == "own_vehicle") "Client travel: Own vehicle"
+            else "Client travel: Cab required"
     }
 
     private fun togglePostponeReason(reason: String) {
@@ -333,6 +560,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             projectId = project.id,
                             scheduledDate = siteVisitDate,
                             scheduledTime = siteVisitTime,
+                            assignedTelecallerStaffId = selectedBdo?.id,
+                            inchargeStaffId = selectedIncharge?.id,
+                            hodStaffId = selectedHod?.id,
+                            avpStaffId = selectedAvp?.id,
+                            gmStaffId = selectedGm?.id,
+                            seniorManagerStaffId = selectedSeniorManager?.id,
+                            expectedAttendeeCount = visitorCount?.text?.toString()?.toIntOrNull()?.takeIf { it > 0 },
+                            attendees = collectVisitors().takeIf { it.isNotEmpty() },
+                            pickupAddress = pickupAddress?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+                            travelMode = selectedTravelMode,
+                            foodPreferences = foodPreference?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
                             notes = "Created from mobile CP visit"
                         )
                     )
@@ -408,9 +646,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         private val POSTPONE_REASON_OPTIONS = listOf("Budget", "Timing", "Project", "Other")
 
-        fun newInstance(cpVisitId: String): CompleteCpVisitBottomSheet =
+        fun newInstance(
+            cpVisitId: String,
+            cpClientMet: Boolean? = null,
+            cpOutcome: String? = null,
+        ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
-                arguments = Bundle().apply { putString(ARG_CP_VISIT_ID, cpVisitId) }
+                arguments = Bundle().apply {
+                    putString(ARG_CP_VISIT_ID, cpVisitId)
+                    if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
+                    if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
+                }
             }
+
+        private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
+        private const val ARG_CP_OUTCOME = "arg_cp_outcome"
     }
 }

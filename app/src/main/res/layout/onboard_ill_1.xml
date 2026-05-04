@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onboard1 (Figma 98:8056) — frame 390x844 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- Today Meeting: source 1092x1093 (~1:1), Figma slot 282x282 @ x=31 y=141 -->
+    <ImageView
+        android:id="@+id/imgTodayMeeting"
+        android:layout_width="340dp"
+        android:layout_height="340dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="80dp"
+        android:src="@drawable/onboard_today_meeting"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true" />
+
+    <!-- Today Task: source 1112x1031 (~1.08:1), Figma slot 287x266 @ x=72 y=239 -->
+    <ImageView
+        android:id="@+id/imgTodayActivity"
+        android:layout_width="350dp"
+        android:layout_height="324dp"
+        android:layout_marginStart="40dp"
+        android:layout_marginTop="220dp"
+        android:src="@drawable/onboard_today_activity"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true" />
+
+</FrameLayout>

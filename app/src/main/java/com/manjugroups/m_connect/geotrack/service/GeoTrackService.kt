@@ -50,7 +50,8 @@ class GeoTrackService : Service() {
         private const val MAX_SYNC_RETRIES = 5
 
         @Volatile
-        private var isRunning = false
+        var isRunning = false
+            private set
 
         fun start(context: Context) {
             if (isRunning) {

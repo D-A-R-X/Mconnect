@@ -6,7 +6,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.text.Editable
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
@@ -73,7 +76,18 @@ class OtpActivity : AppCompatActivity() {
         session = SessionManager(this)
 
         val formatted = if (phone.length == 10) " ${phone}" else phone
-        binding.tvOtpSubtitle.text = getString(R.string.otp_subtitle, formatted)
+        val full = getString(R.string.otp_subtitle, formatted)
+        val phoneToken = "+91$formatted"
+        val span = SpannableString(full)
+        val phoneStart = full.indexOf(phoneToken)
+        if (phoneStart >= 0) {
+            span.setSpan(
+                StyleSpan(android.graphics.Typeface.BOLD),
+                phoneStart, phoneStart + phoneToken.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        binding.tvOtpSubtitle.text = span
 
         otpBoxes = listOf(
             binding.otpBox1, binding.otpBox2, binding.otpBox3,
@@ -145,10 +159,6 @@ class OtpActivity : AppCompatActivity() {
                 viewModel.sendOtp(phone)
                 startTimer()
             }
-        }
-
-        binding.tvDifferentMethod.setOnClickListener {
-            finish()
         }
     }
 
@@ -227,7 +237,7 @@ class OtpActivity : AppCompatActivity() {
                 canResend = true
                 binding.tvResend.alpha = 1.0f
                 binding.tvResend.isClickable = true
-                binding.tvResend.setTextColor(Color.parseColor("#6938EF"))
+                binding.tvResend.setTextColor(Color.parseColor("#0B61CA"))
             }
         }.start()
     }

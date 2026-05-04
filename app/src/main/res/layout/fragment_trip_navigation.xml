@@ -243,6 +243,19 @@
             android:layout_width="match_parent"
             android:layout_height="@dimen/button_height"
             android:layout_marginTop="10dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCompleteCpDetails"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/button_height"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_swipe_track"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Complete CP details"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:visibility="gone" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

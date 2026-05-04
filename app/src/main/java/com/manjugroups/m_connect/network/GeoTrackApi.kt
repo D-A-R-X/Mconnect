@@ -560,7 +560,29 @@ data class ConvertCpVisitToSiteVisitRequest(
     val projectId: String,
     val scheduledDate: String,
     val scheduledTime: String? = null,
+    val telecallerId: String? = null,
+    val convertedByStaffId: String? = null,
+    val assignedTelecallerStaffId: String? = null,
+    val inchargeStaffId: String? = null,
+    val hodStaffId: String? = null,
+    val avpStaffId: String? = null,
+    val gmStaffId: String? = null,
+    val seniorManagerStaffId: String? = null,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<SiteVisitAttendeeRequest>? = null,
+    val pickupAddress: String? = null,
+    val pickupTime: String? = null,
+    val travelMode: String? = null,
+    val vehiclePreference: String? = null,
+    val foodPreferences: String? = null,
     val notes: String? = null,
+)
+
+data class SiteVisitAttendeeRequest(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null
 )
 
 data class ConvertCpVisitToSiteVisitResponse(

@@ -500,7 +500,9 @@ data class StaffData(
     val designation: String?,
     val status: String?,
     val employeeId: String?,
-    val department: String?
+    val department: String?,
+    val reportingTo: String? = null,
+    val reportingToId: String? = null
 )
 
 // Attendance models

@@ -97,6 +97,7 @@ class SelfieClockInDetailFragment : Fragment() {
                     address = address,
                     selfieFile = file,
                     deviceId = session.trackingDeviceId,
+                    context = requireContext().applicationContext,
                 )
             } else {
                 flowViewModel.punchOut(
@@ -106,6 +107,7 @@ class SelfieClockInDetailFragment : Fragment() {
                     address = address,
                     selfieFile = file,
                     deviceId = session.trackingDeviceId,
+                    context = requireContext().applicationContext,
                 )
             }
         }

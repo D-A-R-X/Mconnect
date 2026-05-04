@@ -25,7 +25,7 @@ val googleMapsApiKey = envOrDefault(
     )
 )
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://opulent-cricket-895.convex.site/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://convex-http.aivida.in/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
+    implementation(libs.workmanager)
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

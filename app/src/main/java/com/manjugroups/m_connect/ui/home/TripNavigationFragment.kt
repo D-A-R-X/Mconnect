@@ -41,6 +41,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
@@ -106,6 +107,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // tracks whether we already collected Client Met + Outcome for this run.
     private var tripType: String? = null
     private var cpVisitId: String? = null
+    private var cpClientMet: Boolean? = null
+    private var cpOutcome: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
 
     private var tvTitle: TextView? = null
@@ -117,6 +120,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var btnBack: ImageView? = null
     private var btnOpenMaps: Button? = null
     private var swipeArrived: SwipeToConfirmButton? = null
+    private var btnCompleteCpDetails: Button? = null
     private var loadingOverlay: FrameLayout? = null
 
     private val arrivalCameraLauncher = registerForActivityResult(
@@ -181,6 +185,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         btnBack = view.findViewById(R.id.btnTripBack)
         btnOpenMaps = view.findViewById(R.id.btnOpenInMaps)
         swipeArrived = view.findViewById(R.id.swipeArrived)
+        btnCompleteCpDetails = view.findViewById(R.id.btnCompleteCpDetails)
         loadingOverlay = view.findViewById(R.id.tripLoadingOverlay)
         mapView = view.findViewById(R.id.mapViewTrip)
 
@@ -196,9 +201,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         tripType = args.getString(ARG_TRIP_TYPE)
         cpVisitId = args.getString(ARG_CP_VISIT_ID)
-        // If a prior session already recorded Client Met for this CP visit,
-        // skip the bottom sheet on this run — we only need it once per visit.
-        cpVisitDecisionCaptured = args.containsKey(ARG_CP_CLIENT_MET)
+        cpClientMet = if (args.containsKey(ARG_CP_CLIENT_MET)) args.getBoolean(ARG_CP_CLIENT_MET) else null
+        cpOutcome = args.getString(ARG_CP_OUTCOME)
+        // A CP visit decision is complete only when an outcome exists. Client
+        // Met alone can be saved before the staff exits, so reopen the sheet
+        // later until outcome/project conversion is captured.
+        cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
 
         tvTitle?.text = "Trip to $placeName"
         tvDestName?.text = placeName
@@ -207,6 +215,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         btnBack?.setOnClickListener { parentFragmentManager.popBackStack() }
         btnOpenMaps?.setOnClickListener { openInGoogleMaps() }
         swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
+        btnCompleteCpDetails?.setOnClickListener { showCpCompletionSheet() }
 
         // Listen for OTP verify result from the bottom sheet.
         setFragmentResultListener(ArrivalOtpBottomSheet.RESULT_KEY) { _, bundle ->
@@ -291,9 +300,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val alreadyInFlight = existingStatus in setOf(
             "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
         )
+        val alreadyArrived = existingStatus in setOf("arrived", "arrival_verified", "arrival-verified")
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val attendanceActive = AttendanceTrackingGate.isClockedInForToday(
+                    session.bearerToken,
+                    api,
+                )
+                if (!attendanceActive) {
+                    failAndClose("Please clock in before starting a trip.")
+                    return@launch
+                }
                 val location = if (hasLocationPermission()) fetchCurrentLocation() else null
                 val effectiveVisitId = when {
                     existingVisit != null -> existingVisit
@@ -332,14 +350,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val bootstrap = geoApi
                     .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
                     .data
-                applyTrackingBootstrap(bootstrap)
+                applyTrackingBootstrap(bootstrap, attendanceActive = true)
 
                 visitStarted = true
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
                 loadingOverlay?.visibility = View.GONE
-                tvStatus?.text = if (alreadyInFlight) "In progress" else "On the way"
+                tvStatus?.text = when {
+                    alreadyArrived && !cpVisitDecisionCaptured -> "Arrived"
+                    alreadyInFlight -> "In progress"
+                    else -> "On the way"
+                }
                 renderMapMarkersAndRoute()
                 geocodeDestinationIfNeeded()
+                renderArrivalPhase(alreadyArrived)
                 if (!alreadyInFlight) {
                     Toast.makeText(requireContext(), "Trip started", Toast.LENGTH_SHORT).show()
                 }
@@ -713,13 +736,44 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         val isCpVisit = tripType == "client_place" && !cpVisitId.isNullOrBlank()
         if (isCpVisit && !cpVisitDecisionCaptured) {
-            swipeArrived?.lockAsBusy("Capturing visit outcome…")
-            CompleteCpVisitBottomSheet
-                .newInstance(cpVisitId!!)
-                .show(parentFragmentManager, "cp_visit_complete")
+            renderArrivalPhase(alreadyArrived = true)
+            showCpCompletionSheet()
             return
         }
         finalizeCompleteVisit()
+    }
+
+    private fun renderArrivalPhase(alreadyArrived: Boolean) {
+        val isCpVisit = tripType == "client_place" && !cpVisitId.isNullOrBlank()
+        val shouldFillCpDetails = alreadyArrived && isCpVisit && !cpVisitDecisionCaptured
+
+        if (shouldFillCpDetails) {
+            arrivalInProgress = false
+            tvStatus?.text = "Arrived"
+            swipeArrived?.visibility = View.GONE
+            btnCompleteCpDetails?.visibility = View.VISIBLE
+            return
+        }
+
+        btnCompleteCpDetails?.visibility = View.GONE
+        swipeArrived?.visibility = View.VISIBLE
+        swipeArrived?.reset(newLabel = "Swipe to mark arrived")
+
+        if (alreadyArrived && isCpVisit && cpVisitDecisionCaptured) {
+            finalizeCompleteVisit()
+        }
+    }
+
+    private fun showCpCompletionSheet() {
+        val cpId = cpVisitId ?: return
+        tvStatus?.text = "Arrived"
+        CompleteCpVisitBottomSheet
+            .newInstance(
+                cpVisitId = cpId,
+                cpClientMet = cpClientMet,
+                cpOutcome = cpOutcome,
+            )
+            .show(parentFragmentManager, "cp_visit_complete")
     }
 
     private fun finalizeCompleteVisit() {
@@ -746,7 +800,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val bootstrap = geoApi
                     .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
                     .data
-                applyTrackingBootstrap(bootstrap)
+                applyTrackingBootstrap(
+                    bootstrap,
+                    attendanceActive = runCatching {
+                        AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
+                    }.getOrDefault(false),
+                )
                 Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
                 parentFragmentManager.popBackStack()
             } catch (e: Exception) {
@@ -773,20 +832,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private var pendingArrivalStorageId: String? = null
 
-    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?) {
+    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
         session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = bootstrap?.shouldTrack == true
+        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
         session.geoTrackingEnabled =
             bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
         session.geoConsentGiven = bootstrap?.consent?.status == "granted"
         session.geoConsentDeclined =
             bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
 
-        if (bootstrap?.shouldPromptConsent == true) {
+        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
             startActivity(Intent(requireContext(), GeoTrackConsentActivity::class.java))
             return
         }
-        if (bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
+        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
             GeoTrackService.start(requireContext())
         } else {
             GeoTrackService.stop(requireContext())

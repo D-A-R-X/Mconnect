@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Splash theme: plain white, no Android-12 system splash icon, no flash -->
+    <style name="Theme.Mconnect.Splash" parent="Theme.Mconnect">
+        <item name="android:windowBackground">@color/splash_bg</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- Android 12+: suppress launcher-icon system splash by using transparent icon and white bg -->
+        <item name="android:windowSplashScreenBackground" tools:targetApi="s">@color/splash_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="s">@android:color/transparent</item>
+        <item name="android:windowSplashScreenIconBackgroundColor" tools:targetApi="s">@color/splash_bg</item>
+    </style>
+</resources>
