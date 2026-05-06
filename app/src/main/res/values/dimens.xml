@@ -31,4 +31,8 @@
     <!-- Icons -->
     <dimen name="back_icon_size">24dp</dimen>
     <dimen name="divider_height">24dp</dimen>
+
+    <!-- Clock-In Area screen -->
+    <dimen name="clock_in_pin_top_margin">110dp</dimen>
+    <dimen name="clock_in_sheet_total_height">442dp</dimen>
 </resources>

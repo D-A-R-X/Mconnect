@@ -286,6 +286,17 @@ class HrDashboardFragment : Fragment() {
                             Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
                         }
 
+                        is AttendanceFlowEvent.SubmissionFailed -> {
+                            // Background upload/punch failed after the optimistic Success
+                            // sheet was already shown. Surface a clear retry prompt.
+                            Toast.makeText(
+                                requireContext(),
+                                "${event.message} Please retry.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            loadRecentHistoryCards()
+                        }
+
                         is AttendanceFlowEvent.Success -> {
                             loadRecentHistoryCards()
                         }

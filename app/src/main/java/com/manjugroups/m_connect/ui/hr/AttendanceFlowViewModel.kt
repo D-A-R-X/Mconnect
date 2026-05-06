@@ -2,6 +2,10 @@ package com.manjugroups.m_connect.ui.hr
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
@@ -12,6 +16,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.auth.SessionManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,9 +24,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,8 +61,12 @@ enum class PunchMode {
 
 sealed interface AttendanceFlowEvent {
     data class Loading(val mode: PunchMode) : AttendanceFlowEvent
+    /** Optimistic — emitted as soon as input validation passes, before upload completes. */
     data class Success(val mode: PunchMode, val message: String) : AttendanceFlowEvent
+    /** Pre-flight validation error (no submission attempted). */
     data class Error(val mode: PunchMode, val message: String) : AttendanceFlowEvent
+    /** Background upload/punch failed after optimistic Success was already emitted. */
+    data class SubmissionFailed(val mode: PunchMode, val message: String) : AttendanceFlowEvent
 }
 
 class AttendanceFlowViewModel(
@@ -153,6 +165,7 @@ class AttendanceFlowViewModel(
         selfieFile: File?,
         deviceId: String?,
         context: Context? = null,
+        remarks: String? = null,
     ) {
         submitPunch(
             mode = PunchMode.PUNCH_IN,
@@ -163,6 +176,7 @@ class AttendanceFlowViewModel(
             selfieFile = selfieFile,
             deviceId = deviceId,
             context = context,
+            remarks = remarks,
         )
     }
 
@@ -174,6 +188,7 @@ class AttendanceFlowViewModel(
         selfieFile: File?,
         deviceId: String?,
         context: Context? = null,
+        remarks: String? = null,
     ) {
         submitPunch(
             mode = PunchMode.PUNCH_OUT,
@@ -184,6 +199,7 @@ class AttendanceFlowViewModel(
             selfieFile = selfieFile,
             deviceId = deviceId,
             context = context,
+            remarks = remarks,
         )
     }
 
@@ -196,26 +212,49 @@ class AttendanceFlowViewModel(
         selfieFile: File?,
         deviceId: String?,
         context: Context?,
+        remarks: String? = null,
     ) {
-        viewModelScope.launch {
-            if (selfieFile == null || !selfieFile.exists()) {
+        if (selfieFile == null || !selfieFile.exists()) {
+            viewModelScope.launch {
                 _events.emit(AttendanceFlowEvent.Error(mode, "Selfie photo is required."))
-                return@launch
             }
-            if (latitude == null || longitude == null) {
+            return
+        }
+        if (latitude == null || longitude == null) {
+            viewModelScope.launch {
                 _events.emit(AttendanceFlowEvent.Error(mode, "Valid GPS location is required."))
-                return@launch
             }
+            return
+        }
 
-            _uiState.update { it.copy(isSubmitting = true) }
+        // Optimistic: flip clocked-in state and emit Success immediately so UI feels instant.
+        // Real upload + punch run in background. Failures rollback state and emit SubmissionFailed.
+        val previousState = _uiState.value
+        _uiState.update {
+            it.copy(
+                isSubmitting = true,
+                isClockedIn = mode == PunchMode.PUNCH_IN,
+            )
+        }
+
+        viewModelScope.launch {
             _events.emit(AttendanceFlowEvent.Loading(mode))
+            _events.emit(
+                AttendanceFlowEvent.Success(
+                    mode,
+                    if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
+                ),
+            )
 
             try {
-                val storageId = uploadSelfie(token, selfieFile)
+                val compressed = withContext(Dispatchers.IO) {
+                    runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
+                }
+                val storageId = uploadSelfie(token, compressed)
                 if (storageId.isNullOrBlank()) {
-                    _uiState.update { it.copy(isSubmitting = false) }
+                    rollbackOptimistic(previousState)
                     _events.emit(
-                        AttendanceFlowEvent.Error(
+                        AttendanceFlowEvent.SubmissionFailed(
                             mode,
                             "Failed to upload selfie. Please try again.",
                         ),
@@ -230,6 +269,7 @@ class AttendanceFlowViewModel(
                     photo = storageId,
                     deviceId = deviceId,
                     source = "mobile",
+                    remarks = remarks?.takeIf { it.isNotBlank() },
                 )
 
                 val response = if (mode == PunchMode.PUNCH_IN) {
@@ -239,9 +279,9 @@ class AttendanceFlowViewModel(
                 }
 
                 if (!response.success) {
-                    _uiState.update { it.copy(isSubmitting = false) }
+                    rollbackOptimistic(previousState)
                     _events.emit(
-                        AttendanceFlowEvent.Error(
+                        AttendanceFlowEvent.SubmissionFailed(
                             mode,
                             response.error ?: "Punch request failed.",
                         ),
@@ -260,23 +300,26 @@ class AttendanceFlowViewModel(
                     )
                 }
 
-                _events.emit(
-                    AttendanceFlowEvent.Success(
-                        mode,
-                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
-                    ),
-                )
                 _uiState.update { it.copy(isSubmitting = false) }
                 loadTodayAttendance(token)
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false) }
+                rollbackOptimistic(previousState)
                 _events.emit(
-                    AttendanceFlowEvent.Error(
+                    AttendanceFlowEvent.SubmissionFailed(
                         mode,
                         e.message ?: "Network error while submitting punch.",
                     ),
                 )
             }
+        }
+    }
+
+    private fun rollbackOptimistic(previous: AttendanceFlowState) {
+        _uiState.update {
+            it.copy(
+                isSubmitting = false,
+                isClockedIn = previous.isClockedIn,
+            )
         }
     }
 
@@ -288,6 +331,70 @@ class AttendanceFlowViewModel(
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Re-encodes the selfie to a max 1080px JPEG at quality 80 with EXIF rotation baked in.
+     * Typical 3-5MB camera output drops to ~150-300KB → 10x faster upload on slow networks.
+     * Falls back to the original file if anything goes wrong.
+     */
+    private fun compressSelfie(source: File): File {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(source.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return source
+
+        val maxEdge = 1080
+        var sample = 1
+        var w = bounds.outWidth
+        var h = bounds.outHeight
+        while (w / sample > maxEdge * 2 || h / sample > maxEdge * 2) {
+            sample *= 2
+        }
+
+        val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+        val decoded = BitmapFactory.decodeFile(source.absolutePath, decodeOpts) ?: return source
+
+        val rotated = applyExifRotation(source, decoded)
+
+        val scale = minOf(
+            1f,
+            maxEdge.toFloat() / rotated.width.toFloat(),
+            maxEdge.toFloat() / rotated.height.toFloat(),
+        )
+        val finalBitmap = if (scale < 1f) {
+            val scaledW = (rotated.width * scale).toInt().coerceAtLeast(1)
+            val scaledH = (rotated.height * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(rotated, scaledW, scaledH, true).also {
+                if (it !== rotated) rotated.recycle()
+            }
+        } else rotated
+
+        val out = ByteArrayOutputStream()
+        finalBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        finalBitmap.recycle()
+
+        val target = File(source.parentFile, "punch_compressed_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(target).use { it.write(out.toByteArray()) }
+        return target
+    }
+
+    private fun applyExifRotation(source: File, bitmap: Bitmap): Bitmap {
+        val degrees = try {
+            val exif = ExifInterface(source.absolutePath)
+            when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } catch (_: Exception) {
+            0f
+        }
+        if (degrees == 0f) return bitmap
+        val matrix = Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated !== bitmap) bitmap.recycle()
+        return rotated
     }
 
     private fun applyTrackingBootstrap(

@@ -1,321 +1,351 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/clockInRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#F1F3F8"
+    android:fitsSystemWindows="false">
 
-    <View
+    <!-- Map fills upper region behind status bar; sized via marginBottom from sheet anchor -->
+    <com.google.android.gms.maps.MapView
+        android:id="@+id/mapViewClockIn"
         android:layout_width="match_parent"
-        android:layout_height="402dp"
-        android:background="@drawable/bg_attendance_map_backdrop" />
+        android:layout_height="match_parent"
+        android:layout_marginBottom="@dimen/clock_in_sheet_total_height" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
-        android:gravity="top"
-        android:orientation="vertical"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="24dp">
-
-            <FrameLayout
-                android:id="@+id/btnBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_attendance_icon_circle_light"
-                android:clickable="true"
-                android:focusable="true">
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_arrow_left"
-                    android:tint="#7A5AF8" />
-            </FrameLayout>
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:text="Clock In Area"
-                android:textColor="#101828"
-                android:textSize="16sp" />
-
-            <Space
-                android:layout_width="32dp"
-                android:layout_height="32dp" />
-        </LinearLayout>
-    </LinearLayout>
-
+    <!-- 222dp user pin overlay centered on map -->
     <FrameLayout
-        android:id="@+id/mapContainer"
+        android:id="@+id/userPinOuter"
         android:layout_width="222dp"
         android:layout_height="222dp"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="110dp"
-        android:background="@drawable/bg_attendance_map_outer">
-
-        <com.google.android.gms.maps.MapView
-            android:id="@+id/mapViewClockIn"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+        android:layout_marginTop="@dimen/clock_in_pin_top_margin"
+        android:background="@drawable/bg_attendance_pin_outer"
+        android:clipChildren="false">
 
         <FrameLayout
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_gravity="center"
-            android:background="@drawable/bg_attendance_map_inner">
+            android:background="@drawable/bg_attendance_pin_avatar"
+            android:padding="3dp">
 
-            <View
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_attendance_avatar_placeholder" />
+            <ImageView
+                android:id="@+id/imgUserPinAvatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_attendance_pin_avatar_placeholder"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvUserPinInitial"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_attendance_pin_avatar_initial"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="?"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp" />
         </FrameLayout>
     </FrameLayout>
 
+    <!-- Top app bar -->
     <LinearLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="366dp"
-        android:layout_gravity="bottom"
-        android:layout_marginBottom="76dp"
-        android:background="@drawable/bg_attendance_sheet"
-        android:orientation="vertical"
-        android:paddingHorizontal="15dp"
-        android:paddingTop="24dp"
-        android:paddingBottom="10dp">
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp">
 
         <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="86dp"
-            android:background="@drawable/bg_attendance_banner">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="24dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="You are in the clock-in area!"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="47dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="Now you can press clock in in this area"
-                android:textColor="#EDEAFF"
-                android:textSize="11sp" />
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_attendance_topbar_icon"
+            android:clickable="true"
+            android:focusable="true">
 
             <ImageView
-                android:layout_width="79dp"
-                android:layout_height="79dp"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="4dp"
-                android:layout_marginEnd="10dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/group_icon" />
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_attendance_back" />
         </FrameLayout>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="MY PROFILE"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="Clock In Area"
             android:textColor="#101828"
-            android:textSize="12sp" />
+            android:textSize="18sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="88dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_attendance_profile_card"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="12dp">
+        <FrameLayout
+            android:id="@+id/btnRefresh"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_attendance_topbar_icon"
+            android:clickable="true"
+            android:focusable="true">
 
-            <View
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_attendance_avatar_placeholder" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/tvProfileName"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="Tonald Drump"
-                        android:textColor="#101828"
-                        android:textSize="15sp" />
-
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_marginStart="4dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_home_verified_badge" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/tvProfileDate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="29 September 2024"
-                    android:textColor="#7A5AF8"
-                    android:textSize="11sp" />
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_profile_location" />
-
-                    <TextView
-                        android:id="@+id/tvProfileLatLng"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:fontFamily="@font/inter_medium"
-                        android:text="Lat 45.45334 Long 97897.576"
-                        android:textColor="#475467"
-                        android:textSize="10sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="SCHEDULE"
-            android:textColor="#101828"
-            android:textSize="12sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_attendance_schedule_box"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="CLOCK IN"
-                    android:textColor="#475467"
-                    android:textSize="10sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="09:00"
-                    android:textColor="#000000"
-                    android:textSize="18sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_attendance_schedule_box"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="CLOCK OUT"
-                    android:textColor="#475467"
-                    android:textSize="10sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="05:00"
-                    android:textColor="#000000"
-                    android:textSize="18sp" />
-            </LinearLayout>
-        </LinearLayout>
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_attendance_undo" />
+        </FrameLayout>
     </LinearLayout>
 
+    <!-- Bottom sheet + button anchored at bottom -->
     <LinearLayout
-        android:id="@+id/bottomActionPanel"
+        android:id="@+id/bottomGroup"
         android:layout_width="match_parent"
-        android:layout_height="76dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="@drawable/bg_attendance_bottom_panel"
-        android:gravity="center_vertical"
-        android:orientation="vertical"
-        android:paddingHorizontal="24dp">
+        android:orientation="vertical">
 
-        <View
+        <LinearLayout
+            android:id="@+id/sheetCard"
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#D0D5DD" />
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_attendance_sheet"
+            android:orientation="vertical"
+            android:paddingHorizontal="15dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="16dp">
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btnSelfieClockIn"
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="86dp"
+                android:background="@drawable/bg_attendance_banner">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="22dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="You are in the clock-in area!"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="48dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Now you can press clock in in this area"
+                    android:textColor="#EDEAFF"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:layout_width="82dp"
+                    android:layout_height="82dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/group_icon" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="MY PROFILE"
+                android:textColor="#101828"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_attendance_profile_card"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="12dp">
+
+                <ImageView
+                    android:id="@+id/imgProfileAvatar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/bg_attendance_avatar_placeholder"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvProfileName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Tonald Drump"
+                            android:textColor="#2D2D2D"
+                            android:textSize="16sp" />
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginStart="4dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_home_verified_badge" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvProfileDate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="29 September 2024"
+                        android:textColor="#0B61CA"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_profile_location" />
+
+                        <TextView
+                            android:id="@+id/tvProfileLatLng"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Lat 45.45334 Long 97897.576"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="SCHEDULE"
+                android:textColor="#101828"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_attendance_schedule_box"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="CLOCK IN"
+                        android:textColor="#475467"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvShiftClockIn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="--:--"
+                        android:textColor="#000000"
+                        android:textSize="24sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_attendance_schedule_box"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="CLOCK OUT"
+                        android:textColor="#475467"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvShiftClockOut"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="--:--"
+                        android:textColor="#000000"
+                        android:textSize="24sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/bottomActionPanel"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="13dp"
-            android:background="@drawable/bg_attendance_btn_primary"
-            android:fontFamily="@font/inter_medium"
-            android:text="Selfie To Clock In"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_attendance_bottom_panel"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnSelfieClockIn"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_attendance_btn_primary"
+                android:fontFamily="@font/inter_medium"
+                android:text="Selfie To Clock In"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
     </LinearLayout>
 
 </FrameLayout>

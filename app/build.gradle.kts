@@ -25,7 +25,7 @@ val googleMapsApiKey = envOrDefault(
     )
 )
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://convex-http.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://opulent-cricket-895.convex.site/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)

@@ -70,6 +70,14 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    // Shifts
+    @GET("api/hr/shifts/today")
+    suspend fun getTodayShift(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+        @Query("date") date: String? = null
+    ): TodayShiftResponse
+
     // Storage
     @POST("api/storage/generate-upload-url")
     suspend fun generateUploadUrl(@Header("Authorization") token: String): UploadUrlResponse
@@ -532,6 +540,38 @@ data class SessionData(
     val source: String?,
     val totalMinutes: Int?
 )
+data class TodayShiftResponse(
+    val success: Boolean? = null,
+    val staffId: String? = null,
+    val date: String? = null,
+    val isWeekoff: Boolean? = null,
+    val shift: TodayShift? = null,
+)
+data class TodayShift(
+    val name: String? = null,
+    val code: String? = null,
+    val schedule: TodayShiftSchedule? = null,
+    val graceMinutes: Int? = null,
+    val fullDayThresholdMinutes: Int? = null,
+    val halfDayThresholdMinutes: Int? = null,
+    val isActive: Boolean? = null,
+)
+data class TodayShiftSchedule(
+    val monday: TodayShiftDay? = null,
+    val tuesday: TodayShiftDay? = null,
+    val wednesday: TodayShiftDay? = null,
+    val thursday: TodayShiftDay? = null,
+    val friday: TodayShiftDay? = null,
+    val saturday: TodayShiftDay? = null,
+    val sunday: TodayShiftDay? = null,
+)
+data class TodayShiftDay(
+    val isWorkDay: Boolean? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val breakMinutes: Int? = null,
+)
+
 data class DaySessionsResponse(
     val success: Boolean,
     val sessions: List<SessionData>? = emptyList(),

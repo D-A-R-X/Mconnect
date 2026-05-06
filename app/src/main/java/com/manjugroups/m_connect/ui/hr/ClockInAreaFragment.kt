@@ -29,12 +29,16 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentClockInAreaBinding
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.TodayShiftDay
+import com.manjugroups.m_connect.network.TodayShiftResponse
+import com.manjugroups.m_connect.network.TodayShiftSchedule
+import java.util.Calendar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -47,6 +51,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     private var _binding: FragmentClockInAreaBinding? = null
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
+    private val api = ApiService.create()
     private var googleMap: GoogleMap? = null
     private var pendingPunchMode: PunchMode? = null
     private var pendingPunchImageFile: File? = null
@@ -156,10 +161,10 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        val extraBottomSpacingPx = (8 * resources.displayMetrics.density).toInt()
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
-            val bottomInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
-            root.updatePadding(bottom = bottomInset + extraBottomSpacingPx)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.topBar.updatePadding(top = sys.top)
+            binding.bottomActionPanel.updatePadding(bottom = sys.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(binding.root)
@@ -172,15 +177,22 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             parentFragmentManager.popBackStack()
         }
 
+        binding.btnRefresh.setOnClickListener {
+            updateUserLocationOnMap()
+            loadTodayShift()
+        }
+
         binding.btnSelfieClockIn.setOnClickListener {
             beginPunchCapture(PunchMode.PUNCH_IN)
         }
+
+        loadTodayShift()
     }
 
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
-        (activity as? MainActivity)?.setTopBarAppearance(Color.TRANSPARENT, true)
+        (activity as? MainActivity)?.setTopBarAppearance(Color.TRANSPARENT, true, fullBleed = true)
         _binding?.mapViewClockIn?.onResume()
     }
 
@@ -214,8 +226,11 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     override fun onMapReady(map: GoogleMap) {
         googleMap = map.apply {
             uiSettings.isMapToolbarEnabled = false
-            uiSettings.isCompassEnabled = true
+            uiSettings.isCompassEnabled = false
             uiSettings.isZoomControlsEnabled = false
+            uiSettings.isMyLocationButtonEnabled = false
+            uiSettings.isRotateGesturesEnabled = false
+            uiSettings.isTiltGesturesEnabled = false
         }
         updateUserLocationOnMap()
     }
@@ -228,6 +243,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             .filter { it.isNotBlank() }
             .joinToString(" ") { segment -> segment.replaceFirstChar { it.titlecase() } }
         binding.tvProfileName.text = normalized
+        binding.tvUserPinInitial.text = normalized.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         binding.tvProfileDate.text = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(Date())
         binding.tvProfileLatLng.text = "Fetching current location..."
     }
@@ -256,13 +272,58 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             val map = googleMap ?: return@launch
             val point = LatLng(lat, lng)
             map.clear()
-            map.addMarker(
-                MarkerOptions()
-                    .position(point)
-                    .title("You are here"),
-            )
-            map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 16f))
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 17f))
         }
+    }
+
+    private fun loadTodayShift() {
+        val staffId = session.staffId
+        val token = session.bearerToken
+        if (staffId.isNullOrBlank() || token.isBlank()) return
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = runCatching { api.getTodayShift(token, staffId, today) }.getOrNull()
+            applyShiftToSchedule(response)
+        }
+    }
+
+    private fun applyShiftToSchedule(response: TodayShiftResponse?) {
+        val binding = _binding ?: return
+        if (response == null || response.isWeekoff == true) {
+            binding.tvShiftClockIn.text = "--:--"
+            binding.tvShiftClockOut.text = "--:--"
+            return
+        }
+        val day = response.shift?.schedule?.let { todayFromSchedule(it) }
+        binding.tvShiftClockIn.text = formatShiftTime(day?.startTime)
+        binding.tvShiftClockOut.text = formatShiftTime(day?.endTime)
+    }
+
+    private fun todayFromSchedule(schedule: TodayShiftSchedule): TodayShiftDay? =
+        when (Calendar.getInstance().get(Calendar.DAY_OF_WEEK)) {
+            Calendar.SUNDAY -> schedule.sunday
+            Calendar.MONDAY -> schedule.monday
+            Calendar.TUESDAY -> schedule.tuesday
+            Calendar.WEDNESDAY -> schedule.wednesday
+            Calendar.THURSDAY -> schedule.thursday
+            Calendar.FRIDAY -> schedule.friday
+            Calendar.SATURDAY -> schedule.saturday
+            else -> null
+        }
+
+    private fun formatShiftTime(raw: String?): String {
+        if (raw.isNullOrBlank()) return "--:--"
+        return runCatching {
+            val patterns = listOf("HH:mm:ss", "HH:mm", "hh:mm a", "h:mm a")
+            for (pattern in patterns) {
+                val parser = SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }
+                val parsed = runCatching { parser.parse(raw) }.getOrNull()
+                if (parsed != null) {
+                    return@runCatching SimpleDateFormat("HH:mm", Locale.US).format(parsed)
+                }
+            }
+            raw
+        }.getOrElse { raw }
     }
 
     private fun hasLocationPermission(): Boolean {

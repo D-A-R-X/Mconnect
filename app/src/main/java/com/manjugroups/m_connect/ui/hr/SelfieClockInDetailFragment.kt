@@ -83,12 +83,17 @@ class SelfieClockInDetailFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
 
+        binding.btnHeaderRefresh.setOnClickListener {
+            parentFragmentManager.popBackStack()
+        }
+
         binding.btnRetakePhoto.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
 
         binding.btnClockInAction.setOnClickListener {
             val file = photoPath?.let(::File)
+            val remarks = binding.etClockInNotes.text?.toString()?.trim()
             if (mode == PunchMode.PUNCH_IN) {
                 flowViewModel.punchIn(
                     token = session.bearerToken,
@@ -98,6 +103,7 @@ class SelfieClockInDetailFragment : Fragment() {
                     selfieFile = file,
                     deviceId = session.trackingDeviceId,
                     context = requireContext().applicationContext,
+                    remarks = remarks,
                 )
             } else {
                 flowViewModel.punchOut(
@@ -108,6 +114,7 @@ class SelfieClockInDetailFragment : Fragment() {
                     selfieFile = file,
                     deviceId = session.trackingDeviceId,
                     context = requireContext().applicationContext,
+                    remarks = remarks,
                 )
             }
         }
@@ -213,6 +220,10 @@ class SelfieClockInDetailFragment : Fragment() {
                                 Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
                             }
                         }
+
+                        // Background failure after optimistic Success — usually delivered
+                        // after this fragment has already popped, but handled defensively.
+                        is AttendanceFlowEvent.SubmissionFailed -> Unit
 
                         is AttendanceFlowEvent.Success -> {
                             if (event.mode == mode) {
