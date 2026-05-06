@@ -159,6 +159,12 @@ interface GeoTrackApi {
         @Body body: MarkClientMetRequest
     ): GeoTrackResponse
 
+    @POST("api/marketing/clientPlaceVisits/create")
+    suspend fun createCpVisit(
+        @Header("Authorization") token: String,
+        @Body body: CreateCpVisitRequest
+    ): CreateCpVisitResponse
+
     @POST("api/marketing/clientPlaceVisits/setOutcome")
     suspend fun setCpVisitOutcome(
         @Header("Authorization") token: String,
@@ -548,6 +554,29 @@ data class MarkClientMetRequest(
     val clientNoShowReason: String? = null
 )
 
+data class CreateCpVisitRequest(
+    val leadId: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String,
+    val assignedStaffId: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val visitAddress: String,
+    val visitLat: Double? = null,
+    val visitLng: Double? = null,
+    val googleMapsLink: String? = null,
+    val notes: String? = null,
+)
+
+data class CreateCpVisitResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val fieldVisitId: String? = null,
+    val followupId: String? = null,
+    val clientPlaceId: String? = null,
+    val error: String? = null,
+)
+
 data class SetOutcomeRequest(
     val id: String,
     val outcome: String,
@@ -613,6 +642,8 @@ data class TodayVisit(
     val clientPlaceId: String,
     val scheduledDate: String,
     val status: String,
+    val mobileStatus: String? = null,
+    val reachingRadiusMeters: Int? = null,
     val placeName: String? = null,
     val placeAddress: String? = null,
     val placeType: String? = null,

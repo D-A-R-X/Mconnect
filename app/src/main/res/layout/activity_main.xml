@@ -3,42 +3,52 @@
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#ECEEF3"
+    android:background="#F1F3F8"
     android:orientation="vertical">
 
     <View
         android:id="@+id/statusBarBackground"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="#FEFEFE" />
+        android:background="#FFFFFF" />
 
-    <!-- Fragment container -->
+    <!-- Content area: fragment fills below status bar; tab bar overlays at bottom -->
     <FrameLayout
-        android:id="@+id/fragmentContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="#ECEEF3"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
-    <!-- Bottom tab bar (pill style from design) -->
-    <FrameLayout
-        android:id="@+id/tabBarContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#1C2020"
-        android:paddingHorizontal="0dp"
-        android:paddingTop="0dp"
-        android:paddingBottom="0dp">
+        <FrameLayout
+            android:id="@+id/fragmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#F1F3F8" />
+
+        <!-- Floating pill bottom nav -->
+        <FrameLayout
+            android:id="@+id/tabBarContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@android:color/transparent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
         <LinearLayout
             android:id="@+id/tabBar"
             android:layout_width="match_parent"
             android:layout_height="66dp"
+            android:layout_marginStart="32dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="32dp"
             android:background="@drawable/bg_tab_bar"
-            android:gravity="bottom"
+            android:elevation="10dp"
+            android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="12dp"
-            android:paddingBottom="2dp">
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
             <!-- HOME tab -->
             <FrameLayout
@@ -63,25 +73,23 @@
 
                     <View
                         android:id="@+id/tabHomeIndicator"
-                        android:layout_width="12dp"
-                        android:layout_height="2dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/bg_tab_indicator_active" />
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tabHomeText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="0dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:letterSpacing="0.05"
-                        android:text="HOME"
-                        android:textSize="10sp"
-                        android:visibility="gone" />
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Home"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- HR tab -->
+            <!-- ATTENDANCE tab -->
             <FrameLayout
                 android:id="@+id/tabHr"
                 android:layout_width="0dp"
@@ -100,28 +108,27 @@
                         android:id="@+id/tabHrIcon"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="HR" />
+                        android:contentDescription="Attendance" />
 
                     <View
                         android:id="@+id/tabHrIndicator"
-                        android:layout_width="12dp"
-                        android:layout_height="2dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/bg_tab_indicator_active" />
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tabHrText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="0dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:letterSpacing="0.05"
-                        android:text="HR"
-                        android:textSize="10sp"
-                        android:visibility="gone" />
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Attendance"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
 
+            <!-- CHAT tab -->
             <FrameLayout
                 android:id="@+id/tabChat"
                 android:layout_width="0dp"
@@ -144,21 +151,19 @@
 
                     <View
                         android:id="@+id/tabChatIndicator"
-                        android:layout_width="12dp"
-                        android:layout_height="2dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/bg_tab_indicator_active" />
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tabChatText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="0dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:letterSpacing="0.05"
-                        android:text="CHAT"
-                        android:textSize="10sp"
-                        android:visibility="gone" />
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Chat"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -181,27 +186,26 @@
                         android:id="@+id/tabProfileIcon"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="App Library" />
+                        android:contentDescription="Apps" />
 
                     <View
                         android:id="@+id/tabProfileIndicator"
-                        android:layout_width="12dp"
-                        android:layout_height="2dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/bg_tab_indicator_active" />
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tabProfileText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="0dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:letterSpacing="0.05"
-                        android:text="APPS"
-                        android:textSize="10sp"
-                        android:visibility="gone" />
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Apps"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
         </LinearLayout>
+        </FrameLayout>
     </FrameLayout>
 </LinearLayout>

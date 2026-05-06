@@ -12,6 +12,7 @@ import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsListFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
@@ -46,6 +47,7 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
 
         binding.itemMarketingSiteVisits.setOnClickListener { openScreen(SiteVisitsListFragment()) }
+        binding.itemMarketingCpVisits.setOnClickListener { openScreen(CpVisitsFragment()) }
         binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }
         binding.itemMarketingMyLeads.setOnClickListener {
             openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))

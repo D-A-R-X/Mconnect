@@ -116,7 +116,8 @@ class SiteVisitsListFragment : Fragment() {
         val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, parent, false)
         val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
         val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
-        val action = itemView.findViewById<TextView>(R.id.btnVisitItemAction)
+        val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
+        val action = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
 
         title.text = visit.placeName?.takeIf { it.isNotBlank() } ?: "Site visit"
         time.text = formatWhen(visit)
@@ -131,29 +132,26 @@ class SiteVisitsListFragment : Fragment() {
         when {
             isInProgress -> {
                 action.text = "In progress"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_progress)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_progress)
                 action.setTextColor(Color.parseColor("#B54708"))
             }
             isCompleted -> {
                 action.text = "Completed"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
                 action.setTextColor(Color.parseColor("#475467"))
             }
             isCancelled -> {
                 action.text = "Cancelled"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
                 action.setTextColor(Color.parseColor("#475467"))
             }
             else -> {
                 action.text = "Start Trip"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
                 action.setTextColor(Color.WHITE)
             }
         }
 
-        // Card opens detail screen for everything except cancelled visits.
-        // The pill is interactive only for "Start Trip"; otherwise it's a
-        // read-only status badge.
         val canOpen = !isCancelled
         if (canOpen) {
             val openNav: (View) -> Unit = { openVisit(visit) }
@@ -161,18 +159,18 @@ class SiteVisitsListFragment : Fragment() {
             itemView.isFocusable = true
             itemView.setOnClickListener(openNav)
             if (isInProgress || isCompleted) {
-                action.isClickable = false
-                action.setOnClickListener(null)
+                actionBtn.isClickable = false
+                actionBtn.setOnClickListener(null)
             } else {
-                action.isClickable = true
-                action.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
             }
         } else {
             itemView.isClickable = false
             itemView.isFocusable = false
             itemView.setOnClickListener(null)
-            action.isClickable = false
-            action.setOnClickListener(null)
+            actionBtn.isClickable = false
+            actionBtn.setOnClickListener(null)
         }
 
         return itemView

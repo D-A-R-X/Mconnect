@@ -12,10 +12,12 @@
         <item name="colorSurface">@color/lt_surface_secondary</item>
         <item name="colorOnSurface">@color/lt_foreground_primary</item>
 
-        <!-- System bars -->
-        <item name="android:statusBarColor">@color/lt_surface_primary</item>
-        <item name="android:navigationBarColor">@color/lt_surface_primary</item>
+        <!-- System bars — transparent so our views draw behind them -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#F1F3F8</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
 
         <!-- Custom semantic attributes -->
         <item name="colorAccentPrimary">@color/lt_accent_primary</item>

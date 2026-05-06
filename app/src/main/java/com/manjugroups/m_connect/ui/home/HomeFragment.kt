@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.home
 
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -138,7 +139,7 @@ class HomeFragment : Fragment() {
                             binding.tvVisitCountBadge.visibility = View.GONE
                             binding.visitListContent.visibility = View.GONE
                             binding.visitEmptyContent.visibility = View.VISIBLE
-                            binding.tvVisitEmptyTitle.text = "No Visits Available"
+                            binding.tvVisitEmptyTitle.text = "No Trips Available"
                             binding.tvVisitEmptySubtitle.text = visitEmptySubtitle
                         }
                     }
@@ -259,29 +260,26 @@ class HomeFragment : Fragment() {
         val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, binding.visitListContent, false)
         val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
         val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
-        val action = itemView.findViewById<TextView>(R.id.btnVisitItemAction)
-        val cpBadge = itemView.findViewById<TextView>(R.id.tvVisitItemCpBadge)
+        val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
+        val action = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
+        val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
+        val avatar = itemView.findViewById<TextView>(R.id.tvVisitItemAvatar)
+        val staffName = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
+        val staffRole = itemView.findViewById<TextView>(R.id.tvVisitItemStaffRole)
+        val statusPill = itemView.findViewById<LinearLayout>(R.id.visitItemStatusPill)
+        val statusText = itemView.findViewById<TextView>(R.id.tvVisitItemStatus)
+        val distance = itemView.findViewById<TextView>(R.id.tvVisitItemDistance)
+        val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
 
-        title.text = visit.placeName ?: "Scheduled Visit"
+        val clientName = visit.placeName ?: visit.leadName ?: "Scheduled Visit"
+        bindTripCardHeader(avatar, staffName, staffRole, clientName)
+        title.text = clientName
         time.text = formatVisitTimeOrDate(visit)
+        distance.text = if (visit.placeLat != null && visit.placeLng != null) "Open route" else "Not mapped"
 
-        // KOS-37: badge + lead line are CP-visit-only. The today feed marks the
-        // row with a clientPlaceVisitId only when this trip was spawned by a
-        // marketing CP-visit (PRD §10 Phase B).
         val isCpVisit = visit.clientPlaceVisitId != null
-        cpBadge.visibility = if (isCpVisit) View.VISIBLE else View.GONE
-        if (isCpVisit) {
-            val parts = listOfNotNull(visit.leadName?.takeIf { it.isNotBlank() }, visit.leadPhone?.takeIf { it.isNotBlank() })
-            if (parts.isNotEmpty()) {
-                lead.text = parts.joinToString(" · ")
-                lead.visibility = View.VISIBLE
-            } else {
-                lead.visibility = View.GONE
-            }
-        } else {
-            lead.visibility = View.GONE
-        }
+        lead.visibility = View.GONE
 
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
@@ -292,63 +290,71 @@ class HomeFragment : Fragment() {
 
         when {
             needsCpDetails -> {
-                action.text = "Complete CP details"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
+                statusText.text = "Reaching"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = "Complete Trip"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
                 action.setTextColor(android.graphics.Color.WHITE)
+                actionIcon.visibility = View.VISIBLE
+                eta.text = "Within ${visit.reachingRadiusMeters ?: 500}m"
             }
             isInProgress -> {
-                action.text = "In progress"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_progress)
+                statusText.text = if (status == "arrived") "Reaching" else "Enroute"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_progress)
                 action.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                actionIcon.visibility = View.GONE
+                eta.text = if (status == "arrived") "At client place" else "Tracking"
             }
             isCompleted -> {
-                action.text = "Completed"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
+                statusText.text = "Complete"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
+                statusText.setTextColor(android.graphics.Color.parseColor("#475467"))
+                action.text = "Complete"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
                 action.setTextColor(android.graphics.Color.parseColor("#475467"))
+                actionIcon.visibility = View.GONE
+                eta.text = "Complete"
             }
             !canStartTrip -> {
+                statusText.text = "Clock in"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
+                statusText.setTextColor(android.graphics.Color.parseColor("#475467"))
                 action.text = "Clock In First"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action_disabled)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
                 action.setTextColor(android.graphics.Color.parseColor("#475467"))
+                actionIcon.visibility = View.GONE
+                eta.text = "After clock in"
             }
             else -> {
+                statusText.text = "Start"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_ready)
+                statusText.setTextColor(android.graphics.Color.parseColor("#169B2F"))
                 action.text = "Start Trip"
-                action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
                 action.setTextColor(android.graphics.Color.WHITE)
+                actionIcon.visibility = View.VISIBLE
+                eta.text = "After start"
             }
         }
 
         val canOpen = !isCompleted
         if (canOpen) {
             val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
-            val clockInRequired: (View) -> Unit = {
-                Toast.makeText(requireContext(), "Please clock in before starting a trip.", Toast.LENGTH_SHORT).show()
-            }
-            if (!canStartTrip && !isInProgress) {
-                itemView.isClickable = false
-                itemView.isFocusable = false
-                itemView.setOnClickListener(null)
-                action.isClickable = true
-                action.setOnClickListener(clockInRequired)
-            } else if (isInProgress) {
-                itemView.isClickable = true
-                itemView.isFocusable = true
-                itemView.setOnClickListener(openNav)
-                action.isClickable = false
-                action.setOnClickListener(null)
-            } else {
-                itemView.isClickable = false
-                itemView.isFocusable = false
-                itemView.setOnClickListener(null)
-                action.isClickable = true
-                action.setOnClickListener(openNav)
-            }
+            itemView.isClickable = true
+            itemView.isFocusable = true
+            itemView.setOnClickListener(openNav)
+            actionBtn.isClickable = true
+            actionBtn.setOnClickListener(openNav)
         } else {
             itemView.isClickable = false
             itemView.isFocusable = false
             itemView.setOnClickListener(null)
-            action.isClickable = false
-            action.setOnClickListener(null)
+            actionBtn.isClickable = false
+            actionBtn.setOnClickListener(null)
         }
 
         applyItemSpacing(itemView, index, total)
@@ -359,23 +365,57 @@ class HomeFragment : Fragment() {
         val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, binding.visitListContent, false)
         val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
         val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
-        val action = itemView.findViewById<TextView>(R.id.btnVisitItemAction)
+        val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
+        val action = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
+        val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
+        val avatar = itemView.findViewById<TextView>(R.id.tvVisitItemAvatar)
+        val staffName = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
+        val staffRole = itemView.findViewById<TextView>(R.id.tvVisitItemStaffRole)
+        val statusPill = itemView.findViewById<LinearLayout>(R.id.visitItemStatusPill)
+        val statusText = itemView.findViewById<TextView>(R.id.tvVisitItemStatus)
+        val distance = itemView.findViewById<TextView>(R.id.tvVisitItemDistance)
+        val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
 
+        bindTripCardHeader(avatar, staffName, staffRole, place.name)
         title.text = place.name
         time.text = "Available Today"
+        distance.text = if (place.lat != null && place.lng != null) "Open route" else "Not mapped"
+        eta.text = "After start"
+        statusText.text = "Ready"
+        statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_ready)
+        statusText.setTextColor(android.graphics.Color.parseColor("#169B2F"))
         action.text = "Start Trip"
-        action.background = requireContext().getDrawable(R.drawable.bg_home_today_visit_action)
+        actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
         action.setTextColor(android.graphics.Color.WHITE)
+        actionIcon.visibility = View.VISIBLE
 
         val openNav: (View) -> Unit = { openTripNavigationForPlace(place) }
-        itemView.isClickable = false
-        itemView.isFocusable = false
-        itemView.setOnClickListener(null)
-        action.isClickable = true
-        action.setOnClickListener(openNav)
+        itemView.isClickable = true
+        itemView.isFocusable = true
+        itemView.setOnClickListener(openNav)
+        actionBtn.isClickable = true
+        actionBtn.setOnClickListener(openNav)
 
         applyItemSpacing(itemView, index, total)
         return itemView
+    }
+
+    private fun bindTripCardHeader(
+        avatar: TextView,
+        nameView: TextView,
+        roleView: TextView,
+        clientName: String,
+    ) {
+        val name = formatPersonName(clientName.ifBlank { "Client" })
+        avatar.text = name.firstOrNull()?.uppercase() ?: "M"
+        nameView.text = name
+        roleView.visibility = View.GONE
+    }
+
+    private fun formatPersonName(rawName: String): String {
+        return rawName.lowercase().split(" ").filter { it.isNotBlank() }
+            .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
+            .ifBlank { "Client" }
     }
 
     private fun openTripNavigationForVisit(visit: TodayVisit) {

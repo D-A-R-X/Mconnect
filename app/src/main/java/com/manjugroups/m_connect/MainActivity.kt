@@ -60,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
     private var currentTab = 0
+    private var cachedTopInset = 0
+    private var statusBarFullBleed = false
 
     private data class TabConfig(
         val tab: FrameLayout,
@@ -92,25 +94,31 @@ class MainActivity : AppCompatActivity() {
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
 
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.navigationBarColor = Color.parseColor("#1C2020")
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
-                height = sys.top
+            cachedTopInset = sys.top
+            if (!statusBarFullBleed) {
+                statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
+                    height = sys.top
+                }
             }
-            // When the keyboard is open, lift the fragment content (and the
-            // chat input row anchored to its bottom) above the IME by adding
-            // bottom padding equal to the extra IME height beyond system nav.
             val extraImeBottom = (ime.bottom - sys.bottom).coerceAtLeast(0)
             fragmentContainer.updatePadding(top = 0, bottom = extraImeBottom)
-            tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom)
+            val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
+            mainRoot.updatePadding(bottom = 0)
+            tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom + baseBottomPx)
             insets
         }
         ViewCompat.requestApplyInsets(mainRoot)
@@ -182,10 +190,19 @@ class MainActivity : AppCompatActivity() {
         tabBarContainer.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
     }
 
-    fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean) {
+    fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
-        statusBarBackground.setBackgroundColor(backgroundColor)
-        window.statusBarColor = backgroundColor
+        statusBarFullBleed = fullBleed
+        if (fullBleed) {
+            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
+            window.statusBarColor = Color.TRANSPARENT
+        } else {
+            statusBarBackground.setBackgroundColor(backgroundColor)
+            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
+                height = cachedTopInset
+            }
+            window.statusBarColor = backgroundColor
+        }
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkStatusIcons
     }
 
@@ -224,16 +241,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
-            TAB_HOME -> setTopBarAppearance(Color.WHITE, true)
-            TAB_HR -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
-            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
-            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
+            TAB_HOME -> setTopBarAppearance(Color.WHITE, true, fullBleed = false)
+            TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false, fullBleed = false)
+            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
         }
     }
 
     private fun updateTabUi(index: Int) {
-        val iconColor = Color.WHITE
-        val mutedAlpha = 0.86f
+        val activeColor = Color.parseColor("#1BCA0B")
+        val inactiveColor = Color.parseColor("#999CA0")
 
         tabs.forEachIndexed { i, config ->
             val isActive = i == index
@@ -241,10 +258,11 @@ class MainActivity : AppCompatActivity() {
             config.icon.setImageResource(
                 if (isActive) config.activeIconRes else config.inactiveIconRes
             )
-            config.icon.imageTintList = ColorStateList.valueOf(iconColor)
-            config.icon.alpha = if (isActive) 1f else mutedAlpha
-            config.indicator.visibility = if (isActive) View.VISIBLE else View.INVISIBLE
-            config.text.setTextColor(Color.WHITE)
+            val tint = if (isActive) activeColor else inactiveColor
+            config.icon.imageTintList = ColorStateList.valueOf(tint)
+            config.icon.alpha = 1f
+            config.indicator.visibility = View.GONE
+            config.text.setTextColor(tint)
         }
     }
 
