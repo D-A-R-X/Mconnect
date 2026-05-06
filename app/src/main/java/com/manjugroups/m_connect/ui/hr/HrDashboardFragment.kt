@@ -199,7 +199,7 @@ class HrDashboardFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(true)
-        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
+        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
     }
