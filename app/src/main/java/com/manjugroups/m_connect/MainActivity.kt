@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
@@ -37,6 +38,7 @@ import com.manjugroups.m_connect.ui.hr.HrDashboardFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.library.AppLibraryFragment
+import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -52,12 +54,16 @@ class MainActivity : AppCompatActivity() {
         private const val TAG_HR = "root_tab_hr"
         private const val TAG_CHAT = "root_tab_chat"
         private const val TAG_LIBRARY = "root_tab_library"
+        private const val TRACKING_RESUME_SYNC_THROTTLE_MS = 30_000L
     }
 
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
     private var currentTab = 0
+    private var cachedTopInset = 0
+    private var statusBarFullBleed = false
+    private var lastTrackingResumeSyncMs = 0L
 
     private data class TabConfig(
         val tab: FrameLayout,
@@ -83,31 +89,49 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        TrackingCheckWorker.enqueue(this)
         setContentView(R.layout.activity_main)
         mainRoot = findViewById(R.id.mainRoot)
         statusBarBackground = findViewById(R.id.statusBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
 
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.navigationBarColor = Color.parseColor("#1C2020")
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
-                height = sys.top
+            cachedTopInset = sys.top
+            if (!statusBarFullBleed) {
+                statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
+                    height = sys.top
+                }
             }
-            // When the keyboard is open, lift the fragment content (and the
-            // chat input row anchored to its bottom) above the IME by adding
-            // bottom padding equal to the extra IME height beyond system nav.
-            val extraImeBottom = (ime.bottom - sys.bottom).coerceAtLeast(0)
-            fragmentContainer.updatePadding(top = 0, bottom = extraImeBottom)
-            tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom)
+            // When the floating tab bar is visible it already absorbs `sys.bottom`,
+            // so the fragment only needs the *additional* IME height. When the tab
+            // bar is hidden (chat thread, trip nav) the fragment owns the full
+            // bottom inset, so we apply `max(ime.bottom, sys.bottom)` — otherwise
+            // the keyboard overlaps the toolbar by exactly the nav-bar height.
+            val tabBarShowing = ::tabBarContainer.isInitialized &&
+                tabBarContainer.visibility == android.view.View.VISIBLE
+            val fragmentBottomInset = if (tabBarShowing) {
+                (ime.bottom - sys.bottom).coerceAtLeast(0)
+            } else {
+                maxOf(ime.bottom, sys.bottom)
+            }
+            fragmentContainer.updatePadding(top = 0, bottom = fragmentBottomInset)
+            val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
+            mainRoot.updatePadding(bottom = 0)
+            tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom + baseBottomPx)
             insets
         }
         ViewCompat.requestApplyInsets(mainRoot)
@@ -170,19 +194,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * On every foreground transition, re-fetch the tracking bootstrap and
+     * attendance state. This is what auto-starts GeoTrack after a biometric
+     * (or any external) punch-in: the punch happens off-device, the app comes
+     * back to the foreground, and the next sync sees `firstPunchIn` set on the
+     * server and `bootstrap.shouldTrack == true`, so the service starts.
+     *
+     * Throttled to one sync per 30 s to avoid hammering the API when the user
+     * bounces between tabs or returns from a quick external app.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (!session.isLoggedIn) return
+        val now = System.currentTimeMillis()
+        if (now - lastTrackingResumeSyncMs < TRACKING_RESUME_SYNC_THROTTLE_MS) return
+        lastTrackingResumeSyncMs = now
+        lifecycleScope.launch {
+            runCatching { syncTrackingBootstrap() }
+        }
+    }
+
     fun openTab(index: Int) {
         selectTab(index)
     }
 
     fun setTabBarVisible(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
-        tabBarContainer.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        if (tabBarContainer.visibility == target) return
+        tabBarContainer.visibility = target
+        // Re-dispatch insets so fragmentContainer.bottom padding flips between
+        // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
+        if (::mainRoot.isInitialized) {
+            ViewCompat.requestApplyInsets(mainRoot)
+        }
     }
 
-    fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean) {
+    fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
-        statusBarBackground.setBackgroundColor(backgroundColor)
-        window.statusBarColor = backgroundColor
+        statusBarFullBleed = fullBleed
+        if (fullBleed) {
+            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
+            window.statusBarColor = Color.TRANSPARENT
+        } else {
+            statusBarBackground.setBackgroundColor(backgroundColor)
+            statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
+                height = cachedTopInset
+            }
+            window.statusBarColor = backgroundColor
+        }
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkStatusIcons
     }
 
@@ -221,15 +282,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
-            TAB_HR -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
-            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false)
-            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
+            TAB_HOME -> setTopBarAppearance(Color.WHITE, true, fullBleed = false)
+            TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
         }
     }
 
     private fun updateTabUi(index: Int) {
-        val iconColor = Color.WHITE
-        val mutedAlpha = 0.86f
+        val activeColor = Color.parseColor("#1BCA0B")
+        val inactiveColor = Color.parseColor("#999CA0")
 
         tabs.forEachIndexed { i, config ->
             val isActive = i == index
@@ -237,10 +299,11 @@ class MainActivity : AppCompatActivity() {
             config.icon.setImageResource(
                 if (isActive) config.activeIconRes else config.inactiveIconRes
             )
-            config.icon.imageTintList = ColorStateList.valueOf(iconColor)
-            config.icon.alpha = if (isActive) 1f else mutedAlpha
-            config.indicator.visibility = if (isActive) View.VISIBLE else View.INVISIBLE
-            config.text.setTextColor(Color.WHITE)
+            val tint = if (isActive) activeColor else inactiveColor
+            config.icon.imageTintList = ColorStateList.valueOf(tint)
+            config.icon.alpha = 1f
+            config.indicator.visibility = View.GONE
+            config.text.setTextColor(tint)
         }
     }
 
@@ -307,22 +370,26 @@ class MainActivity : AppCompatActivity() {
             )
         )
         val bootstrap = deviceSync.bootstrap ?: geoApi.getTrackingBootstrap(session.bearerToken, deviceId).data
-        applyTrackingBootstrap(bootstrap)
+        val attendanceActive = runCatching {
+            AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
+        }.getOrDefault(false)
+        applyTrackingBootstrap(bootstrap, attendanceActive)
     }
 
-    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?) {
+    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
         session.geoTrackingEnabled = bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
         session.geoConsentGiven = bootstrap?.consent?.status == "granted"
         session.geoConsentDeclined = bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
         session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = bootstrap?.shouldTrack == true
+        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
 
-        if (bootstrap?.shouldPromptConsent == true && !isFinishing) {
+        if (attendanceActive && bootstrap?.shouldPromptConsent == true && !isFinishing) {
             startActivity(Intent(this, GeoTrackConsentActivity::class.java))
             return
         }
 
-        val canStartTracking = bootstrap?.shouldTrack == true &&
+        val canStartTracking = attendanceActive &&
+            bootstrap?.shouldTrack == true &&
             !bootstrap.activeSession?.id.isNullOrBlank() &&
             GeoTrackService.hasRequiredLocationPermissions(this)
 

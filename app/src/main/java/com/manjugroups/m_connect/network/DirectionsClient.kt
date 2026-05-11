@@ -14,6 +14,12 @@ import kotlinx.coroutines.withContext
  */
 object DirectionsClient {
 
+    data class GeocodeResult(
+        val latLng: LatLng,
+        val formattedAddress: String?,
+        val name: String?,
+    )
+
     data class DirectionsResult(
         val polyline: List<LatLng>,
         val distanceMeters: Int,
@@ -23,6 +29,36 @@ object DirectionsClient {
     )
 
     private val api by lazy { GeoTrackApi.create() }
+
+    suspend fun geocodeAddress(
+        bearerToken: String,
+        address: String,
+    ): GeocodeResult? = withContext(Dispatchers.IO) {
+        if (bearerToken.isBlank() || address.isBlank()) return@withContext null
+        try {
+            val resp = api.geocodeAddress(
+                bearerToken,
+                GeocodeAddressRequest(address = address),
+            )
+            val lat = resp.lat
+            val lng = resp.lng
+            if (!resp.success || lat == null || lng == null) {
+                android.util.Log.w(
+                    "DirectionsClient",
+                    "Backend geocode failed: ${resp.error ?: "no coordinates"}"
+                )
+                return@withContext null
+            }
+            GeocodeResult(
+                latLng = LatLng(lat, lng),
+                formattedAddress = resp.formattedAddress,
+                name = resp.name,
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("DirectionsClient", "Backend geocode call failed", e)
+            null
+        }
+    }
 
     suspend fun fetchDriving(
         bearerToken: String,

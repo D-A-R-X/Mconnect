@@ -4,190 +4,404 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurfacePrimary">
+    android:background="#F2F5FA">
 
-    <!-- Header (matches AttendanceHistory / Leaves style) -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_trip_detail_topbar"
         android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
         android:orientation="horizontal"
-        app:layout_constraintTop_toTopOf="parent"
+        android:paddingStart="16dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
-        <ImageView
-            android:id="@+id/btnTripBack"
-            android:layout_width="@dimen/back_icon_size"
-            android:layout_height="@dimen/back_icon_size"
-            android:contentDescription="Back"
-            android:src="@drawable/ic_arrow_left"
-            android:clickable="true"
-            android:focusable="true"
-            app:tint="?attr/colorForegroundPrimary" />
+        <FrameLayout
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_trip_detail_back">
+
+            <ImageView
+                android:id="@+id/btnTripBack"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:clickable="true"
+                android:contentDescription="Back"
+                android:focusable="true"
+                android:src="@drawable/ic_arrow_left"
+                app:tint="#0B61CA" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/tvTripTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="18sp"
-            android:text="Trip"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="Trip Details"
+            android:textColor="#101828"
+            android:textSize="18sp" />
 
-        <TextView
-            android:id="@+id/tvTripStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_trip_status_pill"
-            android:fontFamily="@font/inter_medium"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
-            android:text="Starting…"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="11sp" />
+        <Space
+            android:layout_width="32dp"
+            android:layout_height="32dp" />
     </LinearLayout>
 
-    <!-- Destination summary card -->
     <LinearLayout
         android:id="@+id/tripInfoCard"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_home_trip_card"
         android:orientation="vertical"
-        android:layout_marginHorizontal="20dp"
-        android:layout_marginTop="8dp"
-        android:padding="16dp"
-        android:background="@drawable/bg_stat_card"
-        app:layout_constraintTop_toBottomOf="@id/topBar"
+        android:paddingStart="14dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_profile_location"
-                app:tint="?attr/colorAccentPrimary" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/tvTripDestinationName"
+                android:id="@+id/tvTripStaffAvatar"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_home_trip_avatar"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="M"
+                android:textColor="#475467"
+                android:textSize="17sp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="15sp"
-                android:text="Destination"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvTripStaffName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="Staff Name"
+                    android:textColor="#111827"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvTripStaffRole"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="Field Executive"
+                    android:textColor="#667085"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tripStatusPill"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/bg_home_trip_status_ready"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp">
+
+                <View
+                    android:id="@+id/tripStatusDot"
+                    android:layout_width="5dp"
+                    android:layout_height="5dp"
+                    android:background="@drawable/bg_home_trip_status_dot" />
+
+                <TextView
+                    android:id="@+id/tvTripStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Start"
+                    android:textColor="#169B2F"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_stat_site" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Site/Client"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripDestinationName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="Manju Groups Site A"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_stat_distance" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Distance"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripDistance"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="—"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="86dp"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="#E5E7EB" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_stat_time" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Time"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripOriginName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="Current Location"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_stat_eta" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="ETA"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripEta"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="—"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <TextView
             android:id="@+id/tvTripDestinationAddress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginStart="28dp"
-            android:fontFamily="@font/inter_regular"
-            android:textColor="?attr/colorForegroundSecondary"
-            android:textSize="12sp"
-            android:text="—"
-            android:maxLines="2"
-            android:ellipsize="end" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="14dp"
-            android:background="?attr/colorBorderLight" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="14dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_regular"
-                    android:textColor="?attr/colorForegroundMuted"
-                    android:textSize="11sp"
-                    android:text="Distance" />
-                <TextView
-                    android:id="@+id/tvTripDistance"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="15sp"
-                    android:text="—" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="match_parent"
-                android:background="?attr/colorBorderLight" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="14dp"
-                android:orientation="vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_regular"
-                    android:textColor="?attr/colorForegroundMuted"
-                    android:textSize="11sp"
-                    android:text="Approx. ETA" />
-                <TextView
-                    android:id="@+id/tvTripEta"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="15sp"
-                    android:text="—" />
-            </LinearLayout>
-        </LinearLayout>
+            android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Map card -->
     <FrameLayout
         android:id="@+id/mapCard"
         android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginHorizontal="20dp"
-        android:layout_marginTop="14dp"
-        android:layout_marginBottom="16dp"
-        android:background="@drawable/bg_trip_map_card"
+        android:layout_height="180dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_trip_detail_map_card"
         android:clipToOutline="true"
-        app:layout_constraintTop_toBottomOf="@id/tripInfoCard"
-        app:layout_constraintBottom_toTopOf="@id/bottomActions"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/tripInfoCard">
 
         <com.google.android.gms.maps.MapView
             android:id="@+id/mapViewTrip"
@@ -200,6 +414,7 @@
             android:layout_height="match_parent"
             android:background="#80FFFFFF"
             android:visibility="gone">
+
             <ProgressBar
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -207,42 +422,305 @@
         </FrameLayout>
     </FrameLayout>
 
-    <!-- Bottom actions -->
+    <LinearLayout
+        android:id="@+id/tripProgressCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_trip_progress_figma_card"
+        android:orientation="vertical"
+        android:padding="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mapCard">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Trip Progress"
+                android:textColor="#1C1C1E"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvTripStateLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="En Route"
+                android:textColor="#19B900"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <!-- Progress connector lines (sit behind the circles) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="15dp"
+                android:layout_marginEnd="16dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/tripLineSegment1"
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
+
+                <View
+                    android:id="@+id/tripLineSegment2"
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
+
+                <View
+                    android:id="@+id/tripLineSegment3"
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/tripStepStart"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                        <ImageView
+                            android:id="@+id/tripStepStartIcon"
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_trip_progress_play_gray" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tripStepStartLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="5dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="Start"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/tvTripStartTime"
+                        android:layout_width="wrap_content"
+                        android:layout_height="13dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="08:20 AM"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/tripStepEnroute"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                        <ImageView
+                            android:id="@+id/tripStepEnrouteIcon"
+                            android:layout_width="11dp"
+                            android:layout_height="13dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_trip_progress_location_gray" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tripStepEnrouteLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="5dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="En Route"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/tripStepReaching"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                        <ImageView
+                            android:id="@+id/tripStepReachingIcon"
+                            android:layout_width="11dp"
+                            android:layout_height="13dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_trip_progress_location_gray" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tripStepReachingLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="5dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="Reaching"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/tripStepComplete"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                        <ImageView
+                            android:id="@+id/tripStepCompleteIcon"
+                            android:layout_width="11dp"
+                            android:layout_height="13dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_trip_progress_flag_gray_exact" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tripStepCompleteLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="5dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="Complete"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/bottomActions"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="14dp"
+        android:layout_marginEnd="28dp"
         android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="20dp"
-        android:background="?attr/colorSurfacePrimary"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/tripProgressCard">
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="14dp"
-            android:background="?attr/colorBorderLight" />
-
-        <androidx.appcompat.widget.AppCompatButton
+        <LinearLayout
             android:id="@+id/btnOpenInMaps"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/button_height"
-            android:background="@drawable/bg_trip_button_outline"
-            android:fontFamily="@font/inter_medium"
-            android:text="Open in Google Maps"
-            android:textAllCaps="false"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="14sp" />
+            android:layout_height="48dp"
+            android:background="@drawable/bg_home_trip_action_ready"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/ivStartTripIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_home_trip_play" />
+
+            <TextView
+                android:id="@+id/tvStartTripLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="Start Trip"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <com.manjugroups.m_connect.ui.home.SwipeToConfirmButton
             android:id="@+id/swipeArrived"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/button_height"
-            android:layout_marginTop="10dp" />
+            android:layout_height="48dp"
+            android:visibility="gone" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCompleteCpDetails"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_home_trip_action_ready"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Complete CP details"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:visibility="gone" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -37,4 +37,34 @@ class AttendanceFlowViewModelTest {
         )
         assertTrue(label.endsWith(" - --"))
     }
+
+    @Test
+    fun shouldTreatAsClockedIn_firstPunchWithoutPunchOut_returnsTrue() {
+        val isClockedIn = AttendanceFlowViewModel.shouldTreatAsClockedIn(
+            firstPunchIn = "2026-04-24T11:23:00+05:30",
+            hasOpenSession = false,
+        )
+
+        assertTrue(isClockedIn)
+    }
+
+    @Test
+    fun shouldTreatAsClockedIn_firstPunchWithIntermediatePunchOut_returnsTrue() {
+        val isClockedIn = AttendanceFlowViewModel.shouldTreatAsClockedIn(
+            firstPunchIn = "2026-04-24T11:23:00+05:30",
+            hasOpenSession = false,
+        )
+
+        assertTrue(isClockedIn)
+    }
+
+    @Test
+    fun shouldTreatAsClockedIn_withoutFirstPunchOrOpenSession_returnsFalse() {
+        val isClockedIn = AttendanceFlowViewModel.shouldTreatAsClockedIn(
+            firstPunchIn = null,
+            hasOpenSession = false,
+        )
+
+        assertEquals(false, isClockedIn)
+    }
 }

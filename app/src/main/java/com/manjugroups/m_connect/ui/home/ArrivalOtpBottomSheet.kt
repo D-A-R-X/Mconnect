@@ -98,12 +98,14 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         resendBtn = view.findViewById(R.id.btnArrivalOtpCancel) // re-purposed
         subtitleText = view.findViewById(R.id.tvArrivalOtpSubtitle)
 
+        // Figma 314:10209 — keep the static body copy as the subtitle. Phone
+        // mask + expiry countdown are shown via the error text when relevant
+        // so the design stays clean while users still get feedback.
         subtitleText?.text = buildString {
-            append("OTP sent to client")
+            append("Please confirm if you have seen or met the client at this location.")
             if (!phoneMasked.isNullOrBlank()) {
-                append(" (").append(phoneMasked).append(")")
+                append("\nSent to ").append(phoneMasked)
             }
-            append(". Ask them to read it back to you.")
         }
 
         boxes.forEachIndexed { index, edit ->
@@ -216,18 +218,11 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun startExpiryCountdown(seconds: Int) {
+        // Don't redraw the figma subtitle every second. Only surface a message
+        // when the OTP actually expires — that's when the user needs to act.
         countdownTimer?.cancel()
         countdownTimer = object : CountDownTimer((seconds * 1000L).coerceAtLeast(1000L), 1000L) {
-            override fun onTick(msLeft: Long) {
-                val s = (msLeft / 1000).toInt()
-                val mm = s / 60
-                val ss = s % 60
-                subtitleText?.text = buildString {
-                    append("Enter the OTP your client received.")
-                    append(" Expires in ")
-                    append(String.format("%d:%02d", mm, ss))
-                }
-            }
+            override fun onTick(msLeft: Long) = Unit
             override fun onFinish() {
                 showError("OTP expired. Tap Resend to get a new one.")
             }
@@ -241,10 +236,10 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         resendTimer = object : CountDownTimer(total * 1000L + 100L, 1000L) {
             override fun onTick(msLeft: Long) {
                 val s = (msLeft / 1000).toInt()
-                resendBtn?.text = "Resend OTP in ${s}s"
+                resendBtn?.text = "Resend available in ${s}s"
             }
             override fun onFinish() {
-                resendBtn?.text = "Resend OTP"
+                resendBtn?.text = "Haven't received the verification code? Resend it."
                 resendBtn?.isClickable = true
             }
         }.start()

@@ -70,6 +70,14 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    // Shifts
+    @GET("api/hr/shifts/today")
+    suspend fun getTodayShift(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+        @Query("date") date: String? = null
+    ): TodayShiftResponse
+
     // Storage
     @POST("api/storage/generate-upload-url")
     suspend fun generateUploadUrl(@Header("Authorization") token: String): UploadUrlResponse
@@ -402,6 +410,59 @@ interface ApiService {
         @Body body: DialDooctiRequest,
     ): DialDooctiResponse
 
+    // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────
+    @GET("api/marketing/projects")
+    suspend fun getMarketingProjects(
+        @Header("Authorization") token: String,
+    ): MarketingProjectsResponse
+
+    @GET("api/marketing/inventory-units")
+    suspend fun listInventoryUnits(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("unitType") unitType: String? = null,
+        @Query("facing") facing: String? = null,
+        @Query("status") status: String? = null,
+    ): InventoryUnitsResponse
+
+    @GET("api/marketing/inventory-units/get")
+    suspend fun getInventoryUnit(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): InventoryUnitResponse
+
+    @GET("api/marketing/inventory-units/layout")
+    suspend fun getInventoryLayout(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("layoutId") layoutId: String? = null,
+    ): InventoryLayoutResponse
+
+    @POST("api/marketing/inventory-units/hold")
+    suspend fun holdInventoryUnit(
+        @Header("Authorization") token: String,
+        @Body body: InventoryUnitIdRequest,
+    ): InventoryUnitResponse
+
+    @POST("api/marketing/inventory-units/release")
+    suspend fun releaseInventoryUnit(
+        @Header("Authorization") token: String,
+        @Body body: InventoryUnitIdRequest,
+    ): InventoryUnitResponse
+
+    // ── Marketing: Bookings (KOS-52 — wires plotId always) ──────────────────
+    @POST("api/bookings")
+    suspend fun createBooking(
+        @Header("Authorization") token: String,
+        @Body body: CreateBookingRequest,
+    ): CreateBookingResponse
+
+    @GET("api/telecaller/leads/search-by-phone")
+    suspend fun searchTelecallerLeadsByPhone(
+        @Header("Authorization") token: String,
+        @Query("phone") phone: String,
+    ): TelecallerLeadSearchResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -447,7 +508,9 @@ data class StaffData(
     val designation: String?,
     val status: String?,
     val employeeId: String?,
-    val department: String?
+    val department: String?,
+    val reportingTo: String? = null,
+    val reportingToId: String? = null
 )
 
 // Attendance models
@@ -477,6 +540,38 @@ data class SessionData(
     val source: String?,
     val totalMinutes: Int?
 )
+data class TodayShiftResponse(
+    val success: Boolean? = null,
+    val staffId: String? = null,
+    val date: String? = null,
+    val isWeekoff: Boolean? = null,
+    val shift: TodayShift? = null,
+)
+data class TodayShift(
+    val name: String? = null,
+    val code: String? = null,
+    val schedule: TodayShiftSchedule? = null,
+    val graceMinutes: Int? = null,
+    val fullDayThresholdMinutes: Int? = null,
+    val halfDayThresholdMinutes: Int? = null,
+    val isActive: Boolean? = null,
+)
+data class TodayShiftSchedule(
+    val monday: TodayShiftDay? = null,
+    val tuesday: TodayShiftDay? = null,
+    val wednesday: TodayShiftDay? = null,
+    val thursday: TodayShiftDay? = null,
+    val friday: TodayShiftDay? = null,
+    val saturday: TodayShiftDay? = null,
+    val sunday: TodayShiftDay? = null,
+)
+data class TodayShiftDay(
+    val isWorkDay: Boolean? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val breakMinutes: Int? = null,
+)
+
 data class DaySessionsResponse(
     val success: Boolean,
     val sessions: List<SessionData>? = emptyList(),
@@ -684,7 +779,10 @@ data class ChannelData(
     val name: String?, val description: String?,
     val type: String?, val memberCount: Int?,
     val unreadCount: Int?, val slug: String?,
-    val muted: Boolean?
+    val muted: Boolean?,
+    val lastMessageAt: Long? = null,
+    val lastMessagePreview: String? = null,
+    val mentionCount: Int? = null
 )
 data class ChannelDetailResponse(val success: Boolean, val channel: ChannelData?)
 data class CreateChannelRequest(
@@ -702,6 +800,8 @@ data class ConversationData(
     val unreadCount: Int?, val muted: Boolean?,
     val lastMessage: MessageData?,
     val lastMessageAt: Long?,
+    val lastMessagePreview: String? = null,
+    val lastMessageSenderId: String? = null,
     val participants: List<ParticipantData>?
 )
 data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?)
@@ -974,6 +1074,42 @@ data class MyLeadsResponse(
     val error: String? = null
 )
 
+data class TelecallerLeadSearchResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val leads: List<TelecallerLeadSearchData> = emptyList(),
+    val error: String? = null
+)
+
+data class TelecallerLeadSearchData(
+    @SerializedName("_id") val id: String,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val emailId: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val suggestedVisitAddress: String? = null,
+    val latestAnalysisProfile: LeadAnalysisProfile? = null,
+)
+
+data class LeadAnalysisProfile(
+    val clientName: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val landmark: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val alternateMobileNumber: String? = null,
+    val propertyType: String? = null,
+    val propertyInterest: LeadPropertyInterest? = null,
+)
+
+data class LeadPropertyInterest(
+    val location: String? = null,
+    val priceRangeLakhs: String? = null,
+    val extentInSqft: String? = null,
+)
+
 data class DialDooctiRequest(
     val phone_number: String,
     val station: String? = null,
@@ -987,4 +1123,106 @@ data class DialDooctiResponse(
     val error: String? = null,
     val stage: String? = null,
     val status: Int? = null,
+)
+
+// ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────
+data class MarketingProject(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val scope: String? = null,
+    val status: String? = null,
+    val location: String? = null,
+)
+
+data class MarketingProjectsResponse(
+    val success: Boolean,
+    val projects: List<MarketingProject> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryLayoutCoordinates(
+    val shape: String? = null,
+    val x: Double? = null,
+    val y: Double? = null,
+    val width: Double? = null,
+    val height: Double? = null,
+    val rotation: Double? = null,
+    val svgViewBox: String? = null,
+    val points: List<LayoutPoint>? = null,
+)
+
+data class LayoutPoint(val x: Double, val y: Double)
+
+data class InventoryUnit(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val unitNumber: String? = null,
+    val unitType: String? = null,           // plot|villa|flat
+    val facing: String? = null,             // N|E|S|W|NE|NW|SE|SW
+    val area: Double? = null,
+    val dimensions: String? = null,
+    val floor: Int? = null,
+    val block: String? = null,
+    val priceSnapshot: Double? = null,
+    val status: String,                     // available|held|booked|sold
+    val rawStatus: String? = null,
+    val reservedByBookingId: String? = null,
+    val soldByBookingId: String? = null,
+    val customerName: String? = null,
+    val layoutId: String? = null,
+    val layoutCoordinates: InventoryLayoutCoordinates? = null,
+)
+
+data class InventoryUnitsResponse(
+    val success: Boolean,
+    val units: List<InventoryUnit> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryUnitResponse(
+    val success: Boolean,
+    val unit: InventoryUnit? = null,
+    val error: String? = null,
+)
+
+data class InventoryLayoutProject(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val scope: String? = null,
+)
+
+data class InventoryLayoutResponse(
+    val success: Boolean,
+    val project: InventoryLayoutProject? = null,
+    val units: List<InventoryUnit> = emptyList(),
+    val error: String? = null,
+)
+
+data class InventoryUnitIdRequest(val id: String)
+
+// ── Marketing: Bookings (KOS-52) ────────────────────────────────────────────
+// Mobile sends only the fields the booking picker collects. plotId is always
+// included when the user selected an inventory unit — server-side validator
+// (KOS-40) rejects mismatched project + sold/booked rows.
+data class CreateBookingRequest(
+    val clientName: String,
+    val mobileNumber: String,
+    val bookingDate: String,                // yyyy-MM-dd
+    val leadId: String? = null,
+    val projectId: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val bookingType: String? = null,
+    val bookingMode: String? = null,
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val email: String? = null,
+    val homeAddress: String? = null,
+)
+
+data class CreateBookingResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val error: String? = null,
 )

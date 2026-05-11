@@ -199,7 +199,7 @@ class HrDashboardFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(true)
-        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
+        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
     }
@@ -284,6 +284,17 @@ class HrDashboardFragment : Fragment() {
                     when (event) {
                         is AttendanceFlowEvent.Error -> {
                             Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                        }
+
+                        is AttendanceFlowEvent.SubmissionFailed -> {
+                            // Background upload/punch failed after the optimistic Success
+                            // sheet was already shown. Surface a clear retry prompt.
+                            Toast.makeText(
+                                requireContext(),
+                                "${event.message} Please retry.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            loadRecentHistoryCards()
                         }
 
                         is AttendanceFlowEvent.Success -> {

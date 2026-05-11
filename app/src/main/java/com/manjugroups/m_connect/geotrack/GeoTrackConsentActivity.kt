@@ -3,8 +3,11 @@ package com.manjugroups.m_connect.geotrack
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -15,6 +18,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.ActivityGeoConsentBinding
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ConsentRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.launch
@@ -73,7 +77,12 @@ class GeoTrackConsentActivity : AppCompatActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
-        // All permissions requested, start tracking
+        requestBatteryOptimizationExemption()
+    }
+
+    private val batteryOptimizationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
         startTrackingService()
     }
 
@@ -182,9 +191,41 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestBatteryOptimizationExemption() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            startTrackingService()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Keep Tracking Active")
+            .setMessage("To ensure attendance tracking and heartbeat work reliably on all devices, please disable battery optimization for this app.\n\nTap Allow on the next screen.")
+            .setPositiveButton("Allow") { _, _ ->
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                batteryOptimizationLauncher.launch(intent)
+            }
+            .setNegativeButton("Skip") { _, _ ->
+                startTrackingService()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
     private fun startTrackingService() {
-        GeoTrackService.start(this)
-        goToMain()
+        lifecycleScope.launch {
+            val attendanceActive = runCatching {
+                AttendanceTrackingGate.isClockedInForToday(session.bearerToken, ApiService.create())
+            }.getOrDefault(false)
+            session.shouldTrackNow = attendanceActive && session.shouldTrackNow
+            if (attendanceActive) {
+                GeoTrackService.start(this@GeoTrackConsentActivity)
+            } else {
+                GeoTrackService.stop(this@GeoTrackConsentActivity)
+            }
+            goToMain()
+        }
     }
 
     private fun goToMain() {

@@ -1,0 +1,348 @@
+- generic:
+  - generic:
+    - complementary:
+      - generic:
+        - link:
+          - /url: /
+          - img
+        - button:
+          - img
+      - navigation:
+        - generic:
+          - link:
+            - /url: /
+            - generic:
+              - img
+            - generic: Insights
+          - link:
+            - /url: /chat
+            - generic:
+              - img
+            - generic: Chat
+          - generic:
+            - button:
+              - img
+              - generic: Telecaller
+              - img
+            - generic:
+              - link:
+                - /url: /telecaller
+                - img
+                - generic: Dashboard
+              - link:
+                - /url: /telecaller/dialer
+                - img
+                - generic: Dialer
+              - link:
+                - /url: /telecaller/calls
+                - img
+                - generic: Calls
+              - link:
+                - /url: /telecaller/leads
+                - img
+                - generic: External Leads
+              - link:
+                - /url: /telecaller/leads/my
+                - img
+                - generic: My Leads
+              - link:
+                - /url: /telecaller/followups
+                - img
+                - generic: Followups
+              - link:
+                - /url: /telecaller/live
+                - img
+                - generic: Live Feed
+              - link:
+                - /url: /telecaller/settings
+                - img
+                - generic: Settings
+          - generic:
+            - button:
+              - img
+              - generic: Project Mgmt
+              - img
+            - generic:
+              - link:
+                - /url: /projects
+                - img
+                - generic: Projects
+              - link:
+                - /url: /tasks
+                - img
+                - generic: My Tasks
+              - link:
+                - /url: /library
+                - img
+                - generic: Library
+              - link:
+                - /url: /procurement
+                - img
+                - generic: Procurement
+          - generic:
+            - button:
+              - img
+              - generic: Land Procurement
+              - img
+            - generic:
+              - link:
+                - /url: /land-procurement
+                - img
+                - generic: Dashboard
+              - link:
+                - /url: /land-procurement/new
+                - img
+                - generic: New Property
+              - link:
+                - /url: /land-procurement/library
+                - img
+                - generic: Library
+          - generic:
+            - button:
+              - img
+              - generic: HR
+              - img
+            - generic:
+              - link:
+                - /url: /hr/dashboard
+                - img
+                - generic: Dashboard
+              - link:
+                - /url: /hr/staff
+                - img
+                - generic: Staff
+              - link:
+                - /url: /hr/org-chart
+                - img
+                - generic: Org Chart
+              - link:
+                - /url: /attendance
+                - img
+                - generic: Attendance
+              - link:
+                - /url: /hr/leaves
+                - img
+                - generic: Leaves
+              - link:
+                - /url: /hr/permissions
+                - img
+                - generic: Permissions
+              - link:
+                - /url: /my-team
+                - img
+                - generic: My Team
+              - link:
+                - /url: /hr/hiring
+                - img
+                - generic: Hiring
+              - link:
+                - /url: /hr/salary-slips
+                - img
+                - generic: Salary Slips
+              - link:
+                - /url: /hr/fines-deductions
+                - img
+                - generic: Fines / Deductions
+              - link:
+                - /url: /hr/loans
+                - img
+                - generic: Loans
+              - link:
+                - /url: /hr/assets
+                - img
+                - generic: Assets
+              - link:
+                - /url: /geotrack/live
+                - img
+                - generic: GeoTrack Live
+          - generic:
+            - button:
+              - img
+              - generic: Accounts
+              - img
+            - generic:
+              - link:
+                - /url: /accounts/requests
+                - img
+                - generic: Requests
+          - generic:
+            - button:
+              - img
+              - generic: Marketing
+              - img
+            - generic:
+              - link:
+                - /url: /marketing/cp-visits
+                - img
+                - generic: CP Visits
+              - link:
+                - /url: /marketing/site-visits
+                - img
+                - generic: Site Visits
+              - link:
+                - /url: /marketing/performance
+                - img
+                - generic: Performance
+              - link:
+                - /url: /marketing/fleet
+                - img
+                - generic: Fleet
+              - link:
+                - /url: /marketing/bookings
+                - img
+                - generic: Bookings
+          - generic:
+            - button:
+              - img
+              - generic: Admin
+              - img
+            - generic:
+              - link:
+                - /url: /settings
+                - img
+                - generic: Settings
+              - link:
+                - /url: /settings/iam
+                - img
+                - generic: IAM
+              - link:
+                - /url: /settings/workflows
+                - img
+                - generic: Workflows
+              - link:
+                - /url: /approvals
+                - img
+                - generic: Approvals
+  - generic:
+    - banner:
+      - generic:
+        - navigation:
+          - generic:
+            - generic: Marketing
+          - generic:
+            - img
+            - generic: CP Visits
+      - generic:
+        - button:
+          - img
+        - button:
+          - img
+        - button:
+          - generic:
+            - generic: MP
+    - main:
+      - generic:
+        - generic:
+          - generic:
+            - heading [level=1]: CP Visits (1)
+            - paragraph: Staff-goes-to-client pipeline. Arrival is proven by photo + OTP timestamp + GPS captured by the field staff app.
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - textbox:
+                - /placeholder: Search lead / place / staff…
+            - combobox:
+              - generic: All Field Staff
+              - img
+            - combobox:
+              - generic: All Telecallers
+              - img
+            - combobox:
+              - generic: All Statuses
+              - img
+            - combobox:
+              - generic: All Outcomes
+              - img
+          - generic:
+            - generic:
+              - generic: From
+              - textbox
+            - generic:
+              - generic: To
+              - textbox
+            - generic:
+              - generic:
+                - button:
+                  - img
+                  - text: Create CP Visit
+                - generic:
+                  - tablist:
+                    - tab [selected]:
+                      - img
+                      - text: List
+                    - tab:
+                      - img
+                      - text: Calendar
+        - generic:
+          - table:
+            - rowgroup:
+              - row:
+                - columnheader: Scheduled
+                - columnheader: Lead / Place
+                - columnheader: Field Staff
+                - columnheader: Telecaller
+                - columnheader: Status
+                - columnheader: Outcome
+            - rowgroup:
+              - row:
+                - cell:
+                  - link:
+                    - /url: /marketing/cp-visits/kd7m0rc7s0kqrsegqbtw5rxa758636mt
+                    - text: 04 May 2026
+                - cell:
+                  - generic:
+                    - generic: Imran
+                    - generic: "9000012406"
+                    - generic: Imran
+                - cell: Manoj Prabhakar K
+                - cell: Manoj Prabhakar K
+                - cell:
+                  - generic: Scheduled
+                - cell: —
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e12] [cursor=pointer]:
+    - img [ref=e13]
+  - alert
+  - dialog "Create CP Visit" [ref=e391]:
+    - generic [ref=e392]:
+      - heading "Create CP Visit" [level=2] [ref=e393]
+      - paragraph [ref=e394]: Enter the client phone number to link the visit to the matching telecaller lead.
+    - generic [ref=e395]:
+      - generic [ref=e396]:
+        - generic [ref=e397]: Client phone *
+        - textbox "10-digit phone number" [active] [ref=e398]
+      - generic [ref=e399]:
+        - generic [ref=e400]: Field staff *
+        - combobox [ref=e401] [cursor=pointer]:
+          - generic [ref=e402]: Pick staff to visit client
+          - img
+      - generic [ref=e403]:
+        - generic [ref=e404]:
+          - generic [ref=e405]: Date *
+          - textbox [ref=e406]: 2026-05-05
+        - generic [ref=e407]:
+          - generic [ref=e408]: Time
+          - textbox [ref=e409]
+      - generic [ref=e410]:
+        - generic [ref=e411]: Address *
+        - textbox "House no, street, landmark, district, state, pincode" [ref=e412]
+      - generic [ref=e413]:
+        - generic [ref=e414]:
+          - generic [ref=e415]:
+            - img [ref=e416]
+            - text: Google Maps link
+            - generic [ref=e419]: (optional)
+          - textbox "Skip if you only have the address" [ref=e420]
+        - button "Optional coordinates" [ref=e421] [cursor=pointer]:
+          - img
+          - text: Optional coordinates
+      - generic [ref=e422]:
+        - generic [ref=e423]: Notes
+        - textbox "Anything the visiting staff should know" [ref=e424]
+    - generic [ref=e425]:
+      - button "Cancel" [ref=e426] [cursor=pointer]
+      - button "Create visit" [disabled]
+    - button "Close" [ref=e427] [cursor=pointer]:
+      - img [ref=e428]
+      - generic [ref=e431]: Close

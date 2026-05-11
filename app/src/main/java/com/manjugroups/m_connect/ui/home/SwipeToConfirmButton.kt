@@ -31,10 +31,11 @@ class SwipeToConfirmButton @JvmOverloads constructor(
         get() = labelView.text
         set(value) { labelView.text = value }
 
-    private val thumbSizePx: Int = dp(44)
+    private val thumbSizePx: Int = dp(40)
     private val thumbInsetPx: Int = dp(4)
     private val thumb: FrameLayout
     private val thumbIcon: ImageView
+    private val endIcon: ImageView
     private val labelView: TextView
 
     private var dragStartX = 0f
@@ -44,17 +45,19 @@ class SwipeToConfirmButton @JvmOverloads constructor(
 
     init {
         background = ContextCompat.getDrawable(context, R.drawable.bg_swipe_track)
+        clipToPadding = false
+        clipChildren = false
         setPadding(thumbInsetPx, thumbInsetPx, thumbInsetPx, thumbInsetPx)
 
         labelView = TextView(context).apply {
-            text = "Swipe to mark arrived"
-            setTextColor(Color.WHITE)
+            text = "Swipe to Complete Trip"
+            setTextColor(Color.parseColor("#19B900"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             gravity = Gravity.CENTER
-            // Match Inter Semibold used in app
+            includeFontPadding = false
             try {
                 typeface = androidx.core.content.res.ResourcesCompat
-                    .getFont(context, R.font.inter_semibold)
+                    .getFont(context, R.font.inter_medium)
             } catch (_: Exception) { /* fallback to default */ }
         }
         addView(
@@ -68,19 +71,30 @@ class SwipeToConfirmButton @JvmOverloads constructor(
 
         thumb = FrameLayout(context).apply {
             background = ContextCompat.getDrawable(context, R.drawable.bg_swipe_thumb)
+            elevation = dp(2).toFloat()
         }
         thumbIcon = ImageView(context).apply {
-            setImageResource(R.drawable.ic_chevron_right)
-            setColorFilter(Color.parseColor("#7544FC"))
+            setImageResource(R.drawable.ic_swipe_double_chevron_figma)
         }
         thumb.addView(
             thumbIcon,
-            LayoutParams(dp(20), dp(20), Gravity.CENTER)
+            LayoutParams(dp(14), dp(13), Gravity.CENTER)
         )
         addView(
             thumb,
             LayoutParams(thumbSizePx, thumbSizePx, Gravity.START or Gravity.CENTER_VERTICAL)
         )
+
+        endIcon = ImageView(context).apply {
+            setImageResource(R.drawable.ic_swipe_double_chevron_figma)
+        }
+        addView(
+            endIcon,
+            LayoutParams(dp(14), dp(13), Gravity.END or Gravity.CENTER_VERTICAL).apply {
+                marginEnd = dp(16)
+            }
+        )
+        thumb.bringToFront()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -104,6 +118,7 @@ class SwipeToConfirmButton @JvmOverloads constructor(
                 val newTx = (thumbStartX + dx).coerceIn(0f, travel.toFloat())
                 thumb.translationX = newTx
                 labelView.alpha = 1f - (newTx / travel.coerceAtLeast(1)).coerceIn(0f, 1f)
+                endIcon.alpha = labelView.alpha
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -120,6 +135,7 @@ class SwipeToConfirmButton @JvmOverloads constructor(
                         .withEndAction { onConfirmed?.invoke() }
                         .start()
                     labelView.animate().alpha(0f).setDuration(120L).start()
+                    endIcon.animate().alpha(0f).setDuration(120L).start()
                 } else {
                     thumb.animate()
                         .translationX(0f)
@@ -127,6 +143,7 @@ class SwipeToConfirmButton @JvmOverloads constructor(
                         .setInterpolator(DecelerateInterpolator())
                         .start()
                     labelView.animate().alpha(1f).setDuration(180L).start()
+                    endIcon.animate().alpha(1f).setDuration(180L).start()
                 }
                 return true
             }
@@ -139,6 +156,7 @@ class SwipeToConfirmButton @JvmOverloads constructor(
         isLocked = false
         thumb.animate().translationX(0f).setDuration(160L).start()
         labelView.animate().alpha(1f).setDuration(160L).start()
+        endIcon.animate().alpha(1f).setDuration(160L).start()
         isEnabled = true
     }
 
@@ -146,6 +164,7 @@ class SwipeToConfirmButton @JvmOverloads constructor(
         isLocked = true
         labelView.text = message
         labelView.alpha = 1f
+        endIcon.alpha = 0f
     }
 
     private fun dp(value: Int): Int =

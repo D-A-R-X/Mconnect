@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onboard2 (Figma 98:8195) — frame 390x844 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- Working Period 1: x=34 y=102 w=286 h=305 -->
+    <ImageView
+        android:id="@+id/imgSalesLine"
+        android:layout_width="286dp"
+        android:layout_height="305dp"
+        android:layout_marginStart="34dp"
+        android:layout_marginTop="102dp"
+        android:src="@drawable/onboard_sales_line"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true" />
+
+    <!-- Group 392 1: x=69 y=188 w=286 h=306 -->
+    <ImageView
+        android:id="@+id/imgSalesBar"
+        android:layout_width="286dp"
+        android:layout_height="306dp"
+        android:layout_marginStart="69dp"
+        android:layout_marginTop="188dp"
+        android:src="@drawable/onboard_sales_bar"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true" />
+
+</FrameLayout>

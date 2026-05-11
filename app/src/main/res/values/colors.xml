@@ -56,4 +56,24 @@
     <color name="dk_warning_light">#FF451A03</color>
     <color name="dk_error_light">#FF450A0A</color>
     <color name="dk_info_light">#FF1E3A5F</color>
+    <color name="splash_bg">#FFFFFFFF</color>
+
+    <!-- Chat / Figma palette -->
+    <color name="chat_blue_top">#FF0B61CA</color>
+    <color name="chat_blue_bottom">#FF02499D</color>
+    <color name="chat_green_top">#FF1BCA0B</color>
+    <color name="chat_green_bottom">#FF3D9D02</color>
+    <color name="chat_text_primary">#FF101828</color>
+    <color name="chat_text_secondary">#FF767779</color>
+    <color name="chat_text_muted">#FFC4C5C4</color>
+    <color name="chat_filter_inactive">#FFF4F4F4</color>
+    <color name="chat_dm_bg">#1769C2FF</color>
+    <color name="chat_bubble_stroke">#0F000000</color>
+    <color name="chat_attach_bg">#FFE3E5EA</color>
+    <color name="chat_input_border">#99D1D1D6</color>
+    <color name="chat_input_hint">#990D082C</color>
+    <color name="chat_search_hint">#FFC4C5C4</color>
+    <color name="chat_subtitle_grey">#FFABABAB</color>
+    <color name="chat_separator">#FFEAECF0</color>
+    <color name="chat_check_blue">#FF007BFC</color>
 </resources>

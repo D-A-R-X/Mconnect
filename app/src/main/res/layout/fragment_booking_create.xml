@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp">
+
+        <ImageView
+            android:id="@+id/btnBookingBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="Back"
+            android:clickable="true"
+            android:focusable="true"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:id="@+id/tvBookingTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Project" />
+
+            <TextView
+                android:id="@+id/tvBookingProject"
+                style="@style/BookingFieldRow"
+                android:text="Select project" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Unit" />
+
+            <TextView
+                android:id="@+id/tvBookingUnit"
+                style="@style/BookingFieldRow"
+                android:text="Select unit" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Booking date" />
+
+            <TextView
+                android:id="@+id/tvBookingDate"
+                style="@style/BookingFieldRow" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Client name" />
+
+            <EditText
+                android:id="@+id/etBookingClientName"
+                style="@style/BookingFieldInput"
+                android:inputType="textPersonName"
+                android:hint="Full name" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Mobile number" />
+
+            <EditText
+                android:id="@+id/etBookingMobile"
+                style="@style/BookingFieldInput"
+                android:inputType="phone"
+                android:hint="10-digit mobile" />
+
+            <TextView
+                android:id="@+id/tvBookingLinkedLead"
+                style="@style/BookingFieldRow"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                android:text="Search lead by phone" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Booking cost (₹)" />
+
+            <EditText
+                android:id="@+id/etBookingCost"
+                style="@style/BookingFieldInput"
+                android:inputType="numberDecimal"
+                android:hint="0" />
+
+            <TextView
+                style="@style/BookingFieldLabel"
+                android:text="Advance amount (₹)" />
+
+            <EditText
+                android:id="@+id/etBookingAdvance"
+                style="@style/BookingFieldInput"
+                android:inputType="numberDecimal"
+                android:hint="0" />
+
+            <TextView
+                android:id="@+id/btnBookingSubmit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/bg_home_today_visit_action"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:padding="14dp"
+                android:text="Submit booking"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

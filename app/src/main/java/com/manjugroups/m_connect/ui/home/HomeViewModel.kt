@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
@@ -77,13 +78,14 @@ class HomeViewModel : ViewModel() {
 
     private var cachedState: HomeUiState.Loaded? = null
 
-    fun loadHomeData(bearerToken: String) {
+    fun loadHomeData(bearerToken: String, context: Context? = null) {
         viewModelScope.launch {
             try {
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 val timeFmt = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
                 val attendance = try { api.getMyAttendanceToday(bearerToken, today) } catch (_: Exception) { null }
+                val daySessions = try { api.getDaySessions(bearerToken, today) } catch (_: Exception) { null }
 
                 // Days present this month: fetch attendance from 1st of month to today
                 val cal = Calendar.getInstance()
@@ -106,8 +108,13 @@ class HomeViewModel : ViewModel() {
                 var totalMin = 0
 
                 if (att != null) {
-                    hasOpen = att.hasOpenSession == true
+                    val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
+                    hasOpen = AttendanceTrackingGate.isClockedInForToday(
+                        firstPunchIn = firstPunchIn,
+                        hasOpenSession = att.hasOpenSession == true || daySessions?.hasOpenSession == true,
+                    )
                     totalMin = att.totalMinutes ?: 0
+                    firstPunchInMillis = firstPunchIn?.let { parseMillis(it) } ?: 0L
 
                     att.sessions?.forEachIndexed { index, s ->
                         val punchInTime = s.punchInTime?.let { parseTime(it, timeFmt) } ?: ""
@@ -141,6 +148,23 @@ class HomeViewModel : ViewModel() {
                 )
                 cachedState = loaded
                 _uiState.value = loaded
+
+                if (context != null) {
+                    if (hasOpen) {
+                        runCatching {
+                            applyTrackingBootstrap(
+                                context = context,
+                                bootstrap = geoApi.getTrackingBootstrap(
+                                    bearerToken,
+                                    SessionManager(context).trackingDeviceId,
+                                ).data,
+                                attendanceActive = true,
+                            )
+                        }
+                    } else {
+                        stopTrackingUntilClockIn(context)
+                    }
+                }
 
                 // Load today's visits
                 loadTodayVisitsInternal(bearerToken)
@@ -182,13 +206,23 @@ class HomeViewModel : ViewModel() {
 
                 if (response.success) {
                     _punchEvent.emit(PunchEvent.Success(if (isPunchIn) "Punched In!" else "Punched Out!"))
-                    applyTrackingBootstrap(context, response.trackingBootstrap)
+                    val bootstrap = response.trackingBootstrap ?: runCatching {
+                        geoApi.getTrackingBootstrap(
+                            bearerToken,
+                            SessionManager(context).trackingDeviceId,
+                        ).data
+                    }.getOrNull()
+                    applyTrackingBootstrap(
+                        context = context,
+                        bootstrap = bootstrap,
+                        attendanceActive = true,
+                    )
                     if (isPunchIn) {
                         loadTodayVisits(bearerToken)
                     }
 
                     // Reload data to refresh state
-                    loadHomeData(bearerToken)
+                    loadHomeData(bearerToken, context)
                 } else {
                     _uiState.value = current.copy(isPunching = false)
                     _punchEvent.emit(PunchEvent.Error(response.error ?: "Punch failed"))
@@ -238,14 +272,23 @@ class HomeViewModel : ViewModel() {
     fun startVisit(context: Context, bearerToken: String, visitId: String, lat: Double?, lng: Double?) {
         viewModelScope.launch {
             try {
+                val current = cachedState
+                if (current?.hasOpenSession != true) {
+                    _punchEvent.emit(PunchEvent.Error("Please clock in before starting a trip."))
+                    return@launch
+                }
                 geoApi.startVisit(bearerToken, StartVisitRequest(visitId, lat, lng))
                 applyTrackingBootstrap(
-                    context,
-                    geoApi.getTrackingBootstrap(bearerToken, SessionManager(context).trackingDeviceId).data
+                    context = context,
+                    bootstrap = geoApi.getTrackingBootstrap(
+                        bearerToken,
+                        SessionManager(context).trackingDeviceId,
+                    ).data,
+                    attendanceActive = true,
                 )
                 _punchEvent.emit(PunchEvent.Success("Visit started!"))
-                val current = cachedState ?: return@launch
-                val updated = current.copy(
+                val latest = cachedState ?: return@launch
+                val updated = latest.copy(
                     showTripSelector = false,
                     activeVisitId = visitId
                 )
@@ -266,8 +309,12 @@ class HomeViewModel : ViewModel() {
             try {
                 geoApi.completeVisit(bearerToken, CompleteVisitRequest(visitId, lat, lng))
                 applyTrackingBootstrap(
-                    context,
-                    geoApi.getTrackingBootstrap(bearerToken, SessionManager(context).trackingDeviceId).data
+                    context = context,
+                    bootstrap = geoApi.getTrackingBootstrap(
+                        bearerToken,
+                        SessionManager(context).trackingDeviceId,
+                    ).data,
+                    attendanceActive = cachedState?.hasOpenSession == true,
                 )
                 _punchEvent.emit(PunchEvent.Success("Visit completed!"))
                 val current = cachedState ?: return@launch
@@ -285,6 +332,10 @@ class HomeViewModel : ViewModel() {
     fun startTripToPlace(context: Context, bearerToken: String, placeId: String, placeName: String, lat: Double?, lng: Double?) {
         viewModelScope.launch {
             try {
+                if (cachedState?.hasOpenSession != true) {
+                    _punchEvent.emit(PunchEvent.Error("Please clock in before starting a trip."))
+                    return@launch
+                }
                 // Create a visit for today and immediately start it
                 val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 val createResp = geoApi.createVisit(bearerToken, com.manjugroups.m_connect.network.CreateVisitRequest(
@@ -296,8 +347,12 @@ class HomeViewModel : ViewModel() {
                     // Start the visit
                     geoApi.startVisit(bearerToken, StartVisitRequest(createResp.visitId, lat, lng))
                     applyTrackingBootstrap(
-                        context,
-                        geoApi.getTrackingBootstrap(bearerToken, SessionManager(context).trackingDeviceId).data
+                        context = context,
+                        bootstrap = geoApi.getTrackingBootstrap(
+                            bearerToken,
+                            SessionManager(context).trackingDeviceId,
+                        ).data,
+                        attendanceActive = true,
                     )
                     _punchEvent.emit(PunchEvent.Success("Trip to $placeName started!"))
                     val current = cachedState ?: return@launch
@@ -329,26 +384,37 @@ class HomeViewModel : ViewModel() {
         } catch (_: Exception) { null }
     }
 
-    private fun applyTrackingBootstrap(context: Context, bootstrap: TrackingBootstrapData?) {
+    private fun applyTrackingBootstrap(
+        context: Context,
+        bootstrap: TrackingBootstrapData?,
+        attendanceActive: Boolean,
+    ) {
         val session = SessionManager(context)
         session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = bootstrap?.shouldTrack == true
+        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
         session.geoTrackingEnabled = bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
         session.geoConsentGiven = bootstrap?.consent?.status == "granted"
         session.geoConsentDeclined = bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
 
-        if (bootstrap?.shouldPromptConsent == true) {
+        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
             context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
             return
         }
 
-        if (bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
+        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
             GeoTrackService.start(context)
         } else {
             GeoTrackService.stop(context)
         }
+    }
+
+    private fun stopTrackingUntilClockIn(context: Context) {
+        val session = SessionManager(context)
+        session.shouldTrackNow = false
+        session.activeTrackingSessionId = null
+        GeoTrackService.stop(context)
     }
 
     /** Parse ISO timestamp like "2026-04-08T14:40:10+05:30" to display format "02:40 PM" */

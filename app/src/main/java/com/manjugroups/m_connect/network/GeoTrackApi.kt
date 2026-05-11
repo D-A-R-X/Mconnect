@@ -87,6 +87,11 @@ interface GeoTrackApi {
         @Query("toDate") toDate: String? = null
     ): MySiteVisitsResponse
 
+    @GET("api/marketing/projects")
+    suspend fun getMarketingProjects(
+        @Header("Authorization") token: String
+    ): MarketingProjectsResponse
+
     @GET("api/tracking/places/search")
     suspend fun searchPlaces(
         @Header("Authorization") token: String,
@@ -122,6 +127,12 @@ interface GeoTrackApi {
         @Body body: RouteRequest
     ): RouteResponse
 
+    @POST("api/geotrack/geocode-address")
+    suspend fun geocodeAddress(
+        @Header("Authorization") token: String,
+        @Body body: GeocodeAddressRequest
+    ): GeocodeAddressResponse
+
     @POST("api/geotrack/visit/arrival-otp/request")
     suspend fun requestArrivalOtp(
         @Header("Authorization") token: String,
@@ -139,6 +150,32 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
         @Body body: ArrivalOtpCancelBody
     ): GeoTrackResponse
+
+    // ── KOS-37: marketing CP-visit decisions from mobile ──
+
+    @POST("api/marketing/clientPlaceVisits/markClientMet")
+    suspend fun markClientMet(
+        @Header("Authorization") token: String,
+        @Body body: MarkClientMetRequest
+    ): GeoTrackResponse
+
+    @POST("api/marketing/clientPlaceVisits/create")
+    suspend fun createCpVisit(
+        @Header("Authorization") token: String,
+        @Body body: CreateCpVisitRequest
+    ): CreateCpVisitResponse
+
+    @POST("api/marketing/clientPlaceVisits/setOutcome")
+    suspend fun setCpVisitOutcome(
+        @Header("Authorization") token: String,
+        @Body body: SetOutcomeRequest
+    ): GeoTrackResponse
+
+    @POST("api/marketing/clientPlaceVisits/convertToSiteVisit")
+    suspend fun convertCpVisitToSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: ConvertCpVisitToSiteVisitRequest
+    ): ConvertCpVisitToSiteVisitResponse
 
     // ── Timeline (self-view) ──
 
@@ -462,6 +499,20 @@ data class RouteResponse(
     val error: String? = null
 )
 
+data class GeocodeAddressRequest(
+    val address: String
+)
+
+data class GeocodeAddressResponse(
+    val success: Boolean,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val formattedAddress: String? = null,
+    val placeId: String? = null,
+    val name: String? = null,
+    val error: String? = null
+)
+
 data class ArrivalOtpRequestBody(
     val visitId: String,
     val lat: Double,
@@ -496,6 +547,80 @@ data class ArrivalOtpVerifyResponse(
 
 data class ArrivalOtpCancelBody(val visitId: String)
 
+// KOS-37: marketing CP-visit mutations exposed over HTTP for the mobile client.
+data class MarkClientMetRequest(
+    val id: String,
+    val clientMet: Boolean,
+    val clientNoShowReason: String? = null
+)
+
+data class CreateCpVisitRequest(
+    val leadId: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String,
+    val assignedStaffId: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val visitAddress: String,
+    val visitLat: Double? = null,
+    val visitLng: Double? = null,
+    val googleMapsLink: String? = null,
+    val notes: String? = null,
+)
+
+data class CreateCpVisitResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val fieldVisitId: String? = null,
+    val followupId: String? = null,
+    val clientPlaceId: String? = null,
+    val error: String? = null,
+)
+
+data class SetOutcomeRequest(
+    val id: String,
+    val outcome: String,
+    val postponeReasons: List<String>? = null,
+    val notes: String? = null
+)
+
+data class ConvertCpVisitToSiteVisitRequest(
+    val id: String,
+    val projectId: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val telecallerId: String? = null,
+    val convertedByStaffId: String? = null,
+    val assignedTelecallerStaffId: String? = null,
+    val inchargeStaffId: String? = null,
+    val hodStaffId: String? = null,
+    val avpStaffId: String? = null,
+    val gmStaffId: String? = null,
+    val seniorManagerStaffId: String? = null,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<SiteVisitAttendeeRequest>? = null,
+    val pickupAddress: String? = null,
+    val pickupTime: String? = null,
+    val travelMode: String? = null,
+    val vehiclePreference: String? = null,
+    val foodPreferences: String? = null,
+    val notes: String? = null,
+)
+
+data class SiteVisitAttendeeRequest(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null
+)
+
+data class ConvertCpVisitToSiteVisitResponse(
+    val success: Boolean,
+    val siteVisitId: String? = null,
+    val visitId: String? = null,
+    val error: String? = null,
+)
+
 data class AssignedPlace(
     @com.google.gson.annotations.SerializedName("_id") val id: String,
     val name: String,
@@ -517,11 +642,19 @@ data class TodayVisit(
     val clientPlaceId: String,
     val scheduledDate: String,
     val status: String,
+    val mobileStatus: String? = null,
+    val reachingRadiusMeters: Int? = null,
     val placeName: String? = null,
     val placeAddress: String? = null,
     val placeType: String? = null,
     val placeLat: Double? = null,
     val placeLng: Double? = null,
+    // KOS-37: surfaced for CP-visit aware UI on home today-card and Complete-Visit screen.
+    val tripType: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val leadName: String? = null,
+    val leadPhone: String? = null,
+    val cpVisit: CpVisitState? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledStartTime",
         alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt", "scheduledTime", "time", "visitTime", "timeFrom", "appointmentTime"]
@@ -532,6 +665,14 @@ data class TodayVisit(
         alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
     val scheduledEndTime: String? = null
+)
+
+data class CpVisitState(
+    val clientMet: Boolean? = null,
+    val clientMetAt: Long? = null,
+    val clientNoShowReason: String? = null,
+    val outcome: String? = null,
+    val postponeReasons: List<String>? = null
 )
 
 data class TodayVisitsResponse(

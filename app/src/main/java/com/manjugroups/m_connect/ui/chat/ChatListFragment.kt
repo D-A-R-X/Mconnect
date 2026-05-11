@@ -2,16 +2,18 @@ package com.manjugroups.m_connect.ui.chat
 
 import android.os.Bundle
 import android.text.InputType
-import android.text.format.DateUtils
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -30,11 +32,14 @@ import com.manjugroups.m_connect.network.StaffData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 class ChatListFragment : Fragment() {
 
-    private enum class ChatFilter { ALL, DIRECT, CHANNELS }
+    private enum class ChatFilter { ALL, UNREAD, FAVOURITES, GROUPS, DM }
 
     private data class ChatListItem(
         val id: String,
@@ -44,7 +49,8 @@ class ChatListFragment : Fragment() {
         val timestamp: Long?,
         val unreadCount: Int,
         val avatarText: String,
-        val avatarSeed: Int
+        val avatarSeed: Int,
+        val isMuted: Boolean
     ) {
         enum class Kind { DIRECT, CHANNEL }
     }
@@ -60,6 +66,7 @@ class ChatListFragment : Fragment() {
     private var allConversations: List<ConversationData> = emptyList()
     private var chatSearchQuery: String = ""
     private var activeFilter: ChatFilter = ChatFilter.ALL
+    private var hasLoadedOnce: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -75,9 +82,14 @@ class ChatListFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.chipAll.setOnClickListener { switchFilter(ChatFilter.ALL) }
-        binding.chipDirect.setOnClickListener { switchFilter(ChatFilter.DIRECT) }
-        binding.chipChannels.setOnClickListener { switchFilter(ChatFilter.CHANNELS) }
+        binding.chipUnread.setOnClickListener { switchFilter(ChatFilter.UNREAD) }
+        binding.chipFavourites.setOnClickListener { switchFilter(ChatFilter.FAVOURITES) }
+        binding.chipChannels.setOnClickListener { switchFilter(ChatFilter.GROUPS) }
+        binding.chipDirect.setOnClickListener { switchFilter(ChatFilter.DM) }
+
         binding.btnNewChat.setOnClickListener { showNewChatOptions() }
+        binding.btnEmptyAction.setOnClickListener { handleEmptyCta() }
+
         binding.etSearchChats.doAfterTextChanged {
             chatSearchQuery = it?.toString().orEmpty().trim()
             renderCurrentList()
@@ -117,17 +129,22 @@ class ChatListFragment : Fragment() {
 
     private fun renderFilterState() {
         bindFilterChip(binding.chipAll, activeFilter == ChatFilter.ALL)
-        bindFilterChip(binding.chipDirect, activeFilter == ChatFilter.DIRECT)
-        bindFilterChip(binding.chipChannels, activeFilter == ChatFilter.CHANNELS)
+        bindFilterChip(binding.chipUnread, activeFilter == ChatFilter.UNREAD)
+        bindFilterChip(binding.chipFavourites, activeFilter == ChatFilter.FAVOURITES)
+        bindFilterChip(binding.chipChannels, activeFilter == ChatFilter.GROUPS)
+        bindFilterChip(binding.chipDirect, activeFilter == ChatFilter.DM)
     }
 
     private fun bindFilterChip(view: TextView, isActive: Boolean) {
         view.setBackgroundResource(
-            if (isActive) R.drawable.bg_chip_active else R.drawable.bg_chip_inactive
+            if (isActive) R.drawable.bg_chat_filter_active
+            else R.drawable.bg_chat_filter_inactive
         )
         view.setTextColor(
-            resolveColor(
-                if (isActive) R.attr.colorForegroundInverse else R.attr.colorForegroundMuted
+            ContextCompat.getColor(
+                requireContext(),
+                if (isActive) R.color.lt_foreground_inverse
+                else R.color.chat_text_secondary
             )
         )
     }
@@ -141,31 +158,27 @@ class ChatListFragment : Fragment() {
             }.onSuccess { (conversations, channels) ->
                 allConversations = conversations
                 allChannels = channels
+                hasLoadedOnce = true
                 renderCurrentList()
             }.onFailure {
-                renderEmptyState(
-                    title = "Unable to load chats",
-                    subtitle = "Pull to refresh later or try opening chat again."
-                )
+                if (!hasLoadedOnce) {
+                    showEmptyState(
+                        title = "Unable to load chats",
+                        subtitle = "Pull to refresh later or try opening chat again.",
+                        ctaLabel = null
+                    )
+                }
             }
         }
     }
 
     private fun renderCurrentList() {
+        if (_binding == null) return
         val items = buildItems()
         binding.chatList.removeAllViews()
 
         if (items.isEmpty()) {
-            val message = when {
-                chatSearchQuery.isNotBlank() -> "Try a different keyword or clear your search."
-                activeFilter == ChatFilter.CHANNELS -> "Create or join a channel to see it here."
-                activeFilter == ChatFilter.DIRECT -> "Use the plus button to start a conversation."
-                else -> "Use the plus button to start a conversation or create a channel."
-            }
-            renderEmptyState(
-                title = "No chats found",
-                subtitle = message
-            )
+            renderEmptyForActiveFilter()
             return
         }
 
@@ -183,7 +196,18 @@ class ChatListFragment : Fragment() {
             row.findViewById<TextView>(R.id.tvChatName).text = item.title
             row.findViewById<TextView>(R.id.tvChatLastMsg).text = item.subtitle
             bindTimestamp(row.findViewById(R.id.tvChatTime), item.timestamp)
-            bindUnreadBadge(row.findViewById(R.id.tvUnread), item.unreadCount)
+            bindUnreadBadge(
+                row.findViewById(R.id.unreadContainer),
+                row.findViewById(R.id.tvUnread),
+                item.unreadCount
+            )
+
+            // online dot — show for direct chats with recent activity
+            val onlineDot = row.findViewById<View>(R.id.onlineDot)
+            onlineDot.visibility =
+                if (item.kind == ChatListItem.Kind.DIRECT && item.timestamp != null &&
+                    System.currentTimeMillis() - item.timestamp < 5L * 60L * 1000L
+                ) View.VISIBLE else View.GONE
 
             row.setOnClickListener {
                 val fragment = when (item.kind) {
@@ -209,10 +233,9 @@ class ChatListFragment : Fragment() {
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
             val title = conversation.displayName?.ifBlank { null } ?: "Chat"
-            val subtitle = conversation.lastMessage?.body?.ifBlank { null }
-                ?: conversation.participants.orEmpty()
-                    .joinToString(", ") { it.name.orEmpty() }
-                    .ifBlank { "Tap to start chatting" }
+            val subtitle = conversation.lastMessagePreview?.ifBlank { null }
+                ?: conversation.lastMessage?.body?.ifBlank { null }
+                ?: "No messages yet"
             ChatListItem(
                 id = id,
                 kind = ChatListItem.Kind.DIRECT,
@@ -221,41 +244,43 @@ class ChatListFragment : Fragment() {
                 timestamp = conversation.lastMessageAt,
                 unreadCount = conversation.unreadCount ?: 0,
                 avatarText = initialsFor(title),
-                avatarSeed = title.length
+                avatarSeed = title.length,
+                isMuted = conversation.muted ?: false
             )
         }
 
         val channelItems = allChannels.mapNotNull { channel ->
             val id = channel.id ?: return@mapNotNull null
             val title = channel.name?.ifBlank { null } ?: "Channel"
-            val descriptor = buildString {
-                append("# ")
-                append(channel.description?.takeIf { it.isNotBlank() } ?: title)
-                val memberCount = channel.memberCount ?: 0
-                if (memberCount > 0) {
-                    append(" • ")
-                    append(memberCount)
-                    append(" members")
+            val descriptor = channel.lastMessagePreview?.ifBlank { null }
+                ?: channel.description?.ifBlank { null }
+                ?: run {
+                    val memberCount = channel.memberCount ?: 0
+                    if (memberCount > 0) "$memberCount members" else "Channel"
                 }
-            }
             ChatListItem(
                 id = id,
                 kind = ChatListItem.Kind.CHANNEL,
                 title = title,
                 subtitle = descriptor,
-                timestamp = null,
+                timestamp = channel.lastMessageAt,
                 unreadCount = channel.unreadCount ?: 0,
                 avatarText = "#",
-                avatarSeed = title.length + 7
+                avatarSeed = title.length + 7,
+                isMuted = channel.muted ?: false
             )
         }
 
-        val filtered = (conversationItems + channelItems)
+        val all = conversationItems + channelItems
+
+        val filtered = all
             .filter { item ->
                 when (activeFilter) {
                     ChatFilter.ALL -> true
-                    ChatFilter.DIRECT -> item.kind == ChatListItem.Kind.DIRECT
-                    ChatFilter.CHANNELS -> item.kind == ChatListItem.Kind.CHANNEL
+                    ChatFilter.UNREAD -> item.unreadCount > 0
+                    ChatFilter.FAVOURITES -> false
+                    ChatFilter.GROUPS -> item.kind == ChatListItem.Kind.CHANNEL
+                    ChatFilter.DM -> item.kind == ChatListItem.Kind.DIRECT
                 }
             }
             .filter { item ->
@@ -276,24 +301,86 @@ class ChatListFragment : Fragment() {
         return filtered
     }
 
-    private fun bindUnreadBadge(view: TextView, unreadCount: Int) {
+    private fun bindUnreadBadge(container: FrameLayout, label: TextView, unreadCount: Int) {
         if (unreadCount > 0) {
-            view.text = if (unreadCount > 99) "99+" else unreadCount.toString()
-            view.visibility = View.VISIBLE
+            label.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+            container.visibility = View.VISIBLE
         } else {
-            view.visibility = View.GONE
+            container.visibility = View.GONE
         }
     }
 
-    private fun renderEmptyState(title: String, subtitle: String) {
+    private fun renderEmptyForActiveFilter() {
+        if (chatSearchQuery.isNotBlank()) {
+            showEmptyState(
+                title = "No matches",
+                subtitle = "Try a different keyword or clear your search.",
+                ctaLabel = null
+            )
+            return
+        }
+
+        when (activeFilter) {
+            ChatFilter.ALL ->
+                showEmptyState(
+                    title = "No Chats Yet",
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
+                    ctaLabel = "Create Group"
+                )
+
+            ChatFilter.UNREAD ->
+                showEmptyState(
+                    title = "No Unread Message Yet",
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
+                    ctaLabel = null
+                )
+
+            ChatFilter.FAVOURITES ->
+                showEmptyState(
+                    title = "No Favourites Yet",
+                    subtitle = "Star conversations and groups so you can find them faster.",
+                    ctaLabel = null
+                )
+
+            ChatFilter.GROUPS ->
+                showEmptyState(
+                    title = "No Groups Yet",
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
+                    ctaLabel = "Create Group"
+                )
+
+            ChatFilter.DM ->
+                showEmptyState(
+                    title = "No Direct Message Yet",
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
+                    ctaLabel = "Direct Messages"
+                )
+        }
+    }
+
+    private fun showEmptyState(title: String, subtitle: String, ctaLabel: String?) {
         binding.chatList.removeAllViews()
         binding.emptyState.visibility = View.VISIBLE
-        binding.tvEmptyState.text = title
-        binding.tvEmptyStateSubtitle.text = subtitle
+        binding.tvEmptyTitle.text = title
+        binding.tvEmptySubtitle.text = subtitle
+        if (ctaLabel.isNullOrBlank()) {
+            binding.btnEmptyAction.visibility = View.GONE
+        } else {
+            binding.btnEmptyAction.visibility = View.VISIBLE
+            binding.tvEmptyActionLabel.text = ctaLabel
+        }
     }
 
     private fun showListState() {
         binding.emptyState.visibility = View.GONE
+    }
+
+    private fun handleEmptyCta() {
+        when (activeFilter) {
+            ChatFilter.GROUPS, ChatFilter.ALL -> promptChannelName()
+            ChatFilter.DM -> showNewChatOptions()
+            else -> showNewChatOptions()
+        }
     }
 
     private fun showNewChatOptions() {
@@ -301,14 +388,45 @@ class ChatListFragment : Fragment() {
         val dialog = BottomSheetDialog(requireContext())
         dialog.setContentView(content)
 
+        // Make sheet fill ~90% of screen so content is comfortable
+        dialog.setOnShowListener {
+            val sheet = dialog.findViewById<View>(
+                com.google.android.material.R.id.design_bottom_sheet
+            )
+            sheet?.let {
+                val params = it.layoutParams
+                params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+                it.layoutParams = params
+                it.setBackgroundResource(android.R.color.transparent)
+                BottomSheetBehavior.from(it).apply {
+                    state = BottomSheetBehavior.STATE_EXPANDED
+                    skipCollapsed = true
+                    isDraggable = true
+                }
+            }
+        }
+
         val searchField = content.findViewById<EditText>(R.id.etSearchPeople)
-        val peopleList = content.findViewById<LinearLayout>(R.id.peopleList)
+        val peopleCard = content.findViewById<LinearLayout>(R.id.peopleCard)
         val emptyState = content.findViewById<TextView>(R.id.tvEmptyPeople)
-        val directCard = content.findViewById<View>(R.id.cardDirectMessage)
-        val groupCard = content.findViewById<View>(R.id.cardGroupConversation)
-        val channelCard = content.findViewById<View>(R.id.cardNewChannel)
+        val createGroupCta = content.findViewById<View>(R.id.cardCreateGroup)
+        val closeBtn = content.findViewById<View>(R.id.btnSheetClose)
+        val startBtn = content.findViewById<FrameLayout>(R.id.btnStartChat)
+        val startLabel = content.findViewById<TextView>(R.id.tvStartChatLabel)
 
         var people: List<StaffData> = emptyList()
+        var selectedStaff: StaffData? = null
+
+        fun bindStartButton() {
+            val enabled = selectedStaff != null
+            startBtn.isClickable = enabled
+            startBtn.isFocusable = enabled
+            startBtn.setBackgroundResource(
+                if (enabled) R.drawable.bg_sheet_start_button
+                else R.drawable.bg_sheet_start_button_disabled
+            )
+            startLabel.text = "Start Chat"
+        }
 
         fun renderPeople() {
             val query = searchField.text?.toString().orEmpty().trim()
@@ -323,55 +441,88 @@ class ChatListFragment : Fragment() {
                 haystack.contains(query.lowercase(Locale.getDefault()))
             }
 
-            peopleList.removeAllViews()
+            peopleCard.removeAllViews()
             if (filtered.isEmpty()) {
+                peopleCard.visibility = View.GONE
                 emptyState.visibility = View.VISIBLE
                 return
             }
 
             emptyState.visibility = View.GONE
+            peopleCard.visibility = View.VISIBLE
+
             filtered.forEachIndexed { index, member ->
-                val item = layoutInflater.inflate(R.layout.item_chat_contact, peopleList, false)
+                val row = layoutInflater.inflate(
+                    R.layout.item_chat_sheet_person,
+                    peopleCard,
+                    false
+                )
                 val initials = initialsFor(member.name ?: "User")
                 bindAvatar(
-                    item.findViewById(R.id.avatarContainer),
-                    item.findViewById(R.id.tvAvatar),
+                    row.findViewById(R.id.avatarContainer),
+                    row.findViewById(R.id.tvAvatar),
                     initials,
                     index + (member.name?.length ?: 0)
                 )
-                item.findViewById<TextView>(R.id.tvName).text = member.name ?: "User"
-                item.findViewById<TextView>(R.id.tvSubtitle).text =
+                row.findViewById<TextView>(R.id.tvName).text = member.name ?: "User"
+                row.findViewById<TextView>(R.id.tvSubtitle).text =
                     listOfNotNull(member.designation, member.department)
                         .takeIf { it.isNotEmpty() }
                         ?.joinToString(" • ")
                         ?: "Tap to start a direct message"
-                item.setOnClickListener {
-                    dialog.dismiss()
-                    startDirectMessage(member)
+
+                val radio = row.findViewById<View>(R.id.radioButton)
+                val avatarCheck = row.findViewById<View>(R.id.avatarCheck)
+                val isSelected = selectedStaff?.id == member.id && member.id != null
+                radio.setBackgroundResource(
+                    if (isSelected) R.drawable.bg_sheet_radio_on
+                    else R.drawable.bg_sheet_radio_off
+                )
+                avatarCheck.visibility = if (isSelected) View.VISIBLE else View.GONE
+
+                row.setOnClickListener {
+                    selectedStaff = if (selectedStaff?.id == member.id) null else member
+                    renderPeople()
+                    bindStartButton()
                 }
-                peopleList.addView(item)
+
+                peopleCard.addView(row)
+
+                if (index < filtered.lastIndex) {
+                    val divider = View(requireContext()).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1)
+                        ).apply {
+                            marginStart = dpToPx(74)
+                        }
+                        setBackgroundColor(
+                            ContextCompat.getColor(requireContext(), R.color.chat_separator)
+                        )
+                        alpha = 0.5f
+                    }
+                    peopleCard.addView(divider)
+                }
             }
         }
 
-        directCard.setOnClickListener {
-            searchField.requestFocus()
-        }
-        groupCard.setOnClickListener {
+        closeBtn.setOnClickListener { dialog.dismiss() }
+        createGroupCta.setOnClickListener {
             dialog.dismiss()
             promptGroupConversationName()
         }
-        channelCard.setOnClickListener {
+        startBtn.setOnClickListener {
+            val staff = selectedStaff ?: return@setOnClickListener
             dialog.dismiss()
-            promptChannelName()
+            startDirectMessage(staff)
         }
         searchField.doAfterTextChanged { renderPeople() }
 
+        bindStartButton()
         emptyState.text = "Loading people..."
         emptyState.visibility = View.VISIBLE
+        peopleCard.visibility = View.GONE
         dialog.show()
-        dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
-        dialog.behavior.skipCollapsed = false
-        dialog.behavior.isDraggable = true
 
         withActiveStaff { staff ->
             people = staff
@@ -624,12 +775,22 @@ class ChatListFragment : Fragment() {
             return
         }
         view.visibility = View.VISIBLE
-        view.text = DateUtils.getRelativeTimeSpanString(
-            millis,
-            System.currentTimeMillis(),
-            DateUtils.MINUTE_IN_MILLIS,
-            DateUtils.FORMAT_ABBREV_RELATIVE
-        )
+        view.text = formatChatTimestamp(millis)
+    }
+
+    private fun formatChatTimestamp(millis: Long): String {
+        val now = Calendar.getInstance()
+        val msg = Calendar.getInstance().apply { timeInMillis = millis }
+        val sameDay = now.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR)
+        val sameWeek = now.get(Calendar.WEEK_OF_YEAR) == msg.get(Calendar.WEEK_OF_YEAR) &&
+            now.get(Calendar.YEAR) == msg.get(Calendar.YEAR)
+
+        return when {
+            sameDay -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+            sameWeek -> SimpleDateFormat("EEE", Locale.getDefault()).format(Date(millis))
+            else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(millis))
+        }
     }
 
     private fun bindAvatar(container: View, label: TextView, text: String, seed: Int) {
