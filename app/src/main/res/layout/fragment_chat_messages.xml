@@ -3,31 +3,42 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurfacePrimary"
+    android:background="@drawable/bg_chat_dm_background"
     android:orientation="vertical">
 
+    <!-- Header -->
     <LinearLayout
         android:id="@+id/headerContainer"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfacePrimary"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="12dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="12dp">
 
-        <ImageView
-            android:id="@+id/btnBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:contentDescription="Back"
-            android:src="@drawable/ic_arrow_left"
-            app:tint="?attr/colorForegroundPrimary" />
+        <FrameLayout
+            android:layout_width="32dp"
+            android:layout_height="32dp">
+
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="Back"
+                android:src="@drawable/ic_arrow_left"
+                app:tint="@color/chat_text_primary" />
+        </FrameLayout>
 
         <FrameLayout
             android:id="@+id/avatarContainer"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/bg_chat_avatar">
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="5dp"
+            android:background="@drawable/bg_chat_avatar_circle">
 
             <TextView
                 android:id="@+id/tvChatAvatar"
@@ -36,13 +47,13 @@
                 android:layout_gravity="center"
                 android:fontFamily="@font/inter_semibold"
                 android:textColor="?attr/colorAccentPrimary"
-                android:textSize="13sp" />
+                android:textSize="11sp" />
         </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -51,47 +62,47 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/inter_bold"
+                android:fontFamily="@font/inter_semibold"
                 android:maxLines="1"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="16sp" />
+                android:textColor="@color/chat_text_primary"
+                android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/tvChatSubtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="-1dp"
                 android:ellipsize="end"
                 android:fontFamily="@font/inter_regular"
                 android:maxLines="1"
-                android:text="tap here for contact info"
-                android:textColor="?attr/colorForegroundMuted"
-                android:textSize="11sp" />
+                android:text="Last seen Today 11:30AM"
+                android:textColor="@color/chat_subtitle_grey"
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <TextView
+        <ImageView
             android:id="@+id/btnInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="8dp"
-            android:text="Info"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="12sp" />
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="Info"
+            android:padding="4dp"
+            android:src="@drawable/ic_chat_more_dots"
+            app:tint="@color/chat_text_primary" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="?attr/colorBorder" />
+        android:background="@color/chat_separator" />
 
     <TextView
         android:id="@+id/tvTypingIndicator"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="16dp"
+        android:fontFamily="@font/inter_regular"
+        android:paddingHorizontal="20dp"
         android:paddingTop="8dp"
-        android:textColor="?attr/colorForegroundMuted"
+        android:textColor="@color/chat_text_secondary"
         android:textSize="12sp"
         android:visibility="gone" />
 
@@ -100,14 +111,13 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="?attr/colorSurfaceSecondary"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
         <FrameLayout
-            android:id="@+id/messagesList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="16dp"
             android:paddingTop="12dp"
             android:paddingBottom="8dp">
 
@@ -122,10 +132,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:fontFamily="@font/inter_regular"
                 android:gravity="center"
-                android:paddingVertical="56dp"
+                android:paddingVertical="80dp"
                 android:text="No messages yet"
-                android:textColor="?attr/colorForegroundMuted"
+                android:textColor="@color/chat_text_secondary"
                 android:textSize="14sp"
                 android:visibility="gone" />
         </FrameLayout>
@@ -135,11 +146,11 @@
         android:id="@+id/selectedAttachmentsScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="10dp"
+        android:paddingStart="12dp"
         android:paddingTop="6dp"
-        android:paddingEnd="10dp"
-        android:visibility="gone"
-        android:scrollbars="none">
+        android:paddingEnd="12dp"
+        android:scrollbars="none"
+        android:visibility="gone">
 
         <LinearLayout
             android:id="@+id/selectedAttachmentsContainer"
@@ -148,56 +159,81 @@
             android:orientation="horizontal" />
     </HorizontalScrollView>
 
+    <!-- Bottom toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="?attr/colorSurfacePrimary"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="10dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp">
-
-        <TextView
-            android:id="@+id/btnAttach"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:fontFamily="@font/inter_bold"
-            android:gravity="center"
-            android:text="+"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="22sp" />
-
-        <EditText
-            android:id="@+id/etMessage"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_chat_message_input"
-            android:fontFamily="@font/inter_regular"
-            android:hint="Message"
-            android:inputType="text"
-            android:paddingHorizontal="16dp"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textColorHint="?attr/colorForegroundMuted"
-            android:textCursorDrawable="@null"
-            android:textSize="14sp" />
+        android:paddingHorizontal="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
         <FrameLayout
-            android:id="@+id/btnSend"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_button_primary"
+            android:id="@+id/btnAttach"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_chat_attach_circle"
             android:clickable="true"
             android:focusable="true">
 
             <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="Attach"
+                android:src="@drawable/ic_chat_attach" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginHorizontal="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_chat_input_pill">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="14dp"
+                android:contentDescription="Camera"
+                android:src="@drawable/ic_chat_camera" />
+
+            <EditText
+                android:id="@+id/etMessage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Message ..."
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLines="3"
+                android:paddingStart="14dp"
+                android:paddingEnd="36dp"
+                android:textColor="@color/chat_text_primary"
+                android:textColorHint="@color/chat_input_hint"
+                android:textCursorDrawable="@null"
+                android:textSize="16sp" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnSend"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_chat_send_circle"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/ivSendIcon"
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:layout_gravity="center"
                 android:contentDescription="Send"
-                android:src="@drawable/ic_send"
+                android:src="@drawable/ic_chat_mic"
                 app:tint="?attr/colorForegroundInverse" />
         </FrameLayout>
     </LinearLayout>

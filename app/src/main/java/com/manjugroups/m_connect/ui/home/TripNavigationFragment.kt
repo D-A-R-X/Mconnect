@@ -23,6 +23,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -112,6 +113,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpOutcome: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
     private var showClientNotSeenCompletion = false
+    // KOS-52: Set when the user picked "No, didn't see client" on the Yes/No
+    // sheet. We still capture an arrival photo for proof but skip the OTP
+    // request and the outcome form, then mark the visit as not-met.
+    private var cpNoPathPhotoCapture = false
 
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
@@ -128,6 +133,25 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var swipeArrived: SwipeToConfirmButton? = null
     private var btnCompleteCpDetails: Button? = null
     private var loadingOverlay: FrameLayout? = null
+
+    // Trip Progress card (Figma 5-stage stepper)
+    private var tvTripStateLabel: TextView? = null
+    private var tripStepStart: FrameLayout? = null
+    private var tripStepEnroute: FrameLayout? = null
+    private var tripStepReaching: FrameLayout? = null
+    private var tripStepComplete: FrameLayout? = null
+    private var tripStepStartIcon: ImageView? = null
+    private var tripStepEnrouteIcon: ImageView? = null
+    private var tripStepReachingIcon: ImageView? = null
+    private var tripStepCompleteIcon: ImageView? = null
+    private var tripStepStartLabel: TextView? = null
+    private var tripStepEnrouteLabel: TextView? = null
+    private var tripStepReachingLabel: TextView? = null
+    private var tripStepCompleteLabel: TextView? = null
+    private var tripLineSegment1: View? = null
+    private var tripLineSegment2: View? = null
+    private var tripLineSegment3: View? = null
+    private var arrivalConfirmedForProgress = false
 
     private val arrivalCameraLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -147,20 +171,35 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val ok = result.resultCode == Activity.RESULT_OK && photoFile != null && photoFile.exists()
         if (!ok) {
             arrivalInProgress = false
+            cpNoPathPhotoCapture = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(requireContext(), "Photo capture cancelled", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
-        // Photo captured — upload then prompt for OTP.
-        uploadArrivalPhotoThenAskOtp(photoFile!!)
+        // Photo captured — branch by flow:
+        // - Yes path (default): upload, then ask the client OTP
+        // - No path (CP only): upload, then mark not-met + complete
+        if (cpNoPathPhotoCapture) {
+            uploadArrivalPhotoThenCompleteWithoutClient(photoFile!!)
+        } else {
+            uploadArrivalPhotoThenAskOtp(photoFile!!)
+        }
     }
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) requestArrivalOtpThenOpenCamera()
+        if (granted) {
+            if (cpNoPathPhotoCapture) {
+                arrivalInProgress = true
+                launchArrivalCamera()
+            } else {
+                requestArrivalOtpThenOpenCamera()
+            }
+        }
         else {
             arrivalInProgress = false
+            cpNoPathPhotoCapture = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(
                 requireContext(),
@@ -198,6 +237,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         btnCompleteCpDetails = view.findViewById(R.id.btnCompleteCpDetails)
         loadingOverlay = view.findViewById(R.id.tripLoadingOverlay)
         mapView = view.findViewById(R.id.mapViewTrip)
+
+        tvTripStateLabel = view.findViewById(R.id.tvTripStateLabel)
+        tripStepStart = view.findViewById(R.id.tripStepStart)
+        tripStepEnroute = view.findViewById(R.id.tripStepEnroute)
+        tripStepReaching = view.findViewById(R.id.tripStepReaching)
+        tripStepComplete = view.findViewById(R.id.tripStepComplete)
+        tripStepStartIcon = view.findViewById(R.id.tripStepStartIcon)
+        tripStepEnrouteIcon = view.findViewById(R.id.tripStepEnrouteIcon)
+        tripStepReachingIcon = view.findViewById(R.id.tripStepReachingIcon)
+        tripStepCompleteIcon = view.findViewById(R.id.tripStepCompleteIcon)
+        tripStepStartLabel = view.findViewById(R.id.tripStepStartLabel)
+        tripStepEnrouteLabel = view.findViewById(R.id.tripStepEnrouteLabel)
+        tripStepReachingLabel = view.findViewById(R.id.tripStepReachingLabel)
+        tripStepCompleteLabel = view.findViewById(R.id.tripStepCompleteLabel)
+        tripLineSegment1 = view.findViewById(R.id.tripLineSegment1)
+        tripLineSegment2 = view.findViewById(R.id.tripLineSegment2)
+        tripLineSegment3 = view.findViewById(R.id.tripLineSegment3)
 
         val args = requireArguments()
         visitId = args.getString(ARG_VISIT_ID)
@@ -244,9 +300,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         setFragmentResultListener(CpClientSeenBottomSheet.RESULT_KEY) { _, bundle ->
             val clientSeen = bundle.getBoolean(CpClientSeenBottomSheet.KEY_CLIENT_SEEN)
             if (clientSeen) {
-                showCpCompletionSheet()
+                startCpYesPath()
             } else {
-                completeCpVisitWithoutClient()
+                startCpNoPath()
             }
         }
         setFragmentResultListener(CpTripCompletedBottomSheet.RESULT_KEY) { _, _ ->
@@ -267,6 +323,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         when (incomingStatus) {
             "arrived", "arrival_verified", "arrival-verified" -> {
                 visitStarted = true
+                arrivalConfirmedForProgress = true
                 showTripStartTime()
                 applyStatusPill("Reaching")
                 btnOpenMaps?.visibility = View.GONE
@@ -377,6 +434,133 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 tvStatus?.setTextColor(Color.parseColor("#169B2F"))
             }
         }
+        applyTripProgressFromLabel(label)
+    }
+
+    /**
+     * Drives the 5-stage Trip Progress stepper card (matches Figma frames
+     * 331:12144 / 331:12190 / 331:12328 / 331:12375 / 331:12423).
+     *
+     *  Stage 0 — Trip not started   (label = "Start" / "Starting…")
+     *  Stage 1 — Trip started       (label = "Enroute")
+     *  Stage 2 — Enroute (close)    (label = "Reaching", before arrival confirm)
+     *  Stage 3 — Trip reached       (label = "Reaching", after arrival confirm)
+     *  Stage 4 — Trip completed     (label = "Complete" / "Completed")
+     */
+    private fun applyTripProgressFromLabel(label: String) {
+        val stage = when (label.lowercase(Locale.getDefault())) {
+            "complete", "completed", "done" -> 4
+            "reaching" -> if (arrivalConfirmedForProgress) 3 else 2
+            "enroute", "en route", "in progress", "in-progress" -> 1
+            else -> 0
+        }
+        applyTripProgressStage(stage)
+    }
+
+    private fun applyTripProgressStage(stage: Int) {
+        // Right-side state label
+        val (rightLabel, rightColor) = when (stage) {
+            0 -> "Not Started" to "#8E8E93"
+            1 -> "Started" to "#19B900"
+            2 -> "En Route" to "#19B900"
+            3 -> "Reached" to "#19B900"
+            else -> "Completed" to "#19B900"
+        }
+        tvTripStateLabel?.text = rightLabel
+        tvTripStateLabel?.setTextColor(Color.parseColor(rightColor))
+
+        bindTripStep(
+            container = tripStepStart,
+            icon = tripStepStartIcon,
+            label = tripStepStartLabel,
+            stepStateFor(stage, ownIndex = 0),
+            doneIcon = R.drawable.ic_trip_progress_play_white,
+            activeIcon = R.drawable.ic_trip_progress_play_white,
+            inactiveIcon = R.drawable.ic_trip_progress_play_gray
+        )
+        bindTripStep(
+            container = tripStepEnroute,
+            icon = tripStepEnrouteIcon,
+            label = tripStepEnrouteLabel,
+            stepStateFor(stage, ownIndex = 1),
+            doneIcon = R.drawable.ic_trip_progress_location_white,
+            activeIcon = R.drawable.ic_trip_progress_location_green,
+            inactiveIcon = R.drawable.ic_trip_progress_location_gray
+        )
+        bindTripStep(
+            container = tripStepReaching,
+            icon = tripStepReachingIcon,
+            label = tripStepReachingLabel,
+            stepStateFor(stage, ownIndex = 2),
+            doneIcon = R.drawable.ic_trip_progress_location_white,
+            activeIcon = R.drawable.ic_trip_progress_location_green,
+            inactiveIcon = R.drawable.ic_trip_progress_location_gray
+        )
+        bindTripStep(
+            container = tripStepComplete,
+            icon = tripStepCompleteIcon,
+            label = tripStepCompleteLabel,
+            stepStateFor(stage, ownIndex = 3),
+            doneIcon = R.drawable.ic_trip_progress_flag_white,
+            activeIcon = R.drawable.ic_trip_progress_flag_green,
+            inactiveIcon = R.drawable.ic_trip_progress_flag_gray_exact
+        )
+
+        // Connector line segments — green from step1 onwards as stages advance.
+        bindTripLine(tripLineSegment1, isActive = stage >= 1)
+        bindTripLine(tripLineSegment2, isActive = stage >= 2)
+        bindTripLine(tripLineSegment3, isActive = stage >= 3)
+    }
+
+    private enum class TripStepState { DONE, ACTIVE, INACTIVE }
+
+    private fun stepStateFor(stage: Int, ownIndex: Int): TripStepState {
+        return when {
+            ownIndex < stage -> TripStepState.DONE
+            ownIndex == stage && stage in 1..3 -> TripStepState.ACTIVE
+            stage == 4 -> TripStepState.DONE
+            else -> TripStepState.INACTIVE
+        }
+    }
+
+    private fun bindTripStep(
+        container: FrameLayout?,
+        icon: ImageView?,
+        label: TextView?,
+        state: TripStepState,
+        doneIcon: Int,
+        activeIcon: Int,
+        inactiveIcon: Int
+    ) {
+        val ctx = context ?: return
+        when (state) {
+            TripStepState.DONE -> {
+                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_active)
+                icon?.setImageResource(doneIcon)
+                label?.setTextColor(Color.parseColor("#19B900"))
+                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
+            }
+            TripStepState.ACTIVE -> {
+                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_outline)
+                icon?.setImageResource(activeIcon)
+                label?.setTextColor(Color.parseColor("#19B900"))
+                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
+            }
+            TripStepState.INACTIVE -> {
+                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_inactive)
+                icon?.setImageResource(inactiveIcon)
+                label?.setTextColor(Color.parseColor("#8E8E93"))
+                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_regular)
+            }
+        }
+    }
+
+    private fun bindTripLine(view: View?, isActive: Boolean) {
+        val ctx = context ?: return
+        view?.background = ctx.getDrawable(
+            if (isActive) R.drawable.bg_trip_progress_line_active
+            else R.drawable.bg_trip_progress_line_inactive
+        )
     }
 
     private fun renderPreStartPhase() {
@@ -462,6 +646,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 applyTrackingBootstrap(bootstrap, attendanceActive = true)
 
                 visitStarted = true
+                if (alreadyArrived) arrivalConfirmedForProgress = true
                 showTripStartTime()
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
                 loadingOverlay?.visibility = View.GONE
@@ -735,6 +920,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ).show()
                 return@launch
             }
+            arrivalConfirmedForProgress = true
             applyStatusPill("Reaching")
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             CpClientSeenBottomSheet().show(parentFragmentManager, "cp_client_seen")
@@ -915,6 +1101,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val isCpVisit = isCpVisit()
         val shouldFillCpDetails = alreadyArrived && isCpVisit && !cpVisitDecisionCaptured
 
+        if (alreadyArrived) arrivalConfirmedForProgress = true
+
         if (shouldFillCpDetails) {
             arrivalInProgress = false
             applyStatusPill("Reaching")
@@ -934,6 +1122,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun showCpCompletionSheet() {
         val cpId = cpVisitId ?: return
+        arrivalConfirmedForProgress = true
         applyStatusPill("Reaching")
         CompleteCpVisitBottomSheet
             .newInstance(
@@ -942,6 +1131,61 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpOutcome = cpOutcome,
             )
             .show(parentFragmentManager, "cp_visit_complete")
+    }
+
+    // KOS-52: After the user confirms "Yes, I saw the client" we still need
+    // to capture the arrival photo and validate the visit against the client
+    // OTP before showing the outcome form. Reuse the non-CP arrival pipeline:
+    // requestArrivalOtp → camera → upload → OTP sheet → onArrivalOtpVerified
+    // (which already routes CP visits to the outcome bottom sheet).
+    private fun startCpYesPath() {
+        cpNoPathPhotoCapture = false
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+        requestArrivalOtpThenOpenCamera()
+    }
+
+    // KOS-52: "No, didn't see client" path — capture a photo for proof, upload
+    // it, then mark the visit as not-met with the existing API. No OTP and no
+    // outcome form for this branch.
+    private fun startCpNoPath() {
+        cpNoPathPhotoCapture = true
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+        arrivalInProgress = true
+        launchArrivalCamera()
+    }
+
+    private fun uploadArrivalPhotoThenCompleteWithoutClient(photoFile: File) {
+        swipeArrived?.lockAsBusy("Uploading photo…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val storageId = uploadArrivalPhoto(photoFile)
+            if (storageId == null) {
+                arrivalInProgress = false
+                cpNoPathPhotoCapture = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    "Photo upload failed. Try again.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            pendingArrivalStorageId = storageId
+            completeCpVisitWithoutClient()
+        }
     }
 
     private fun completeCpVisitWithoutClient() {
@@ -963,6 +1207,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 )
                 if (!metResp.success) {
                     arrivalInProgress = false
+                    cpNoPathPhotoCapture = false
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                     Toast.makeText(requireContext(), metResp.error ?: "Failed to record client status", Toast.LENGTH_LONG).show()
                     return@launch
@@ -977,6 +1222,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 )
                 if (!outcomeResp.success) {
                     arrivalInProgress = false
+                    cpNoPathPhotoCapture = false
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                     Toast.makeText(requireContext(), outcomeResp.error ?: "Failed to set outcome", Toast.LENGTH_LONG).show()
                     return@launch
@@ -985,9 +1231,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpOutcome = "other"
                 cpVisitDecisionCaptured = true
                 showClientNotSeenCompletion = true
+                cpNoPathPhotoCapture = false
                 finalizeCompleteVisit()
             } catch (e: Exception) {
                 arrivalInProgress = false
+                cpNoPathPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
             }

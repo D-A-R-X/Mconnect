@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG_HR = "root_tab_hr"
         private const val TAG_CHAT = "root_tab_chat"
         private const val TAG_LIBRARY = "root_tab_library"
+        private const val TRACKING_RESUME_SYNC_THROTTLE_MS = 30_000L
     }
 
     private lateinit var session: SessionManager
@@ -62,6 +63,7 @@ class MainActivity : AppCompatActivity() {
     private var currentTab = 0
     private var cachedTopInset = 0
     private var statusBarFullBleed = false
+    private var lastTrackingResumeSyncMs = 0L
 
     private data class TabConfig(
         val tab: FrameLayout,
@@ -114,8 +116,19 @@ class MainActivity : AppCompatActivity() {
                     height = sys.top
                 }
             }
-            val extraImeBottom = (ime.bottom - sys.bottom).coerceAtLeast(0)
-            fragmentContainer.updatePadding(top = 0, bottom = extraImeBottom)
+            // When the floating tab bar is visible it already absorbs `sys.bottom`,
+            // so the fragment only needs the *additional* IME height. When the tab
+            // bar is hidden (chat thread, trip nav) the fragment owns the full
+            // bottom inset, so we apply `max(ime.bottom, sys.bottom)` — otherwise
+            // the keyboard overlaps the toolbar by exactly the nav-bar height.
+            val tabBarShowing = ::tabBarContainer.isInitialized &&
+                tabBarContainer.visibility == android.view.View.VISIBLE
+            val fragmentBottomInset = if (tabBarShowing) {
+                (ime.bottom - sys.bottom).coerceAtLeast(0)
+            } else {
+                maxOf(ime.bottom, sys.bottom)
+            }
+            fragmentContainer.updatePadding(top = 0, bottom = fragmentBottomInset)
             val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
             mainRoot.updatePadding(bottom = 0)
             tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom + baseBottomPx)
@@ -181,13 +194,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * On every foreground transition, re-fetch the tracking bootstrap and
+     * attendance state. This is what auto-starts GeoTrack after a biometric
+     * (or any external) punch-in: the punch happens off-device, the app comes
+     * back to the foreground, and the next sync sees `firstPunchIn` set on the
+     * server and `bootstrap.shouldTrack == true`, so the service starts.
+     *
+     * Throttled to one sync per 30 s to avoid hammering the API when the user
+     * bounces between tabs or returns from a quick external app.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (!session.isLoggedIn) return
+        val now = System.currentTimeMillis()
+        if (now - lastTrackingResumeSyncMs < TRACKING_RESUME_SYNC_THROTTLE_MS) return
+        lastTrackingResumeSyncMs = now
+        lifecycleScope.launch {
+            runCatching { syncTrackingBootstrap() }
+        }
+    }
+
     fun openTab(index: Int) {
         selectTab(index)
     }
 
     fun setTabBarVisible(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
-        tabBarContainer.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        if (tabBarContainer.visibility == target) return
+        tabBarContainer.visibility = target
+        // Re-dispatch insets so fragmentContainer.bottom padding flips between
+        // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
+        if (::mainRoot.isInitialized) {
+            ViewCompat.requestApplyInsets(mainRoot)
+        }
     }
 
     fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
@@ -243,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         when (index) {
             TAB_HOME -> setTopBarAppearance(Color.WHITE, true, fullBleed = false)
             TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#795FFC"), false, fullBleed = false)
+            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
             else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
         }
     }

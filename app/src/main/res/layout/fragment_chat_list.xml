@@ -1,173 +1,272 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?attr/colorSurfacePrimary"
     android:orientation="vertical">
 
+    <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:paddingHorizontal="20dp">
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="14dp">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
-            android:text="Chat"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="22sp" />
+            android:fontFamily="@font/inter_semibold"
+            android:text="Chats"
+            android:textColor="@color/chat_text_primary"
+            android:textSize="18sp" />
 
         <FrameLayout
             android:id="@+id/btnNewChat"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_chat_send_circle"
             android:clickable="true"
             android:focusable="true">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:layout_gravity="center"
-                android:includeFontPadding="false"
-                android:fontFamily="@font/inter_bold"
-                android:text="+"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="22sp" />
+                android:contentDescription="New chat"
+                android:src="@drawable/ic_chat_plus"
+                app:tint="?attr/colorForegroundInverse" />
         </FrameLayout>
     </LinearLayout>
 
-    <EditText
-        android:id="@+id/etSearchChats"
+    <!-- Search field -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="20dp"
-        android:background="@drawable/bg_search_bar"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Search chats"
-        android:importantForAutofill="no"
-        android:inputType="text"
-        android:paddingHorizontal="16dp"
-        android:textColor="?attr/colorForegroundPrimary"
-        android:textColorHint="?attr/colorForegroundMuted"
-        android:textCursorDrawable="@null"
-        android:textSize="14sp" />
+        android:layout_height="50dp"
+        android:layout_marginHorizontal="8dp"
+        android:background="@drawable/bg_chat_search_pill">
 
-    <LinearLayout
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="20dp"
+            android:contentDescription="Search"
+            android:src="@drawable/ic_chat_search"
+            app:tint="@color/chat_search_hint" />
+
+        <EditText
+            android:id="@+id/etSearchChats"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Search Chats"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:paddingStart="20dp"
+            android:paddingEnd="48dp"
+            android:textColor="@color/chat_text_primary"
+            android:textColorHint="@color/chat_search_hint"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp" />
+    </FrameLayout>
+
+    <!-- Filter chips -->
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginHorizontal="20dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:layout_marginTop="15dp"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
-        <TextView
-            android:id="@+id/chipAll"
+        <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_chip_active"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="All"
-            android:textColor="?attr/colorForegroundInverse"
-            android:textSize="12sp" />
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
-        <TextView
-            android:id="@+id/chipDirect"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_chip_inactive"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="Direct"
-            android:textColor="?attr/colorForegroundMuted"
-            android:textSize="12sp" />
+            <TextView
+                android:id="@+id/chipAll"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_chat_filter_active"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="All"
+                android:textColor="?attr/colorForegroundInverse"
+                android:textSize="14sp" />
 
-        <TextView
-            android:id="@+id/chipChannels"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_chip_inactive"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="Channels"
-            android:textColor="?attr/colorForegroundMuted"
-            android:textSize="12sp" />
-    </LinearLayout>
+            <TextView
+                android:id="@+id/chipUnread"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Unread"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
 
-    <ScrollView
+            <TextView
+                android:id="@+id/chipFavourites"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Favourites"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/chipChannels"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Groups"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/chipDirect"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Dm"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- List + empty state -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:layout_marginTop="16dp"
+        android:layout_weight="1">
 
-        <FrameLayout
+        <ScrollView
+            android:id="@+id/scrollChats"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:paddingBottom="20dp">
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
             <LinearLayout
                 android:id="@+id/chatList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingHorizontal="20dp" />
+                android:paddingBottom="24dp" />
+        </ScrollView>
 
-            <LinearLayout
-                android:id="@+id/emptyState"
+        <LinearLayout
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="22dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivEmptyIllustration"
+                android:layout_width="162dp"
+                android:layout_height="151dp"
+                android:contentDescription="Empty"
+                android:src="@drawable/ic_chat_empty_inbox" />
+
+            <TextView
+                android:id="@+id/tvEmptyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="No Chats Yet"
+                android:textColor="#FF0A0A0A"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/tvEmptySubtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:layout_marginTop="10dp"
+                android:fontFamily="@font/inter_regular"
                 android:gravity="center"
-                android:orientation="vertical"
-                android:paddingHorizontal="28dp"
-                android:paddingTop="88dp"
+                android:lineSpacingExtra="5sp"
+                android:text="Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="16sp" />
+
+            <FrameLayout
+                android:id="@+id/btnEmptyAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:layout_marginHorizontal="8dp"
+                android:background="@drawable/bg_chat_create_button"
+                android:clickable="true"
+                android:focusable="true"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:background="@drawable/bg_chat_empty_avatar"
-                    android:gravity="center"
-                    android:text="C"
-                    android:textColor="?attr/colorAccentPrimary"
-                    android:textSize="24sp" />
-
-                <TextView
-                    android:id="@+id/tvEmptyState"
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="No chats yet"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="16sp" />
+                    android:layout_gravity="center"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="10dp">
 
-                <TextView
-                    android:id="@+id/tvEmptyStateSubtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="Start a new conversation or join a channel to begin."
-                    android:textColor="?attr/colorForegroundMuted"
-                    android:textSize="13sp" />
-            </LinearLayout>
-        </FrameLayout>
-    </ScrollView>
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Create"
+                        android:src="@drawable/ic_chat_plus"
+                        app:tint="?attr/colorForegroundInverse" />
+
+                    <TextView
+                        android:id="@+id/tvEmptyActionLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Create Group"
+                        android:textColor="?attr/colorForegroundInverse"
+                        android:textSize="16sp" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

@@ -12,10 +12,17 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import coil.load
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
@@ -36,6 +43,7 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -49,7 +57,7 @@ class ChatMessagesFragment : Fragment() {
     private var channelId: String? = null
     private var conversationId: String? = null
     private var chatTitle: String = ""
-    private var chatSubtitle: String = "tap here for contact info"
+    private var chatSubtitle: String = "Last seen recently"
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var latestMessageTime: Double = 0.0
@@ -107,13 +115,16 @@ class ChatMessagesFragment : Fragment() {
         binding.tvChatSubtitle.text = chatSubtitle
         updateHeaderAvatar(chatTitle)
         renderPendingAttachments()
+        updateSendIcon()
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.headerContainer.setOnClickListener { openContactInfo() }
         binding.btnInfo.setOnClickListener { openContactInfo() }
-        binding.btnSend.setOnClickListener { sendMessage() }
+        binding.btnSend.setOnClickListener { handleSendOrMic() }
         binding.btnAttach.setOnClickListener { openAttachmentPicker() }
         binding.etMessage.addTextChangedListener(typingWatcher)
+
+        applyKeyboardAndSystemInsets(view)
 
         viewLifecycleOwner.lifecycleScope.launch {
             if (myStaffId.isBlank()) {
@@ -181,7 +192,8 @@ class ChatMessagesFragment : Fragment() {
                     otherStaffId = conversation?.participants
                         ?.firstOrNull { it.id != null && it.id != myStaffId }
                         ?.id
-                    chatSubtitle = "tap here for contact info"
+                    val seenStamp = conversation?.lastMessageAt
+                    chatSubtitle = formatLastSeen(seenStamp)
                 }
             }
         }
@@ -190,6 +202,19 @@ class ChatMessagesFragment : Fragment() {
             binding.tvChatTitle.text = chatTitle
             binding.tvChatSubtitle.text = chatSubtitle
             updateHeaderAvatar(chatTitle)
+        }
+    }
+
+    private fun formatLastSeen(timestamp: Long?): String {
+        if (timestamp == null || timestamp <= 0L) return "Last seen recently"
+        val now = Calendar.getInstance()
+        val past = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val sameDay = now.get(Calendar.YEAR) == past.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
+        val time = SimpleDateFormat("h:mma", Locale.getDefault()).format(Date(timestamp))
+        return if (sameDay) "Last seen Today $time" else {
+            val day = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
+            "Last seen $day $time"
         }
     }
 
@@ -258,6 +283,7 @@ class ChatMessagesFragment : Fragment() {
         if (accepted.isEmpty()) return
         pendingAttachments += accepted
         renderPendingAttachments()
+        updateSendIcon()
     }
 
     private fun readAttachmentMeta(uri: Uri): PendingAttachment? {
@@ -334,14 +360,14 @@ class ChatMessagesFragment : Fragment() {
                     maxLines = 1
                     setTextColor(resolveColor(R.attr.colorForegroundPrimary))
                     textSize = 12f
-                    typeface = resources.getFont(R.font.inter_semibold)
+                    typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
                 })
 
                 addView(TextView(requireContext()).apply {
                     text = humanFileSize(attachment.fileSize)
                     setTextColor(resolveColor(R.attr.colorForegroundMuted))
                     textSize = 11f
-                    typeface = resources.getFont(R.font.inter_regular)
+                    typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
                 })
             })
 
@@ -351,10 +377,11 @@ class ChatMessagesFragment : Fragment() {
                 minWidth = dpToPx(20)
                 setTextColor(resolveColor(R.attr.colorForegroundMuted))
                 textSize = 13f
-                typeface = resources.getFont(R.font.inter_bold)
+                typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
                 setOnClickListener {
                     pendingAttachments.remove(attachment)
                     renderPendingAttachments()
+                    updateSendIcon()
                 }
             })
         }
@@ -453,11 +480,19 @@ class ChatMessagesFragment : Fragment() {
         binding.messagesContainer.removeAllViews()
         binding.tvEmptyMessages.visibility = if (messages.isEmpty()) View.VISIBLE else View.GONE
 
-        val timeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+        var lastDayKey: String? = null
 
         messages
             .filterNot { it.isDeleted == true }
             .forEach { message ->
+                val createdMillis = message.creationTime?.toLong() ?: 0L
+                val dayKey = dayKey(createdMillis)
+                if (dayKey != lastDayKey && createdMillis > 0L) {
+                    binding.messagesContainer.addView(buildDateSeparator(createdMillis))
+                    lastDayKey = dayKey
+                }
+
                 val isMine = message.senderId == myStaffId
                 val row = LinearLayout(requireContext()).apply {
                     orientation = LinearLayout.VERTICAL
@@ -465,7 +500,7 @@ class ChatMessagesFragment : Fragment() {
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     ).apply {
-                        bottomMargin = dpToPx(8)
+                        bottomMargin = dpToPx(6)
                     }
                     gravity = if (isMine) Gravity.END else Gravity.START
                 }
@@ -473,10 +508,10 @@ class ChatMessagesFragment : Fragment() {
                 if (!isMine && channelId != null) {
                     row.addView(TextView(requireContext()).apply {
                         text = message.senderName ?: "Unknown"
-                        setTextColor(resolveColor(R.attr.colorAccentPrimary))
+                        setTextColor(ContextCompat.getColor(context, R.color.chat_blue_top))
                         textSize = 11f
-                        typeface = resources.getFont(R.font.inter_semibold)
-                        setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(3))
+                        typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+                        setPadding(dpToPx(10), 0, dpToPx(10), dpToPx(2))
                     })
                 }
 
@@ -486,37 +521,33 @@ class ChatMessagesFragment : Fragment() {
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     ).apply {
-                        marginStart = if (isMine) dpToPx(68) else 0
-                        marginEnd = if (isMine) 0 else dpToPx(68)
+                        marginStart = if (isMine) dpToPx(60) else 0
+                        marginEnd = if (isMine) 0 else dpToPx(60)
                     }
-                    minimumWidth = dpToPx(52)
+                    minimumWidth = dpToPx(56)
                     setBackgroundResource(
                         if (isMine) R.drawable.bg_chat_bubble_sent else R.drawable.bg_chat_bubble_received
                     )
-                    setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+                    setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(7))
                 }
+
+                addMessageAttachments(bubble, message.attachments.orEmpty(), isMine)
 
                 if (!message.body.isNullOrBlank()) {
                     bubble.addView(TextView(requireContext()).apply {
                         text = message.body.orEmpty()
-                        setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-                        textSize = 14f
+                        setTextColor(
+                            if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
+                            else ContextCompat.getColor(context, R.color.chat_text_primary)
+                        )
+                        textSize = 15.5f
                         setLineSpacing(0f, 1.05f)
-                        typeface = resources.getFont(R.font.inter_regular)
+                        typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
                     })
                 }
 
-                addMessageAttachments(bubble, message.attachments.orEmpty())
+                bubble.addView(buildBubbleTimeRow(createdMillis, isMine, timeFormatter))
                 row.addView(bubble)
-
-                row.addView(TextView(requireContext()).apply {
-                    text = message.creationTime?.let { timeFormatter.format(Date(it.toLong())) }.orEmpty()
-                    setTextColor(resolveColor(R.attr.colorForegroundMuted))
-                    gravity = if (isMine) Gravity.END else Gravity.START
-                    setPadding(dpToPx(8), dpToPx(3), dpToPx(8), 0)
-                    textSize = 10f
-                    typeface = resources.getFont(R.font.geist_mono_regular)
-                })
 
                 binding.messagesContainer.addView(row)
             }
@@ -528,20 +559,210 @@ class ChatMessagesFragment : Fragment() {
         }
     }
 
+    private fun buildDateSeparator(timestamp: Long): View {
+        val container = FrameLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dpToPx(6)
+                bottomMargin = dpToPx(8)
+            }
+        }
+        val pill = TextView(requireContext()).apply {
+            text = friendlyDateLabel(timestamp)
+            setBackgroundResource(R.drawable.bg_chat_date_pill)
+            setPadding(dpToPx(14), dpToPx(3), dpToPx(14), dpToPx(3))
+            setTextColor(ContextCompat.getColor(context, R.color.chat_text_primary))
+            textSize = 12f
+            typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+        container.addView(pill)
+        return container
+    }
+
+    private fun buildBubbleTimeRow(
+        timestamp: Long,
+        isMine: Boolean,
+        formatter: SimpleDateFormat
+    ): LinearLayout {
+        return LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dpToPx(2)
+            }
+
+            addView(TextView(requireContext()).apply {
+                text = if (timestamp > 0L) formatter.format(Date(timestamp)) else ""
+                textSize = 11f
+                setTextColor(
+                    if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
+                    else resolveColor(R.attr.colorForegroundMuted)
+                )
+                alpha = if (isMine) 0.85f else 0.6f
+                typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
+            })
+
+            if (isMine) {
+                addView(ImageView(requireContext()).apply {
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(14), dpToPx(14)).apply {
+                        marginStart = dpToPx(4)
+                    }
+                    setImageResource(R.drawable.ic_chat_check_double)
+                    alpha = 0.85f
+                })
+            }
+        }
+    }
+
+    private fun dayKey(timestamp: Long): String {
+        if (timestamp <= 0L) return ""
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestamp))
+    }
+
+    private fun friendlyDateLabel(timestamp: Long): String {
+        val now = Calendar.getInstance()
+        val past = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val today = now.get(Calendar.YEAR) == past.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
+        if (today) return "Today"
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        val isYesterday = yesterday.get(Calendar.YEAR) == past.get(Calendar.YEAR) &&
+            yesterday.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
+        if (isYesterday) return "Yesterday"
+        return SimpleDateFormat("EEE, dd MMM", Locale.getDefault()).format(Date(timestamp))
+    }
+
     private fun addMessageAttachments(
         parent: LinearLayout,
-        attachments: List<MessageAttachmentData>
+        attachments: List<MessageAttachmentData>,
+        isMine: Boolean
     ) {
         attachments.forEachIndexed { index, attachment ->
-            parent.addView(createMessageAttachmentView(attachment).apply {
+            val mime = attachment.fileType.orEmpty().lowercase(Locale.getDefault())
+            val view = when {
+                mime.startsWith("image/") -> createImageAttachmentView(attachment)
+                mime.startsWith("video/") -> createVideoAttachmentView(attachment)
+                else -> createMessageAttachmentView(attachment, isMine)
+            }
+            parent.addView(view.apply {
                 val params = layoutParams as LinearLayout.LayoutParams
-                params.topMargin = if (index == 0) dpToPx(8) else dpToPx(6)
+                params.topMargin = if (index == 0) 0 else dpToPx(6)
+                params.bottomMargin = dpToPx(4)
                 layoutParams = params
             })
         }
     }
 
-    private fun createMessageAttachmentView(attachment: MessageAttachmentData): LinearLayout {
+    private fun createImageAttachmentView(attachment: MessageAttachmentData): View {
+        val width = dpToPx(238)
+        val height = dpToPx(178)
+        val cornerPx = dpToPx(8).toFloat()
+
+        val container = FrameLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(width, height)
+            isClickable = !attachment.url.isNullOrBlank()
+            isFocusable = isClickable
+            if (isClickable) setOnClickListener { openAttachment(attachment) }
+        }
+
+        val image = ImageView(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundResource(R.drawable.bg_chat_media_placeholder)
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, v.width, v.height, cornerPx)
+                }
+            }
+        }
+        attachment.url?.takeIf { it.isNotBlank() }?.let { url ->
+            image.load(url) {
+                crossfade(true)
+                transformations(coil.transform.RoundedCornersTransformation(cornerPx))
+            }
+        }
+        container.addView(image)
+        return container
+    }
+
+    private fun createVideoAttachmentView(attachment: MessageAttachmentData): View {
+        val width = dpToPx(238)
+        val height = dpToPx(178)
+        val cornerPx = dpToPx(8).toFloat()
+
+        val container = FrameLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(width, height)
+            isClickable = !attachment.url.isNullOrBlank()
+            isFocusable = isClickable
+            if (isClickable) setOnClickListener { openAttachment(attachment) }
+        }
+
+        val image = ImageView(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundResource(R.drawable.bg_chat_media_placeholder)
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, v.width, v.height, cornerPx)
+                }
+            }
+        }
+        attachment.url?.takeIf { it.isNotBlank() }?.let { url ->
+            image.load(url, videoFrameImageLoader()) {
+                crossfade(true)
+                transformations(coil.transform.RoundedCornersTransformation(cornerPx))
+            }
+        }
+        container.addView(image)
+
+        // Play overlay
+        val play = FrameLayout(requireContext()).apply {
+            val size = dpToPx(48)
+            layoutParams = FrameLayout.LayoutParams(size, size, Gravity.CENTER)
+            setBackgroundResource(R.drawable.bg_chat_video_play_circle)
+        }
+        play.addView(ImageView(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                dpToPx(22), dpToPx(22), Gravity.CENTER
+            )
+            setImageResource(R.drawable.ic_chat_media_play)
+        })
+        container.addView(play)
+        return container
+    }
+
+    private var cachedVideoFrameLoader: coil.ImageLoader? = null
+    private fun videoFrameImageLoader(): coil.ImageLoader {
+        cachedVideoFrameLoader?.let { return it }
+        val loader = coil.ImageLoader.Builder(requireContext())
+            .components { add(coil.decode.VideoFrameDecoder.Factory()) }
+            .build()
+        cachedVideoFrameLoader = loader
+        return loader
+    }
+
+    private fun createMessageAttachmentView(
+        attachment: MessageAttachmentData,
+        isMine: Boolean
+    ): LinearLayout {
         return LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -549,8 +770,7 @@ class ChatMessagesFragment : Fragment() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            setBackgroundResource(R.drawable.bg_chat_action_card)
-            setPadding(dpToPx(10), dpToPx(10), dpToPx(12), dpToPx(10))
+            setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
             isClickable = !attachment.url.isNullOrBlank()
             isFocusable = isClickable
             if (isClickable) {
@@ -565,15 +785,18 @@ class ChatMessagesFragment : Fragment() {
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    marginStart = dpToPx(10)
+                    marginStart = dpToPx(8)
                 }
 
                 addView(TextView(requireContext()).apply {
                     text = attachment.fileName ?: "Attachment"
                     maxLines = 1
-                    setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-                    textSize = 12f
-                    typeface = resources.getFont(R.font.inter_semibold)
+                    setTextColor(
+                        if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
+                        else ContextCompat.getColor(context, R.color.chat_text_primary)
+                    )
+                    textSize = 13f
+                    typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
                 })
 
                 addView(TextView(requireContext()).apply {
@@ -584,9 +807,13 @@ class ChatMessagesFragment : Fragment() {
                             append(humanFileSize(it))
                         }
                     }
-                    setTextColor(resolveColor(R.attr.colorForegroundMuted))
+                    setTextColor(
+                        if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
+                        else ContextCompat.getColor(context, R.color.chat_text_secondary)
+                    )
+                    alpha = if (isMine) 0.85f else 1f
                     textSize = 11f
-                    typeface = resources.getFont(R.font.inter_regular)
+                    typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
                 })
             })
         }
@@ -599,10 +826,10 @@ class ChatMessagesFragment : Fragment() {
             minWidth = dpToPx(34)
             minHeight = dpToPx(34)
             setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
-            setBackgroundResource(R.drawable.bg_chat_avatar)
+            setBackgroundResource(R.drawable.bg_chat_avatar_circle)
             setTextColor(resolveColor(R.attr.colorAccentPrimary))
             textSize = 10f
-            typeface = resources.getFont(R.font.inter_bold)
+            typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
         }
     }
 
@@ -637,6 +864,24 @@ class ChatMessagesFragment : Fragment() {
         }
     }
 
+    private fun handleSendOrMic() {
+        if (canSendNow()) {
+            sendMessage()
+        }
+    }
+
+    private fun canSendNow(): Boolean {
+        val text = binding.etMessage.text?.toString().orEmpty().trim()
+        return text.isNotEmpty() || pendingAttachments.isNotEmpty()
+    }
+
+    private fun updateSendIcon() {
+        if (_binding == null) return
+        binding.ivSendIcon.setImageResource(
+            if (canSendNow()) R.drawable.ic_send else R.drawable.ic_chat_mic
+        )
+    }
+
     private fun sendMessage() {
         val text = binding.etMessage.text.toString().trim()
         if (text.isEmpty() && pendingAttachments.isEmpty()) return
@@ -649,6 +894,7 @@ class ChatMessagesFragment : Fragment() {
         renderPendingAttachments()
         binding.tvTypingIndicator.visibility = View.GONE
         setComposerBusy(true)
+        updateSendIcon()
 
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
@@ -676,6 +922,7 @@ class ChatMessagesFragment : Fragment() {
             }
 
             setComposerBusy(false)
+            updateSendIcon()
         }
     }
 
@@ -715,6 +962,7 @@ class ChatMessagesFragment : Fragment() {
         pendingAttachments.clear()
         pendingAttachments.addAll(attachments)
         renderPendingAttachments()
+        updateSendIcon()
     }
 
     private fun setComposerBusy(isBusy: Boolean) {
@@ -776,6 +1024,7 @@ class ChatMessagesFragment : Fragment() {
             if (!s.isNullOrBlank()) {
                 sendTypingSignal()
             }
+            updateSendIcon()
         }
 
         override fun afterTextChanged(s: Editable?) = Unit
@@ -783,6 +1032,39 @@ class ChatMessagesFragment : Fragment() {
 
     private fun humanFileSize(sizeBytes: Long): String {
         return Formatter.formatShortFileSize(requireContext(), sizeBytes)
+    }
+
+    /**
+     * MainActivity uses edge-to-edge (setDecorFitsSystemWindows(false)) which
+     * disables the system's `adjustResize` behaviour. The activity's root listener
+     * already pads `fragmentContainer` by the visible-keyboard height
+     * (`ime.bottom - sys.bottom`), so the chat fragment's vertical LinearLayout
+     * naturally compresses and the bottom toolbar lifts with the keyboard.
+     *
+     * We only do two extra things here:
+     *   1) Auto-scroll the message list to the latest message when the keyboard
+     *      opens so the focused field stays visible above the IME.
+     *   2) Forward the same scroll-to-bottom hint when the layout height changes
+     *      (which is what edge-to-edge resize looks like to the fragment).
+     */
+    private fun applyKeyboardAndSystemInsets(root: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            if (ime > 0) {
+                binding.scrollMessages.post {
+                    binding.scrollMessages.fullScroll(View.FOCUS_DOWN)
+                }
+            }
+            insets
+        }
+        root.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, oldBottom ->
+            if (bottom < oldBottom) {
+                binding.scrollMessages.post {
+                    binding.scrollMessages.fullScroll(View.FOCUS_DOWN)
+                }
+            }
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
     private fun toast(message: String) {

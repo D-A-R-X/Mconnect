@@ -425,16 +425,13 @@
     <LinearLayout
         android:id="@+id/tripProgressCard"
         android:layout_width="0dp"
-        android:layout_height="121dp"
+        android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="12dp"
         android:background="@drawable/bg_trip_progress_figma_card"
         android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp"
+        android:padding="16dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/mapCard">
@@ -452,10 +449,11 @@
                 android:fontFamily="@font/inter_medium"
                 android:includeFontPadding="false"
                 android:text="Trip Progress"
-                android:textColor="#111827"
+                android:textColor="#1C1C1E"
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/tvTripStateLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
@@ -467,66 +465,81 @@
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="65dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp">
 
+            <!-- Progress connector lines (sit behind the circles) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="2dp"
-                android:layout_marginStart="23dp"
+                android:layout_marginStart="16dp"
                 android:layout_marginTop="15dp"
-                android:layout_marginEnd="23dp"
+                android:layout_marginEnd="16dp"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <View
+                    android:id="@+id/tripLineSegment1"
                     android:layout_width="0dp"
                     android:layout_height="2dp"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_trip_progress_line_active" />
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
 
                 <View
+                    android:id="@+id/tripLineSegment2"
                     android:layout_width="0dp"
                     android:layout_height="2dp"
-                    android:layout_weight="2"
-                    android:background="#E5E7EB" />
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
+
+                <View
+                    android:id="@+id/tripLineSegment3"
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_trip_progress_line_inactive" />
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="65dp"
+                android:layout_height="wrap_content"
                 android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <LinearLayout
-                    android:layout_width="47dp"
-                    android:layout_height="65dp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:gravity="center_horizontal"
                     android:orientation="vertical">
 
                     <FrameLayout
+                        android:id="@+id/tripStepStart"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
-                        android:background="@drawable/bg_trip_progress_figma_active">
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
 
                         <ImageView
+                            android:id="@+id/tripStepStartIcon"
                             android:layout_width="14dp"
                             android:layout_height="14dp"
                             android:layout_gravity="center"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_trip_progress_play_white" />
+                            android:src="@drawable/ic_trip_progress_play_gray" />
                     </FrameLayout>
 
                     <TextView
+                        android:id="@+id/tripStepStartLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="15dp"
                         android:layout_marginTop="5dp"
-                        android:fontFamily="@font/inter_medium"
+                        android:fontFamily="@font/inter_regular"
                         android:gravity="center"
                         android:includeFontPadding="false"
                         android:text="Start"
-                        android:textColor="#19B900"
+                        android:textColor="#8E8E93"
                         android:textSize="10sp" />
 
                     <TextView
@@ -542,59 +555,21 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
                 <LinearLayout
-                    android:layout_width="43dp"
-                    android:layout_height="65dp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:gravity="center_horizontal"
                     android:orientation="vertical">
 
                     <FrameLayout
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:background="@drawable/bg_trip_progress_figma_outline">
-
-                        <ImageView
-                            android:layout_width="11dp"
-                            android:layout_height="13dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_trip_progress_location_green" />
-                    </FrameLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="15dp"
-                        android:layout_marginTop="5dp"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:includeFontPadding="false"
-                        android:text="En Route"
-                        android:textColor="#19B900"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <LinearLayout
-                    android:layout_width="44dp"
-                    android:layout_height="65dp"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical">
-
-                    <FrameLayout
+                        android:id="@+id/tripStepEnroute"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:background="@drawable/bg_trip_progress_figma_inactive">
 
                         <ImageView
+                            android:id="@+id/tripStepEnrouteIcon"
                             android:layout_width="11dp"
                             android:layout_height="13dp"
                             android:layout_gravity="center"
@@ -603,6 +578,42 @@
                     </FrameLayout>
 
                     <TextView
+                        android:id="@+id/tripStepEnrouteLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="5dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="En Route"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/tripStepReaching"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                        <ImageView
+                            android:id="@+id/tripStepReachingIcon"
+                            android:layout_width="11dp"
+                            android:layout_height="13dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_trip_progress_location_gray" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tripStepReachingLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="15dp"
                         android:layout_marginTop="5dp"
@@ -614,23 +625,21 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
                 <LinearLayout
-                    android:layout_width="46dp"
-                    android:layout_height="65dp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:gravity="center_horizontal"
                     android:orientation="vertical">
 
                     <FrameLayout
+                        android:id="@+id/tripStepComplete"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:background="@drawable/bg_trip_progress_figma_inactive">
 
                         <ImageView
+                            android:id="@+id/tripStepCompleteIcon"
                             android:layout_width="11dp"
                             android:layout_height="13dp"
                             android:layout_gravity="center"
@@ -639,6 +648,7 @@
                     </FrameLayout>
 
                     <TextView
+                        android:id="@+id/tripStepCompleteLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="15dp"
                         android:layout_marginTop="5dp"

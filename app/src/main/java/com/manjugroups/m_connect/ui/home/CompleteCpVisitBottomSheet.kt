@@ -38,10 +38,13 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * KOS-37: collects clientMet + outcome (+ postpone reasons) for a CP visit at
- * arrival time. Caller (TripNavigationFragment) shows it after OTP verify on a
- * tripType=client_place trip; on success the sheet POSTs markClientMet and
- * setOutcome, then signals the host to call completeVisit.
+ * KOS-37 / KOS-52: collects the visit outcome (+ outcome-specific details) for
+ * a CP visit. Caller (TripNavigationFragment) shows this after OTP verify on a
+ * tripType=client_place "Yes, saw client" path; clientMet is implicitly true
+ * because the sheet is unreachable without OTP success. On submit the sheet
+ * POSTs markClientMet(true) and setOutcome, then signals the host to call
+ * completeVisit. The "No, didn't see client" path skips this sheet entirely
+ * and is handled directly in TripNavigationFragment.completeCpVisitWithoutClient.
  */
 class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
@@ -49,7 +52,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
-    private var clientMet: Boolean? = null
     private var selectedOutcome: String? = null
     private val selectedPostponeReasons = linkedSetOf<String>()
     private var selectedProject: MarketingProject? = null
@@ -66,9 +68,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var siteVisitTime: String = defaultTime()
     private var selectedTravelMode: String = "cab"
 
-    private var btnYes: TextView? = null
-    private var btnNo: TextView? = null
-    private var etReason: EditText? = null
     private var outcomeRow: LinearLayout? = null
     private var siteVisitDetailsGroup: View? = null
     private var siteVisitProject: TextView? = null
@@ -85,9 +84,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var visitorCount: EditText? = null
     private var visitorRows: LinearLayout? = null
     private var foodPreference: EditText? = null
-    private var postponeLabel: TextView? = null
-    private var postponeScroll: View? = null
+    private var postponeDetailsGroup: View? = null
     private var postponeRow: LinearLayout? = null
+    private var postponeBudgetConcern: EditText? = null
+    private var postponeTiming: EditText? = null
+    private var postponeProjectDetails: EditText? = null
+    private var postponeOtherDetails: EditText? = null
+    private var notInterestedDetailsGroup: View? = null
+    private var notInterestedNotes: EditText? = null
+    private var waitDetailsGroup: View? = null
+    private var waitNotes: EditText? = null
     private var errorText: TextView? = null
     private var submitBtn: TextView? = null
 
@@ -116,9 +122,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        btnYes = view.findViewById(R.id.btnCpClientMetYes)
-        btnNo = view.findViewById(R.id.btnCpClientMetNo)
-        etReason = view.findViewById(R.id.etCpClientNoShowReason)
         outcomeRow = view.findViewById(R.id.outcomeChipRow)
         siteVisitDetailsGroup = view.findViewById(R.id.siteVisitDetailsGroup)
         siteVisitProject = view.findViewById(R.id.tvCpSiteVisitProject)
@@ -135,20 +138,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         visitorCount = view.findViewById(R.id.etCpSiteVisitVisitorCount)
         visitorRows = view.findViewById(R.id.visitorRows)
         foodPreference = view.findViewById(R.id.etCpSiteVisitFoodPreference)
-        postponeLabel = view.findViewById(R.id.tvPostponeReasonsLabel)
-        postponeScroll = view.findViewById(R.id.postponeReasonScroll)
+        postponeDetailsGroup = view.findViewById(R.id.postponeDetailsGroup)
         postponeRow = view.findViewById(R.id.postponeReasonRow)
+        postponeBudgetConcern = view.findViewById(R.id.etCpPostponeBudgetConcern)
+        postponeTiming = view.findViewById(R.id.etCpPostponeTiming)
+        postponeProjectDetails = view.findViewById(R.id.etCpPostponeProjectDetails)
+        postponeOtherDetails = view.findViewById(R.id.etCpPostponeOtherDetails)
+        notInterestedDetailsGroup = view.findViewById(R.id.notInterestedDetailsGroup)
+        notInterestedNotes = view.findViewById(R.id.etCpNotInterestedNotes)
+        waitDetailsGroup = view.findViewById(R.id.waitDetailsGroup)
+        waitNotes = view.findViewById(R.id.etCpWaitNotes)
         errorText = view.findViewById(R.id.tvCpError)
         submitBtn = view.findViewById(R.id.btnCpSubmit)
 
-        arguments?.let { args ->
-            if (args.containsKey(ARG_CP_CLIENT_MET)) {
-                setClientMet(args.getBoolean(ARG_CP_CLIENT_MET))
-            }
-            args.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }?.let(::setOutcome)
-        }
-        btnYes?.setOnClickListener { setClientMet(true) }
-        btnNo?.setOnClickListener { setClientMet(false) }
+        arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }?.let(::setOutcome)
         siteVisitProject?.setOnClickListener { pickProject() }
         siteVisitBdo?.isClickable = false
         siteVisitIncharge?.setOnClickListener {
@@ -197,13 +200,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         submitBtn?.setOnClickListener { onSubmit() }
     }
 
-    private fun setClientMet(met: Boolean) {
-        clientMet = met
-        applyChipState(btnYes, met)
-        applyChipState(btnNo, !met)
-        etReason?.visibility = if (!met) View.VISIBLE else View.GONE
-    }
-
     private fun renderOutcomeChips() {
         val row = outcomeRow ?: return
         row.removeAllViews()
@@ -246,9 +242,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val isPostpone = outcome == OUTCOME_POSTPONED
         val isSiteVisit = outcome == OUTCOME_SITE_VISIT
+        val isNotInterested = outcome == OUTCOME_NOT_INTERESTED
+        val isWait = outcome == OUTCOME_WAIT
         siteVisitDetailsGroup?.visibility = if (isSiteVisit) View.VISIBLE else View.GONE
-        postponeLabel?.visibility = if (isPostpone) View.VISIBLE else View.GONE
-        postponeScroll?.visibility = if (isPostpone) View.VISIBLE else View.GONE
+        postponeDetailsGroup?.visibility = if (isPostpone) View.VISIBLE else View.GONE
+        notInterestedDetailsGroup?.visibility = if (isNotInterested) View.VISIBLE else View.GONE
+        waitDetailsGroup?.visibility = if (isWait) View.VISIBLE else View.GONE
         if (!isPostpone) selectedPostponeReasons.clear()
     }
 
@@ -513,16 +512,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         clearError()
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        val met = clientMet ?: return showError("Please record whether you met the client")
-        val reason = etReason?.text?.toString()?.trim().orEmpty()
-        if (!met && reason.isEmpty()) return showError("Please add a reason for not meeting the client")
+        // KOS-52: Sheet only shows on the "Yes, I saw the client" branch (after
+        // OTP verify), so met is implicitly true. The "No" branch is handled
+        // by TripNavigationFragment.completeCpVisitWithoutClient.
+        val met = true
         val outcome = selectedOutcome ?: return showError("Please pick an outcome")
         if (outcome == OUTCOME_POSTPONED && selectedPostponeReasons.isEmpty()) {
             return showError("Pick at least one postpone reason")
         }
-        if (outcome == OUTCOME_SITE_VISIT) {
-            if (!met) return showError("Site visit can be created only after meeting the client")
-            if (selectedProject == null) return showError("Please select a project for the site visit")
+        if (outcome == OUTCOME_SITE_VISIT && selectedProject == null) {
+            return showError("Please select a project for the site visit")
         }
 
         submitBtn?.isClickable = false
@@ -534,24 +533,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     session.bearerToken,
                     MarkClientMetRequest(
                         id = cpVisitId,
-                        clientMet = met,
-                        clientNoShowReason = reason.takeIf { !met }
+                        clientMet = met
                     )
                 )
                 if (!metResp.success) {
                     submitBtn?.isClickable = true
-                    submitBtn?.text = "Save and complete"
+                    submitBtn?.text = "Submit"
                     showError(metResp.error ?: "Failed to record client met")
                     return@launch
                 }
 
                 if (outcome == OUTCOME_SITE_VISIT) {
-                    val project = selectedProject
-                    if (project == null) {
+                    val project = selectedProject ?: return@launch run {
                         submitBtn?.isClickable = true
-                        submitBtn?.text = "Save and complete"
+                        submitBtn?.text = "Submit"
                         showError("Please select a project for the site visit")
-                        return@launch
                     }
                     val convertResp = geoApi.convertCpVisitToSiteVisit(
                         session.bearerToken,
@@ -576,7 +572,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     )
                     if (!convertResp.success) {
                         submitBtn?.isClickable = true
-                        submitBtn?.text = "Save and complete"
+                        submitBtn?.text = "Submit"
                         showError(convertResp.error ?: "Failed to create site visit")
                         return@launch
                     }
@@ -596,12 +592,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     SetOutcomeRequest(
                         id = cpVisitId,
                         outcome = outcome,
-                        postponeReasons = if (outcome == OUTCOME_POSTPONED) selectedPostponeReasons.toList() else null
+                        postponeReasons = if (outcome == OUTCOME_POSTPONED) selectedPostponeReasons.toList() else null,
+                        notes = buildOutcomeNotes(outcome)
                     )
                 )
                 if (!outcomeResp.success) {
                     submitBtn?.isClickable = true
-                    submitBtn?.text = "Save and complete"
+                    submitBtn?.text = "Submit"
                     showError(outcomeResp.error ?: "Failed to set outcome")
                     return@launch
                 }
@@ -616,10 +613,36 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
                 submitBtn?.isClickable = true
-                submitBtn?.text = "Save and complete"
+                submitBtn?.text = "Submit"
                 showError(e.message ?: "Network error")
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    // Backend SetOutcomeRequest only carries a single `notes` string, so we
+    // bundle the outcome-specific free-text fields into a labeled, multi-line
+    // value the back office can display verbatim. Empty fields are omitted.
+    private fun buildOutcomeNotes(outcome: String): String? {
+        return when (outcome) {
+            OUTCOME_POSTPONED -> {
+                val parts = listOfNotNull(
+                    postponeBudgetConcern?.text?.toString()?.trim()
+                        ?.takeIf { it.isNotEmpty() }?.let { "Budget concern: $it" },
+                    postponeTiming?.text?.toString()?.trim()
+                        ?.takeIf { it.isNotEmpty() }?.let { "Timing: $it" },
+                    postponeProjectDetails?.text?.toString()?.trim()
+                        ?.takeIf { it.isNotEmpty() }?.let { "Project details: $it" },
+                    postponeOtherDetails?.text?.toString()?.trim()
+                        ?.takeIf { it.isNotEmpty() }?.let { "Other: $it" },
+                )
+                parts.joinToString("\n").takeIf { it.isNotBlank() }
+            }
+            OUTCOME_NOT_INTERESTED ->
+                notInterestedNotes?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            OUTCOME_WAIT ->
+                waitNotes?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            else -> null
         }
     }
 

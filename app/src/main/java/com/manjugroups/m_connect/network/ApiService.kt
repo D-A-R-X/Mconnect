@@ -779,7 +779,10 @@ data class ChannelData(
     val name: String?, val description: String?,
     val type: String?, val memberCount: Int?,
     val unreadCount: Int?, val slug: String?,
-    val muted: Boolean?
+    val muted: Boolean?,
+    val lastMessageAt: Long? = null,
+    val lastMessagePreview: String? = null,
+    val mentionCount: Int? = null
 )
 data class ChannelDetailResponse(val success: Boolean, val channel: ChannelData?)
 data class CreateChannelRequest(
@@ -797,6 +800,8 @@ data class ConversationData(
     val unreadCount: Int?, val muted: Boolean?,
     val lastMessage: MessageData?,
     val lastMessageAt: Long?,
+    val lastMessagePreview: String? = null,
+    val lastMessageSenderId: String? = null,
     val participants: List<ParticipantData>?
 )
 data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?)
