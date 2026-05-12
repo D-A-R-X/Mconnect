@@ -351,6 +351,162 @@ interface ApiService {
         @Query("conversationId") conversationId: String? = null
     ): ChatAttachmentsResponse
 
+    // Chat - Channel management
+    @POST("api/chat/channels/leave")
+    suspend fun leaveChannel(
+        @Header("Authorization") token: String,
+        @Body body: ChannelIdRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/update")
+    suspend fun updateChannel(
+        @Header("Authorization") token: String,
+        @Body body: UpdateChannelRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/archive")
+    suspend fun archiveChannel(
+        @Header("Authorization") token: String,
+        @Body body: ChannelIdRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/add-member")
+    suspend fun addChannelMember(
+        @Header("Authorization") token: String,
+        @Body body: ChannelMemberRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/remove-member")
+    suspend fun removeChannelMember(
+        @Header("Authorization") token: String,
+        @Body body: ChannelMemberRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/set-mute")
+    suspend fun setChannelMute(
+        @Header("Authorization") token: String,
+        @Body body: SetMuteRequest
+    ): SimpleResponse
+
+    @POST("api/chat/channels/set-role")
+    suspend fun setChannelRole(
+        @Header("Authorization") token: String,
+        @Body body: SetChannelRoleRequest
+    ): SimpleResponse
+
+    @GET("api/chat/channels/search")
+    suspend fun searchChannels(
+        @Header("Authorization") token: String,
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 25
+    ): ChannelsResponse
+
+    @GET("api/chat/channels/members")
+    suspend fun getChannelMembers(
+        @Header("Authorization") token: String,
+        @Query("channelId") channelId: String
+    ): ChannelMembersResponse
+
+    // Chat - Conversation management
+    @POST("api/chat/conversations/add-member")
+    suspend fun addConversationMember(
+        @Header("Authorization") token: String,
+        @Body body: ConversationMemberRequest
+    ): SimpleResponse
+
+    @POST("api/chat/conversations/remove-member")
+    suspend fun removeConversationMember(
+        @Header("Authorization") token: String,
+        @Body body: ConversationMemberRequest
+    ): SimpleResponse
+
+    @POST("api/chat/conversations/hide")
+    suspend fun hideConversation(
+        @Header("Authorization") token: String,
+        @Body body: ConversationIdRequest
+    ): SimpleResponse
+
+    @POST("api/chat/conversations/set-mute")
+    suspend fun setConversationMute(
+        @Header("Authorization") token: String,
+        @Body body: SetMuteRequest
+    ): SimpleResponse
+
+    // Chat - Message edit/delete/replies/unread
+    @GET("api/chat/messages/replies")
+    suspend fun getMessageReplies(
+        @Header("Authorization") token: String,
+        @Query("parentMessageId") parentMessageId: String
+    ): MessagesResponse
+
+    @GET("api/chat/messages/get")
+    suspend fun getMessage(
+        @Header("Authorization") token: String,
+        @Query("messageId") messageId: String
+    ): SingleMessageResponse
+
+    @GET("api/chat/messages/unread-summary")
+    suspend fun getUnreadSummary(
+        @Header("Authorization") token: String
+    ): UnreadSummaryResponse
+
+    @POST("api/chat/messages/edit")
+    suspend fun editMessage(
+        @Header("Authorization") token: String,
+        @Body body: EditMessageRequest
+    ): SimpleResponse
+
+    @POST("api/chat/messages/delete")
+    suspend fun deleteMessage(
+        @Header("Authorization") token: String,
+        @Body body: DeleteMessageRequest
+    ): SimpleResponse
+
+    // Chat - Reactions
+    @GET("api/chat/reactions")
+    suspend fun getReactions(
+        @Header("Authorization") token: String,
+        @Query("messageId") messageId: String
+    ): ReactionsResponse
+
+    @POST("api/chat/reactions/add")
+    suspend fun addReaction(
+        @Header("Authorization") token: String,
+        @Body body: ReactionRequest
+    ): SimpleResponse
+
+    @POST("api/chat/reactions/remove")
+    suspend fun removeReaction(
+        @Header("Authorization") token: String,
+        @Body body: ReactionRequest
+    ): SimpleResponse
+
+    @POST("api/chat/reactions/toggle")
+    suspend fun toggleReaction(
+        @Header("Authorization") token: String,
+        @Body body: ReactionRequest
+    ): SimpleResponse
+
+    // Chat - Presence
+    @GET("api/chat/presence")
+    suspend fun getPresence(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null,
+        @Query("staffIds") staffIds: String? = null
+    ): PresenceResponse
+
+    @GET("api/chat/presence/online")
+    suspend fun getOnlineStaff(
+        @Header("Authorization") token: String,
+        @Query("limit") limit: Int = 100
+    ): PresenceListResponse
+
+    @POST("api/chat/presence/heartbeat")
+    suspend fun presenceHeartbeat(
+        @Header("Authorization") token: String,
+        @Body body: PresenceHeartbeatRequest
+    ): SimpleResponse
+
     @POST("api/staff/me/update")
     suspend fun updateMyProfile(
         @Header("Authorization") token: String,
@@ -914,6 +1070,100 @@ data class ChatAttachmentsResponse(
     val messages: List<ChatAttachmentMessage> = emptyList(),
     val error: String? = null
 )
+
+// ── Chat channel management models ──────────────────────────────────────────
+
+data class ChannelMembersResponse(val success: Boolean, val members: List<ChannelMemberData> = emptyList())
+data class ChannelMemberData(
+    @SerializedName("_id") val id: String?,
+    val staffId: String?,
+    val role: String?,
+    val muted: Boolean? = null,
+    val staffName: String? = null,
+    val staffRole: String? = null,
+    val staffDesignation: String? = null,
+    val profilePhoto: String? = null
+)
+
+data class UpdateChannelRequest(
+    val channelId: String,
+    val name: String? = null,
+    val description: String? = null,
+    val type: String? = null
+)
+
+data class ChannelMemberRequest(
+    val channelId: String,
+    val staffId: String
+)
+
+data class SetMuteRequest(
+    val channelId: String? = null,
+    val conversationId: String? = null,
+    val muted: Boolean
+)
+
+data class SetChannelRoleRequest(
+    val channelId: String,
+    val targetStaffId: String,
+    val role: String
+)
+
+// ── Chat conversation management models ──────────────────────────────────────
+
+data class ConversationMemberRequest(
+    val conversationId: String,
+    val staffId: String
+)
+
+// ── Chat message edit/delete/unread models ──────────────────────────────────
+
+data class SingleMessageResponse(val success: Boolean, val message: MessageData? = null)
+
+data class UnreadSummaryResponse(
+    val success: Boolean,
+    val channels: Int = 0,
+    val dms: Int = 0,
+    val mentions: Int = 0,
+    val total: Int = 0
+)
+
+data class EditMessageRequest(
+    val messageId: String,
+    val body: String
+)
+
+data class DeleteMessageRequest(
+    val messageId: String
+)
+
+// ── Chat reaction models ────────────────────────────────────────────────────
+
+data class ReactionsResponse(val success: Boolean, val reactions: List<ReactionData> = emptyList())
+data class ReactionData(
+    val emoji: String?,
+    val count: Int? = 0,
+    val staffIds: List<String>? = null,
+    val mine: Boolean? = false
+)
+
+data class ReactionRequest(
+    val messageId: String,
+    val emoji: String
+)
+
+// ── Chat presence models ────────────────────────────────────────────────────
+
+data class PresenceData(
+    @SerializedName("_id") val id: String?,
+    val staffId: String? = null,
+    val status: String? = null,
+    val lastSeenAt: Long? = null
+)
+
+data class PresenceResponse(val success: Boolean, val presence: PresenceData? = null)
+data class PresenceListResponse(val success: Boolean, val online: List<PresenceData> = emptyList())
+data class PresenceHeartbeatRequest(val status: String? = null)
 
 // ── Staff self-edit (personal + family fields) ─────────────────────────────
 
