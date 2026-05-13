@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="56dp"
+    android:background="@drawable/bg_reaction_popup"
+    android:elevation="12dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="6dp">
+
+    <TextView
+        android:id="@+id/reactEmoji1"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="❤️"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/reactEmoji2"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="👍"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/reactEmoji3"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="😂"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/reactEmoji4"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="😮"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/reactEmoji5"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="😢"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/reactEmoji6"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="🙏"
+        android:textColor="#101828"
+        android:textSize="26sp" />
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="28dp"
+        android:layout_marginHorizontal="4dp"
+        android:background="#E5E5EA" />
+
+    <TextView
+        android:id="@+id/btnMoreReactions"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="⋯"
+        android:textColor="#475467"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

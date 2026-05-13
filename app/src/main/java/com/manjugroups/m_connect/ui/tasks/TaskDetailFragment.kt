@@ -71,6 +71,7 @@ class TaskDetailFragment : Fragment() {
         super.onResume()
         // White system-bar background to match the white in-fragment header.
         (activity as? MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+        (activity as? MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onPause() {
@@ -82,7 +83,7 @@ class TaskDetailFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        stopSkeleton()
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopAll()
         super.onDestroyView()
     }
 
@@ -109,7 +110,7 @@ class TaskDetailFragment : Fragment() {
                 }
                 currentTask = task
                 bind(root, task)
-                stopSkeleton()
+                stopSkeleton(skeleton)
                 skeleton.visibility = View.GONE
                 scroll.visibility = View.VISIBLE
                 updateBtn.visibility = if (canUpdate(task)) View.VISIBLE else View.GONE
@@ -209,20 +210,11 @@ class TaskDetailFragment : Fragment() {
     }
 
     private fun startSkeleton(target: View) {
-        target.visibility = View.VISIBLE
-        if (skeletonAnimator?.isRunning != true) {
-            skeletonAnimator = ObjectAnimator.ofFloat(target, View.ALPHA, 0.55f, 1f).apply {
-                duration = 650L
-                repeatMode = ObjectAnimator.REVERSE
-                repeatCount = ObjectAnimator.INFINITE
-                start()
-            }
-        }
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(target)
     }
 
-    private fun stopSkeleton() {
-        skeletonAnimator?.cancel()
-        skeletonAnimator = null
+    private fun stopSkeleton(target: View) {
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(target)
     }
 
     companion object {

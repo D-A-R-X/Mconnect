@@ -61,6 +61,7 @@ class ProfileFragment : Fragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            binding.profileContentScroll.visibility = View.GONE
             try {
                 val resp = api.getStaffDetail(session.bearerToken, staffId)
                 if (resp.success) resp.staff?.let(::renderStaff)
@@ -72,6 +73,7 @@ class ProfileFragment : Fragment() {
                 }
             } finally {
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                binding.profileContentScroll.visibility = View.VISIBLE
             }
         }
     }

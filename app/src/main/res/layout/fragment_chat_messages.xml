@@ -12,23 +12,24 @@
         android:orientation="vertical">
 
         <!-- Header -->
-        <FrameLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/headerContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#FFFFFF"
             android:paddingHorizontal="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp">
+            android:paddingVertical="8dp">
 
             <FrameLayout
                 android:id="@+id/btnBack"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:layout_gravity="start|center_vertical"
                 android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
-                android:focusable="true">
+                android:focusable="true"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <ImageView
                     android:layout_width="20dp"
@@ -38,12 +39,43 @@
                     app:tint="#0B61CA" />
             </FrameLayout>
 
+            <FrameLayout
+                android:id="@+id/headerAvatarContainer"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_avatar_circle"
+                app:layout_constraintStart_toEndOf="@id/btnBack"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+                
+                <ImageView
+                    android:id="@+id/ivHeaderAvatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop" />
+
+                <TextView
+                    android:id="@+id/tvHeaderAvatarInitials"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:fontFamily="@font/inter_semibold"
+                    android:textColor="?attr/colorAccentPrimary"
+                    android:textSize="12sp" />
+            </FrameLayout>
+
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:id="@+id/titleGroup"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="vertical"
+                android:layout_marginHorizontal="8dp"
+                app:layout_constraintStart_toEndOf="@id/headerAvatarContainer"
+                app:layout_constraintEnd_toStartOf="@id/btnSearch"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <TextView
                     android:id="@+id/tvChatTitle"
@@ -52,15 +84,20 @@
                     android:fontFamily="@font/inter_semibold"
                     android:textColor="#101828"
                     android:textSize="17sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     tools:text="Team Design" />
 
                 <TextView
                     android:id="@+id/tvChatSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
                     android:fontFamily="@font/inter_medium"
                     android:textColor="#667085"
                     android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:includeFontPadding="false"
                     tools:text="Last seen Today 11:30AM" />
             </LinearLayout>
@@ -69,11 +106,13 @@
                 android:id="@+id/btnSearch"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:layout_gravity="end|center_vertical"
                 android:padding="6dp"
                 android:src="@drawable/ic_chat_search"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:tint="#101828" />
-        </FrameLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <View
             android:layout_width="match_parent"
@@ -89,70 +128,33 @@
                 android:id="@+id/rvMessages"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipToPadding="false"
+                android:clipToPadding="true"
                 android:overScrollMode="never"
                 android:paddingHorizontal="16dp"
                 android:paddingTop="12dp"
-                android:paddingBottom="24dp" />
+                android:paddingBottom="0dp" />
 
-            <!-- Attachment Menu (Floating) -->
-            <androidx.cardview.widget.CardView
+            <!-- Legacy attach menu hooks kept hidden for binding compatibility -->
+            <View
                 android:id="@+id/attachmentMenu"
-                android:layout_width="200dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|start"
-                android:layout_marginStart="16dp"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="8dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="4dp">
-
-                    <LinearLayout
-                        android:id="@+id/menuAttachFile"
-                        android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="12dp">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_file" app:tint="#0B61CA" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:text="Attach a file" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/menuAttachMedia"
-                        android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="12dp">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_today_trip_globe" app:tint="#7A5AF8" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:text="Photos or videos" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/menuAttachCamera"
-                        android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="12dp">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_camera" app:tint="#12B76A" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:text="Camera" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-                    </LinearLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+            <View
+                android:id="@+id/menuAttachFile"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+            <View
+                android:id="@+id/menuAttachMedia"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+            <View
+                android:id="@+id/menuAttachCamera"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/skeletonContainer"
@@ -320,20 +322,39 @@
                     android:inputType="textMultiLine|textCapSentences"
                     android:maxLines="4"
                     android:paddingStart="16dp"
-                    android:paddingEnd="40dp"
+                    android:paddingEnd="76dp"
                     android:textColor="#101828"
                     android:textColorHint="#98A2B3"
                     android:textCursorDrawable="@null"
                     android:textSize="15sp" />
 
-                <ImageView
-                    android:id="@+id/btnEmoji"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="12dp"
-                    android:src="@drawable/ic_chat_emoji"
-                    app:tint="#98A2B3" />
+                    android:layout_marginEnd="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/btnEmoji"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:contentDescription="Emoji"
+                        android:src="@drawable/ic_chat_emoji"
+                        app:tint="#98A2B3" />
+
+                    <ImageView
+                        android:id="@+id/btnInputCamera"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="14dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:contentDescription="Camera"
+                        android:src="@drawable/ic_chat_camera"
+                        app:tint="#98A2B3" />
+                </LinearLayout>
             </FrameLayout>
 
             <FrameLayout
@@ -353,6 +374,32 @@
                     app:tint="#FFFFFF" />
             </FrameLayout>
         </LinearLayout>
+
+        <!-- Emoji Panel (below input section, like WhatsApp keyboard slot) -->
+        <FrameLayout
+            android:id="@+id/emojiPanel"
+            android:layout_width="match_parent"
+            android:layout_height="280dp"
+            android:background="#FFFFFF"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/emojiPickerContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <ImageView
+                android:id="@+id/btnCloseEmojiPanel"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_sheet_close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                app:tint="#667085" />
+        </FrameLayout>
     </LinearLayout>
 
 </FrameLayout>

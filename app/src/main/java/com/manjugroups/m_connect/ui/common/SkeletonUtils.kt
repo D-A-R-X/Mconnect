@@ -9,26 +9,39 @@ import java.util.WeakHashMap
 
 object SkeletonUtils {
 
-    private const val DURATION_MS = 820L
+    private const val DURATION_MS = 1000L
     private val activeSkeletons = WeakHashMap<View, ObjectAnimator>()
 
+    /**
+     * Starts a pulsing animation on the descendants of the given [skeletonContainer].
+     * The container itself remains opaque to hide any content behind it.
+     */
     fun startSkeletonPulse(skeletonContainer: View): ObjectAnimator {
-        skeletonContainer.clearAnimation()
-        skeletonContainer.animate().cancel()
-        skeletonContainer.alpha = 1f
+        // Stop any previous animation on this container
+        activeSkeletons[skeletonContainer]?.cancel()
+
         skeletonContainer.visibility = View.VISIBLE
-        val animator = ObjectAnimator.ofFloat(skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
+        skeletonContainer.alpha = 1f // Keep container opaque
+
+        // We pulse from 0.45 to 1.0 for a more distinct "loading" feel
+        val animator = ObjectAnimator.ofFloat(skeletonContainer, View.ALPHA, 0.45f, 1f).apply {
             duration = DURATION_MS
             repeatCount = ObjectAnimator.INFINITE
             repeatMode = ObjectAnimator.REVERSE
             start()
         }
+
         activeSkeletons[skeletonContainer] = animator
         return animator
     }
 
+    /**
+     * Stays consistent with the start method but hides the container.
+     */
     fun stopSkeletonPulse(skeletonContainer: View) {
-        activeSkeletons.remove(skeletonContainer)
+        val animator = activeSkeletons.remove(skeletonContainer)
+        animator?.cancel()
+        
         skeletonContainer.clearAnimation()
         skeletonContainer.animate().cancel()
         skeletonContainer.alpha = 1f

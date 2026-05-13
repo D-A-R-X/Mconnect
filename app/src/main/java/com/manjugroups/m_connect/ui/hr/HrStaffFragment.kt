@@ -69,13 +69,18 @@ class HrStaffFragment : Fragment() {
                     when (state) {
                         is HrStaffUiState.Loading -> {
                             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                            binding.staffList.visibility = View.GONE
                         }
+
                         is HrStaffUiState.Loaded -> {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                            binding.staffList.visibility = View.VISIBLE
                             renderStaffList(state)
                         }
+
                         is HrStaffUiState.Error -> {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                            binding.staffList.visibility = View.VISIBLE
                         }
                     }
                 }
@@ -184,6 +189,11 @@ class HrStaffFragment : Fragment() {
         val tv = android.util.TypedValue()
         requireContext().theme.resolveAttribute(attr, tv, true)
         return tv.data
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onDestroyView() {

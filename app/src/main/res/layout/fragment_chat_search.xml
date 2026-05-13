@@ -10,33 +10,37 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <LinearLayout
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
+            android:layout_height="64dp"
             android:paddingHorizontal="16dp">
 
-            <ImageView
+            <FrameLayout
                 android:id="@+id/btnSearchBack"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:contentDescription="Back"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
-                android:focusable="true"
-                android:src="@drawable/ic_arrow_left"
-                app:tint="?attr/colorForegroundPrimary" />
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_arrow_left"
+                    app:tint="#0B61CA" />
+            </FrameLayout>
 
             <TextView
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:fontFamily="@font/inter_bold"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
                 android:text="Search Messages"
                 android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="18sp" />
-        </LinearLayout>
+                android:textSize="17sp" />
+        </FrameLayout>
 
         <EditText
             android:id="@+id/etSearch"

@@ -95,6 +95,7 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun loadData() {
         SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        binding.attendanceScroll.visibility = View.GONE
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyAttendance(
@@ -118,6 +119,7 @@ class AttendanceHistoryFragment : Fragment() {
                 }
             } catch (_: Exception) { }
             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.attendanceScroll.visibility = View.VISIBLE
         }
     }
 
@@ -189,6 +191,7 @@ class AttendanceHistoryFragment : Fragment() {
         super.onResume()
         // White system status bar with dark icons to match the white in-app header.
         (activity as? MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+        (activity as? MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onPause() {

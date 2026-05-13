@@ -438,19 +438,16 @@ class LeavesFragment : Fragment() {
     }
 
     private fun startSkeletonPulse() {
-        if (skeletonAnimator?.isRunning == true) return
-        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
-            duration = 650L
-            repeatMode = ObjectAnimator.REVERSE
-            repeatCount = ObjectAnimator.INFINITE
-            start()
-        }
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
     }
 
     private fun stopSkeletonPulse() {
-        skeletonAnimator?.cancel()
-        skeletonAnimator = null
-        binding.skeletonContainer.alpha = 1f
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onDestroyView() {

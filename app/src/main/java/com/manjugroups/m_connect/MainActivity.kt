@@ -110,10 +110,12 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            cachedTopInset = sys.top
-            if (!statusBarFullBleed) {
+            if (sys.top > 0) {
+                cachedTopInset = sys.top
+            }
+            if (!statusBarFullBleed && cachedTopInset > 0) {
                 statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
-                    height = sys.top
+                    height = cachedTopInset
                 }
             }
             // When the floating tab bar is visible it already absorbs `sys.bottom`,
@@ -233,6 +235,7 @@ class MainActivity : AppCompatActivity() {
 
     fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
+        val wasFullBleed = statusBarFullBleed
         statusBarFullBleed = fullBleed
         if (fullBleed) {
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
@@ -245,6 +248,10 @@ class MainActivity : AppCompatActivity() {
             window.statusBarColor = backgroundColor
         }
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkStatusIcons
+        
+        if (wasFullBleed != fullBleed || (fullBleed == false && statusBarBackground.layoutParams.height == 0)) {
+            ViewCompat.requestApplyInsets(mainRoot)
+        }
     }
 
     private fun selectTab(index: Int) {
@@ -282,7 +289,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
-            TAB_HOME -> setTopBarAppearance(Color.WHITE, true, fullBleed = false)
+            TAB_HOME -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
             TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
             TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
             else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)

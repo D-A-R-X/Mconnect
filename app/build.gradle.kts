@@ -106,6 +106,8 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.coil)
     implementation(libs.coil.video)
+    implementation(libs.emoji2.emojipicker)
+    implementation("androidx.media3:media3-exoplayer:1.6.0")
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

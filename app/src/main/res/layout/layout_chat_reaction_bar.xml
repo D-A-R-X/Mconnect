@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_chat_action_card"
+    android:elevation="8dp"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <TextView android:id="@+id/reactFire" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="🔥" />
+    <TextView android:id="@+id/reactClap" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="🙌" />
+    <TextView android:id="@+id/reactHeart" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="❤️" />
+    <TextView android:id="@+id/reactSmile" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="😄" />
+    <TextView android:id="@+id/reactAngry" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="😠" />
+    <TextView android:id="@+id/reactThumb" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:textSize="24sp" android:text="👍" />
+
+</LinearLayout>

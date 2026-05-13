@@ -81,12 +81,17 @@ class ChatContactInfoFragment : Fragment() {
         }
 
         SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        binding.contentScroll.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
             when {
                 channelId != null -> loadChannelInfo(channelId, title)
                 conversationId != null -> loadConversationInfo(conversationId, otherStaffId, title)
-                else -> render(title, "Conversation details are not available yet.")
+                else -> {
+                    SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                    binding.contentScroll.visibility = View.VISIBLE
+                    render(title, "Conversation details are not available yet.")
+                }
             }
         }
     }
@@ -114,8 +119,13 @@ class ChatContactInfoFragment : Fragment() {
             
             val about = channel?.description?.ifBlank { null }
                 ?: "Team updates and discussions live here."
+            
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.contentScroll.visibility = View.VISIBLE
             render(title, about)
         }.onFailure {
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.contentScroll.visibility = View.VISIBLE
             render(fallbackTitle, "Channel details are not available right now.")
         }
     }
@@ -141,21 +151,23 @@ class ChatContactInfoFragment : Fragment() {
             binding.tvRole.text = staff?.designation ?: staff?.role ?: "Senior Design Manager"
             binding.tvPhone.text = staff?.phone ?: "+1 (555) 123-4567"
             binding.tvEmail.text = staff?.email ?: "alicia.rochefort@starkindustries.com"
-            binding.tvAddress.text = staff?.address ?: "Ashok Nagar Main Road"
+            binding.tvAddress.text = staff?.address ?: "Ash Nagar Main Road"
 
             val about = staff?.department ?: "Start a conversation and keep your project communication in one place."
+            
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.contentScroll.visibility = View.VISIBLE
             render(title, about)
         }.onFailure {
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.contentScroll.visibility = View.VISIBLE
             render(fallbackTitle, "Contact details are not available right now.")
         }
     }
 
     private fun render(title: String, about: String) {
         if (_binding == null) return
-        if (!hasLoadedData) {
-            hasLoadedData = true
-            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-        }
+        hasLoadedData = true
         val initials = title.split(" ")
             .filter { it.isNotBlank() }
             .take(2)

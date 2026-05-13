@@ -28,7 +28,8 @@
                 android:layout_height="18dp"
                 android:layout_gravity="center"
                 android:contentDescription="Close"
-                android:src="@drawable/ic_sheet_close" />
+                android:src="@drawable/ic_sheet_close"
+                app:tint="#101828" />
         </FrameLayout>
 
         <TextView

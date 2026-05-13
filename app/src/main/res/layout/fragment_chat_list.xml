@@ -17,17 +17,7 @@
             android:paddingBottom="14dp">
 
             <TextView
-                android:id="@+id/tvChatAvatarInitial"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:gravity="center"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="?attr/colorForegroundInverse"
-                android:textSize="14sp"
-                android:background="@drawable/bg_chat_avatar_circle"
-                android:layout_marginEnd="10dp" />
-
-            <TextView
+                android:id="@+id/tvChatHeaderTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -36,11 +26,17 @@
                 android:textColor="@color/chat_text_primary"
                 android:textSize="18sp" />
 
+            <TextView
+                android:id="@+id/tvChatAvatarInitial"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
             <FrameLayout
                 android:id="@+id/btnChatMenu"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:background="@drawable/bg_chat_send_circle"
+                android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -50,7 +46,25 @@
                     android:layout_gravity="center"
                     android:contentDescription="New chat"
                     android:src="@drawable/ic_chat_plus"
-                    app:tint="?attr/colorForegroundInverse" />
+                    app:tint="#0B61CA" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnChatSelectionMenu"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Actions"
+                    android:src="@drawable/ic_chat_more_dots"
+                    app:tint="#0B61CA" />
             </FrameLayout>
         </LinearLayout>
 

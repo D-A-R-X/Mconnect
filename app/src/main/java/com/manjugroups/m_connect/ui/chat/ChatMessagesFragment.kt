@@ -5,7 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.media.MediaRecorder
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
@@ -13,12 +16,16 @@ import android.text.format.Formatter
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
+import android.view.Gravity
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
+import androidx.emoji2.emojipicker.EmojiPickerView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -42,14 +49,24 @@ import com.manjugroups.m_connect.network.ReactionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.DeleteMessageRequest
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.io.File
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import android.animation.ValueAnimator
+import android.animation.ArgbEvaluator
 
 class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
@@ -65,8 +82,17 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var latestMessageTime: Double = 0.0
+    private var currentTypingText: String? = null
+    private var presencePollCounter = 0
     private val messages = mutableListOf<MessageData>()
+    private val originalBodyCache = mutableMapOf<String, MessageData>()
+    private val audioDurationLocalCache = mutableMapOf<String, String>()
+    private val staffNameCache = mutableMapOf<String, String>()
     private val pendingAttachments = mutableListOf<PendingAttachment>()
+
+    private val subtitleColorMuted = android.graphics.Color.parseColor("#667085")
+    private val subtitleColorTyping = android.graphics.Color.parseColor("#12B76A")
+    private val subtitleColorRecording = android.graphics.Color.parseColor("#F04438")
 
     private lateinit var chatAdapter: ChatMessageAdapter
     private lateinit var mentionAdapter: MentionAdapter
@@ -78,6 +104,24 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var isSendingMessage = false
     private var isAttachmentMenuOpen = false
     private var hasLoadedMessages = false
+    private var isEmojiPanelVisible = false
+
+    private var mediaRecorder: MediaRecorder? = null
+    private var audioFile: File? = null
+    private var isRecording = false
+    private var recordingStartTime = 0L
+    private val recordingHandler = Handler(Looper.getMainLooper())
+    private var recordTouchStartX = 0f
+    private var recordCancelRequested = false
+
+    private val recordAudioPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                startRecording()
+            } else {
+                toast("Audio recording permission required")
+            }
+        }
 
     private val pickAttachmentsLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -88,6 +132,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     companion object {
         private const val MAX_ATTACHMENT_COUNT = 5
         private const val MAX_ATTACHMENT_SIZE_BYTES = 15L * 1024L * 1024L
+        private const val MIN_RECORDING_MS = 800L
+        private const val SLIDE_TO_CANCEL_DP = 80f
 
         fun forChannel(id: String, name: String) = ChatMessagesFragment().apply {
             arguments = Bundle().apply {
@@ -130,41 +176,99 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         renderPendingAttachments()
         updateSendIcon()
 
+        if (messages.isEmpty()) {
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            binding.rvMessages.visibility = View.GONE
+        } else {
+            binding.skeletonContainer.visibility = View.GONE
+            binding.rvMessages.visibility = View.VISIBLE
+            renderMessages(scrollToBottom = true)
+        }
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
-        binding.headerContainer.setOnClickListener { openContactInfo() }
-        binding.btnSearch.setOnClickListener { toast("Search feature coming soon") }
-        binding.btnSend.setOnClickListener { handleSendOrMic() }
+        binding.titleGroup.setOnClickListener { openContactInfo() }
+        binding.btnSearch.setOnClickListener { 
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, ChatSearchFragment.newInstance(channelId, conversationId, chatTitle))
+                .addToBackStack(null)
+                .commit()
+        }
         
-        binding.btnAttach.setOnClickListener { 
-            toggleAttachmentMenu()
+        binding.btnSend.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    recordTouchStartX = event.rawX
+                    recordCancelRequested = false
+                    if (!canSendNow()) {
+                        checkRecordingPermission()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isRecording) {
+                        val deltaX = recordTouchStartX - event.rawX
+                        val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
+                        if (deltaX > threshold && !recordCancelRequested) {
+                            recordCancelRequested = true
+                            updateRecordingHintCancel()
+                        } else if (deltaX <= threshold && recordCancelRequested) {
+                            recordCancelRequested = false
+                            updateRecordingHintNormal()
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (isRecording) {
+                        stopRecording(send = !recordCancelRequested)
+                        recordCancelRequested = false
+                        true
+                    } else if (canSendNow()) {
+                        sendMessage()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    if (isRecording) {
+                        stopRecording(send = false)
+                        recordCancelRequested = false
+                        true
+                    } else {
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
+        
+        binding.btnAttach.setOnClickListener {
+            showAttachGrid()
         }
 
-        binding.menuAttachFile.setOnClickListener {
-            toggleAttachmentMenu()
-            pickAttachmentsLauncher.launch(arrayOf("*/*"))
-        }
-        binding.menuAttachMedia.setOnClickListener {
-            toggleAttachmentMenu()
-            pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
-        }
-        binding.menuAttachCamera.setOnClickListener {
-            toggleAttachmentMenu()
-            toast("Camera feature coming soon")
+        binding.btnInputCamera.setOnClickListener {
+            launchCamera()
         }
 
         binding.btnCancelReply.setOnClickListener {
             cancelReply()
         }
 
-        binding.btnEmoji.setOnClickListener {
-            toast("Emoji picker coming soon")
-        }
+        setupEmojiPicker()
+
+        binding.btnEmoji.setOnClickListener { toggleEmojiPanel() }
+        binding.btnCloseEmojiPanel.setOnClickListener { hideEmojiPanel() }
 
         binding.etMessage.addTextChangedListener(typingWatcher)
+        binding.etMessage.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus && isEmojiPanelVisible) hideEmojiPanel()
+        }
 
         applyKeyboardAndSystemInsets(view)
-
-        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
 
         viewLifecycleOwner.lifecycleScope.launch {
             if (myStaffId.isBlank()) {
@@ -180,10 +284,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
+    private var exoPlayer: ExoPlayer? = null
+    private var currentlyPlayingUrl: String? = null
+    private var currentlyPlayingStorageId: String? = null
+    private var audioProgressJob: Job? = null
+
     private fun setupAdapters() {
         chatAdapter = ChatMessageAdapter(
-            onMessageLongClick = { message: MessageData -> showMessageActions(message) },
-            onAttachmentClick = { url: String -> openAttachmentUrl(url) }
+            onMessageReactionClick = { message: MessageData, anchor: View -> showReactionPopup(message, anchor) },
+            onReactionPillClick = { message: MessageData, anchor: View -> showReactionRemovePopup(message, anchor) },
+            onAttachmentClick = { url: String, mime: String, storageId: String? ->
+                handleAttachmentClick(url, mime, storageId)
+            },
+            onReplyClick = { messageId -> scrollToMessage(messageId) }
         )
         binding.rvMessages.apply {
             layoutManager = LinearLayoutManager(requireContext()).apply {
@@ -198,6 +311,339 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.rvMentions.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = mentionAdapter
+        }
+    }
+
+    private fun scrollToMessage(messageId: String) {
+        val index = chatAdapter.currentList.indexOfFirst { it is ChatItem.Message && it.data.id == messageId }
+        if (index != -1) {
+            binding.rvMessages.smoothScrollToPosition(index)
+            highlightMessage(index)
+        } else {
+            toast("Message not found in current view")
+        }
+    }
+
+    private fun highlightMessage(index: Int) {
+        val checkRunnable = object : Runnable {
+            var attempts = 0
+            override fun run() {
+                val viewHolder = binding.rvMessages.findViewHolderForAdapterPosition(index)
+                if (viewHolder != null) {
+                    val viewToHighlight = viewHolder.itemView
+                    val colorFrom = android.graphics.Color.parseColor("#400B61CA")
+                    val colorTo = android.graphics.Color.TRANSPARENT
+                    val animator = ValueAnimator.ofObject(ArgbEvaluator(), colorFrom, colorTo)
+                    animator.duration = 2000
+                    animator.addUpdateListener { anim ->
+                        viewToHighlight.setBackgroundColor(anim.animatedValue as Int)
+                    }
+                    animator.start()
+                } else if (attempts < 20) {
+                    attempts++
+                    binding.rvMessages.postDelayed(this, 100)
+                }
+            }
+        }
+        binding.rvMessages.postDelayed(checkRunnable, 100)
+    }
+
+    private fun handleAttachmentClick(url: String, mime: String, storageId: String?) {
+        if (url.isBlank() && storageId.isNullOrBlank()) {
+            toast("Attachment unavailable")
+            return
+        }
+        if (url.isBlank()) {
+            resolveStorageUrl(storageId!!) { resolved ->
+                if (resolved.isNullOrBlank()) {
+                    toast("Unable to load attachment")
+                } else {
+                    routeAttachment(resolved, mime, storageId)
+                }
+            }
+        } else {
+            routeAttachment(url, mime, storageId)
+        }
+    }
+
+    private fun routeAttachment(url: String, mime: String, storageId: String? = null) {
+        when {
+            mime.startsWith("image/") -> showImagePreview(url)
+            mime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
+            else -> openAttachmentUrl(url)
+        }
+    }
+
+    private fun resolveStorageUrl(storageId: String, onResolved: (String?) -> Unit) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resolved = runCatching {
+                api.getStorageUrl(session.bearerToken, storageId)
+            }.getOrNull()?.url
+            onResolved(resolved)
+        }
+    }
+
+    private fun showImagePreview(url: String) {
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_preview, null)
+        val popup = PopupWindow(
+            view,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            true
+        )
+
+        view.findViewById<ImageView>(R.id.ivPreview).load(url) {
+            crossfade(true)
+        }
+
+        view.findViewById<View>(R.id.btnBack).setOnClickListener { popup.dismiss() }
+        view.findViewById<View>(R.id.btnPreviewClose).setOnClickListener { popup.dismiss() }
+
+        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+    }
+
+    private fun showImageSendPreview(images: List<PendingAttachment>) {
+        if (images.isEmpty()) return
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_send_preview, null)
+        val popup = PopupWindow(
+            view,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            true
+        ).apply {
+            isFocusable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0F0F1A")))
+        }
+
+        val ivMain = view.findViewById<ImageView>(R.id.ivPreviewMain)
+        val stripContainer = view.findViewById<LinearLayout>(R.id.thumbStripContainer)
+        val etCaption = view.findViewById<android.widget.EditText>(R.id.etPreviewCaption)
+        val btnSend = view.findViewById<View>(R.id.btnPreviewSend)
+        val btnBack = view.findViewById<View>(R.id.btnPreviewBack)
+
+        var activeIndex = 0
+        fun showActive() {
+            val active = images[activeIndex]
+            ivMain.load(active.uri) { crossfade(true) }
+            for (i in 0 until stripContainer.childCount) {
+                val v = stripContainer.getChildAt(i)
+                v.alpha = if (i == activeIndex) 1f else 0.55f
+                v.setBackgroundResource(
+                    if (i == activeIndex) R.drawable.bg_thumb_strip_selected
+                    else 0
+                )
+            }
+        }
+
+        images.forEachIndexed { index, attachment ->
+            val thumb = ImageView(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(dpToPx(52), dpToPx(52)).apply {
+                    marginEnd = dpToPx(6)
+                }
+                setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                load(attachment.uri) {
+                    transformations(coil.transform.RoundedCornersTransformation(dpToPx(8).toFloat()))
+                }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    activeIndex = index
+                    showActive()
+                }
+            }
+            stripContainer.addView(thumb)
+        }
+        showActive()
+
+        listOf(R.id.btnPreviewSave, R.id.btnPreviewCrop, R.id.btnPreviewDraw, R.id.btnPreviewText).forEach { id ->
+            view.findViewById<View>(id)?.setOnClickListener { toast("Coming soon") }
+        }
+
+        btnBack.setOnClickListener { popup.dismiss() }
+
+        btnSend.setOnClickListener {
+            val caption = etCaption.text?.toString()?.trim().orEmpty()
+            popup.dismiss()
+            pendingAttachments.addAll(images)
+            if (caption.isNotEmpty()) {
+                binding.etMessage.setText(caption)
+            }
+            renderPendingAttachments()
+            updateSendIcon()
+            sendMessage()
+        }
+
+        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+    }
+
+    private fun playVoiceMessage(url: String, mime: String = "audio/mp4", storageId: String? = null) {
+        if (currentlyPlayingUrl == url && exoPlayer?.isPlaying == true) {
+            exoPlayer?.pause()
+            stopAudioProgressPolling()
+            chatAdapter.setCurrentlyPlayingStorageId(null)
+            return
+        }
+
+        if (currentlyPlayingUrl == url && exoPlayer != null) {
+            exoPlayer?.play()
+            chatAdapter.setCurrentlyPlayingStorageId(storageId)
+            startAudioProgressPolling(storageId)
+            return
+        }
+
+        exoPlayer?.release()
+        stopAudioProgressPolling()
+        val mimeHint = resolveAudioMime(url, mime)
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .setMimeType(mimeHint)
+            .build()
+
+        exoPlayer = ExoPlayer.Builder(requireContext()).build().apply {
+            setMediaItem(mediaItem)
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        currentlyPlayingUrl = null
+                        currentlyPlayingStorageId = null
+                        stopAudioProgressPolling()
+                        if (!storageId.isNullOrBlank()) {
+                            chatAdapter.setAudioPlaybackProgress(storageId, 1f, "Played")
+                        }
+                        chatAdapter.setCurrentlyPlayingStorageId(null)
+                    } else if (playbackState == Player.STATE_READY && !storageId.isNullOrBlank()) {
+                        val totalMs = exoPlayer?.duration ?: 0L
+                        if (totalMs > 0) {
+                            chatAdapter.cacheAudioDuration(storageId, formatAudioMillis(totalMs))
+                        }
+                    }
+                }
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (isPlaying) {
+                        chatAdapter.setCurrentlyPlayingStorageId(storageId)
+                        startAudioProgressPolling(storageId)
+                    } else {
+                        stopAudioProgressPolling()
+                    }
+                }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    toast("Error playing audio: ${error.message}")
+                    currentlyPlayingUrl = null
+                    currentlyPlayingStorageId = null
+                    stopAudioProgressPolling()
+                    chatAdapter.setCurrentlyPlayingStorageId(null)
+                }
+            })
+            prepare()
+            playWhenReady = true
+        }
+        currentlyPlayingUrl = url
+        currentlyPlayingStorageId = storageId
+        chatAdapter.setCurrentlyPlayingStorageId(storageId)
+    }
+
+    private fun startAudioProgressPolling(storageId: String?) {
+        audioProgressJob?.cancel()
+        if (storageId.isNullOrBlank()) return
+        audioProgressJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (true) {
+                val player = exoPlayer ?: break
+                val duration = player.duration.takeIf { it > 0L } ?: 0L
+                val position = player.currentPosition.coerceAtLeast(0L)
+                val progress = if (duration > 0L) {
+                    (position.toFloat() / duration).coerceIn(0f, 1f)
+                } else 0f
+                val label = if (duration > 0L) {
+                    "${formatAudioMillis(position)} / ${formatAudioMillis(duration)}"
+                } else {
+                    formatAudioMillis(position)
+                }
+                chatAdapter.setAudioPlaybackProgress(storageId, progress, label)
+                delay(60L)
+            }
+        }
+    }
+
+    private fun stopAudioProgressPolling() {
+        audioProgressJob?.cancel()
+        audioProgressJob = null
+    }
+
+    private fun formatAudioMillis(millis: Long): String {
+        val totalSec = (millis / 1000).coerceAtLeast(0)
+        val m = totalSec / 60
+        val s = totalSec % 60
+        return String.format(Locale.US, "%d:%02d", m, s)
+    }
+
+    private fun probeAudioDurations(messageList: List<MessageData>) {
+        val targets = messageList
+            .flatMap { it.attachments.orEmpty() }
+            .mapNotNull { att ->
+                val sid = att.storageId ?: return@mapNotNull null
+                if (audioDurationLocalCache.containsKey(sid)) return@mapNotNull null
+                val mime = att.fileType.orEmpty().lowercase()
+                val name = att.fileName.orEmpty().lowercase()
+                val isAudio = mime.startsWith("audio/") ||
+                    name.endsWith(".m4a") || name.endsWith(".mp3") ||
+                    name.endsWith(".wav") || name.endsWith(".aac") ||
+                    name.endsWith(".caf") || name.startsWith("voice-")
+                if (isAudio) Triple(sid, att.url, mime) else null
+            }
+        if (targets.isEmpty()) return
+
+        val semaphore = kotlinx.coroutines.sync.Semaphore(permits = 3)
+        viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            coroutineScope {
+                targets.forEach { (sid, urlOrNull, _) ->
+                    launch {
+                        semaphore.withPermit {
+                            val url = urlOrNull?.takeIf { it.isNotBlank() } ?: runCatching {
+                                api.getStorageUrl(session.bearerToken, sid).url
+                            }.getOrNull()
+                            if (url.isNullOrBlank()) return@withPermit
+                            val durationMs = probeMediaDuration(url) ?: return@withPermit
+                            val label = formatAudioMillis(durationMs)
+                            audioDurationLocalCache[sid] = label
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                if (_binding != null) {
+                                    chatAdapter.cacheAudioDuration(sid, label)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun probeMediaDuration(url: String): Long? {
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(url, hashMapOf())
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+        } catch (_: Throwable) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun resolveAudioMime(url: String, declared: String): String {
+        val lower = url.lowercase(Locale.getDefault())
+        return when {
+            lower.endsWith(".m4a") || lower.endsWith(".aac") ||
+                declared.equals("audio/aac", ignoreCase = true) ||
+                declared.equals("audio/mp4", ignoreCase = true) ||
+                declared.equals("audio/x-m4a", ignoreCase = true) ||
+                declared.equals("audio/mpeg", ignoreCase = true) -> "audio/mp4"
+            lower.endsWith(".mp3") -> "audio/mpeg"
+            lower.endsWith(".ogg") || lower.endsWith(".opus") -> "audio/ogg"
+            lower.endsWith(".webm") -> "audio/webm"
+            lower.endsWith(".wav") -> "audio/wav"
+            declared.startsWith("audio/", ignoreCase = true) -> declared
+            else -> "audio/mp4"
         }
     }
 
@@ -226,10 +672,167 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.replyPreviewCard.visibility = View.GONE
     }
 
-    private fun showMessageActions(message: MessageData) {
-        val actions = ChatMessageActionsFragment.newInstance(message.id ?: "", message.body ?: "")
-        actions.setCallback(this)
-        actions.show(childFragmentManager, "MessageActions")
+    private fun setupEmojiPicker() {
+        val emojiPicker = EmojiPickerView(requireContext()).apply {
+            emojiGridColumns = 9
+            setOnEmojiPickedListener { emoji ->
+                val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
+                binding.etMessage.text?.insert(cursorPos, emoji.emoji)
+                binding.etMessage.setSelection(cursorPos + emoji.emoji.length)
+            }
+        }
+        binding.emojiPickerContainer.addView(emojiPicker)
+    }
+
+    private fun toggleEmojiPanel() {
+        if (isEmojiPanelVisible) hideEmojiPanel() else showEmojiPanel()
+    }
+
+    private fun showEmojiPanel() {
+        isEmojiPanelVisible = true
+        binding.emojiPanel.visibility = View.VISIBLE
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
+    }
+
+    private fun hideEmojiPanel() {
+        isEmojiPanelVisible = false
+        binding.emojiPanel.visibility = View.GONE
+    }
+
+    private fun showReactionPopup(message: MessageData, anchor: View) {
+        val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.reaction_popup, null)
+        val popup = PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 10f
+            isOutsideTouchable = true
+        }
+
+        popupView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_OUTSIDE) {
+                popup.dismiss()
+                true
+            } else false
+        }
+
+        val emojis = listOf("❤️", "👍", "😂", "😮", "😢", "🙏")
+        val emojiIds = listOf(
+            R.id.reactEmoji1, R.id.reactEmoji2, R.id.reactEmoji3,
+            R.id.reactEmoji4, R.id.reactEmoji5, R.id.reactEmoji6
+        )
+
+        emojis.forEachIndexed { index, emoji ->
+            popupView.findViewById<TextView>(emojiIds[index]).setOnClickListener {
+                onReact(message.id ?: "", emoji)
+                popup.dismiss()
+            }
+        }
+
+        popupView.findViewById<TextView>(R.id.btnMoreReactions).setOnClickListener {
+            popup.dismiss()
+            val actions = ChatMessageActionsFragment.newInstance(message.id ?: "", message.body ?: "")
+            actions.setCallback(this)
+            actions.show(childFragmentManager, "MessageActions")
+        }
+
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+
+        anchor.post {
+            if (!isAdded || anchor.isAttachedToWindow.not()) return@post
+            val location = IntArray(2)
+            anchor.getLocationOnScreen(location)
+            val popupX = location[0] + (anchor.width - popupView.measuredWidth) / 2
+            val popupY = location[1] - popupView.measuredHeight - dpToPx(8)
+            popup.showAtLocation(anchor, Gravity.NO_GRAVITY, popupX.coerceAtLeast(dpToPx(8)), popupY)
+        }
+    }
+
+    private fun showReactionRemovePopup(message: MessageData, anchor: View) {
+        val reactions = message.reactions?.filter { (it.count ?: 0) > 0 }
+        if (reactions.isNullOrEmpty()) return
+
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_reaction_details, null)
+        val container = view.findViewById<LinearLayout>(R.id.reactionDetailsContainer)
+        val popup = PopupWindow(
+            view,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 12f
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+
+        reactions.forEach { reaction ->
+            val emoji = reaction.emoji.orEmpty()
+            val staffIds = reaction.staffIds.orEmpty()
+            val mine = reaction.mine == true || (myStaffId.isNotBlank() && staffIds.contains(myStaffId))
+            val others = staffIds.filter { it != myStaffId }
+            val count = reaction.count ?: staffIds.size
+
+            val row = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_reaction_detail_row, container, false)
+            row.findViewById<TextView>(R.id.tvReactionEmoji).text = emoji
+
+            val nameText = buildString {
+                if (mine) append("You")
+                if (others.isNotEmpty()) {
+                    if (isNotEmpty()) append(" and ")
+                    val displayNames = others.map { staffNameCache[it] ?: "Member" }
+                    append(displayNames.joinToString(", "))
+                }
+                if (isEmpty()) append("$count reaction" + if (count > 1) "s" else "")
+            }
+            row.findViewById<TextView>(R.id.tvReactionName).text = nameText
+            row.findViewById<TextView>(R.id.tvReactionHint).text =
+                if (mine) "Tap to remove" else "Reacted"
+            row.setOnClickListener {
+                if (mine) {
+                    onReact(message.id ?: "", emoji)
+                    popup.dismiss()
+                }
+            }
+            container.addView(row)
+
+            // Lazy-load staff names for ids we don't already have
+            others.filter { !staffNameCache.containsKey(it) }.forEach { sid ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching { api.getStaffDetail(session.bearerToken, sid).staff }
+                        .getOrNull()?.name?.let { name ->
+                            staffNameCache[sid] = name
+                            row.findViewById<TextView>(R.id.tvReactionName).text = buildString {
+                                if (mine) append("You")
+                                val updated = others.map { staffNameCache[it] ?: "Member" }
+                                if (updated.isNotEmpty()) {
+                                    if (isNotEmpty()) append(" and ")
+                                    append(updated.joinToString(", "))
+                                }
+                            }
+                        }
+                }
+            }
+        }
+
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        anchor.post {
+            if (!isAdded || anchor.isAttachedToWindow.not()) return@post
+            val location = IntArray(2)
+            anchor.getLocationOnScreen(location)
+            val popupX = location[0] + (anchor.width - view.measuredWidth) / 2
+            val popupY = location[1] - view.measuredHeight - dpToPx(8)
+            popup.showAtLocation(anchor, Gravity.NO_GRAVITY, popupX.coerceAtLeast(dpToPx(8)), popupY)
+        }
     }
 
     override fun onReply(messageId: String) {
@@ -240,13 +843,86 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     override fun onReact(messageId: String, emoji: String) {
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index == -1) return
+        
+        val message = messages[index]
+        
+        // Find existing reaction by this user
+        val existingReaction = message.reactions?.find { 
+            it.mine == true || (it.staffIds != null && myStaffId.isNotBlank() && it.staffIds.contains(myStaffId)) 
+        }
+
+        val newReactions = message.reactions?.toMutableList() ?: mutableListOf()
+        var added = false
+        var removed = false
+        var removedEmoji = ""
+
+        if (existingReaction != null) {
+            if (existingReaction.emoji == emoji) {
+                // Remove existing
+                val existingIndex = newReactions.indexOf(existingReaction)
+                val updatedReaction = existingReaction.copy(count = (existingReaction.count ?: 1) - 1, mine = false)
+                if (updatedReaction.count!! <= 0) {
+                    newReactions.removeAt(existingIndex)
+                } else {
+                    newReactions[existingIndex] = updatedReaction
+                }
+                removed = true
+                removedEmoji = emoji
+            } else {
+                // Replace: remove old
+                val existingIndex = newReactions.indexOf(existingReaction)
+                val updatedOldReaction = existingReaction.copy(count = (existingReaction.count ?: 1) - 1, mine = false)
+                if (updatedOldReaction.count!! <= 0) {
+                    newReactions.removeAt(existingIndex)
+                } else {
+                    newReactions[existingIndex] = updatedOldReaction
+                }
+                removed = true
+                removedEmoji = existingReaction.emoji ?: ""
+                
+                // Replace: add new
+                val newTargetReaction = newReactions.find { it.emoji == emoji }
+                if (newTargetReaction != null) {
+                    val targetIndex = newReactions.indexOf(newTargetReaction)
+                    newReactions[targetIndex] = newTargetReaction.copy(count = (newTargetReaction.count ?: 0) + 1, mine = true)
+                } else {
+                    newReactions.add(com.manjugroups.m_connect.network.ReactionData(emoji = emoji, count = 1, mine = true, staffIds = listOf(myStaffId)))
+                }
+                added = true
+            }
+        } else {
+            // Add new
+            val newTargetReaction = newReactions.find { it.emoji == emoji }
+            if (newTargetReaction != null) {
+                val targetIndex = newReactions.indexOf(newTargetReaction)
+                newReactions[targetIndex] = newTargetReaction.copy(count = (newTargetReaction.count ?: 0) + 1, mine = true)
+            } else {
+                newReactions.add(com.manjugroups.m_connect.network.ReactionData(emoji = emoji, count = 1, mine = true, staffIds = listOf(myStaffId)))
+            }
+            added = true
+        }
+
+        // Apply optimistic UI update locally
+        val updatedMessage = message.copy(reactions = newReactions)
+        messages[index] = updatedMessage
+        renderMessages(scrollToBottom = false)
+
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
-                api.addReaction(session.bearerToken, ReactionRequest(messageId, emoji))
-            }.onSuccess {
-                loadInitialMessages(scrollToBottom = false)
+                if (removed && !added) {
+                    api.removeReaction(session.bearerToken, ReactionRequest(messageId, removedEmoji))
+                } else if (removed && added) {
+                    api.removeReaction(session.bearerToken, ReactionRequest(messageId, removedEmoji))
+                    api.addReaction(session.bearerToken, ReactionRequest(messageId, emoji))
+                } else if (added && !removed) {
+                    api.addReaction(session.bearerToken, ReactionRequest(messageId, emoji))
+                }
             }.onFailure {
-                toast("Unable to add reaction")
+                toast("Unable to update reaction")
+                // Revert on failure (simplified to reload)
+                loadInitialMessages(scrollToBottom = false)
             }
         }
     }
@@ -307,19 +983,158 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         pollJob = null
         typingDebounceJob?.cancel()
         typingDebounceJob = null
-        (activity as? MainActivity)?.setTabBarVisible(true)
         super.onPause()
     }
 
-    private fun toggleAttachmentMenu() {
-        isAttachmentMenuOpen = !isAttachmentMenuOpen
-        binding.attachmentMenu.visibility = if (isAttachmentMenuOpen) View.VISIBLE else View.GONE
-        
-        // Rotate the plus icon
-        binding.btnAttach.animate()
-            .rotation(if (isAttachmentMenuOpen) 45f else 0f)
-            .setDuration(200)
-            .start()
+    private fun showAttachGrid() {
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_attach_grid, null)
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        dialog.setContentView(content)
+        dialog.window?.setDimAmount(0.25f)
+        dialog.setOnShowListener {
+            val sheet = dialog.findViewById<View>(
+                com.google.android.material.R.id.design_bottom_sheet
+            )
+            sheet?.setBackgroundResource(android.R.color.transparent)
+        }
+
+        fun tile(id: Int, onClick: () -> Unit) {
+            content.findViewById<View>(id).setOnClickListener {
+                dialog.dismiss()
+                onClick()
+            }
+        }
+        tile(R.id.tileAttachImage) { pickAttachmentsLauncher.launch(arrayOf("image/*")) }
+        tile(R.id.tileAttachVideo) { pickAttachmentsLauncher.launch(arrayOf("video/*")) }
+        tile(R.id.tileAttachAudio) { pickAttachmentsLauncher.launch(arrayOf("audio/*")) }
+        tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
+        tile(R.id.tileAttachDocument) { pickAttachmentsLauncher.launch(arrayOf("*/*")) }
+        tile(R.id.tileAttachPoll) { toast("Polls coming soon") }
+        tile(R.id.tileAttachEvent) { toast("Events coming soon") }
+        tile(R.id.tileAttachContact) { launchContactPicker() }
+        tile(R.id.tileAttachCamera) { launchCamera() }
+
+        dialog.show()
+    }
+
+    private val cameraImageUri: android.net.Uri? get() = pendingCameraUri
+    private var pendingCameraUri: android.net.Uri? = null
+
+    private val takePictureLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { saved ->
+            val uri = pendingCameraUri
+            pendingCameraUri = null
+            if (saved == true && uri != null) {
+                val resolver = requireContext().contentResolver
+                val mime = resolver.getType(uri) ?: "image/jpeg"
+                val size = runCatching {
+                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                }.getOrNull() ?: 0L
+                val name = "Photo-${System.currentTimeMillis()}.jpg"
+                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                showImageSendPreview(listOf(pending))
+            }
+        }
+
+    private val cameraPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) actuallyLaunchCamera() else toast("Camera permission required")
+        }
+
+    private fun launchCamera() {
+        val permission = android.Manifest.permission.CAMERA
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), permission)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            actuallyLaunchCamera()
+        } else {
+            cameraPermissionLauncher.launch(permission)
+        }
+    }
+
+    private fun actuallyLaunchCamera() {
+        val photoDir = File(requireContext().cacheDir, "chat_photos").apply { mkdirs() }
+        val photoFile = File(photoDir, "photo_${System.currentTimeMillis()}.jpg")
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            photoFile
+        )
+        pendingCameraUri = uri
+        runCatching { takePictureLauncher.launch(uri) }
+            .onFailure { toast("Unable to open camera") }
+    }
+
+    private val pickContactLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode != android.app.Activity.RESULT_OK) return@registerForActivityResult
+            val uri = result.data?.data ?: return@registerForActivityResult
+            handlePickedContact(uri)
+        }
+
+    private fun launchContactPicker() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_PICK).apply {
+            type = android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+        }
+        runCatching { pickContactLauncher.launch(intent) }
+            .onFailure { toast("No contacts app available") }
+    }
+
+    private fun handlePickedContact(uri: android.net.Uri) {
+        if (!isAdded) return
+        val projection = arrayOf(
+            android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER,
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE,
+            android.provider.ContactsContract.CommonDataKinds.Phone.LABEL
+        )
+        val resolver = requireContext().contentResolver
+        val (name, number, label) = runCatching {
+            resolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val n = cursor.getString(0).orEmpty()
+                    val num = cursor.getString(1).orEmpty()
+                    val type = cursor.getInt(2)
+                    val custom = cursor.getString(3)
+                    val typeLabel = android.provider.ContactsContract.CommonDataKinds.Phone
+                        .getTypeLabel(resources, type, custom).toString()
+                    Triple(n, num, typeLabel)
+                } else null
+            }
+        }.getOrNull() ?: return.also { toast("Unable to read contact") }
+
+        if (number.isBlank()) {
+            toast("This contact has no phone number")
+            return
+        }
+
+        showContactConfirmDialog(name.ifBlank { "Contact" }, number, label)
+    }
+
+    private fun showContactConfirmDialog(name: String, number: String, label: String) {
+        val message = buildString {
+            append("Send this contact?\n\n")
+            append("• ").append(name).append('\n')
+            append("• ").append(label).append(": ").append(number)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Share contact")
+            .setMessage(message)
+            .setPositiveButton("Send") { _, _ -> sendContactMessage(name, number, label) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun sendContactMessage(name: String, number: String, label: String) {
+        val text = buildString {
+            append("📇 Contact\n")
+            append(name).append('\n')
+            append(label).append(": ").append(number)
+        }
+        val existing = binding.etMessage.text?.toString().orEmpty()
+        val composed = if (existing.isBlank()) text else existing.trim() + "\n\n" + text
+        binding.etMessage.setText(composed)
+        binding.etMessage.setSelection(composed.length)
+        sendMessage()
     }
 
     private fun startPolling() {
@@ -328,12 +1143,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             while (true) {
                 pollForMessages()
                 pollTyping()
+                presencePollCounter++
+                if (presencePollCounter % 6 == 0) {
+                    refreshPresence()
+                }
                 delay(2_500)
             }
         }
     }
 
     private suspend fun refreshChatMetadata() {
+        var photoUrl: String? = null
+        var initials = "U"
         runCatching {
             when {
                 channelId != null -> {
@@ -348,26 +1169,102 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     } else {
                         channelType
                     }
+                    initials = chatTitle.take(1).uppercase()
                 }
 
                 conversationId != null -> {
                     val conversation =
                         api.getConversation(session.bearerToken, conversationId!!).conversation
+
+                    val participant = conversation?.participants
+                        ?.firstOrNull { it.id != null && it.id != myStaffId }
+                    otherStaffId = participant?.id
+
                     if (conversation?.displayName?.isNotBlank() == true) {
                         chatTitle = conversation.displayName
+                    } else if (participant?.name?.isNotBlank() == true) {
+                        chatTitle = participant.name
                     }
-                    otherStaffId = conversation?.participants
-                        ?.firstOrNull { it.id != null && it.id != myStaffId }
-                        ?.id
-                    val seenStamp = conversation?.lastMessageAt
-                    chatSubtitle = formatLastSeen(seenStamp)
+
+                    initials = chatTitle.split(" ")
+                        .filter { it.isNotBlank() }
+                        .take(2)
+                        .joinToString("") { it.first().uppercase() }.ifBlank { "U" }
+
+                    chatSubtitle = buildPresenceSubtitle(
+                        staffId = otherStaffId,
+                        fallbackStamp = conversation?.lastMessageAt
+                    )
+
+                    val staffId = otherStaffId
+                    if (staffId != null) {
+                        runCatching {
+                            val staffResp = api.getStaffDetail(session.bearerToken, staffId)
+                            photoUrl = staffResp.staff?.photo
+                        }
+                    }
                 }
             }
         }
 
         if (_binding != null) {
+            binding.tvChatTitle.visibility = View.VISIBLE
+            binding.tvChatSubtitle.visibility = View.VISIBLE
             binding.tvChatTitle.text = chatTitle
-            binding.tvChatSubtitle.text = chatSubtitle
+            applySubtitleState()
+
+            binding.tvHeaderAvatarInitials.text = initials
+            if (photoUrl != null) {
+                binding.ivHeaderAvatar.load(photoUrl) {
+                    crossfade(true)
+                }
+                binding.tvHeaderAvatarInitials.visibility = View.GONE
+            } else {
+                binding.ivHeaderAvatar.setImageDrawable(null)
+                binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private suspend fun buildPresenceSubtitle(
+        staffId: String?,
+        fallbackStamp: Long?
+    ): String {
+        if (staffId.isNullOrBlank()) return formatLastSeen(fallbackStamp)
+        return runCatching {
+            val presence = api.getPresence(session.bearerToken, staffId = staffId).presence
+            if (presence?.status == "online") {
+                "Online"
+            } else {
+                formatLastSeen(presence?.lastSeenAt ?: fallbackStamp)
+            }
+        }.getOrDefault(formatLastSeen(fallbackStamp))
+    }
+
+    private suspend fun refreshPresence() {
+        val staffId = otherStaffId ?: return
+        if (channelId != null) return
+        val updated = buildPresenceSubtitle(staffId, fallbackStamp = null)
+        if (chatSubtitle != updated) {
+            chatSubtitle = updated
+            applySubtitleState()
+        }
+    }
+
+    private fun applySubtitleState() {
+        if (_binding == null) return
+        when {
+            isRecording -> {
+                // recordingTimerTask drives the text + color directly
+            }
+            !currentTypingText.isNullOrBlank() -> {
+                binding.tvChatSubtitle.text = currentTypingText
+                binding.tvChatSubtitle.setTextColor(subtitleColorTyping)
+            }
+            else -> {
+                binding.tvChatSubtitle.text = chatSubtitle
+                binding.tvChatSubtitle.setTextColor(subtitleColorMuted)
+            }
         }
     }
 
@@ -432,9 +1329,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
 
         if (accepted.isEmpty()) return
-        pendingAttachments += accepted
-        renderPendingAttachments()
-        updateSendIcon()
+
+        val allImages = accepted.all { it.fileType.startsWith("image/") }
+        if (allImages) {
+            showImageSendPreview(accepted)
+        } else {
+            pendingAttachments += accepted
+            renderPendingAttachments()
+            updateSendIcon()
+        }
     }
 
     private fun readAttachmentMeta(uri: Uri): PendingAttachment? {
@@ -533,13 +1436,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 })
             })
 
-            addView(TextView(requireContext()).apply {
-                text = "x"
-                gravity = android.view.Gravity.CENTER
-                minWidth = dpToPx(20)
-                setTextColor(resolveColor(R.attr.colorForegroundMuted))
-                textSize = 13f
-                typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_bold)
+            addView(ImageView(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(dpToPx(24), dpToPx(24))
+                setImageResource(R.drawable.ic_sheet_close)
+                setColorFilter(resolveColor(R.attr.colorForegroundPrimary))
+                setBackgroundResource(R.drawable.bg_home_new_action_circle)
+                setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4))
+                isClickable = true
+                isFocusable = true
+                contentDescription = "Remove attachment"
                 setOnClickListener {
                     pendingAttachments.remove(attachment)
                     renderPendingAttachments()
@@ -565,13 +1470,108 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
             }
         }.onSuccess { response ->
+            val mainMessages = (response.page ?: response.messages ?: emptyList()).reversed()
+
+            // Snapshot original bodies from main feed
+            mainMessages.forEach { msg ->
+                val id = msg.id ?: return@forEach
+                if (msg.isDeleted != true && !originalBodyCache.containsKey(id)) {
+                    originalBodyCache[id] = msg
+                }
+            }
+
+            // First-paint: render the main feed immediately
+            val byId = linkedMapOf<String, MessageData>()
+            mainMessages.forEach { msg -> msg.id?.let { byId[it] = msg } }
+            val mergedInitial = byId.values
+                .sortedBy { it.creationTime ?: 0.0 }
+                .toList()
             messages.clear()
-            messages.addAll((response.page ?: response.messages ?: emptyList()).reversed())
+            messages.addAll(mergedInitial)
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
+
+            val initialParentMap = mutableMapOf<String, MessageData>()
+            mergedInitial.filter { it.isDeleted == true }.forEach { msg ->
+                msg.id?.let { initialParentMap[it] = originalBodyCache[it] ?: msg }
+            }
+            chatAdapter.setParentMessageCache(initialParentMap)
             renderMessages(scrollToBottom = scrollToBottom)
+
+            // Background: fetch thread replies + missing parents + audio durations,
+            // then re-render with the enriched list.
+            viewLifecycleOwner.lifecycleScope.launch {
+                enrichMessages(mainMessages, byId)
+            }
         }.onFailure {
             renderMessages(scrollToBottom = false)
             toast("Unable to load messages")
+        }
+    }
+
+    private suspend fun enrichMessages(
+        mainMessages: List<MessageData>,
+        byId: MutableMap<String, MessageData>
+    ) {
+        val candidateParentIds = mainMessages.mapNotNull { it.id }
+        if (candidateParentIds.isEmpty()) return
+
+        val replyMessages = coroutineScope {
+            candidateParentIds.map { parentId ->
+                async {
+                    runCatching {
+                        api.getMessageReplies(session.bearerToken, parentId)
+                    }.getOrNull()
+                }
+            }.awaitAll().flatMap { resp -> resp?.page ?: resp?.messages ?: emptyList() }
+        }
+
+        if (_binding == null) return
+
+        replyMessages.forEach { msg ->
+            val id = msg.id ?: return@forEach
+            if (msg.isDeleted != true && !originalBodyCache.containsKey(id)) {
+                originalBodyCache[id] = msg
+            }
+            if (!byId.containsKey(id)) byId[id] = msg
+        }
+        val merged = byId.values
+            .sortedBy { it.creationTime ?: 0.0 }
+            .toList()
+        messages.clear()
+        messages.addAll(merged)
+        latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
+        renderMessages(scrollToBottom = false)
+
+        val missingParentIds = merged
+            .mapNotNull { it.parentMessageId }
+            .filter { it.isNotBlank() && !byId.containsKey(it) }
+            .distinct()
+        val parentMap = mutableMapOf<String, MessageData>()
+        merged.filter { it.isDeleted == true }.forEach { msg ->
+            msg.id?.let { parentMap[it] = originalBodyCache[it] ?: msg }
+        }
+
+        if (missingParentIds.isNotEmpty()) {
+            val parents = coroutineScope {
+                missingParentIds.map { pid ->
+                    async {
+                        runCatching {
+                            api.getMessage(session.bearerToken, pid)
+                        }.getOrNull()?.message
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            parents.forEach { p ->
+                val pid = p.id ?: return@forEach
+                if (p.isDeleted != true && !originalBodyCache.containsKey(pid)) {
+                    originalBodyCache[pid] = p
+                }
+                parentMap[pid] = originalBodyCache[pid] ?: p
+            }
+        }
+        if (_binding != null) {
+            chatAdapter.setParentMessageCache(parentMap)
+            probeAudioDurations(merged)
         }
     }
 
@@ -622,25 +1622,100 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             )
         }.onSuccess { response ->
             if (_binding == null) return@onSuccess
-            val names = response.typing
+            val typingEntries = response.typing
+                .filter { it.staffId != null && it.staffId != myStaffId }
+
+            val names = typingEntries
                 .mapNotNull { it.staffName?.trim() }
                 .filter { it.isNotEmpty() }
                 .distinct()
 
-            // We hide indicator for now per reference design, or we can overlay it
+            currentTypingText = if (names.isEmpty()) {
+                null
+            } else {
+                val isVoiceTyping = typingEntries.any { entry ->
+                    val expires = entry.expiresAt ?: 0L
+                    expires > 0L && (expires - System.currentTimeMillis()) > 8_000L
+                }
+                val verb = if (isVoiceTyping) "recording voice" else "typing"
+                when (names.size) {
+                    1 -> "${names[0]} is $verb..."
+                    2 -> "${names[0]} and ${names[1]} are $verb..."
+                    else -> "${names[0]} and ${names.size - 1} others are $verb..."
+                }
+            }
+            applySubtitleState()
+        }
+    }
+
+    private val recordingTimerTask = object : Runnable {
+        override fun run() {
+            if (isRecording && _binding != null) {
+                val elapsed = System.currentTimeMillis() - recordingStartTime
+                val seconds = (elapsed / 1000) % 60
+                val minutes = (elapsed / (1000 * 60)) % 60
+                val timeStr = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+                binding.tvChatSubtitle.text = "Recording voice... $timeStr"
+                binding.tvChatSubtitle.setTextColor(subtitleColorRecording)
+                recordingHandler.postDelayed(this, 1000)
+            }
+        }
+    }
+
+    private fun updateRecordingUI() {
+        if (_binding == null) return
+        if (isRecording) {
+            binding.etMessage.isEnabled = false
+            updateRecordingHintNormal()
+            binding.ivSendIcon.setImageResource(R.drawable.ic_send)
+            recordingHandler.post(recordingTimerTask)
+            broadcastRecordingTyping()
+        } else {
+            recordingHandler.removeCallbacks(recordingTimerTask)
+            binding.etMessage.isEnabled = true
+            binding.etMessage.hint = "Message ..."
+            applySubtitleState()
+            updateSendIcon()
+        }
+    }
+
+    private fun updateRecordingHintNormal() {
+        if (_binding == null) return
+        binding.etMessage.hint = "◀  Slide to cancel"
+    }
+
+    private fun updateRecordingHintCancel() {
+        if (_binding == null) return
+        binding.etMessage.hint = "Release to cancel"
+    }
+
+    private fun broadcastRecordingTyping() {
+        val channel = channelId
+        val conversation = conversationId
+        if (channel == null && conversation == null) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.setTyping(
+                    token = session.bearerToken,
+                    body = TypingRequest(channelId = channel, conversationId = conversation)
+                )
+            }
         }
     }
 
     private fun renderMessages(scrollToBottom: Boolean) {
-        if (!hasLoadedMessages) {
-            hasLoadedMessages = true
+        if (_binding == null) return
+        if (binding.rvMessages.visibility != View.VISIBLE) {
+            binding.rvMessages.visibility = View.VISIBLE
+        }
+        if (binding.skeletonContainer.visibility != View.GONE) {
             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         }
+        hasLoadedMessages = true
         val chatItems = mutableListOf<ChatItem>()
         var lastDayKey: String? = null
 
         messages
-            .filterNot { it.isDeleted == true }
             .forEach { message ->
                 val createdMillis = message.creationTime?.toLong() ?: 0L
                 val dayKey = dayKey(createdMillis)
@@ -712,8 +1787,83 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         if (canSendNow()) {
             sendMessage()
         } else {
-            toast("Recording coming soon")
+            if (isRecording) {
+                stopRecording(send = true)
+            } else {
+                checkRecordingPermission()
+            }
         }
+    }
+
+    private fun checkRecordingPermission() {
+        val permission = android.Manifest.permission.RECORD_AUDIO
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startRecording()
+        } else {
+            recordAudioPermissionLauncher.launch(permission)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startRecording() {
+        runCatching {
+            audioFile = File(requireContext().cacheDir, "voice_${System.currentTimeMillis()}.m4a")
+            mediaRecorder = MediaRecorder(requireContext()).apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(audioFile?.absolutePath)
+                prepare()
+                start()
+            }
+            isRecording = true
+            recordingStartTime = System.currentTimeMillis()
+            updateRecordingUI()
+        }.onFailure {
+            toast("Failed to start recording")
+            isRecording = false
+            updateRecordingUI()
+        }
+    }
+
+    private fun stopRecording(send: Boolean) {
+        if (!isRecording) return
+        val elapsed = System.currentTimeMillis() - recordingStartTime
+        val stopped = runCatching {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+        }.isSuccess
+        mediaRecorder = null
+        isRecording = false
+
+        val file = audioFile
+        if (!send || !stopped || file == null || !file.exists()) {
+            file?.delete()
+            audioFile = null
+            updateRecordingUI()
+            return
+        }
+        if (elapsed < MIN_RECORDING_MS) {
+            file.delete()
+            audioFile = null
+            toast("Hold to record voice message")
+            updateRecordingUI()
+            return
+        }
+
+        val uri = Uri.fromFile(file)
+        val pending = PendingAttachment(
+            uri = uri,
+            fileName = "Voice-${System.currentTimeMillis()}.m4a",
+            fileType = "audio/mp4",
+            fileSize = file.length()
+        )
+        pendingAttachments.add(pending)
+        audioFile = null
+        sendMessage()
+        updateRecordingUI()
     }
 
     private fun canSendNow(): Boolean {
@@ -738,6 +1888,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val parentId = replyingToMessage?.id
 
         binding.etMessage.setText("")
+        if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
         cancelReply()
         renderPendingAttachments()
@@ -763,7 +1914,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     toast("Failed to send message")
                     return@onSuccess
                 }
-                loadInitialMessages(scrollToBottom = true)
+                appendSentMessage(response.messageId)
                 markRead()
             }.onFailure {
                 restoreComposer(previousText, pendingSnapshot)
@@ -772,6 +1923,32 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
             setComposerBusy(false)
             updateSendIcon()
+        }
+    }
+
+    private suspend fun appendSentMessage(messageId: String?) {
+        if (messageId.isNullOrBlank()) {
+            loadInitialMessages(scrollToBottom = true)
+            return
+        }
+        runCatching {
+            api.getMessage(session.bearerToken, messageId)
+        }.onSuccess { resp ->
+            val sent = resp.message
+            if (sent == null) {
+                loadInitialMessages(scrollToBottom = true)
+                return@onSuccess
+            }
+            val existingIndex = messages.indexOfFirst { it.id == sent.id }
+            if (existingIndex >= 0) {
+                messages[existingIndex] = sent
+            } else {
+                messages.add(sent)
+            }
+            latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
+            renderMessages(scrollToBottom = true)
+        }.onFailure {
+            loadInitialMessages(scrollToBottom = true)
         }
     }
 
@@ -905,23 +2082,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val keyboardHeight = ime.bottom
+            val bottomInset = ime.bottom.coerceAtLeast(sys.bottom)
 
             binding.bottomBar.setPadding(
                 dpToPx(12),
                 dpToPx(12),
                 dpToPx(12),
-                dpToPx(12) + sys.bottom + keyboardHeight
+                dpToPx(12) + bottomInset
             )
 
             binding.rvMessages.setPadding(
                 binding.rvMessages.paddingLeft,
                 binding.rvMessages.paddingTop,
                 binding.rvMessages.paddingRight,
-                keyboardHeight
+                0
             )
 
-            if (keyboardHeight > 0) {
+            if (ime.bottom > sys.bottom) {
                 binding.rvMessages.post {
                     binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
                 }
@@ -952,6 +2129,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     override fun onDestroyView() {
+        stopAudioProgressPolling()
+        exoPlayer?.release()
+        exoPlayer = null
         SkeletonUtils.stopAll()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(true)

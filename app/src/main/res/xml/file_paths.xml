@@ -2,4 +2,6 @@
 <paths>
     <cache-path name="punch_photos" path="punch_photos/" />
     <cache-path name="arrival_photos" path="arrival_photos/" />
+    <cache-path name="voice_notes" path="voice_notes/" />
+    <cache-path name="chat_photos" path="chat_photos/" />
 </paths>

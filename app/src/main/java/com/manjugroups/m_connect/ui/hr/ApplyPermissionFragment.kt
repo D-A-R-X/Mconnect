@@ -128,6 +128,11 @@ class ApplyPermissionFragment : Fragment() {
         return error.message ?: "Network error"
     }
 
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null

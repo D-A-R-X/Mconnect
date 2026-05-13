@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingTop="6dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="8dp"
+    android:clipToPadding="false">
 
     <TextView
         android:id="@+id/tvDateLabel"
@@ -11,6 +12,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:background="@drawable/bg_chat_date_pill"
+        android:elevation="1dp"
         android:fontFamily="@font/inter_regular"
         android:paddingHorizontal="14dp"
         android:paddingVertical="3dp"

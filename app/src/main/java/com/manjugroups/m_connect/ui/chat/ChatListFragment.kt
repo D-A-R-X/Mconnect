@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -57,6 +58,9 @@ class ChatListFragment : Fragment() {
     private var activeFilter: ChatFilter = ChatFilter.ALL
     private var favouriteIds: MutableSet<String> = mutableSetOf()
     private var hasLoadedOnce: Boolean = false
+    private val selectedChatIds: MutableSet<String> = mutableSetOf()
+    private var selectionPopup: android.widget.PopupWindow? = null
+    private var backCallback: androidx.activity.OnBackPressedCallback? = null
 
     private lateinit var chatListAdapter: ChatListAdapter
 
@@ -84,7 +88,16 @@ class ChatListFragment : Fragment() {
         binding.chipFavourites.setOnClickListener { switchFilter(ChatFilter.FAVOURITES) }
 
         binding.btnChatMenu.setOnClickListener { showNewChatOptions() }
+        binding.btnChatSelectionMenu.setOnClickListener { showSelectionActionsPopup(it) }
         binding.btnEmptyAction.setOnClickListener { handleEmptyCta() }
+
+        backCallback = object : androidx.activity.OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() {
+                clearChatSelection()
+            }
+        }.also {
+            requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it)
+        }
 
         binding.etSearchChats.doAfterTextChanged {
             chatSearchQuery = it?.toString().orEmpty().trim()
@@ -98,6 +111,10 @@ class ChatListFragment : Fragment() {
     private fun setupRecyclerView() {
         chatListAdapter = ChatListAdapter(
             onItemClick = { item ->
+                if (selectedChatIds.isNotEmpty()) {
+                    toggleChatSelection(item.id)
+                    return@ChatListAdapter
+                }
                 val fragment = when (item.kind) {
                     ChatListItem.Kind.DIRECT ->
                         ChatMessagesFragment.forConversation(item.id, item.title)
@@ -110,20 +127,112 @@ class ChatListFragment : Fragment() {
                     .addToBackStack(null)
                     .commit()
             },
-            onItemLongClick = { anchor, item ->
-                showChatActionMenu(anchor, item)
+            onItemLongClick = { _, item ->
+                toggleChatSelection(item.id)
             },
             avatarBinder = { container, label, text, seed ->
-                bindAvatar(container, label, text, seed)
+                if (_binding != null) {
+                    bindAvatar(container, label, text, seed)
+                }
             },
             timestampBinder = { view, millis ->
                 bindTimestamp(view, millis)
-            }
+            },
+            isSelectedProvider = { item -> selectedChatIds.contains(item.id) }
         )
         binding.rvChatList.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = chatListAdapter
         }
+    }
+
+    private fun toggleChatSelection(id: String) {
+        if (selectedChatIds.contains(id)) {
+            selectedChatIds.remove(id)
+        } else {
+            selectedChatIds.add(id)
+        }
+        applySelectionState()
+        chatListAdapter.notifyDataSetChanged()
+    }
+
+    private fun clearChatSelection() {
+        if (selectedChatIds.isEmpty()) return
+        selectedChatIds.clear()
+        applySelectionState()
+        chatListAdapter.notifyDataSetChanged()
+    }
+
+    private fun applySelectionState() {
+        if (_binding == null) return
+        val count = selectedChatIds.size
+        if (count == 0) {
+            binding.tvChatHeaderTitle.text = "Chats"
+            binding.btnChatMenu.visibility = View.VISIBLE
+            binding.btnChatSelectionMenu.visibility = View.GONE
+            backCallback?.isEnabled = false
+            selectionPopup?.dismiss()
+            selectionPopup = null
+        } else {
+            binding.tvChatHeaderTitle.text = "$count selected"
+            binding.btnChatMenu.visibility = View.GONE
+            binding.btnChatSelectionMenu.visibility = View.VISIBLE
+            backCallback?.isEnabled = true
+        }
+    }
+
+    private fun showSelectionActionsPopup(anchor: View) {
+        if (selectedChatIds.isEmpty()) return
+        val view = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_chat_selection_actions, null)
+
+        val popup = android.widget.PopupWindow(
+            view,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 12f
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+        selectionPopup = popup
+
+        val allAlreadyFav = selectedChatIds.all { favouriteIds.contains(it) }
+        view.findViewById<TextView>(R.id.tvActionFavouriteLabel).text =
+            if (allAlreadyFav) "Remove Favourites" else "Add Favourites"
+
+        view.findViewById<View>(R.id.actionDelete).setOnClickListener {
+            val count = selectedChatIds.size
+            toast(if (count == 1) "Deleting 1 chat" else "Deleting $count chats")
+            selectedChatIds.clear()
+            popup.dismiss()
+            applySelectionState()
+            chatListAdapter.notifyDataSetChanged()
+        }
+        view.findViewById<View>(R.id.actionFavourite).setOnClickListener {
+            if (allAlreadyFav) {
+                favouriteIds.removeAll(selectedChatIds)
+                toast("Removed from Favourites")
+            } else {
+                favouriteIds.addAll(selectedChatIds)
+                toast("Added to Favourites")
+            }
+            selectedChatIds.clear()
+            popup.dismiss()
+            applySelectionState()
+            renderCurrentList()
+        }
+
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val anchorLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        val xOffset = anchorLocation[0] + anchor.width - view.measuredWidth
+        val yOffset = anchorLocation[1] + anchor.height + dpToPx(6)
+        popup.showAtLocation(anchor, android.view.Gravity.NO_GRAVITY, xOffset, yOffset)
     }
 
     private fun setupHeader() {
@@ -137,7 +246,10 @@ class ChatListFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(true)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(true)
+            main.setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+        }
         startRefreshLoop()
     }
 
@@ -187,6 +299,7 @@ class ChatListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             if (!hasLoadedOnce) {
                 SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                binding.rvChatList.visibility = View.GONE
             }
             runCatching {
                 val conversations = api.getConversations(session.bearerToken).conversations
@@ -514,7 +627,7 @@ class ChatListFragment : Fragment() {
         closeBtn.setOnClickListener { dialog.dismiss() }
         createGroupCta.setOnClickListener {
             dialog.dismiss()
-            promptGroupConversationName()
+            showCreateGroupSheet()
         }
         startBtn.setOnClickListener {
             val staff = selectedStaff ?: return@setOnClickListener
@@ -532,37 +645,279 @@ class ChatListFragment : Fragment() {
         dialog.show()
 
         withActiveStaff(
-            onLoaded = { staff ->
-                people = staff
-                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                skeletonContainer.visibility = View.GONE
-                emptyState.text = "No people match your search."
-                renderPeople()
-            },
             onError = {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 skeletonContainer.visibility = View.GONE
                 emptyState.text = "Unable to load people."
                 emptyState.visibility = View.VISIBLE
             }
-        )
+        ) { staff ->
+            people = staff
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+            skeletonContainer.visibility = View.GONE
+            emptyState.text = "No people match your search."
+            renderPeople()
+        }
     }
 
-    private fun promptGroupConversationName() {
-        promptForText(
-            title = "Group conversation",
-            hint = "Optional group name",
-            positiveLabel = "Next"
-        ) { name ->
-            pickMultipleStaff(
-                title = "Choose members",
-                positiveLabel = "Create"
-            ) { selectedStaff ->
-                createGroupConversation(
-                    memberIds = selectedStaff.mapNotNull { it.id },
-                    displayName = name.takeIf { it.isNotBlank() }
-                )
+    private fun showCreateGroupSheet() {
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_create_group, null)
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.setContentView(content)
+
+        dialog.setOnShowListener {
+            val sheet = dialog.findViewById<View>(
+                com.google.android.material.R.id.design_bottom_sheet
+            )
+            sheet?.let {
+                val params = it.layoutParams
+                params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+                it.layoutParams = params
+                it.setBackgroundResource(android.R.color.transparent)
+                BottomSheetBehavior.from(it).apply {
+                    state = BottomSheetBehavior.STATE_EXPANDED
+                    skipCollapsed = true
+                    isDraggable = true
+                }
             }
+        }
+
+        val closeBtn = content.findViewById<View>(R.id.btnCreateGroupClose)
+        val etGroupName = content.findViewById<EditText>(R.id.etGroupName)
+        val searchField = content.findViewById<EditText>(R.id.etSearchGroupPeople)
+        val peopleCard = content.findViewById<LinearLayout>(R.id.groupPeopleCard)
+        val emptyView = content.findViewById<TextView>(R.id.tvGroupEmpty)
+        val skeletonContainer = content.findViewById<View>(R.id.groupSkeletonContainer)
+        val membersHeader = content.findViewById<TextView>(R.id.tvSelectedMembersHeader)
+        val membersScroll = content.findViewById<View>(R.id.selectedMembersScroll)
+        val membersContainer = content.findViewById<LinearLayout>(R.id.selectedMembersContainer)
+        val createBtn = content.findViewById<FrameLayout>(R.id.btnCreateGroup)
+        val createLabel = content.findViewById<TextView>(R.id.tvCreateGroupLabel)
+
+        dialog.setOnDismissListener {
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+        }
+
+        var people: List<StaffData> = emptyList()
+        val selectedIds = linkedSetOf<String>()
+        val selectedById = mutableMapOf<String, StaffData>()
+
+        var renderSelectedChips: () -> Unit = {}
+        var renderPeopleList: () -> Unit = {}
+        var bindCreateButton: () -> Unit = {}
+
+        renderSelectedChips = render@{
+            membersContainer.removeAllViews()
+            if (selectedIds.isEmpty()) {
+                membersHeader.visibility = View.GONE
+                membersScroll.visibility = View.GONE
+                return@render
+            }
+
+            membersHeader.text = "Selected Members (${selectedIds.size})"
+            membersHeader.visibility = View.VISIBLE
+            membersScroll.visibility = View.VISIBLE
+
+            selectedIds.forEach { id ->
+                val staff = selectedById[id] ?: return@forEach
+                val chip = LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setBackgroundResource(R.drawable.bg_create_group_chip)
+                    setPadding(dpToPx(4), dpToPx(4), dpToPx(10), dpToPx(4))
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = dpToPx(6) }
+
+                    val initials = initialsFor(staff.name ?: "User")
+                    val avatarFrame = FrameLayout(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(dpToPx(22), dpToPx(22))
+                        setBackgroundResource(R.drawable.bg_chat_avatar_circle)
+                    }
+                    val avatarLabel = TextView(context).apply {
+                        textSize = 9f
+                        setTextColor(resolveColor(R.attr.colorAccentPrimary))
+                        text = initials
+                        layoutParams = FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            android.view.Gravity.CENTER
+                        )
+                    }
+                    avatarFrame.addView(avatarLabel)
+                    bindAvatar(avatarFrame, avatarLabel, initials, (staff.name?.length ?: 0))
+                    addView(avatarFrame)
+
+                    addView(TextView(context).apply {
+                        text = staff.name ?: "Member"
+                        textSize = 12f
+                        setTextColor(android.graphics.Color.parseColor("#101828"))
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            marginStart = dpToPx(6)
+                            marginEnd = dpToPx(4)
+                        }
+                    })
+
+                    addView(ImageView(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(dpToPx(14), dpToPx(14))
+                        setImageResource(R.drawable.ic_sheet_close)
+                        setColorFilter(android.graphics.Color.parseColor("#667085"))
+                    })
+
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        selectedIds.remove(id)
+                        selectedById.remove(id)
+                        renderSelectedChips()
+                        renderPeopleList()
+                        bindCreateButton()
+                    }
+                }
+                membersContainer.addView(chip)
+            }
+        }
+
+        bindCreateButton = {
+            val enabled = selectedIds.size >= 2
+            createBtn.isClickable = enabled
+            createBtn.isFocusable = enabled
+            createBtn.setBackgroundResource(
+                if (enabled) R.drawable.bg_sheet_start_button
+                else R.drawable.bg_sheet_start_button_disabled
+            )
+            createLabel.text = if (selectedIds.size >= 2) "Create" else "Select at least 2"
+        }
+
+        renderPeopleList = render@{
+            val query = searchField.text?.toString().orEmpty().trim()
+            val filtered = people.filter { member ->
+                if (query.isBlank()) return@filter true
+                val haystack = listOfNotNull(
+                    member.name,
+                    member.designation,
+                    member.department,
+                    member.employeeId
+                ).joinToString(" ").lowercase(Locale.getDefault())
+                haystack.contains(query.lowercase(Locale.getDefault()))
+            }
+
+            peopleCard.removeAllViews()
+            if (filtered.isEmpty()) {
+                peopleCard.visibility = View.GONE
+                emptyView.visibility = View.VISIBLE
+                return@render
+            }
+
+            emptyView.visibility = View.GONE
+            peopleCard.visibility = View.VISIBLE
+
+            filtered.forEachIndexed { index, member ->
+                val row = layoutInflater.inflate(
+                    R.layout.item_chat_sheet_person,
+                    peopleCard,
+                    false
+                )
+                val initials = initialsFor(member.name ?: "User")
+                bindAvatar(
+                    row.findViewById(R.id.avatarContainer),
+                    row.findViewById(R.id.tvAvatar),
+                    initials,
+                    index + (member.name?.length ?: 0)
+                )
+                row.findViewById<TextView>(R.id.tvName).text = member.name ?: "User"
+                row.findViewById<TextView>(R.id.tvSubtitle).text =
+                    listOfNotNull(member.designation, member.department)
+                        .takeIf { it.isNotEmpty() }
+                        ?.joinToString(" • ")
+                        ?: "Tap to add to group"
+
+                val radio = row.findViewById<View>(R.id.radioButton)
+                val avatarCheck = row.findViewById<View>(R.id.avatarCheck)
+                val memberId = member.id
+                val isSelected = memberId != null && selectedIds.contains(memberId)
+                radio.setBackgroundResource(
+                    if (isSelected) R.drawable.bg_sheet_radio_on
+                    else R.drawable.bg_sheet_radio_off
+                )
+                avatarCheck.visibility = if (isSelected) View.VISIBLE else View.GONE
+
+                row.setOnClickListener {
+                    if (memberId == null) return@setOnClickListener
+                    if (selectedIds.contains(memberId)) {
+                        selectedIds.remove(memberId)
+                        selectedById.remove(memberId)
+                    } else {
+                        selectedIds.add(memberId)
+                        selectedById[memberId] = member
+                    }
+                    renderPeopleList()
+                    renderSelectedChips()
+                    bindCreateButton()
+                }
+
+                peopleCard.addView(row)
+
+                if (index < filtered.lastIndex) {
+                    val divider = View(requireContext()).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1)
+                        ).apply {
+                            marginStart = dpToPx(74)
+                        }
+                        setBackgroundColor(
+                            ContextCompat.getColor(requireContext(), R.color.chat_separator)
+                        )
+                        alpha = 0.5f
+                    }
+                    peopleCard.addView(divider)
+                }
+            }
+        }
+
+        closeBtn.setOnClickListener { dialog.dismiss() }
+        createBtn.setOnClickListener {
+            if (selectedIds.size < 2) {
+                toast("Select at least 2 members")
+                return@setOnClickListener
+            }
+            val name = etGroupName.text?.toString()?.trim().orEmpty()
+            dialog.dismiss()
+            createGroupConversation(
+                memberIds = selectedIds.toList(),
+                displayName = name.takeIf { it.isNotBlank() }
+            )
+        }
+        searchField.doAfterTextChanged { renderPeopleList() }
+
+        bindCreateButton()
+        emptyView.text = ""
+        emptyView.visibility = View.GONE
+        peopleCard.visibility = View.GONE
+        skeletonContainer.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
+        dialog.show()
+
+        withActiveStaff(
+            onError = {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                skeletonContainer.visibility = View.GONE
+                emptyView.text = "Unable to load people."
+                emptyView.visibility = View.VISIBLE
+            }
+        ) { staff ->
+            people = staff
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+            skeletonContainer.visibility = View.GONE
+            emptyView.text = "No people match your search."
+            renderPeopleList()
         }
     }
 
@@ -642,8 +997,8 @@ class ChatListFragment : Fragment() {
     }
 
     private fun withActiveStaff(
-        onLoaded: (List<StaffData>) -> Unit,
-        onError: (() -> Unit)? = null
+        onError: (() -> Unit)? = null,
+        onLoaded: (List<StaffData>) -> Unit
     ) {
         if (activeStaffCache.isNotEmpty()) {
             onLoaded(activeStaffCache)
@@ -809,7 +1164,7 @@ class ChatListFragment : Fragment() {
             now.get(Calendar.YEAR) == msg.get(Calendar.YEAR)
 
         return when {
-            sameDay -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+            sameDay -> SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(millis))
             sameWeek -> SimpleDateFormat("EEE", Locale.getDefault()).format(Date(millis))
             else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(millis))
         }
@@ -817,7 +1172,13 @@ class ChatListFragment : Fragment() {
 
     private fun bindAvatar(container: View, label: TextView, text: String, seed: Int) {
         val palette = avatarPalette(seed)
-        container.background?.mutate()?.setTint(palette.first)
+        // Try to tint the background drawable; use setBackgroundColor as fallback
+        val bg = container.background
+        if (bg != null) {
+            bg.mutate().setTint(palette.first)
+        } else {
+            container.setBackgroundColor(palette.first)
+        }
         label.setTextColor(palette.second)
         label.text = text
     }

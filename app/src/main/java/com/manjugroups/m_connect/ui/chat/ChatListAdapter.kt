@@ -29,7 +29,8 @@ class ChatListAdapter(
     private val onItemClick: (ChatListItem) -> Unit,
     private val onItemLongClick: (View, ChatListItem) -> Unit,
     private val avatarBinder: (View, TextView, String, Int) -> Unit,
-    private val timestampBinder: (TextView, Long?) -> Unit
+    private val timestampBinder: (TextView, Long?) -> Unit,
+    private val isSelectedProvider: (ChatListItem) -> Boolean = { false }
 ) : ListAdapter<ChatListItem, ChatListAdapter.ViewHolder>(ChatListItemDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -45,12 +46,15 @@ class ChatListAdapter(
         fun bind(item: ChatListItem) {
             binding.tvChatName.text = item.title
             binding.tvChatLastMsg.text = item.subtitle
-            
+
             // Find the inner FrameLayout that has the background in item_chat.xml
-            val avatarFrame = (binding.avatarContainer as ViewGroup).getChildAt(0)
-            avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+            val avatarContainer = binding.avatarContainer as ViewGroup
+            if (avatarContainer.childCount > 0) {
+                val avatarFrame = avatarContainer.getChildAt(0)
+                avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+            }
             timestampBinder(binding.tvChatTime, item.timestamp)
-            
+
             if (item.unreadCount > 0) {
                 binding.tvUnread.text = if (item.unreadCount > 99) "99+" else item.unreadCount.toString()
                 binding.unreadContainer.visibility = View.VISIBLE
@@ -59,6 +63,11 @@ class ChatListAdapter(
             }
 
             binding.onlineDot.visibility = if (item.isOnline) View.VISIBLE else View.GONE
+
+            binding.root.setBackgroundColor(
+                if (isSelectedProvider(item)) android.graphics.Color.parseColor("#1A0B61CA")
+                else android.graphics.Color.TRANSPARENT
+            )
 
             binding.root.setOnClickListener { onItemClick(item) }
             binding.root.setOnLongClickListener {

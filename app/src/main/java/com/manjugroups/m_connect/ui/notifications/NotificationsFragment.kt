@@ -53,7 +53,10 @@ class NotificationsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
+        }
     }
 
     override fun onPause() {
