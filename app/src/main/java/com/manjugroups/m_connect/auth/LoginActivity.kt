@@ -17,6 +17,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityLoginBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
@@ -94,7 +95,8 @@ class LoginActivity : AppCompatActivity() {
                     when (state) {
                         is AuthUiState.Loading -> {
                             binding.tvSendOtp.visibility = View.INVISIBLE
-                            binding.progressSendOtp.visibility = View.VISIBLE
+                            binding.skeletonSendOtp.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonSendOtp)
                             binding.btnSendOtp.isClickable = false
                         }
                         is AuthUiState.OtpSent -> {
@@ -120,7 +122,8 @@ class LoginActivity : AppCompatActivity() {
 
     private fun resetButton() {
         binding.tvSendOtp.visibility = View.VISIBLE
-        binding.progressSendOtp.visibility = View.GONE
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonSendOtp)
+        binding.skeletonSendOtp.visibility = View.GONE
         binding.btnSendOtp.isClickable = true
     }
 

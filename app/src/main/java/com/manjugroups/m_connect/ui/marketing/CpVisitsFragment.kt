@@ -62,11 +62,9 @@ class CpVisitsFragment : Fragment() {
     private fun loadVisits() {
         val root = rootView ?: return
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
-        val loading = root.findViewById<View>(R.id.cpVisitsLoading)
         val empty = root.findViewById<TextView>(R.id.tvCpVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -81,7 +79,6 @@ class CpVisitsFragment : Fragment() {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load CP visits"
                     empty.visibility = View.VISIBLE
@@ -98,7 +95,6 @@ class CpVisitsFragment : Fragment() {
                 visits.forEach { list.addView(createRow(it, list)) }
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

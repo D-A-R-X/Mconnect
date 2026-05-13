@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -119,12 +120,12 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            binding.homeLoading.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.GONE
                         }
 
                         is HomeUiState.Loaded -> {
-                            binding.homeLoading.visibility = View.GONE
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.VISIBLE
                             renderSummary(state)
                             if (!viewModel.isVisitsLoading.value) {
@@ -133,7 +134,7 @@ class HomeFragment : Fragment() {
                         }
 
                         is HomeUiState.Error -> {
-                            binding.homeLoading.visibility = View.GONE
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.VISIBLE
                             binding.tvSummarySubtitle.text = "Today task & presence activity"
                             binding.tvVisitCountBadge.visibility = View.GONE
@@ -552,6 +553,7 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         _binding = null
     }

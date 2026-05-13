@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentApplyPermissionBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyPermissionRequest
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.util.*
@@ -65,7 +66,8 @@ class ApplyPermissionFragment : Fragment() {
         }
 
         binding.tvSubmit.visibility = View.INVISIBLE
-        binding.progressSubmit.visibility = View.VISIBLE
+        binding.skeletonSubmit.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(binding.skeletonSubmit)
         binding.btnSubmit.isClickable = false
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -81,7 +83,8 @@ class ApplyPermissionFragment : Fragment() {
                 Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
             }
             _binding?.tvSubmit?.visibility = View.VISIBLE
-            _binding?.progressSubmit?.visibility = View.GONE
+            _binding?.skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+            _binding?.skeletonSubmit?.visibility = View.GONE
             _binding?.btnSubmit?.isClickable = true
         }
     }

@@ -67,15 +67,6 @@
             android:textColor="?attr/colorForegroundMuted"
             android:textSize="12sp" />
 
-        <ProgressBar
-            android:id="@+id/searchLoading"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="16dp"
-            android:indeterminateTint="?attr/colorAccentPrimary"
-            android:visibility="gone" />
-
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"

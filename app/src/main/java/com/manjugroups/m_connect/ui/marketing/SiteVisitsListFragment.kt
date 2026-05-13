@@ -72,13 +72,11 @@ class SiteVisitsListFragment : Fragment() {
 
     private fun loadVisits(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
-        val loading = root.findViewById<View>(R.id.siteVisitsLoading)
         val empty = root.findViewById<TextView>(R.id.tvSiteVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.siteVisitsList)
         val countText = root.findViewById<TextView>(R.id.tvSiteVisitsCount)
 
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -95,7 +93,6 @@ class SiteVisitsListFragment : Fragment() {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load site visits"
                     empty.visibility = View.VISIBLE
@@ -115,7 +112,6 @@ class SiteVisitsListFragment : Fragment() {
                 }
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

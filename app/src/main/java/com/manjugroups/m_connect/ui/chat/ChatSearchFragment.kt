@@ -59,7 +59,6 @@ class ChatSearchFragment : Fragment() {
 
         val etSearch = view.findViewById<EditText>(R.id.etSearch)
         val hint = view.findViewById<TextView>(R.id.tvSearchHint)
-        val loading = view.findViewById<View>(R.id.searchLoading)
         val list = view.findViewById<LinearLayout>(R.id.searchResultsContainer)
 
         etSearch.addTextChangedListener(object : TextWatcher {
@@ -71,13 +70,12 @@ class ChatSearchFragment : Fragment() {
                 if (query.length < 2) {
                     hint.text = "Type at least 2 characters"
                     hint.visibility = View.VISIBLE
-                    loading.visibility = View.GONE
                     list.removeAllViews()
                     return
                 }
                 searchJob = viewLifecycleOwner.lifecycleScope.launch {
                     delay(250L)
-                    runSearch(query, hint, loading, list)
+                    runSearch(query, hint, list)
                 }
             }
         })
@@ -86,7 +84,7 @@ class ChatSearchFragment : Fragment() {
                 val q = etSearch.text.toString().trim()
                 if (q.length >= 2) {
                     viewLifecycleOwner.lifecycleScope.launch {
-                        runSearch(q, hint, loading, list)
+                        runSearch(q, hint, list)
                     }
                 }
                 true
@@ -113,12 +111,10 @@ class ChatSearchFragment : Fragment() {
     private suspend fun runSearch(
         query: String,
         hint: TextView,
-        loading: View,
         list: LinearLayout
     ) {
         val skeletonContainer = requireView().findViewById<View>(R.id.skeletonContainer)
         hint.visibility = View.GONE
-        loading.visibility = View.VISIBLE
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
         list.removeAllViews()
         try {
@@ -128,7 +124,6 @@ class ChatSearchFragment : Fragment() {
                 channelId = channelId,
                 conversationId = conversationId
             )
-            loading.visibility = View.GONE
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             if (!resp.success) {
                 Toast.makeText(
@@ -155,7 +150,6 @@ class ChatSearchFragment : Fragment() {
                 list.addView(row)
             }
         } catch (e: Exception) {
-            loading.visibility = View.GONE
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             Toast.makeText(
                 requireContext(),

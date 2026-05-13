@@ -434,7 +434,6 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun setLoading(isLoading: Boolean) {
-        binding.progressMap.visibility = if (isLoading) View.VISIBLE else View.GONE
         if (isLoading) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         } else {

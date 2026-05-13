@@ -262,14 +262,6 @@
             android:textColor="?attr/colorForegroundPrimary"
             android:textSize="12sp" />
 
-        <ProgressBar
-            android:id="@+id/progressMap"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center"
-            android:indeterminateTint="?attr/colorAccentPrimary"
-            android:visibility="gone" />
-
         <TextView
             android:id="@+id/tvMapEmpty"
             android:layout_width="wrap_content"

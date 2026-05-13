@@ -189,6 +189,21 @@
                     android:visibility="gone" />
 
                 <LinearLayout
+                    android:id="@+id/skeletonContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_sheet_people_card"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <include layout="@layout/skeleton_list_item" />
+                    <include layout="@layout/skeleton_list_item" />
+                    <include layout="@layout/skeleton_list_item" />
+                    <include layout="@layout/skeleton_list_item" />
+                    <include layout="@layout/skeleton_list_item" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/peopleList"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
@@ -201,7 +216,7 @@
                     android:fontFamily="@font/inter_regular"
                     android:gravity="center"
                     android:paddingVertical="48dp"
-                    android:text="Loading people..."
+                    android:text=""
                     android:textColor="#FF8E8E93"
                     android:textSize="14sp" />
             </LinearLayout>

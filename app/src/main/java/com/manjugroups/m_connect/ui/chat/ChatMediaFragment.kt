@@ -73,10 +73,8 @@ class ChatMediaFragment : Fragment() {
     private fun loadAttachments(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        val loading = root.findViewById<View>(R.id.mediaLoading)
         val empty = root.findViewById<TextView>(R.id.tvMediaEmpty)
         val list = root.findViewById<LinearLayout>(R.id.mediaList)
-        loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -87,7 +85,6 @@ class ChatMediaFragment : Fragment() {
                     channelId = channelId,
                     conversationId = conversationId
                 )
-                loading.visibility = View.GONE
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     Toast.makeText(
@@ -123,7 +120,6 @@ class ChatMediaFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 Toast.makeText(
                     requireContext(),

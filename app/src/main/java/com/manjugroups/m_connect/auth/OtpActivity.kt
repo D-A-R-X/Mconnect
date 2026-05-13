@@ -27,6 +27,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityOtpBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class OtpActivity : AppCompatActivity() {
@@ -173,7 +174,8 @@ class OtpActivity : AppCompatActivity() {
                     when (state) {
                         is AuthUiState.Loading -> {
                             binding.tvVerify.visibility = View.INVISIBLE
-                            binding.progressVerify.visibility = View.VISIBLE
+                            binding.skeletonVerify.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonVerify)
                             binding.btnVerify.isClickable = false
                         }
                         is AuthUiState.OtpSent -> {
@@ -202,7 +204,8 @@ class OtpActivity : AppCompatActivity() {
 
     private fun resetButton() {
         binding.tvVerify.visibility = View.VISIBLE
-        binding.progressVerify.visibility = View.GONE
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonVerify)
+        binding.skeletonVerify.visibility = View.GONE
         binding.btnVerify.isClickable = true
     }
 

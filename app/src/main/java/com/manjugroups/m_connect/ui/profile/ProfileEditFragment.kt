@@ -83,9 +83,7 @@ class ProfileEditFragment : Fragment() {
     }
 
     private fun loadStaff(root: View) {
-        val loading = root.findViewById<View>(R.id.editLoading)
         val scroll = root.findViewById<View>(R.id.editScroll)
-        loading.visibility = View.VISIBLE
         scroll.visibility = View.GONE
 
         val id = session.staffId?.takeIf { it.isNotBlank() }
@@ -111,7 +109,6 @@ class ProfileEditFragment : Fragment() {
                     return@launch
                 }
                 fillForm(root, staff)
-                loading.visibility = View.GONE
                 scroll.visibility = View.VISIBLE
             } catch (e: Exception) {
                 Toast.makeText(

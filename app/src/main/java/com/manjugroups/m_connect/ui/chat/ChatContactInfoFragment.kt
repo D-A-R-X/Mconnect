@@ -51,10 +51,6 @@ class ChatContactInfoFragment : Fragment() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
 
         val title = arguments?.getString("title").orEmpty().ifBlank { "Chat" }
-        render(
-            title = title,
-            about = "Loading details..."
-        )
 
         val channelId = arguments?.getString("channelId")
         val conversationId = arguments?.getString("conversationId")

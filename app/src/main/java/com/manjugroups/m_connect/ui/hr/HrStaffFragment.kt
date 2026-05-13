@@ -8,8 +8,10 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -117,20 +119,62 @@ class HrStaffFragment : Fragment() {
 
         // Load more button
         if (state.hasMore && state.searchQuery.isBlank()) {
-            val loadMoreBtn = TextView(requireContext()).apply {
-                text = if (state.isLoadingMore) "Loading..." else "Load More"
+            val row = FrameLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(0, 32, 0, 16)
+            }
+
+            val label = TextView(requireContext()).apply {
+                text = "Load More"
                 textSize = 14f
                 typeface = resources.getFont(R.font.inter_semibold)
                 setTextColor(resolveColor(R.attr.colorAccentPrimary))
                 gravity = android.view.Gravity.CENTER
-                setPadding(0, 32, 0, 16)
+                isClickable = !state.isLoadingMore
+                isFocusable = !state.isLoadingMore
                 setOnClickListener {
                     if (!state.isLoadingMore) viewModel.loadMore(session.bearerToken)
                 }
             }
-            binding.staffList.addView(loadMoreBtn)
+
+            val skeleton = View(requireContext()).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    dpToPx(120),
+                    dpToPx(12),
+                    android.view.Gravity.CENTER
+                )
+                background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_skeleton_rounded)
+                visibility = View.GONE
+            }
+
+            row.addView(
+                label,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.CENTER
+                )
+            )
+            row.addView(skeleton)
+
+            if (state.isLoadingMore) {
+                label.visibility = View.INVISIBLE
+                skeleton.visibility = View.VISIBLE
+                SkeletonUtils.startSkeletonPulse(skeleton)
+            } else {
+                SkeletonUtils.stopSkeletonPulse(skeleton)
+                skeleton.visibility = View.GONE
+                label.visibility = View.VISIBLE
+            }
+
+            binding.staffList.addView(row)
         }
     }
+
+    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
     private fun formatPhone(phone: String): String {
         return if (phone.length == 10) "${phone.substring(0, 5)} ${phone.substring(5)}" else phone

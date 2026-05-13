@@ -409,10 +409,15 @@ class ChatListFragment : Fragment() {
         val searchField = content.findViewById<EditText>(R.id.etSearchPeople)
         val peopleCard = content.findViewById<LinearLayout>(R.id.peopleCard)
         val emptyState = content.findViewById<TextView>(R.id.tvEmptyPeople)
+        val skeletonContainer = content.findViewById<View>(R.id.skeletonContainer)
         val createGroupCta = content.findViewById<View>(R.id.cardCreateGroup)
         val closeBtn = content.findViewById<View>(R.id.btnSheetClose)
         val startBtn = content.findViewById<FrameLayout>(R.id.btnStartChat)
         val startLabel = content.findViewById<TextView>(R.id.tvStartChatLabel)
+
+        dialog.setOnDismissListener {
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+        }
 
         var people: List<StaffData> = emptyList()
         var selectedStaff: StaffData? = null
@@ -519,16 +524,28 @@ class ChatListFragment : Fragment() {
         searchField.doAfterTextChanged { renderPeople() }
 
         bindStartButton()
-        emptyState.text = "Loading people..."
-        emptyState.visibility = View.VISIBLE
+        emptyState.text = ""
+        emptyState.visibility = View.GONE
         peopleCard.visibility = View.GONE
+        skeletonContainer.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         dialog.show()
 
-        withActiveStaff { staff ->
-            people = staff
-            emptyState.text = "No people match your search."
-            renderPeople()
-        }
+        withActiveStaff(
+            onLoaded = { staff ->
+                people = staff
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                skeletonContainer.visibility = View.GONE
+                emptyState.text = "No people match your search."
+                renderPeople()
+            },
+            onError = {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                skeletonContainer.visibility = View.GONE
+                emptyState.text = "Unable to load people."
+                emptyState.visibility = View.VISIBLE
+            }
+        )
     }
 
     private fun promptGroupConversationName() {
@@ -624,7 +641,10 @@ class ChatListFragment : Fragment() {
         }
     }
 
-    private fun withActiveStaff(onLoaded: (List<StaffData>) -> Unit) {
+    private fun withActiveStaff(
+        onLoaded: (List<StaffData>) -> Unit,
+        onError: (() -> Unit)? = null
+    ) {
         if (activeStaffCache.isNotEmpty()) {
             onLoaded(activeStaffCache)
             return
@@ -638,11 +658,13 @@ class ChatListFragment : Fragment() {
                 activeStaffCache = response.staff.filter { it.id != null && it.id != currentStaffId }
                 if (activeStaffCache.isEmpty()) {
                     toast("No staff available")
+                    onError?.invoke()
                     return@onSuccess
                 }
                 onLoaded(activeStaffCache)
             }.onFailure {
                 toast("Unable to load staff")
+                onError?.invoke()
             }
         }
     }

@@ -45,7 +45,7 @@ class ProfileFragment : Fragment() {
         val cachedName = session.userName?.trim().orEmpty().ifBlank { "User" }
         binding.tvProfileName.text = cachedName
         binding.tvProfileAvatar.text = initialsFor(cachedName)
-        binding.tvProfileRole.text = "Loading…"
+        binding.tvProfileRole.text = ""
         binding.tvContactEmail.text = session.userPhone?.takeIf { it.isNotBlank() } ?: "—"
         binding.tvContactAddress.text = "—"
 

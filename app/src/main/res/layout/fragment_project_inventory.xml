@@ -106,15 +106,6 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <ProgressBar
-            android:id="@+id/projectInventoryLoading"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="16dp"
-            android:indeterminateTint="?attr/colorAccentPrimary"
-            android:visibility="gone" />
-
         <TextView
             android:id="@+id/tvProjectInventoryEmpty"
             android:layout_width="wrap_content"
