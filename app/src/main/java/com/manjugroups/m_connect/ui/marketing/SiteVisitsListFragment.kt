@@ -65,6 +65,11 @@ class SiteVisitsListFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadVisits(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.siteVisitsLoading)

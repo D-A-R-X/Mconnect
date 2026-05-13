@@ -58,6 +58,11 @@ class InventoryLayoutMapFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadLayout(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.layoutMapLoading)

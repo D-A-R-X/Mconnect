@@ -830,6 +830,7 @@ class ChatListFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         refreshJob?.cancel()
         refreshJob = null
         super.onDestroyView()

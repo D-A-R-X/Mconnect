@@ -180,6 +180,7 @@ class ChatContactInfoFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onDestroyView()
         _binding = null

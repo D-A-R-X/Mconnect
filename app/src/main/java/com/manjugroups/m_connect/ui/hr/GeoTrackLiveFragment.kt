@@ -479,6 +479,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         _binding?.mapView?.onDestroy()
         googleMap = null
         _binding = null

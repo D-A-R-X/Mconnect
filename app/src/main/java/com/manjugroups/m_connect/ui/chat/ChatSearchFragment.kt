@@ -105,6 +105,11 @@ class ChatSearchFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private suspend fun runSearch(
         query: String,
         hint: TextView,

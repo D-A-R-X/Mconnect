@@ -77,6 +77,11 @@ class MyLeadsFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadLeads(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.leadsLoading)

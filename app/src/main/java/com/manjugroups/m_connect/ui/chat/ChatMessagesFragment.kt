@@ -952,6 +952,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(true)
             main.setTopBarAppearance(android.graphics.Color.parseColor("#0B61CA"), false, fullBleed = false)

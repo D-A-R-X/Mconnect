@@ -5,12 +5,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
+import java.util.WeakHashMap
 
 object SkeletonUtils {
 
     private const val DURATION_MS = 820L
+    private val activeSkeletons = WeakHashMap<View, ObjectAnimator>()
 
     fun startSkeletonPulse(skeletonContainer: View): ObjectAnimator {
+        skeletonContainer.clearAnimation()
+        skeletonContainer.animate().cancel()
+        skeletonContainer.alpha = 1f
         skeletonContainer.visibility = View.VISIBLE
         val animator = ObjectAnimator.ofFloat(skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
             duration = DURATION_MS
@@ -18,18 +23,32 @@ object SkeletonUtils {
             repeatMode = ObjectAnimator.REVERSE
             start()
         }
-        skeletonContainer.tag = animator
+        activeSkeletons[skeletonContainer] = animator
         return animator
     }
 
     fun stopSkeletonPulse(skeletonContainer: View) {
-        val animator = skeletonContainer.tag as? ObjectAnimator
-        animator?.cancel()
+        activeSkeletons.remove(skeletonContainer)
+        skeletonContainer.clearAnimation()
+        skeletonContainer.animate().cancel()
         skeletonContainer.alpha = 1f
         skeletonContainer.visibility = View.GONE
-        skeletonContainer.tag = null
     }
 
+    fun stopAll() {
+        val iter = activeSkeletons.entries.iterator()
+        while (iter.hasNext()) {
+            val (view, animator) = iter.next()
+            animator.cancel()
+            view.clearAnimation()
+            view.animate().cancel()
+            view.alpha = 1f
+            view.visibility = View.GONE
+            iter.remove()
+        }
+    }
+
+    @Deprecated("Use startSkeletonPulse instead")
     fun startSkeletonPulseLegacy(skeletonContainer: View): AlphaAnimation {
         skeletonContainer.visibility = View.VISIBLE
         val anim = AlphaAnimation(0.55f, 1f).apply {
@@ -42,6 +61,7 @@ object SkeletonUtils {
         return anim
     }
 
+    @Deprecated("Use stopSkeletonPulse instead")
     fun stopSkeletonPulseLegacy(skeletonContainer: View) {
         val anim = skeletonContainer.tag as? AlphaAnimation
         if (anim != null) {

@@ -79,6 +79,11 @@ class ProjectInventoryFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun setupTypeChips(group: ChipGroup) {
         val allTypes = listOf("plot" to "Plot", "villa" to "Villa", "flat" to "Flat")
         val allowed = allTypes.filter { allowedByScope(it.first) }

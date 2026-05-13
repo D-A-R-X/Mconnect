@@ -65,6 +65,11 @@ class ChatMediaFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadAttachments(root: View) {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         SkeletonUtils.startSkeletonPulse(skeletonContainer)

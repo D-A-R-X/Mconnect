@@ -77,6 +77,11 @@ class ProfileEditFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadStaff(root: View) {
         val loading = root.findViewById<View>(R.id.editLoading)
         val scroll = root.findViewById<View>(R.id.editScroll)

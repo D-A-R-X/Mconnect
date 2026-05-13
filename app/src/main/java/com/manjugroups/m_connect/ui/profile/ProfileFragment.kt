@@ -171,6 +171,7 @@ class ProfileFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         _binding = null
     }

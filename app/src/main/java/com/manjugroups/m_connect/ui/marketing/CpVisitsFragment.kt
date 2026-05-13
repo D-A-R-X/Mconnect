@@ -54,6 +54,11 @@ class CpVisitsFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadVisits() {
         val root = rootView ?: return
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)

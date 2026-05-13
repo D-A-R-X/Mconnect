@@ -143,6 +143,7 @@ class HrStaffFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         searchRunnable?.let { searchHandler.removeCallbacks(it) }
         _binding = null
