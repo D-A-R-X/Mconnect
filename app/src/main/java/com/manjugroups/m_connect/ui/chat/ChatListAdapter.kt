@@ -21,7 +21,8 @@ data class ChatListItem(
     val avatarText: String,
     val avatarSeed: Int,
     val isMuted: Boolean,
-    val isOnline: Boolean = false
+    val isOnline: Boolean = false,
+    val isFavourite: Boolean = false
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }

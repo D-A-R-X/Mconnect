@@ -151,6 +151,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             cancelReply()
         }
 
+        binding.btnEmoji.setOnClickListener {
+            toast("Emoji picker coming soon")
+        }
+
         binding.etMessage.addTextChangedListener(typingWatcher)
 
         applyKeyboardAndSystemInsets(view)

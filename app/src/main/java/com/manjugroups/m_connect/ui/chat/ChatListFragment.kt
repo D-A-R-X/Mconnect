@@ -41,7 +41,7 @@ import java.util.Locale
 
 class ChatListFragment : Fragment() {
 
-    private enum class ChatFilter { ALL, UNREAD, GROUPS, DM }
+    private enum class ChatFilter { ALL, UNREAD, GROUPS, DM, FAVOURITES }
 
     private var _binding: FragmentChatListBinding? = null
     private val binding get() = _binding!!
@@ -54,6 +54,7 @@ class ChatListFragment : Fragment() {
     private var allConversations: List<ConversationData> = emptyList()
     private var chatSearchQuery: String = ""
     private var activeFilter: ChatFilter = ChatFilter.ALL
+    private var favouriteIds: MutableSet<String> = mutableSetOf()
     private var hasLoadedOnce: Boolean = false
 
     private lateinit var chatListAdapter: ChatListAdapter
@@ -79,6 +80,7 @@ class ChatListFragment : Fragment() {
         binding.chipUnread.setOnClickListener { switchFilter(ChatFilter.UNREAD) }
         binding.chipChannels.setOnClickListener { switchFilter(ChatFilter.GROUPS) }
         binding.chipDirect.setOnClickListener { switchFilter(ChatFilter.DM) }
+        binding.chipFavourites.setOnClickListener { switchFilter(ChatFilter.FAVOURITES) }
 
         binding.btnChatMenu.setOnClickListener { showNewChatOptions() }
         binding.btnEmptyAction.setOnClickListener { handleEmptyCta() }
@@ -166,6 +168,7 @@ class ChatListFragment : Fragment() {
         bindFilterChip(binding.chipUnread, activeFilter == ChatFilter.UNREAD)
         bindFilterChip(binding.chipChannels, activeFilter == ChatFilter.GROUPS)
         bindFilterChip(binding.chipDirect, activeFilter == ChatFilter.DM)
+        bindFilterChip(binding.chipFavourites, activeFilter == ChatFilter.FAVOURITES)
     }
 
     private fun bindFilterChip(view: TextView, isActive: Boolean) {
@@ -218,12 +221,22 @@ class ChatListFragment : Fragment() {
 
     private fun showChatActionMenu(anchor: View, item: ChatListItem) {
         val popup = androidx.appcompat.widget.PopupMenu(requireContext(), anchor)
-        popup.menu.add("Add Favorites")
+        val isFav = favouriteIds.contains(item.id)
+        popup.menu.add(if (isFav) "Remove from Favourites" else "Add to Favourites")
         popup.menu.add("Delete Chat")
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.title) {
                 "Delete Chat" -> toast("Deleting ${item.title}")
-                "Add Favorites" -> toast("Added ${item.title} to Favorites")
+                "Add to Favourites" -> {
+                    favouriteIds.add(item.id)
+                    renderCurrentList()
+                    toast("Added ${item.title} to Favourites")
+                }
+                "Remove from Favourites" -> {
+                    favouriteIds.remove(item.id)
+                    renderCurrentList()
+                    toast("Removed ${item.title} from Favourites")
+                }
             }
             true
         }
@@ -279,7 +292,7 @@ class ChatListFragment : Fragment() {
             )
         }
 
-        val all = conversationItems + channelItems
+        val all = (conversationItems + channelItems).map { it.copy(isFavourite = favouriteIds.contains(it.id)) }
 
         val filtered = all
             .filter { item ->
@@ -288,6 +301,7 @@ class ChatListFragment : Fragment() {
                     ChatFilter.UNREAD -> item.unreadCount > 0
                     ChatFilter.GROUPS -> item.kind == ChatListItem.Kind.CHANNEL
                     ChatFilter.DM -> item.kind == ChatListItem.Kind.DIRECT
+                    ChatFilter.FAVOURITES -> item.isFavourite
                 }
             }
             .filter { item ->
@@ -340,6 +354,12 @@ class ChatListFragment : Fragment() {
                 showEmptyState(
                     title = "No Direct Message Yet",
                     subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
+                )
+
+            ChatFilter.FAVOURITES ->
+                showEmptyState(
+                    title = "No Favourites Yet",
+                    subtitle = "Long-press on a chat and select \"Add to Favourites\" to pin it here."
                 )
         }
     }

@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.databinding.ItemChatMessageReceivedBinding
 import com.manjugroups.m_connect.databinding.ItemChatMessageSentBinding
 import com.manjugroups.m_connect.network.MessageAttachmentData
 import com.manjugroups.m_connect.network.MessageData
+import com.manjugroups.m_connect.network.ReactionData
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -92,6 +93,8 @@ class ChatMessageAdapter(
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(createAttachmentView(binding.attachmentsContainer, attachment))
             }
+
+            bindReactions(binding.reactionsLayout, item.data.reactions)
         }
     }
 
@@ -132,11 +135,31 @@ class ChatMessageAdapter(
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(createAttachmentView(binding.attachmentsContainer, attachment))
             }
+
+            bindReactions(binding.reactionsLayout, item.data.reactions)
         }
     }
 
     private fun findMessageInList(id: String): MessageData? {
         return currentList.filterIsInstance<ChatItem.Message>().find { it.data.id == id }?.data
+    }
+
+    private fun bindReactions(layout: LinearLayout, reactions: List<ReactionData>?) {
+        layout.removeAllViews()
+        if (reactions.isNullOrEmpty()) {
+            layout.visibility = View.GONE
+            return
+        }
+
+        layout.visibility = View.VISIBLE
+        reactions.forEach { reaction ->
+            val tv = TextView(layout.context).apply {
+                text = "${reaction.emoji} ${reaction.count ?: ""}"
+                textSize = 10f
+                setPadding(4, 0, 4, 0)
+            }
+            layout.addView(tv)
+        }
     }
 
     private fun createAttachmentView(parent: ViewGroup, attachment: MessageAttachmentData): View {

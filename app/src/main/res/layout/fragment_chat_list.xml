@@ -161,6 +161,22 @@
                 android:text="Dm"
                 android:textColor="@color/chat_text_secondary"
                 android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/chipFavourites"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Favourites"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
         </LinearLayout>
     </HorizontalScrollView>
 

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="end"
@@ -68,7 +70,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_regular"
-                android:lineSpacingExtra="3sp"
+                android:lineSpacingMultiplier="1.1"
                 android:textColor="?attr/colorForegroundInverse"
                 android:textSize="15sp" />
 
@@ -91,19 +93,26 @@
                 <ImageView
                     android:id="@+id/ivSeenStatus"
                     android:layout_width="14dp"
-                    android:layout_height="10dp"
-                    android:layout_marginStart="3dp"
-                    android:contentDescription="Status"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="4dp"
+                    android:contentDescription="Sent Status"
                     android:src="@drawable/ic_chat_check_double"
+                    app:tint="#80FFFFFF"
                     android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
-    <FrameLayout
-        android:id="@+id/reactionContainer"
+    <LinearLayout
+        android:id="@+id/reactionsLayout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="-6dp"
+        android:layout_marginTop="-8dp"
+        android:layout_marginEnd="4dp"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_chat_action_card"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="2dp"
+        android:elevation="1dp"
         android:visibility="gone" />
 </LinearLayout>
