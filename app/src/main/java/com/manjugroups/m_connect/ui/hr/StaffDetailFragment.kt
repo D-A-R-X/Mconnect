@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentStaffDetailBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
@@ -52,6 +53,7 @@ class StaffDetailFragment : Fragment() {
     }
 
     private fun loadDetail() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getStaffDetail(session.bearerToken, staffId)
@@ -62,6 +64,7 @@ class StaffDetailFragment : Fragment() {
                     setupMessageButton(resp.staff)
                 }
             } catch (_: Exception) { }
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         }
     }
 

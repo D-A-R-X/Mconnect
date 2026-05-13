@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InventoryUnit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import kotlinx.coroutines.launch
 
@@ -144,11 +145,13 @@ class ProjectInventoryFragment : Fragment() {
     }
 
     private fun loadUnits(root: View) {
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.projectInventoryLoading)
         val empty = root.findViewById<TextView>(R.id.tvProjectInventoryEmpty)
         val list = root.findViewById<LinearLayout>(R.id.projectInventoryList)
         val count = root.findViewById<TextView>(R.id.tvProjectInventoryCount)
 
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
@@ -163,6 +166,7 @@ class ProjectInventoryFragment : Fragment() {
                     facing = facingFilter,
                     status = statusFilter,
                 )
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load units"
@@ -178,6 +182,7 @@ class ProjectInventoryFragment : Fragment() {
                 }
                 units.forEach { u -> list.addView(createUnitRow(u, list)) }
             } catch (e: Exception) {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE

@@ -3,12 +3,10 @@ package com.manjugroups.m_connect.ui.chat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ItemChatBinding
 
 data class ChatListItem(
@@ -48,7 +46,9 @@ class ChatListAdapter(
             binding.tvChatName.text = item.title
             binding.tvChatLastMsg.text = item.subtitle
             
-            avatarBinder(binding.avatarContainer, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+            // Find the inner FrameLayout that has the background in item_chat.xml
+            val avatarFrame = (binding.avatarContainer as ViewGroup).getChildAt(0)
+            avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
             timestampBinder(binding.tvChatTime, item.timestamp)
             
             if (item.unreadCount > 0) {

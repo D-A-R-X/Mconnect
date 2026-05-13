@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import kotlinx.coroutines.launch
@@ -61,6 +62,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun loadNotifications() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 api.getNotifications(session.bearerToken)
@@ -74,6 +76,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun renderNotifications(notifications: List<NotificationData>) {
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         binding.notificationList.removeAllViews()
 
         val unreadCount = notifications.count { !it.read }

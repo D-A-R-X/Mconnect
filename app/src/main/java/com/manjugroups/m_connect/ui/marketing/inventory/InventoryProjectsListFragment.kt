@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -57,11 +58,13 @@ class InventoryProjectsListFragment : Fragment() {
     }
 
     private fun loadProjects(root: View) {
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.inventoryProjectsLoading)
         val empty = root.findViewById<TextView>(R.id.tvInventoryProjectsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.inventoryProjectsList)
         val countText = root.findViewById<TextView>(R.id.tvInventoryProjectsCount)
 
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
@@ -69,6 +72,7 @@ class InventoryProjectsListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMarketingProjects(session.bearerToken)
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load projects"
@@ -87,6 +91,7 @@ class InventoryProjectsListFragment : Fragment() {
                     list.addView(createProjectRow(p, list))
                 }
             } catch (e: Exception) {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE

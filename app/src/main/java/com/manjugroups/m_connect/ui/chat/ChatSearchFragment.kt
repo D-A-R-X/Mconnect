@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ChatSearchMessage
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -110,8 +111,10 @@ class ChatSearchFragment : Fragment() {
         loading: View,
         list: LinearLayout
     ) {
+        val skeletonContainer = requireView().findViewById<View>(R.id.skeletonContainer)
         hint.visibility = View.GONE
         loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         list.removeAllViews()
         try {
             val resp = api.searchMessages(
@@ -121,6 +124,7 @@ class ChatSearchFragment : Fragment() {
                 conversationId = conversationId
             )
             loading.visibility = View.GONE
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             if (!resp.success) {
                 Toast.makeText(
                     requireContext(),
@@ -147,6 +151,7 @@ class ChatSearchFragment : Fragment() {
             }
         } catch (e: Exception) {
             loading.visibility = View.GONE
+            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             Toast.makeText(
                 requireContext(),
                 "Network error: ${e.message ?: "unknown"}",

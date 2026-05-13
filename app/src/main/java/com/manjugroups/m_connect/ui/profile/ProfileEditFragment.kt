@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmergencyContact
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.network.UpdateMyProfileRequest
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -89,6 +90,8 @@ class ProfileEditFragment : Fragment() {
             return
         }
 
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getStaffDetail(session.bearerToken, id)
@@ -112,6 +115,8 @@ class ProfileEditFragment : Fragment() {
                     Toast.LENGTH_LONG
                 ).show()
                 parentFragmentManager.popBackStack()
+            } finally {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             }
         }
     }

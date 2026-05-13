@@ -14,6 +14,8 @@ import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -24,6 +26,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.load
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -36,6 +39,7 @@ import com.manjugroups.m_connect.network.MessageData
 import com.manjugroups.m_connect.network.SendMessageRequest
 import com.manjugroups.m_connect.network.TypingRequest
 import com.manjugroups.m_connect.network.ReactionRequest
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.DeleteMessageRequest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -73,6 +77,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var typingDebounceJob: Job? = null
     private var isSendingMessage = false
     private var isAttachmentMenuOpen = false
+    private var hasLoadedMessages = false
 
     private val pickAttachmentsLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -158,6 +163,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.etMessage.addTextChangedListener(typingWatcher)
 
         applyKeyboardAndSystemInsets(view)
+
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
 
         viewLifecycleOwner.lifecycleScope.launch {
             if (myStaffId.isBlank()) {
@@ -245,8 +252,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     override fun onCopy(text: String) {
-        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Chat Message", text)
+        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Chat Message", text)
         clipboard.setPrimaryClip(clip)
         toast("Message copied")
     }
@@ -485,14 +492,24 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             setBackgroundResource(R.drawable.bg_chat_action_card)
-            setPadding(dpToPx(12), dpToPx(10), dpToPx(10), dpToPx(10))
+            setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
 
-            addView(buildAttachmentBadge(attachment.fileType))
+            if (attachment.fileType.startsWith("image/")) {
+                addView(ImageView(requireContext()).apply {
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(40), dpToPx(40))
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    load(attachment.uri) {
+                        transformations(coil.transform.RoundedCornersTransformation(dpToPx(4).toFloat()))
+                    }
+                })
+            } else {
+                addView(buildAttachmentBadge(attachment.fileType))
+            }
 
             addView(LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    dpToPx(100), // Fixed width for name preview
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     marginStart = dpToPx(10)
@@ -502,6 +519,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 addView(TextView(requireContext()).apply {
                     text = attachment.fileName
                     maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
                     setTextColor(resolveColor(R.attr.colorForegroundPrimary))
                     textSize = 12f
                     typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
@@ -614,6 +632,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun renderMessages(scrollToBottom: Boolean) {
+        if (!hasLoadedMessages) {
+            hasLoadedMessages = true
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        }
         val chatItems = mutableListOf<ChatItem>()
         var lastDayKey: String? = null
 
@@ -883,17 +905,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            
+            val keyboardHeight = ime.bottom
+
             binding.bottomBar.setPadding(
                 dpToPx(12),
                 dpToPx(12),
                 dpToPx(12),
-                dpToPx(12) + sys.bottom
+                dpToPx(12) + sys.bottom + keyboardHeight
             )
-            
-            if (ime.bottom > 0) {
+
+            binding.rvMessages.setPadding(
+                binding.rvMessages.paddingLeft,
+                binding.rvMessages.paddingTop,
+                binding.rvMessages.paddingRight,
+                keyboardHeight
+            )
+
+            if (keyboardHeight > 0) {
                 binding.rvMessages.post {
-                    binding.rvMessages.smoothScrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                    binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
                 }
             }
             insets
@@ -901,7 +931,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         root.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, oldBottom ->
             if (bottom < oldBottom) {
                 binding.rvMessages.post {
-                    binding.rvMessages.smoothScrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                    binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
                 }
             }
         }

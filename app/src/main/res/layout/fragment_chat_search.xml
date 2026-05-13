@@ -1,90 +1,109 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurfacePrimary"
-    android:orientation="vertical">
+    android:background="?attr/colorSurfacePrimary">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp">
-
-        <ImageView
-            android:id="@+id/btnSearchBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:contentDescription="Back"
-            android:clickable="true"
-            android:focusable="true"
-            android:src="@drawable/ic_arrow_left"
-            app:tint="?attr/colorForegroundPrimary" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
-            android:text="Search Messages"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="18sp" />
-    </LinearLayout>
-
-    <EditText
-        android:id="@+id/etSearch"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginHorizontal="16dp"
-        android:background="@drawable/bg_chat_message_input"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Search messages…"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        android:paddingHorizontal="16dp"
-        android:textColor="?attr/colorForegroundPrimary"
-        android:textColorHint="?attr/colorForegroundMuted"
-        android:textCursorDrawable="@null"
-        android:textSize="14sp"
-        android:importantForAutofill="no"
-        android:autofillHints="@null" />
-
-    <TextView
-        android:id="@+id/tvSearchHint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp"
-        android:fontFamily="@font/inter_regular"
-        android:text="Type at least 2 characters"
-        android:textColor="?attr/colorForegroundMuted"
-        android:textSize="12sp" />
-
-    <ProgressBar
-        android:id="@+id/searchLoading"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="16dp"
-        android:indeterminateTint="?attr/colorAccentPrimary"
-        android:visibility="gone" />
-
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
         <LinearLayout
-            android:id="@+id/searchResultsContainer"
             android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
+
+            <ImageView
+                android:id="@+id/btnSearchBack"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="Back"
+                android:clickable="true"
+                android:focusable="true"
+                android:src="@drawable/ic_arrow_left"
+                app:tint="?attr/colorForegroundPrimary" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_bold"
+                android:text="Search Messages"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/etSearch"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="16dp"
+            android:background="@drawable/bg_chat_message_input"
+            android:fontFamily="@font/inter_regular"
+            android:hint="Search messages…"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:paddingHorizontal="16dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp"
+            android:importantForAutofill="no"
+            android:autofillHints="@null" />
+
+        <TextView
+            android:id="@+id/tvSearchHint"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingBottom="16dp" />
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Type at least 2 characters"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+
+        <ProgressBar
+            android:id="@+id/searchLoading"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:indeterminateTint="?attr/colorAccentPrimary"
+            android:visibility="gone" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/searchResultsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingBottom="16dp" />
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/skeletonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="?attr/colorSurfacePrimary"
+        android:visibility="gone">
+
+        <include layout="@layout/skeleton_list_item"/>
+        <include layout="@layout/skeleton_list_item"/>
+        <include layout="@layout/skeleton_list_item"/>
+        <include layout="@layout/skeleton_list_item"/>
+    </LinearLayout>
+</FrameLayout>

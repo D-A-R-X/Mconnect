@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.databinding.FragmentProfileBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class ProfileFragment : Fragment() {
@@ -59,6 +60,7 @@ class ProfileFragment : Fragment() {
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             try {
                 val resp = api.getStaffDetail(session.bearerToken, staffId)
                 if (resp.success) resp.staff?.let(::renderStaff)
@@ -68,6 +70,8 @@ class ProfileFragment : Fragment() {
                     binding.tvProfileRole.text =
                         if (session.isAdmin) "Administrator" else "Staff"
                 }
+            } finally {
+                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
             }
         }
     }

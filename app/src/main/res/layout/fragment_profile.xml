@@ -119,7 +119,20 @@
                                 android:contentDescription="Verified"
                                 android:src="@drawable/ic_home_verified"
                                 app:tint="#FFFFFF" />
-                        </FrameLayout>
+    <LinearLayout
+        android:id="@+id/skeletonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/white"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <include layout="@layout/skeleton_profile_item" />
+
+        <include layout="@layout/skeleton_detail_item" />
+
+    </LinearLayout>
+</FrameLayout>
                     </LinearLayout>
 
                     <TextView

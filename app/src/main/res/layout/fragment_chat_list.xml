@@ -274,5 +274,20 @@
                 </LinearLayout>
             </FrameLayout>
         </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/skeletonContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="?attr/colorSurfacePrimary"
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+        </LinearLayout>
     </FrameLayout>
 </LinearLayout>

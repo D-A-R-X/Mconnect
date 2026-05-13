@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.network.TelecallerLeadData
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -77,11 +78,13 @@ class MyLeadsFragment : Fragment() {
     }
 
     private fun loadLeads(root: View) {
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.leadsLoading)
         val empty = root.findViewById<TextView>(R.id.tvLeadsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.leadsList)
         val countText = root.findViewById<TextView>(R.id.tvLeadsCount)
 
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
@@ -89,6 +92,7 @@ class MyLeadsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyLeads(session.bearerToken, limit = 200)
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load leads"
@@ -123,6 +127,7 @@ class MyLeadsFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE

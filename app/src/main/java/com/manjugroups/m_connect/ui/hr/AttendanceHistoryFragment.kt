@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
 import kotlinx.coroutines.launch
@@ -93,6 +94,7 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun loadData() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyAttendance(
@@ -115,6 +117,7 @@ class AttendanceHistoryFragment : Fragment() {
                     renderRecords(records)
                 }
             } catch (_: Exception) { }
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         }
     }
 

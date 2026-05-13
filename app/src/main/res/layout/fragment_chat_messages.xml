@@ -153,6 +153,23 @@
                     </LinearLayout>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
+
+        <LinearLayout
+            android:id="@+id/skeletonContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="end"
+            android:orientation="vertical"
+            android:background="#F1F3F8"
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_message_sent"/>
+            <include layout="@layout/skeleton_message_received"/>
+            <include layout="@layout/skeleton_message_sent"/>
+            <include layout="@layout/skeleton_message_received"/>
+            <include layout="@layout/skeleton_message_sent"/>
+            <include layout="@layout/skeleton_message_received"/>
+        </LinearLayout>
         </FrameLayout>
 
         <!-- Mentions Popup -->

@@ -136,18 +136,38 @@
     </LinearLayout>
 
     <!-- Attendance list -->
-    <ScrollView
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:layout_weight="1">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/attendanceList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingBottom="24dp" />
+        </ScrollView>
 
         <LinearLayout
-            android:id="@+id/attendanceList"
+            android:id="@+id/skeletonContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/colorSurfacePrimary"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingBottom="24dp" />
-    </ScrollView>
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+        </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

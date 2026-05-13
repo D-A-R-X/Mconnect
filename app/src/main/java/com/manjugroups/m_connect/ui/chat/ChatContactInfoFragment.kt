@@ -11,6 +11,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class ChatContactInfoFragment : Fragment() {
@@ -34,6 +35,7 @@ class ChatContactInfoFragment : Fragment() {
     private var _binding: FragmentChatContactInfoBinding? = null
     private val binding get() = _binding!!
     private val api = ApiService.create()
+    private var hasLoadedData = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -81,6 +83,8 @@ class ChatContactInfoFragment : Fragment() {
                 .addToBackStack(null)
                 .commit()
         }
+
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
 
         viewLifecycleOwner.lifecycleScope.launch {
             when {
@@ -152,6 +156,10 @@ class ChatContactInfoFragment : Fragment() {
 
     private fun render(title: String, about: String) {
         if (_binding == null) return
+        if (!hasLoadedData) {
+            hasLoadedData = true
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        }
         val initials = title.split(" ")
             .filter { it.isNotBlank() }
             .take(2)

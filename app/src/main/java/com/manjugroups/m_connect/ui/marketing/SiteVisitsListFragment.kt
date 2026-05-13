@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -65,11 +66,13 @@ class SiteVisitsListFragment : Fragment() {
     }
 
     private fun loadVisits(root: View) {
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.siteVisitsLoading)
         val empty = root.findViewById<TextView>(R.id.tvSiteVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.siteVisitsList)
         val countText = root.findViewById<TextView>(R.id.tvSiteVisitsCount)
 
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
@@ -86,6 +89,7 @@ class SiteVisitsListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load site visits"
@@ -105,6 +109,7 @@ class SiteVisitsListFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE

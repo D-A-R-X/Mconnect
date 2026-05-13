@@ -18,6 +18,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrStaffBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class HrStaffFragment : Fragment() {
@@ -64,9 +65,16 @@ class HrStaffFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
                     when (state) {
-                        is HrStaffUiState.Loading -> { }
-                        is HrStaffUiState.Loaded -> renderStaffList(state)
-                        is HrStaffUiState.Error -> { }
+                        is HrStaffUiState.Loading -> {
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                        }
+                        is HrStaffUiState.Loaded -> {
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                            renderStaffList(state)
+                        }
+                        is HrStaffUiState.Error -> {
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                        }
                     }
                 }
             }

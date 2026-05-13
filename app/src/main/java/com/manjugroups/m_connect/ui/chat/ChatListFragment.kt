@@ -31,6 +31,7 @@ import com.manjugroups.m_connect.network.CreateChannelRequest
 import com.manjugroups.m_connect.network.CreateGroupConversationRequest
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -184,6 +185,9 @@ class ChatListFragment : Fragment() {
 
     private fun loadData() {
         viewLifecycleOwner.lifecycleScope.launch {
+            if (!hasLoadedOnce) {
+                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            }
             runCatching {
                 val conversations = api.getConversations(session.bearerToken).conversations
                 val channels = api.getChannels(session.bearerToken).channels
@@ -192,8 +196,10 @@ class ChatListFragment : Fragment() {
                 allConversations = conversations
                 allChannels = channels
                 hasLoadedOnce = true
+                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 renderCurrentList()
             }.onFailure {
+                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 if (!hasLoadedOnce) {
                     showEmptyState(
                         title = "Unable to load chats",

@@ -33,7 +33,8 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
         binding.tvMessagePreview.text = body
 
         binding.btnReply.setOnClickListener {
-            callback?.onReply(messageId)
+            val id = arguments?.getString("messageId") ?: ""
+            callback?.onReply(id)
             dismiss()
         }
         binding.btnForward.setOnClickListener {

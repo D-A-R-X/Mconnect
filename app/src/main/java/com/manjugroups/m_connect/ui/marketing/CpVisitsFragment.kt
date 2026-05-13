@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -55,9 +56,11 @@ class CpVisitsFragment : Fragment() {
 
     private fun loadVisits() {
         val root = rootView ?: return
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val loading = root.findViewById<View>(R.id.cpVisitsLoading)
         val empty = root.findViewById<TextView>(R.id.tvCpVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
@@ -72,6 +75,7 @@ class CpVisitsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load CP visits"
@@ -88,6 +92,7 @@ class CpVisitsFragment : Fragment() {
                 }
                 visits.forEach { list.addView(createRow(it, list)) }
             } catch (e: Exception) {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 loading.visibility = View.GONE
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE

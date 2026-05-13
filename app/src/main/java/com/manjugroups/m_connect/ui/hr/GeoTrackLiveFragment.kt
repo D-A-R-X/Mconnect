@@ -24,6 +24,7 @@ import com.google.android.gms.maps.model.PolylineOptions
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentGeotrackLiveBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.GeoLiveStatus
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.GeoTrip
@@ -434,6 +435,11 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
     private fun setLoading(isLoading: Boolean) {
         binding.progressMap.visibility = if (isLoading) View.VISIBLE else View.GONE
+        if (isLoading) {
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        } else {
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        }
     }
 
     private fun selectedDateRange(): Pair<Long, Long> {
