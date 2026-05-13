@@ -41,7 +41,7 @@ import java.util.Locale
 
 class ChatListFragment : Fragment() {
 
-    private enum class ChatFilter { ALL, UNREAD, GROUPS, DM, FAVOURITES }
+    private enum class ChatFilter { ALL, UNREAD, FAVOURITES, GROUPS, DM }
 
     private var _binding: FragmentChatListBinding? = null
     private val binding get() = _binding!!

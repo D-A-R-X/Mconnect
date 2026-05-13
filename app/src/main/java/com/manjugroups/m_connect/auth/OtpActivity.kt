@@ -13,7 +13,6 @@ import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -179,7 +178,6 @@ class OtpActivity : AppCompatActivity() {
                         }
                         is AuthUiState.OtpSent -> {
                             resetButton()
-                            Toast.makeText(this@OtpActivity, "OTP resent", Toast.LENGTH_SHORT).show()
                             clearOtp()
                             viewModel.resetState()
                         }
