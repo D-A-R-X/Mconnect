@@ -41,6 +41,9 @@ import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import kotlinx.coroutines.launch
 
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
+
 class MainActivity : AppCompatActivity() {
 
     companion object {
@@ -76,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabs: List<TabConfig>
     private lateinit var tabBarContainer: FrameLayout
     private lateinit var fragmentContainer: FrameLayout
+    private lateinit var mainViewPager: ViewPager2
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
 
@@ -95,6 +99,9 @@ class MainActivity : AppCompatActivity() {
         statusBarBackground = findViewById(R.id.statusBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
+        mainViewPager = findViewById(R.id.mainViewPager)
+
+        setupViewPager()
 
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -129,6 +136,7 @@ class MainActivity : AppCompatActivity() {
                 maxOf(ime.bottom, sys.bottom)
             }
             fragmentContainer.updatePadding(top = 0, bottom = fragmentBottomInset)
+            mainViewPager.updatePadding(top = 0, bottom = fragmentBottomInset)
             val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
             mainRoot.updatePadding(bottom = 0)
             tabBarContainer.updatePadding(left = sys.left, right = sys.right, bottom = sys.bottom + baseBottomPx)
@@ -189,9 +197,31 @@ class MainActivity : AppCompatActivity() {
             applyTopBarForTab(currentTab)
         }
 
+        supportFragmentManager.addOnBackStackChangedListener {
+            val hasBackstack = supportFragmentManager.backStackEntryCount > 0
+            fragmentContainer.visibility = if (hasBackstack) View.VISIBLE else View.GONE
+            mainViewPager.isUserInputEnabled = !hasBackstack
+            setTabBarVisible(!hasBackstack)
+        }
+
         lifecycleScope.launch {
             refreshSessionContext()
         }
+    }
+
+    private fun setupViewPager() {
+        mainViewPager.adapter = object : FragmentStateAdapter(this) {
+            override fun getItemCount(): Int = 4
+            override fun createFragment(position: Int): Fragment = createRootFragment(position)
+        }
+        mainViewPager.offscreenPageLimit = 3
+        mainViewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                currentTab = position
+                updateTabUi(position)
+                applyTopBarForTab(position)
+            }
+        })
     }
 
     /**
@@ -248,44 +278,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectTab(index: Int) {
-        val targetTag = tabTag(index)
-        val existingTarget = supportFragmentManager.findFragmentByTag(targetTag)
-        if (currentTab == index && existingTarget?.isVisible == true && supportFragmentManager.backStackEntryCount == 0) {
-            return
-        }
-
         if (supportFragmentManager.backStackEntryCount > 0) {
             supportFragmentManager.popBackStackImmediate(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
         }
 
         currentTab = index
-        updateTabUi(index)
-        applyTopBarForTab(index)
-        setTabBarVisible(true)
-
-        val fragment = existingTarget ?: createRootFragment(index)
-        val transaction = supportFragmentManager.beginTransaction()
-            .setReorderingAllowed(true)
-
-        rootTabTags().forEach { tag ->
-            supportFragmentManager.findFragmentByTag(tag)?.let(transaction::hide)
-        }
-
-        if (existingTarget == null) {
-            transaction.add(R.id.fragmentContainer, fragment, targetTag)
-        } else {
-            transaction.show(existingTarget)
-        }
-
-        transaction.commit()
+        mainViewPager.setCurrentItem(index, true)
     }
 
     private fun applyTopBarForTab(index: Int) {
+        val blue = Color.parseColor("#0B61CA")
         when (index) {
-            TAB_HOME -> setTopBarAppearance(Color.WHITE, true, fullBleed = false)
-            TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+            TAB_HOME -> setTopBarAppearance(blue, false, fullBleed = false)
+            TAB_HR -> setTopBarAppearance(blue, false, fullBleed = false)
+            TAB_CHAT -> setTopBarAppearance(blue, false, fullBleed = false)
+            TAB_LIBRARY -> setTopBarAppearance(blue, false, fullBleed = false)
+            else -> setTopBarAppearance(blue, false, fullBleed = false)
         }
     }
 

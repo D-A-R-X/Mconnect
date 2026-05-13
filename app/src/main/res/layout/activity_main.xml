@@ -20,11 +20,17 @@
         android:clipChildren="false"
         android:clipToPadding="false">
 
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/mainViewPager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
         <FrameLayout
             android:id="@+id/fragmentContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#F1F3F8" />
+            android:background="#F1F3F8"
+            android:visibility="gone" />
 
         <!-- Floating pill bottom nav -->
         <FrameLayout

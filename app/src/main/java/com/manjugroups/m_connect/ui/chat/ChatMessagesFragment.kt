@@ -18,11 +18,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import coil.load
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
@@ -32,7 +30,6 @@ import com.manjugroups.m_connect.databinding.FragmentChatMessagesBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ChannelIdRequest
 import com.manjugroups.m_connect.network.ConversationIdRequest
-import com.manjugroups.m_connect.network.MessageAttachmentData
 import com.manjugroups.m_connect.network.MessageAttachmentUpload
 import com.manjugroups.m_connect.network.MessageData
 import com.manjugroups.m_connect.network.SendMessageRequest
@@ -64,9 +61,13 @@ class ChatMessagesFragment : Fragment() {
     private val messages = mutableListOf<MessageData>()
     private val pendingAttachments = mutableListOf<PendingAttachment>()
 
+    private lateinit var chatAdapter: ChatMessageAdapter
+    private lateinit var mentionAdapter: MentionAdapter
+
     private var pollJob: Job? = null
     private var typingDebounceJob: Job? = null
     private var isSendingMessage = false
+    private var isAttachmentMenuOpen = false
 
     private val pickAttachmentsLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -113,15 +114,42 @@ class ChatMessagesFragment : Fragment() {
 
         binding.tvChatTitle.text = chatTitle
         binding.tvChatSubtitle.text = chatSubtitle
-        updateHeaderAvatar(chatTitle)
+        
+        setupAdapters()
         renderPendingAttachments()
         updateSendIcon()
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.headerContainer.setOnClickListener { openContactInfo() }
         binding.btnInfo.setOnClickListener { openContactInfo() }
+        binding.btnSearch.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(
+                    R.id.fragmentContainer,
+                    ChatSearchFragment.newInstance(channelId, conversationId, chatTitle)
+                )
+                .addToBackStack(null)
+                .commit()
+        }
         binding.btnSend.setOnClickListener { handleSendOrMic() }
-        binding.btnAttach.setOnClickListener { openAttachmentPicker() }
+        
+        binding.btnAttach.setOnClickListener { 
+            toggleAttachmentMenu()
+        }
+
+        binding.menuAttachFile.setOnClickListener {
+            toggleAttachmentMenu()
+            pickAttachmentsLauncher.launch(arrayOf("*/*"))
+        }
+        binding.menuAttachMedia.setOnClickListener {
+            toggleAttachmentMenu()
+            pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+        }
+        binding.menuAttachCamera.setOnClickListener {
+            toggleAttachmentMenu()
+            toast("Camera feature coming soon")
+        }
+
         binding.etMessage.addTextChangedListener(typingWatcher)
 
         applyKeyboardAndSystemInsets(view)
@@ -142,7 +170,10 @@ class ChatMessagesFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
+        }
         startPolling()
     }
 
@@ -153,6 +184,62 @@ class ChatMessagesFragment : Fragment() {
         typingDebounceJob = null
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onPause()
+    }
+
+    private fun toggleAttachmentMenu() {
+        isAttachmentMenuOpen = !isAttachmentMenuOpen
+        binding.attachmentMenu.visibility = if (isAttachmentMenuOpen) View.VISIBLE else View.GONE
+        
+        // Rotate the plus icon
+        binding.btnAttach.animate()
+            .rotation(if (isAttachmentMenuOpen) 45f else 0f)
+            .setDuration(200)
+            .start()
+    }
+
+    private fun setupAdapters() {
+        chatAdapter = ChatMessageAdapter(
+            onMessageLongClick = { message -> showMessageActions(message) },
+            onAttachmentClick = { url -> openAttachmentUrl(url) }
+        )
+        binding.rvMessages.apply {
+            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext()).apply {
+                stackFromEnd = true
+            }
+            adapter = chatAdapter
+        }
+
+        mentionAdapter = MentionAdapter { person ->
+            insertMention(person)
+        }
+        binding.rvMentions.apply {
+            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext())
+            adapter = mentionAdapter
+        }
+    }
+
+    private fun showMessageActions(message: MessageData) {
+        val actions = ChatMessageActionsFragment.newInstance(message.body ?: "")
+        actions.show(childFragmentManager, "MessageActions")
+    }
+
+    private fun openAttachmentUrl(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            toast("Unable to open attachment")
+        }
+    }
+
+    private fun insertMention(person: MentionPerson) {
+        val text = binding.etMessage.text.toString()
+        val atIndex = text.lastIndexOf("@")
+        if (atIndex >= 0) {
+            val newText = text.substring(0, atIndex + 1) + person.username + " "
+            binding.etMessage.setText(newText)
+            binding.etMessage.setSelection(newText.length)
+        }
+        binding.mentionsCard.visibility = View.GONE
     }
 
     private fun startPolling() {
@@ -200,8 +287,6 @@ class ChatMessagesFragment : Fragment() {
 
         if (_binding != null) {
             binding.tvChatTitle.text = chatTitle
-            binding.tvChatSubtitle.text = chatSubtitle
-            updateHeaderAvatar(chatTitle)
         }
     }
 
@@ -218,16 +303,6 @@ class ChatMessagesFragment : Fragment() {
         }
     }
 
-    private fun updateHeaderAvatar(title: String) {
-        if (_binding == null) return
-        val initials = title.split(" ")
-            .filter { it.isNotBlank() }
-            .take(2)
-            .joinToString("") { it.first().uppercase() }
-            .ifBlank { "C" }
-        binding.tvChatAvatar.text = initials
-    }
-
     private fun openContactInfo() {
         val fragment = ChatContactInfoFragment.newInstance(
             channelId = channelId,
@@ -239,11 +314,6 @@ class ChatMessagesFragment : Fragment() {
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
-    }
-
-    private fun openAttachmentPicker() {
-        if (isSendingMessage) return
-        pickAttachmentsLauncher.launch(arrayOf("*/*"))
     }
 
     private fun handlePickedAttachments(uris: List<Uri>) {
@@ -465,96 +535,34 @@ class ChatMessagesFragment : Fragment() {
                 .filter { it.isNotEmpty() }
                 .distinct()
 
-            binding.tvTypingIndicator.text = when (names.size) {
-                0 -> ""
-                1 -> "${names.first()} is typing..."
-                2 -> "${names[0]} and ${names[1]} are typing..."
-                else -> "${names[0]}, ${names[1]} and others are typing..."
-            }
-            binding.tvTypingIndicator.visibility =
-                if (names.isEmpty()) View.GONE else View.VISIBLE
+            // We hide indicator for now per reference design, or we can overlay it
         }
     }
 
     private fun renderMessages(scrollToBottom: Boolean) {
-        binding.messagesContainer.removeAllViews()
-        binding.tvEmptyMessages.visibility = if (messages.isEmpty()) View.VISIBLE else View.GONE
-
-        val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val chatItems = mutableListOf<ChatItem>()
         var lastDayKey: String? = null
 
-        messages
-            .filterNot { it.isDeleted == true }
-            .forEach { message ->
-                val createdMillis = message.creationTime?.toLong() ?: 0L
-                val dayKey = dayKey(createdMillis)
-                if (dayKey != lastDayKey && createdMillis > 0L) {
-                    binding.messagesContainer.addView(buildDateSeparator(createdMillis))
-                    lastDayKey = dayKey
-                }
-
-                val isMine = message.senderId == myStaffId
-                val row = LinearLayout(requireContext()).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        bottomMargin = dpToPx(6)
-                    }
-                    gravity = if (isMine) Gravity.END else Gravity.START
-                }
-
-                if (!isMine && channelId != null) {
-                    row.addView(TextView(requireContext()).apply {
-                        text = message.senderName ?: "Unknown"
-                        setTextColor(ContextCompat.getColor(context, R.color.chat_blue_top))
-                        textSize = 11f
-                        typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
-                        setPadding(dpToPx(10), 0, dpToPx(10), dpToPx(2))
-                    })
-                }
-
-                val bubble = LinearLayout(requireContext()).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        marginStart = if (isMine) dpToPx(60) else 0
-                        marginEnd = if (isMine) 0 else dpToPx(60)
-                    }
-                    minimumWidth = dpToPx(56)
-                    setBackgroundResource(
-                        if (isMine) R.drawable.bg_chat_bubble_sent else R.drawable.bg_chat_bubble_received
-                    )
-                    setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(7))
-                }
-
-                addMessageAttachments(bubble, message.attachments.orEmpty(), isMine)
-
-                if (!message.body.isNullOrBlank()) {
-                    bubble.addView(TextView(requireContext()).apply {
-                        text = message.body.orEmpty()
-                        setTextColor(
-                            if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
-                            else ContextCompat.getColor(context, R.color.chat_text_primary)
-                        )
-                        textSize = 15.5f
-                        setLineSpacing(0f, 1.05f)
-                        typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
-                    })
-                }
-
-                bubble.addView(buildBubbleTimeRow(createdMillis, isMine, timeFormatter))
-                row.addView(bubble)
-
-                binding.messagesContainer.addView(row)
+        messages.filterNot { it.isDeleted == true }.forEach { message ->
+            val createdMillis = message.creationTime?.toLong() ?: 0L
+            val dayKey = dayKey(createdMillis)
+            if (dayKey != lastDayKey && createdMillis > 0L) {
+                chatItems.add(ChatItem.DateSeparator(friendlyDateLabel(createdMillis)))
+                lastDayKey = dayKey
             }
 
-        if (scrollToBottom) {
-            binding.scrollMessages.post {
-                binding.scrollMessages.fullScroll(View.FOCUS_DOWN)
+            val isMine = message.senderId == myStaffId
+            chatItems.add(ChatItem.Message(
+                data = message,
+                isMine = isMine,
+                showAvatar = !isMine && channelId != null,
+                showName = !isMine && channelId != null
+            ))
+        }
+
+        chatAdapter.submitList(chatItems) {
+            if (scrollToBottom && chatItems.isNotEmpty()) {
+                binding.rvMessages.scrollToPosition(chatItems.size - 1)
             }
         }
     }
@@ -565,17 +573,17 @@ class ChatMessagesFragment : Fragment() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dpToPx(6)
-                bottomMargin = dpToPx(8)
+                topMargin = dpToPx(10)
+                bottomMargin = dpToPx(14)
             }
         }
         val pill = TextView(requireContext()).apply {
             text = friendlyDateLabel(timestamp)
             setBackgroundResource(R.drawable.bg_chat_date_pill)
-            setPadding(dpToPx(14), dpToPx(3), dpToPx(14), dpToPx(3))
-            setTextColor(ContextCompat.getColor(context, R.color.chat_text_primary))
-            textSize = 12f
-            typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
+            setPadding(dpToPx(16), dpToPx(4), dpToPx(16), dpToPx(4))
+            setTextColor(android.graphics.Color.parseColor("#475467"))
+            textSize = 11f
+            typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -603,12 +611,11 @@ class ChatMessagesFragment : Fragment() {
 
             addView(TextView(requireContext()).apply {
                 text = if (timestamp > 0L) formatter.format(Date(timestamp)) else ""
-                textSize = 11f
+                textSize = 10f
                 setTextColor(
-                    if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
-                    else resolveColor(R.attr.colorForegroundMuted)
+                    if (isMine) android.graphics.Color.parseColor("#B3FFFFFF")
+                    else android.graphics.Color.parseColor("#667085")
                 )
-                alpha = if (isMine) 0.85f else 0.6f
                 typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
             })
 
@@ -618,7 +625,7 @@ class ChatMessagesFragment : Fragment() {
                         marginStart = dpToPx(4)
                     }
                     setImageResource(R.drawable.ic_chat_check_double)
-                    alpha = 0.85f
+                    imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#80FFFFFF"))
                 })
             }
         }
@@ -639,184 +646,7 @@ class ChatMessagesFragment : Fragment() {
         val isYesterday = yesterday.get(Calendar.YEAR) == past.get(Calendar.YEAR) &&
             yesterday.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
         if (isYesterday) return "Yesterday"
-        return SimpleDateFormat("EEE, dd MMM", Locale.getDefault()).format(Date(timestamp))
-    }
-
-    private fun addMessageAttachments(
-        parent: LinearLayout,
-        attachments: List<MessageAttachmentData>,
-        isMine: Boolean
-    ) {
-        attachments.forEachIndexed { index, attachment ->
-            val mime = attachment.fileType.orEmpty().lowercase(Locale.getDefault())
-            val view = when {
-                mime.startsWith("image/") -> createImageAttachmentView(attachment)
-                mime.startsWith("video/") -> createVideoAttachmentView(attachment)
-                else -> createMessageAttachmentView(attachment, isMine)
-            }
-            parent.addView(view.apply {
-                val params = layoutParams as LinearLayout.LayoutParams
-                params.topMargin = if (index == 0) 0 else dpToPx(6)
-                params.bottomMargin = dpToPx(4)
-                layoutParams = params
-            })
-        }
-    }
-
-    private fun createImageAttachmentView(attachment: MessageAttachmentData): View {
-        val width = dpToPx(238)
-        val height = dpToPx(178)
-        val cornerPx = dpToPx(8).toFloat()
-
-        val container = FrameLayout(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(width, height)
-            isClickable = !attachment.url.isNullOrBlank()
-            isFocusable = isClickable
-            if (isClickable) setOnClickListener { openAttachment(attachment) }
-        }
-
-        val image = ImageView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundResource(R.drawable.bg_chat_media_placeholder)
-            clipToOutline = true
-            outlineProvider = object : android.view.ViewOutlineProvider() {
-                override fun getOutline(v: View, outline: android.graphics.Outline) {
-                    outline.setRoundRect(0, 0, v.width, v.height, cornerPx)
-                }
-            }
-        }
-        attachment.url?.takeIf { it.isNotBlank() }?.let { url ->
-            image.load(url) {
-                crossfade(true)
-                transformations(coil.transform.RoundedCornersTransformation(cornerPx))
-            }
-        }
-        container.addView(image)
-        return container
-    }
-
-    private fun createVideoAttachmentView(attachment: MessageAttachmentData): View {
-        val width = dpToPx(238)
-        val height = dpToPx(178)
-        val cornerPx = dpToPx(8).toFloat()
-
-        val container = FrameLayout(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(width, height)
-            isClickable = !attachment.url.isNullOrBlank()
-            isFocusable = isClickable
-            if (isClickable) setOnClickListener { openAttachment(attachment) }
-        }
-
-        val image = ImageView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundResource(R.drawable.bg_chat_media_placeholder)
-            clipToOutline = true
-            outlineProvider = object : android.view.ViewOutlineProvider() {
-                override fun getOutline(v: View, outline: android.graphics.Outline) {
-                    outline.setRoundRect(0, 0, v.width, v.height, cornerPx)
-                }
-            }
-        }
-        attachment.url?.takeIf { it.isNotBlank() }?.let { url ->
-            image.load(url, videoFrameImageLoader()) {
-                crossfade(true)
-                transformations(coil.transform.RoundedCornersTransformation(cornerPx))
-            }
-        }
-        container.addView(image)
-
-        // Play overlay
-        val play = FrameLayout(requireContext()).apply {
-            val size = dpToPx(48)
-            layoutParams = FrameLayout.LayoutParams(size, size, Gravity.CENTER)
-            setBackgroundResource(R.drawable.bg_chat_video_play_circle)
-        }
-        play.addView(ImageView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                dpToPx(22), dpToPx(22), Gravity.CENTER
-            )
-            setImageResource(R.drawable.ic_chat_media_play)
-        })
-        container.addView(play)
-        return container
-    }
-
-    private var cachedVideoFrameLoader: coil.ImageLoader? = null
-    private fun videoFrameImageLoader(): coil.ImageLoader {
-        cachedVideoFrameLoader?.let { return it }
-        val loader = coil.ImageLoader.Builder(requireContext())
-            .components { add(coil.decode.VideoFrameDecoder.Factory()) }
-            .build()
-        cachedVideoFrameLoader = loader
-        return loader
-    }
-
-    private fun createMessageAttachmentView(
-        attachment: MessageAttachmentData,
-        isMine: Boolean
-    ): LinearLayout {
-        return LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
-            isClickable = !attachment.url.isNullOrBlank()
-            isFocusable = isClickable
-            if (isClickable) {
-                setOnClickListener { openAttachment(attachment) }
-            }
-
-            addView(buildAttachmentBadge(attachment.fileType.orEmpty()))
-
-            addView(LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    marginStart = dpToPx(8)
-                }
-
-                addView(TextView(requireContext()).apply {
-                    text = attachment.fileName ?: "Attachment"
-                    maxLines = 1
-                    setTextColor(
-                        if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
-                        else ContextCompat.getColor(context, R.color.chat_text_primary)
-                    )
-                    textSize = 13f
-                    typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
-                })
-
-                addView(TextView(requireContext()).apply {
-                    text = buildString {
-                        append(readableAttachmentLabel(attachment.fileType.orEmpty()))
-                        attachment.fileSize?.takeIf { it > 0 }?.let {
-                            append(" • ")
-                            append(humanFileSize(it))
-                        }
-                    }
-                    setTextColor(
-                        if (isMine) ContextCompat.getColor(context, R.color.lt_foreground_inverse)
-                        else ContextCompat.getColor(context, R.color.chat_text_secondary)
-                    )
-                    alpha = if (isMine) 0.85f else 1f
-                    textSize = 11f
-                    typeface = ResourcesCompat.getFont(context, R.font.inter_regular)
-                })
-            })
-        }
+        return SimpleDateFormat("dd MMMM", Locale.getDefault()).format(Date(timestamp))
     }
 
     private fun buildAttachmentBadge(fileType: String): TextView {
@@ -844,29 +674,11 @@ class ChatMessagesFragment : Fragment() {
         }
     }
 
-    private fun readableAttachmentLabel(fileType: String): String {
-        val normalized = fileType.lowercase(Locale.getDefault())
-        return when {
-            normalized.startsWith("image/") -> "Image"
-            normalized.contains("pdf") -> "PDF"
-            normalized.contains("sheet") || normalized.contains("excel") -> "Spreadsheet"
-            normalized.contains("word") || normalized.contains("document") -> "Document"
-            else -> "Attachment"
-        }
-    }
-
-    private fun openAttachment(attachment: MessageAttachmentData) {
-        val url = attachment.url ?: return
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            toast("Unable to open attachment")
-        }
-    }
-
     private fun handleSendOrMic() {
         if (canSendNow()) {
             sendMessage()
+        } else {
+            toast("Recording coming soon")
         }
     }
 
@@ -892,7 +704,6 @@ class ChatMessagesFragment : Fragment() {
         binding.etMessage.setText("")
         pendingAttachments.clear()
         renderPendingAttachments()
-        binding.tvTypingIndicator.visibility = View.GONE
         setComposerBusy(true)
         updateSendIcon()
 
@@ -1021,6 +832,13 @@ class ChatMessagesFragment : Fragment() {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
 
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+            val text = s?.toString().orEmpty()
+            if (text.endsWith("@")) {
+                showMentionsPopup()
+            } else if (!text.contains("@")) {
+                binding.mentionsCard.visibility = View.GONE
+            }
+            
             if (!s.isNullOrBlank()) {
                 sendTypingSignal()
             }
@@ -1030,37 +848,50 @@ class ChatMessagesFragment : Fragment() {
         override fun afterTextChanged(s: Editable?) = Unit
     }
 
+    private fun showMentionsPopup() {
+        binding.mentionsCard.visibility = View.VISIBLE
+        // Mock data for now, ideally fetch from channel members
+        val mockPeople = listOf(
+            MentionPerson("1", "Dr. Who", "drwho"),
+            MentionPerson("2", "Emmett Brown", "docbrown"),
+            MentionPerson("3", "James Cole", "jcole"),
+            MentionPerson("4", "Titor", "titor")
+        )
+        mentionAdapter.submitList(mockPeople)
+    }
+
     private fun humanFileSize(sizeBytes: Long): String {
         return Formatter.formatShortFileSize(requireContext(), sizeBytes)
     }
 
-    /**
-     * MainActivity uses edge-to-edge (setDecorFitsSystemWindows(false)) which
-     * disables the system's `adjustResize` behaviour. The activity's root listener
-     * already pads `fragmentContainer` by the visible-keyboard height
-     * (`ime.bottom - sys.bottom`), so the chat fragment's vertical LinearLayout
-     * naturally compresses and the bottom toolbar lifts with the keyboard.
-     *
-     * We only do two extra things here:
-     *   1) Auto-scroll the message list to the latest message when the keyboard
-     *      opens so the focused field stays visible above the IME.
-     *   2) Forward the same scroll-to-bottom hint when the layout height changes
-     *      (which is what edge-to-edge resize looks like to the fragment).
-     */
     private fun applyKeyboardAndSystemInsets(root: View) {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            if (ime > 0) {
-                binding.scrollMessages.post {
-                    binding.scrollMessages.fullScroll(View.FOCUS_DOWN)
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            
+            // Bottom bar padding should account for system navigation bars
+            binding.bottomBar.setPadding(
+                dpToPx(12),
+                dpToPx(12),
+                dpToPx(12),
+                dpToPx(12) + sys.bottom
+            )
+            
+            if (ime.bottom > 0) {
+                binding.rvMessages.post {
+                    if (chatAdapter.itemCount > 0) {
+                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount - 1)
+                    }
                 }
             }
             insets
         }
         root.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, oldBottom ->
             if (bottom < oldBottom) {
-                binding.scrollMessages.post {
-                    binding.scrollMessages.fullScroll(View.FOCUS_DOWN)
+                binding.rvMessages.post {
+                    if (chatAdapter.itemCount > 0) {
+                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount - 1)
+                    }
                 }
             }
         }
@@ -1074,6 +905,9 @@ class ChatMessagesFragment : Fragment() {
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
+    private fun Int.spToFloat(): Float =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, this.toFloat(), resources.displayMetrics)
+
     private fun resolveColor(attr: Int): Int {
         val typedValue = TypedValue()
         requireContext().theme.resolveAttribute(attr, typedValue, true)
@@ -1081,7 +915,11 @@ class ChatMessagesFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        (activity as? MainActivity)?.setTabBarVisible(true)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(true)
+            // Restore top bar to brand blue
+            main.setTopBarAppearance(android.graphics.Color.parseColor("#0B61CA"), false, fullBleed = false)
+        }
         binding.etMessage.removeTextChangedListener(typingWatcher)
         pollJob?.cancel()
         pollJob = null

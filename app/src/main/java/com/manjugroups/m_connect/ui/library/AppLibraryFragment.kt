@@ -5,8 +5,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
+import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentAppLibraryBinding
 import com.manjugroups.m_connect.ui.PlaceholderFragment
@@ -17,6 +18,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
+import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.telecaller.DialerFragment
@@ -27,7 +29,9 @@ class AppLibraryFragment : Fragment() {
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, SETTINGS }
+    private var hasAnimatedBanner = false
+    private var isBannerCollapsed = false
+    private var bannerMeasuredHeight = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -38,14 +42,57 @@ class AppLibraryFragment : Fragment() {
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, savedInstanceState: android.os.Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setupClickActions()
-        setupFilterPills()
-        applyFilter(Filter.ALL)
+        setupHeader()
+        setupActions()
+        setupScroll()
+        
+        binding.appsContentWrapper.visibility = View.VISIBLE
     }
 
-    private fun setupClickActions() {
+    override fun onResume() {
+        super.onResume()
+        (activity as? MainActivity)?.setTabBarVisible(true)
+        
+        // Always trigger animation on swipe back
+        if (!hasAnimatedBanner) {
+            animateBannerExpansion()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Reset state so it re-animates next time
+        hasAnimatedBanner = false
+        isBannerCollapsed = false
+        if (_binding != null) {
+            binding.appsBannerExpandable.visibility = View.INVISIBLE
+            binding.appsBannerExpandable.alpha = 0f
+            binding.appsBannerExpandable.layoutParams.height = 0
+        }
+    }
+
+    private fun setupHeader() {
+        val session = SessionManager(requireContext())
+        val name = (session.userName ?: "User").ifBlank { "User" }
+        binding.tvAppsAvatarInitial.text = name.first().uppercase()
+    }
+
+    private fun setupActions() {
+        binding.btnAppsProfile.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, ProfileFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+        binding.btnAppsBell.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, NotificationsFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+
         binding.itemHrAttendance.setOnClickListener { openScreen(AttendanceHistoryFragment()) }
         binding.itemHrLeave.setOnClickListener { openScreen(LeavesFragment()) }
         binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
@@ -71,34 +118,88 @@ class AppLibraryFragment : Fragment() {
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }
     }
 
-    private fun setupFilterPills() {
-        binding.pillAllApps.setOnClickListener { applyFilter(Filter.ALL) }
-        binding.pillHr.setOnClickListener { applyFilter(Filter.HR) }
-        binding.pillMarketing.setOnClickListener { applyFilter(Filter.MARKETING) }
-        binding.pillProject.setOnClickListener { applyFilter(Filter.PROJECT) }
-        binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
+    private fun setupScroll() {
+        binding.appsScrollView.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
+            if (scrollY > 50 && !isBannerCollapsed && bannerMeasuredHeight > 0) {
+                collapseBanner()
+            } else if (scrollY < 10 && isBannerCollapsed) {
+                expandBanner()
+            }
+        })
     }
 
-    private fun applyFilter(filter: Filter) {
-        binding.cardHr.visibility = if (filter == Filter.ALL || filter == Filter.HR) View.VISIBLE else View.GONE
-        binding.cardMarketing.visibility = if (filter == Filter.ALL || filter == Filter.MARKETING) View.VISIBLE else View.GONE
-        binding.cardProject.visibility = if (filter == Filter.ALL || filter == Filter.PROJECT) View.VISIBLE else View.GONE
-        binding.cardConfig.visibility = if (filter == Filter.ALL || filter == Filter.SETTINGS) View.VISIBLE else View.GONE
-
-        styleTab(binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
-        styleTab(binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
-        styleTab(binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
-        styleTab(binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
-        styleTab(binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
+    private fun collapseBanner() {
+        if (!isBannerCollapsed) {
+            isBannerCollapsed = true
+            val animator = android.animation.ValueAnimator.ofInt(binding.appsBannerExpandable.height, 0)
+            animator.addUpdateListener { valueAnimator ->
+                if (_binding == null) return@addUpdateListener
+                val value = valueAnimator.animatedValue as Int
+                val params = binding.appsBannerExpandable.layoutParams
+                params.height = value
+                binding.appsBannerExpandable.layoutParams = params
+            }
+            animator.duration = 300
+            animator.start()
+            binding.appsBannerExpandable.animate().alpha(0f).setDuration(200).start()
+        }
     }
 
-    private fun styleTab(label: TextView, indicator: View, active: Boolean) {
-        if (active) {
-            label.setTextColor(Color.parseColor("#0B61CA"))
-            indicator.visibility = View.VISIBLE
-        } else {
-            label.setTextColor(Color.parseColor("#6A6D78"))
-            indicator.visibility = View.INVISIBLE
+    private fun expandBanner() {
+        if (isBannerCollapsed) {
+            isBannerCollapsed = false
+            val animator = android.animation.ValueAnimator.ofInt(0, bannerMeasuredHeight)
+            animator.addUpdateListener { valueAnimator ->
+                if (_binding == null) return@addUpdateListener
+                val value = valueAnimator.animatedValue as Int
+                val params = binding.appsBannerExpandable.layoutParams
+                params.height = value
+                binding.appsBannerExpandable.layoutParams = params
+            }
+            animator.duration = 300
+            animator.start()
+            binding.appsBannerExpandable.animate().alpha(1f).setDuration(300).start()
+        }
+    }
+
+    private fun animateBannerExpansion() {
+        if (hasAnimatedBanner || _binding == null) return
+        hasAnimatedBanner = true
+
+        binding.appsContentWrapper.visibility = View.VISIBLE
+        binding.appsBannerExpandable.visibility = View.VISIBLE
+        binding.appsBannerExpandable.alpha = 0f
+        
+        binding.appsBannerExpandable.post {
+            if (_binding == null) return@post
+            val widthSpec = View.MeasureSpec.makeMeasureSpec(binding.appsBannerExpandable.width, View.MeasureSpec.EXACTLY)
+            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            binding.appsBannerExpandable.measure(widthSpec, heightSpec)
+            bannerMeasuredHeight = binding.appsBannerExpandable.measuredHeight
+
+            if (bannerMeasuredHeight <= 0) {
+                hasAnimatedBanner = false
+                return@post
+            }
+
+            val animator = android.animation.ValueAnimator.ofInt(0, bannerMeasuredHeight)
+            animator.addUpdateListener { valueAnimator ->
+                if (_binding == null) return@addUpdateListener
+                val value = valueAnimator.animatedValue as Int
+                val params = binding.appsBannerExpandable.layoutParams
+                params.height = value
+                binding.appsBannerExpandable.layoutParams = params
+            }
+            
+            animator.addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: android.animation.Animator) {
+                    _binding?.appsBannerExpandable?.animate()?.alpha(1f)?.setDuration(400)?.start()
+                }
+            })
+            
+            animator.duration = 700
+            animator.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            animator.start()
         }
     }
 
@@ -129,5 +230,8 @@ class AppLibraryFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+        hasAnimatedBanner = false
+        isBannerCollapsed = false
+        bannerMeasuredHeight = 0
     }
 }

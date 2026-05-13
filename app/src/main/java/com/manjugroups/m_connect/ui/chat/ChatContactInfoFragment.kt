@@ -162,7 +162,8 @@ class ChatContactInfoFragment : Fragment() {
 
         binding.tvAvatar.text = initials
         binding.tvTitle.text = title
-        binding.tvMeta.text = meta
+        // meta is now split into company/role in the UI or handled differently
+        // For now, let's just update about
         binding.tvAbout.text = about
     }
 

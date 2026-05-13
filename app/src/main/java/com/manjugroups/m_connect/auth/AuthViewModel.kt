@@ -72,6 +72,9 @@ class AuthViewModel : ViewModel() {
     }
 
     private fun parseErrorMessage(error: Throwable, fallback: String): String {
+        if (error is java.net.UnknownHostException) {
+            return "No internet connection. Please check your network settings."
+        }
         if (error is HttpException) {
             val body = error.response()?.errorBody()?.string()
             if (!body.isNullOrBlank()) {
