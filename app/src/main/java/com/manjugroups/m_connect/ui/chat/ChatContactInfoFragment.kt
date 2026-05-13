@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
@@ -50,7 +51,6 @@ class ChatContactInfoFragment : Fragment() {
         val title = arguments?.getString("title").orEmpty().ifBlank { "Chat" }
         render(
             title = title,
-            meta = "Loading details...",
             about = "Loading details..."
         )
 
@@ -58,8 +58,12 @@ class ChatContactInfoFragment : Fragment() {
         val conversationId = arguments?.getString("conversationId")
         val otherStaffId = arguments?.getString("otherStaffId")
 
-        // Wire Media + Search rows to the new fragments.
-        view.findViewById<View>(R.id.rowMedia)?.setOnClickListener {
+        binding.btnMessage.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnCreateGroup.setOnClickListener {
+            toast("Create group feature coming soon")
+        }
+
+        binding.rowMedia.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(
                     R.id.fragmentContainer,
@@ -68,7 +72,7 @@ class ChatContactInfoFragment : Fragment() {
                 .addToBackStack(null)
                 .commit()
         }
-        view.findViewById<View>(R.id.rowSearch)?.setOnClickListener {
+        binding.rowSearch.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(
                     R.id.fragmentContainer,
@@ -82,7 +86,7 @@ class ChatContactInfoFragment : Fragment() {
             when {
                 channelId != null -> loadChannelInfo(channelId, title)
                 conversationId != null -> loadConversationInfo(conversationId, otherStaffId, title)
-                else -> render(title, "Chat", "Conversation details are not available yet.")
+                else -> render(title, "Conversation details are not available yet.")
             }
         }
     }
@@ -103,19 +107,16 @@ class ChatContactInfoFragment : Fragment() {
         }.onSuccess { channel ->
             val title = channel?.name?.ifBlank { null } ?: fallbackTitle
             val memberCount = channel?.memberCount ?: 0
-            val meta = buildString {
-                append(channel?.type?.replaceFirstChar { it.uppercase() } ?: "Channel")
-                if (memberCount > 0) {
-                    append(" • ")
-                    append(memberCount)
-                    append(" members")
-                }
-            }
+            val type = channel?.type?.replaceFirstChar { it.uppercase() } ?: "Channel"
+            
+            binding.tvCompany.text = type
+            binding.tvRole.text = if (memberCount > 0) "$memberCount members" else ""
+            
             val about = channel?.description?.ifBlank { null }
                 ?: "Team updates and discussions live here."
-            render(title, meta, about)
+            render(title, about)
         }.onFailure {
-            render(fallbackTitle, "Channel", "Channel details are not available right now.")
+            render(fallbackTitle, "Channel details are not available right now.")
         }
     }
 
@@ -127,6 +128,7 @@ class ChatContactInfoFragment : Fragment() {
         runCatching {
             val conversation = api.getConversation(requireSession(), conversationId).conversation
             val contactId = otherStaffId
+                ?: conversation?.participants?.firstOrNull { it.id != null && it.id != com.manjugroups.m_connect.auth.SessionManager(requireContext()).staffId }?.id
                 ?: conversation?.participants?.firstOrNull()?.id
             val staff = contactId?.let { api.getStaffDetail(requireSession(), it).staff }
             conversation to staff
@@ -134,25 +136,21 @@ class ChatContactInfoFragment : Fragment() {
             val title = staff?.name?.ifBlank { null }
                 ?: conversation?.displayName?.ifBlank { null }
                 ?: fallbackTitle
-            val meta = listOfNotNull(
-                staff?.phone,
-                staff?.designation,
-                staff?.department
-            ).joinToString(" • ").ifBlank { "Direct message" }
-            val about = listOfNotNull(
-                staff?.company,
-                staff?.branch,
-                staff?.email
-            ).joinToString(" • ").ifBlank {
-                "Start a conversation and keep your project communication in one place."
-            }
-            render(title, meta, about)
+            
+            binding.tvCompany.text = staff?.company ?: "Stark Industries"
+            binding.tvRole.text = staff?.designation ?: staff?.role ?: "Senior Design Manager"
+            binding.tvPhone.text = staff?.phone ?: "+1 (555) 123-4567"
+            binding.tvEmail.text = staff?.email ?: "alicia.rochefort@starkindustries.com"
+            binding.tvAddress.text = staff?.address ?: "Ashok Nagar Main Road"
+
+            val about = staff?.department ?: "Start a conversation and keep your project communication in one place."
+            render(title, about)
         }.onFailure {
-            render(fallbackTitle, "Direct message", "Contact details are not available right now.")
+            render(fallbackTitle, "Contact details are not available right now.")
         }
     }
 
-    private fun render(title: String, meta: String, about: String) {
+    private fun render(title: String, about: String) {
         if (_binding == null) return
         val initials = title.split(" ")
             .filter { it.isNotBlank() }
@@ -162,12 +160,15 @@ class ChatContactInfoFragment : Fragment() {
 
         binding.tvAvatar.text = initials
         binding.tvTitle.text = title
-        binding.tvMeta.text = meta
         binding.tvAbout.text = about
     }
 
     private fun requireSession(): String {
         return com.manjugroups.m_connect.auth.SessionManager(requireContext()).bearerToken
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroyView() {

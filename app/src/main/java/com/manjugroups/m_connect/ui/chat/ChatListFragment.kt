@@ -8,17 +8,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentChatListBinding
@@ -39,21 +41,7 @@ import java.util.Locale
 
 class ChatListFragment : Fragment() {
 
-    private enum class ChatFilter { ALL, UNREAD, FAVOURITES, GROUPS, DM }
-
-    private data class ChatListItem(
-        val id: String,
-        val kind: Kind,
-        val title: String,
-        val subtitle: String,
-        val timestamp: Long?,
-        val unreadCount: Int,
-        val avatarText: String,
-        val avatarSeed: Int,
-        val isMuted: Boolean
-    ) {
-        enum class Kind { DIRECT, CHANNEL }
-    }
+    private enum class ChatFilter { ALL, UNREAD, GROUPS, DM }
 
     private var _binding: FragmentChatListBinding? = null
     private val binding get() = _binding!!
@@ -68,6 +56,8 @@ class ChatListFragment : Fragment() {
     private var activeFilter: ChatFilter = ChatFilter.ALL
     private var hasLoadedOnce: Boolean = false
 
+    private lateinit var chatListAdapter: ChatListAdapter
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -81,13 +71,16 @@ class ChatListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        setupRecyclerView()
+        setupHeader()
+        setupActions()
+
         binding.chipAll.setOnClickListener { switchFilter(ChatFilter.ALL) }
         binding.chipUnread.setOnClickListener { switchFilter(ChatFilter.UNREAD) }
-        binding.chipFavourites.setOnClickListener { switchFilter(ChatFilter.FAVOURITES) }
         binding.chipChannels.setOnClickListener { switchFilter(ChatFilter.GROUPS) }
         binding.chipDirect.setOnClickListener { switchFilter(ChatFilter.DM) }
 
-        binding.btnNewChat.setOnClickListener { showNewChatOptions() }
+        binding.btnChatMenu.setOnClickListener { showNewChatOptions() }
         binding.btnEmptyAction.setOnClickListener { handleEmptyCta() }
 
         binding.etSearchChats.doAfterTextChanged {
@@ -99,8 +92,49 @@ class ChatListFragment : Fragment() {
         loadData()
     }
 
+    private fun setupRecyclerView() {
+        chatListAdapter = ChatListAdapter(
+            onItemClick = { item ->
+                val fragment = when (item.kind) {
+                    ChatListItem.Kind.DIRECT ->
+                        ChatMessagesFragment.forConversation(item.id, item.title)
+                    ChatListItem.Kind.CHANNEL ->
+                        ChatMessagesFragment.forChannel(item.id, item.title)
+                }
+
+                parentFragmentManager.beginTransaction()
+                    .replace(R.id.fragmentContainer, fragment)
+                    .addToBackStack(null)
+                    .commit()
+            },
+            onItemLongClick = { anchor, item ->
+                showChatActionMenu(anchor, item)
+            },
+            avatarBinder = { container, label, text, seed ->
+                bindAvatar(container, label, text, seed)
+            },
+            timestampBinder = { view, millis ->
+                bindTimestamp(view, millis)
+            }
+        )
+        binding.rvChatList.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = chatListAdapter
+        }
+    }
+
+    private fun setupHeader() {
+        val name = (session.userName ?: "User").ifBlank { "User" }
+        binding.tvChatAvatarInitial.text = name.first().uppercase()
+    }
+
+    private fun setupActions() {
+        // Any additional header actions
+    }
+
     override fun onResume() {
         super.onResume()
+        (activity as? MainActivity)?.setTabBarVisible(true)
         startRefreshLoop()
     }
 
@@ -130,7 +164,6 @@ class ChatListFragment : Fragment() {
     private fun renderFilterState() {
         bindFilterChip(binding.chipAll, activeFilter == ChatFilter.ALL)
         bindFilterChip(binding.chipUnread, activeFilter == ChatFilter.UNREAD)
-        bindFilterChip(binding.chipFavourites, activeFilter == ChatFilter.FAVOURITES)
         bindFilterChip(binding.chipChannels, activeFilter == ChatFilter.GROUPS)
         bindFilterChip(binding.chipDirect, activeFilter == ChatFilter.DM)
     }
@@ -141,11 +174,8 @@ class ChatListFragment : Fragment() {
             else R.drawable.bg_chat_filter_inactive
         )
         view.setTextColor(
-            ContextCompat.getColor(
-                requireContext(),
-                if (isActive) R.color.lt_foreground_inverse
-                else R.color.chat_text_secondary
-            )
+            if (isActive) ContextCompat.getColor(requireContext(), R.color.lt_foreground_inverse)
+            else ContextCompat.getColor(requireContext(), R.color.chat_text_secondary)
         )
     }
 
@@ -164,8 +194,7 @@ class ChatListFragment : Fragment() {
                 if (!hasLoadedOnce) {
                     showEmptyState(
                         title = "Unable to load chats",
-                        subtitle = "Pull to refresh later or try opening chat again.",
-                        ctaLabel = null
+                        subtitle = "Pull to refresh later or try opening chat again."
                     )
                 }
             }
@@ -175,56 +204,30 @@ class ChatListFragment : Fragment() {
     private fun renderCurrentList() {
         if (_binding == null) return
         val items = buildItems()
-        binding.chatList.removeAllViews()
 
         if (items.isEmpty()) {
+            binding.rvChatList.visibility = View.GONE
             renderEmptyForActiveFilter()
             return
         }
 
         showListState()
-        items.forEach { item ->
-            val row = LayoutInflater.from(requireContext())
-                .inflate(R.layout.item_chat, binding.chatList, false)
+        binding.rvChatList.visibility = View.VISIBLE
+        chatListAdapter.submitList(items)
+    }
 
-            bindAvatar(
-                row.findViewById(R.id.avatarContainer),
-                row.findViewById(R.id.tvChatAvatar),
-                item.avatarText,
-                item.avatarSeed
-            )
-            row.findViewById<TextView>(R.id.tvChatName).text = item.title
-            row.findViewById<TextView>(R.id.tvChatLastMsg).text = item.subtitle
-            bindTimestamp(row.findViewById(R.id.tvChatTime), item.timestamp)
-            bindUnreadBadge(
-                row.findViewById(R.id.unreadContainer),
-                row.findViewById(R.id.tvUnread),
-                item.unreadCount
-            )
-
-            // online dot — show for direct chats with recent activity
-            val onlineDot = row.findViewById<View>(R.id.onlineDot)
-            onlineDot.visibility =
-                if (item.kind == ChatListItem.Kind.DIRECT && item.timestamp != null &&
-                    System.currentTimeMillis() - item.timestamp < 5L * 60L * 1000L
-                ) View.VISIBLE else View.GONE
-
-            row.setOnClickListener {
-                val fragment = when (item.kind) {
-                    ChatListItem.Kind.DIRECT ->
-                        ChatMessagesFragment.forConversation(item.id, item.title)
-                    ChatListItem.Kind.CHANNEL ->
-                        ChatMessagesFragment.forChannel(item.id, item.title)
-                }
-
-                parentFragmentManager.beginTransaction()
-                    .replace(R.id.fragmentContainer, fragment)
-                    .addToBackStack(null)
-                    .commit()
+    private fun showChatActionMenu(anchor: View, item: ChatListItem) {
+        val popup = androidx.appcompat.widget.PopupMenu(requireContext(), anchor)
+        popup.menu.add("Add Favorites")
+        popup.menu.add("Delete Chat")
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.title) {
+                "Delete Chat" -> toast("Deleting ${item.title}")
+                "Add Favorites" -> toast("Added ${item.title} to Favorites")
             }
-
-            binding.chatList.addView(row)
+            true
         }
+        popup.show()
     }
 
     private fun buildItems(): List<ChatListItem> {
@@ -236,6 +239,10 @@ class ChatListFragment : Fragment() {
             val subtitle = conversation.lastMessagePreview?.ifBlank { null }
                 ?: conversation.lastMessage?.body?.ifBlank { null }
                 ?: "No messages yet"
+            
+            val lastActive = conversation.lastMessageAt ?: 0L
+            val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
+
             ChatListItem(
                 id = id,
                 kind = ChatListItem.Kind.DIRECT,
@@ -245,7 +252,8 @@ class ChatListFragment : Fragment() {
                 unreadCount = conversation.unreadCount ?: 0,
                 avatarText = initialsFor(title),
                 avatarSeed = title.length,
-                isMuted = conversation.muted ?: false
+                isMuted = conversation.muted ?: false,
+                isOnline = isOnline
             )
         }
 
@@ -278,7 +286,6 @@ class ChatListFragment : Fragment() {
                 when (activeFilter) {
                     ChatFilter.ALL -> true
                     ChatFilter.UNREAD -> item.unreadCount > 0
-                    ChatFilter.FAVOURITES -> false
                     ChatFilter.GROUPS -> item.kind == ChatListItem.Kind.CHANNEL
                     ChatFilter.DM -> item.kind == ChatListItem.Kind.DIRECT
                 }
@@ -301,21 +308,11 @@ class ChatListFragment : Fragment() {
         return filtered
     }
 
-    private fun bindUnreadBadge(container: FrameLayout, label: TextView, unreadCount: Int) {
-        if (unreadCount > 0) {
-            label.text = if (unreadCount > 99) "99+" else unreadCount.toString()
-            container.visibility = View.VISIBLE
-        } else {
-            container.visibility = View.GONE
-        }
-    }
-
     private fun renderEmptyForActiveFilter() {
         if (chatSearchQuery.isNotBlank()) {
             showEmptyState(
                 title = "No matches",
-                subtitle = "Try a different keyword or clear your search.",
-                ctaLabel = null
+                subtitle = "Try a different keyword or clear your search."
             )
             return
         }
@@ -324,51 +321,33 @@ class ChatListFragment : Fragment() {
             ChatFilter.ALL ->
                 showEmptyState(
                     title = "No Chats Yet",
-                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
-                    ctaLabel = "Create Group"
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
                 )
 
             ChatFilter.UNREAD ->
                 showEmptyState(
                     title = "No Unread Message Yet",
-                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
-                    ctaLabel = null
-                )
-
-            ChatFilter.FAVOURITES ->
-                showEmptyState(
-                    title = "No Favourites Yet",
-                    subtitle = "Star conversations and groups so you can find them faster.",
-                    ctaLabel = null
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
                 )
 
             ChatFilter.GROUPS ->
                 showEmptyState(
                     title = "No Groups Yet",
-                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
-                    ctaLabel = "Create Group"
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
                 )
 
             ChatFilter.DM ->
                 showEmptyState(
                     title = "No Direct Message Yet",
-                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place.",
-                    ctaLabel = "Direct Messages"
+                    subtitle = "Stay organized by creating or joining teams.\nGroups help you manage tasks, track progress, and collaborate with your team in one place."
                 )
         }
     }
 
-    private fun showEmptyState(title: String, subtitle: String, ctaLabel: String?) {
-        binding.chatList.removeAllViews()
+    private fun showEmptyState(title: String, subtitle: String) {
         binding.emptyState.visibility = View.VISIBLE
         binding.tvEmptyTitle.text = title
         binding.tvEmptySubtitle.text = subtitle
-        if (ctaLabel.isNullOrBlank()) {
-            binding.btnEmptyAction.visibility = View.GONE
-        } else {
-            binding.btnEmptyAction.visibility = View.VISIBLE
-            binding.tvEmptyActionLabel.text = ctaLabel
-        }
     }
 
     private fun showListState() {
@@ -376,11 +355,7 @@ class ChatListFragment : Fragment() {
     }
 
     private fun handleEmptyCta() {
-        when (activeFilter) {
-            ChatFilter.GROUPS, ChatFilter.ALL -> promptChannelName()
-            ChatFilter.DM -> showNewChatOptions()
-            else -> showNewChatOptions()
-        }
+        showNewChatOptions()
     }
 
     private fun showNewChatOptions() {
@@ -388,7 +363,6 @@ class ChatListFragment : Fragment() {
         val dialog = BottomSheetDialog(requireContext())
         dialog.setContentView(content)
 
-        // Make sheet fill ~90% of screen so content is comfortable
         dialog.setOnShowListener {
             val sheet = dialog.findViewById<View>(
                 com.google.android.material.R.id.design_bottom_sheet

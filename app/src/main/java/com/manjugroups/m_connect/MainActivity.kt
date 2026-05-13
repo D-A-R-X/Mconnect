@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
             val fragmentBottomInset = if (tabBarShowing) {
                 (ime.bottom - sys.bottom).coerceAtLeast(0)
             } else {
-                maxOf(ime.bottom, sys.bottom)
+                0 // Fragment handles its own insets (chat bottom bar)
             }
             fragmentContainer.updatePadding(top = 0, bottom = fragmentBottomInset)
             val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
