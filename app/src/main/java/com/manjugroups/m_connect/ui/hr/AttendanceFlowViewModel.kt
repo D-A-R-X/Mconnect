@@ -311,6 +311,13 @@ class AttendanceFlowViewModel(
                 val message = extractHttpErrorMessage(e) ?: e.message
                     ?: "Network error while submitting punch."
                 _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
+                // If the server says there's no active punch-in for today, the
+                // client's `isClockedIn` is stale (e.g. session was auto-closed
+                // overnight, or never opened). Pull the truth from the server
+                // so the dashboard button flips back to "Clock In".
+                if (message.contains("No active punch-in", ignoreCase = true)) {
+                    loadTodayAttendance(token)
+                }
             }
         }
     }

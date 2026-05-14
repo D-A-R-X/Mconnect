@@ -162,9 +162,20 @@ class ProfileFragment : Fragment() {
                         token = session.bearerToken,
                         body = SetProfilePhotoRequest(storageId = storageId)
                     )
-                    val url = photoResp.photo?.url
-                        ?: error(photoResp.error ?: "Could not set photo")
-                    true to url
+                    if (!photoResp.success) {
+                        error(photoResp.error ?: "Could not set photo")
+                    }
+                    // Prefer the storageId — that's what web/iOS read out of
+                    // staff.photo, so storing it keeps the cross-device source
+                    // of truth consistent and lets ProfilePhotos.resolve build
+                    // a fresh serve URL against the current BASE_URL on every
+                    // render. Fall back to the URL only if the response is
+                    // missing the storageId for some reason.
+                    val canonical = photoResp.photo?.storageId
+                        ?: photoResp.staff?.photo
+                        ?: photoResp.photo?.url
+                        ?: error("Upload succeeded but no photo reference returned")
+                    true to canonical
                 }.getOrElse { err -> false to (err.message ?: "Upload error") }
             }
             if (_binding == null) return@launch

@@ -230,6 +230,14 @@ class SelfieClockInDetailFragment : Fragment() {
                                 binding.btnClockInAction.text =
                                     if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
                                 Toast.makeText(requireContext(), event.message, Toast.LENGTH_LONG).show()
+                                // Server says there's no open session — the UI
+                                // got into this screen because of a stale
+                                // clocked-in flag. Send the user back to the
+                                // dashboard, which will refresh and show the
+                                // right button.
+                                if (event.message.contains("No active punch-in", ignoreCase = true)) {
+                                    parentFragmentManager.popBackStack()
+                                }
                             }
                         }
 

@@ -547,8 +547,16 @@ class ChatMessageAdapter(
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 weight = 1f
-                marginStart = dp(context, 12)
-                marginEnd = dp(context, 6)
+                // For received messages we'll mount the play button on the
+                // right of the waveform (WhatsApp-style), so flip the side
+                // margins to keep the wave row visually balanced.
+                if (isMine) {
+                    marginStart = dp(context, 12)
+                    marginEnd = dp(context, 6)
+                } else {
+                    marginStart = dp(context, 6)
+                    marginEnd = dp(context, 12)
+                }
             }
         }
 
@@ -636,8 +644,16 @@ class ChatMessageAdapter(
         waveAndMeta.addView(waveformRow)
         waveAndMeta.addView(footerRow)
 
-        container.addView(playBtn)
-        container.addView(waveAndMeta)
+        // Sent: play button on the left (next to the avatar/bubble origin).
+        // Received: play button on the right, mirroring WhatsApp's layout
+        // for incoming voice notes.
+        if (isMine) {
+            container.addView(playBtn)
+            container.addView(waveAndMeta)
+        } else {
+            container.addView(waveAndMeta)
+            container.addView(playBtn)
+        }
 
         val click = View.OnClickListener {
             onAttachmentClick(url, "audio/mp4", storageId)

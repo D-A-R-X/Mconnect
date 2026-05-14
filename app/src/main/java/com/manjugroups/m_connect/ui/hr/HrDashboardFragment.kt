@@ -164,6 +164,14 @@ class HrDashboardFragment : Fragment() {
             ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
         }
 
+        // Server has no separate "break" concept — each punch-in/out pair is
+        // its own session and successive ones in a day are implicit breaks.
+        // Wire Take a Break to the same punch-out capture; the user can
+        // simply Clock In again when they return.
+        binding.btnTakeBreak.setOnClickListener {
+            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
+        }
+
         parentFragmentManager.setFragmentResultListener(
             ClockOutConfirmBottomSheet.RESULT_KEY,
             viewLifecycleOwner

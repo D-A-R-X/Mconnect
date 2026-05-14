@@ -98,6 +98,12 @@ class HomeFragment : Fragment() {
         loadUnreadNotifications()
         // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+        // Pull the staff record so a profile photo updated from web/iOS
+        // appears here too. ProfilePhotos.resolve rebuilds the serve URL
+        // from the current BASE_URL on every render, so cached photos
+        // never stick to an old domain.
+        applyAvatarPhoto(session.userPhotoUrl)
+        loadHeaderDesignation()
         // Replay the stagger when returning to the Home tab (either from a child
         // fragment via back, or after pop-back from another tab via show/hide).
         if (_binding != null && binding.homeContent.visibility == View.VISIBLE) {
