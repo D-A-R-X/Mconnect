@@ -300,7 +300,8 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:background="@drawable/bg_chat_pattern">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvMessages"
@@ -554,12 +555,13 @@
             </FrameLayout>
         </LinearLayout>
 
-        <!-- Inline attach/share panel — replaces the BottomSheetDialog so the
-             chat input visually sits on top of the share toast. -->
+        <!-- WhatsApp-style attach panel: occupies the keyboard slot so the
+             chat input stays anchored in place and the grid simply replaces
+             the IME — no floating card, no extra margins. -->
         <FrameLayout
             android:id="@+id/attachPanel"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="280dp"
             android:background="#FFFFFF"
             android:visibility="gone">
 

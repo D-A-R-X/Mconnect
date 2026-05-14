@@ -227,8 +227,12 @@ class AttendanceFlowViewModel(
             return
         }
 
-        // Optimistic: flip clocked-in state and emit Success immediately so UI feels instant.
-        // Real upload + punch run in background. Failures rollback state and emit SubmissionFailed.
+        // We used to emit Success optimistically before the API call to make
+        // the UI feel instant. That's wrong for punch: when the server rejects
+        // (e.g. HTTP 500 "No active punch-in found for today"), the user
+        // still saw a "Clock out successful" sheet because the early Success
+        // had already fired. Now we wait for the actual response and only
+        // emit Success when the server confirms it.
         val previousState = _uiState.value
         _uiState.update {
             it.copy(
@@ -239,12 +243,6 @@ class AttendanceFlowViewModel(
 
         viewModelScope.launch {
             _events.emit(AttendanceFlowEvent.Loading(mode))
-            _events.emit(
-                AttendanceFlowEvent.Success(
-                    mode,
-                    if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
-                ),
-            )
 
             try {
                 val compressed = withContext(Dispatchers.IO) {
@@ -301,17 +299,40 @@ class AttendanceFlowViewModel(
                 }
 
                 _uiState.update { it.copy(isSubmitting = false) }
+                _events.emit(
+                    AttendanceFlowEvent.Success(
+                        mode,
+                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
+                    ),
+                )
                 loadTodayAttendance(token)
             } catch (e: Exception) {
                 rollbackOptimistic(previousState)
-                _events.emit(
-                    AttendanceFlowEvent.SubmissionFailed(
-                        mode,
-                        e.message ?: "Network error while submitting punch.",
-                    ),
-                )
+                val message = extractHttpErrorMessage(e) ?: e.message
+                    ?: "Network error while submitting punch."
+                _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
             }
         }
+    }
+
+    /**
+     * Convex returns its handler-thrown errors as HTTP 5xx with a JSON body
+     * like `{ "code": "...", "message": "No active punch-in found for today" }`.
+     * Retrofit gives us an HttpException — try to surface that nested message
+     * instead of the generic "HTTP 500" Retrofit toString.
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        // Prefer parsing the standard {message:..., error:...} fields without
+        // pulling in extra deps. Fall through to the raw body if parsing fails.
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            val msg = obj.get("message")?.asString
+                ?: obj.get("error")?.asString
+            msg?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun rollbackOptimistic(previous: AttendanceFlowState) {

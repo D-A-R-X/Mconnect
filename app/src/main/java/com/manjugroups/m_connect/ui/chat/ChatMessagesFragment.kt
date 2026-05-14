@@ -282,7 +282,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         binding.etMessage.addTextChangedListener(typingWatcher)
         binding.etMessage.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && isEmojiPanelVisible) hideEmojiPanel()
+            if (hasFocus) {
+                if (isEmojiPanelVisible) hideEmojiPanel()
+                if (binding.attachPanel.visibility == View.VISIBLE) hideAttachPanel()
+            }
+        }
+        // Tapping the input even when it already has focus should still
+        // dismiss any open share panel so the keyboard slot isn't doubled up.
+        binding.etMessage.setOnClickListener {
+            if (binding.attachPanel.visibility == View.VISIBLE) hideAttachPanel()
         }
 
         applyKeyboardAndSystemInsets(view)
@@ -1555,14 +1563,47 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
 
         binding.emojiPanel.visibility = View.GONE
-        binding.attachPanel.visibility = View.VISIBLE
-        binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
         wireAttachTiles()
+
+        val panel = binding.attachPanel
+        panel.animate().cancel()
+        panel.visibility = View.VISIBLE
+        if (panel.height > 0) {
+            panel.translationY = panel.height.toFloat()
+        } else {
+            panel.translationY = (280f * resources.displayMetrics.density)
+        }
+        panel.alpha = 0f
+        panel.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setDuration(220L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+        binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
     }
 
     private fun hideAttachPanel() {
         if (_binding == null) return
-        binding.attachPanel.visibility = View.GONE
+        val panel = binding.attachPanel
+        if (panel.visibility != View.VISIBLE) {
+            binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
+            return
+        }
+        panel.animate().cancel()
+        panel.animate()
+            .translationY(panel.height.toFloat())
+            .alpha(0f)
+            .setDuration(180L)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                if (_binding != null) {
+                    panel.visibility = View.GONE
+                    panel.translationY = 0f
+                    panel.alpha = 1f
+                }
+            }
+            .start()
         binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
     }
 

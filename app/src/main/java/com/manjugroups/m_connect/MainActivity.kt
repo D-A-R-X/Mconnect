@@ -125,11 +125,12 @@ class MainActivity : AppCompatActivity() {
             // the keyboard overlaps the toolbar by exactly the nav-bar height.
             val tabBarShowing = ::tabBarContainer.isInitialized &&
                 tabBarContainer.visibility == android.view.View.VISIBLE
-            val fragmentBottomInset = if (tabBarShowing) {
-                (ime.bottom - sys.bottom).coerceAtLeast(0)
-            } else {
-                0 // Fragment handles its own insets (chat bottom bar)
-            }
+            // adjustResize handles IME. The tab bar absorbs sys.bottom when
+            // visible. When the tab bar is hidden, each detail fragment is
+            // responsible for its own bottom inset — chat needs the input bar
+            // flush to the screen edge, while scroll-based screens (loans,
+            // contact info, etc.) apply paddingBottom themselves.
+            val fragmentBottomInset = 0
             fragmentContainer.updatePadding(top = 0, bottom = fragmentBottomInset)
             val baseBottomPx = (8 * resources.displayMetrics.density).toInt()
             mainRoot.updatePadding(bottom = 0)

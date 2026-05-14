@@ -121,7 +121,9 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrAttendance.setOnClickListener { openScreen(AttendanceHistoryFragment()) }
         binding.itemHrLeave.setOnClickListener { openScreen(LeavesFragment()) }
         binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
-        binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
+        binding.itemHrLoans.setOnClickListener {
+            openScreen(com.manjugroups.m_connect.ui.library.loans.LoansFragment())
+        }
 
         binding.itemMarketingCpVisits.setOnClickListener { openScreen(CpVisitsFragment()) }
         binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }

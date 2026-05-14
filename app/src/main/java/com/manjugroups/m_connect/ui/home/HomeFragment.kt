@@ -13,6 +13,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHomeBinding
@@ -20,6 +22,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
+import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
@@ -156,11 +159,24 @@ class HomeFragment : Fragment() {
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
         binding.tvAvatarInitial.text = name.first().uppercase()
-        // Show a soft fallback while we fetch the real designation; the API
-        // call below replaces it with the staff's actual designation/department.
+        applyAvatarPhoto(session.userPhotoUrl)
         binding.tvHeaderRole.text =
             if (session.isAdmin) "Administrator" else "Staff"
         loadHeaderDesignation()
+    }
+
+    private fun applyAvatarPhoto(url: String?) {
+        val resolved = ProfilePhotos.resolve(url)
+        if (resolved == null) {
+            binding.ivHomeAvatar.setImageDrawable(null)
+            binding.tvAvatarInitial.visibility = View.VISIBLE
+            return
+        }
+        binding.tvAvatarInitial.visibility = View.GONE
+        binding.ivHomeAvatar.load(resolved) {
+            crossfade(true)
+            transformations(CircleCropTransformation())
+        }
     }
 
     private fun loadHeaderDesignation() {
@@ -175,6 +191,10 @@ class HomeFragment : Fragment() {
                     staff.department?.takeIf { it.isNotBlank() },
                 ).joinToString(" • ")
                 if (role.isNotBlank()) binding.tvHeaderRole.text = role
+                staff.photo?.takeIf { it.isNotBlank() }?.let { photo ->
+                    session.userPhotoUrl = photo
+                    applyAvatarPhoto(photo)
+                }
             } catch (_: Exception) {
                 // Keep the fallback; not worth a toast on a soft header field.
             }

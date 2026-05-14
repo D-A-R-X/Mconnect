@@ -1,14 +1,19 @@
 package com.manjugroups.m_connect.ui.profile
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
@@ -16,10 +21,17 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.databinding.FragmentProfileBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.SetProfilePhotoRequest
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
 
 class ProfileFragment : Fragment() {
 
@@ -50,7 +62,121 @@ class ProfileFragment : Fragment() {
         binding.tvContactAddress.text = "—"
 
         bindActions()
+        setupScrollAnimation()
+        applyCachedAvatar()
         loadStaffProfile()
+    }
+
+    private val pickProfileImage = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) launchCropDialog(uri)
+    }
+
+    private fun launchCropDialog(uri: Uri) {
+        val dialog = ProfilePhotoCropDialog()
+        dialog.setSource(uri)
+        dialog.setListener { bitmap -> uploadProfilePhoto(bitmap) }
+        dialog.show(childFragmentManager, "ProfilePhotoCrop")
+    }
+
+    private fun setupScrollAnimation() {
+        val density = resources.displayMetrics.density
+        val fadeDistance = 220f * density
+        val compactThreshold = 180f * density
+        binding.btnCompactBack.setOnClickListener {
+            parentFragmentManager.popBackStackImmediate()
+        }
+        binding.profileContentScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            if (_binding == null) return@setOnScrollChangeListener
+            val alpha = (1f - scrollY / fadeDistance).coerceIn(0f, 1f)
+            val parallax = scrollY * 0.35f
+            binding.profileAvatarContainer.translationY = -parallax
+            binding.profileAvatarContainer.alpha = alpha
+            val scale = (1f - scrollY / (fadeDistance * 1.6f)).coerceIn(0.7f, 1f)
+            binding.profileAvatarContainer.scaleX = scale
+            binding.profileAvatarContainer.scaleY = scale
+            binding.tvProfileName.alpha = alpha
+            binding.tvProfileRole.alpha = alpha
+
+            // Compact sticky header crossfades in once the big avatar has
+            // scrolled past about its own height; linear ramp over the next
+            // 80dp so the swap doesn't pop.
+            val compactProgress =
+                ((scrollY - compactThreshold) / (80f * density)).coerceIn(0f, 1f)
+            binding.compactHeader.alpha = compactProgress
+            binding.compactHeader.visibility =
+                if (compactProgress <= 0f) View.GONE else View.VISIBLE
+        }
+    }
+
+    private fun applyCompactAvatar(url: String?) {
+        val initials = binding.tvProfileAvatar.text?.toString().orEmpty()
+        binding.tvCompactAvatar.text = initials
+        val resolved = ProfilePhotos.resolve(url)
+        if (resolved == null) {
+            binding.ivCompactAvatar.setImageDrawable(null)
+            binding.tvCompactAvatar.visibility = View.VISIBLE
+            return
+        }
+        binding.tvCompactAvatar.visibility = View.GONE
+        binding.ivCompactAvatar.load(resolved) {
+            crossfade(true)
+            transformations(CircleCropTransformation())
+        }
+    }
+
+    private fun applyCachedAvatar() {
+        val url = session.userPhotoUrl
+        val resolved = ProfilePhotos.resolve(url)
+        if (resolved != null) loadAvatarUrl(resolved)
+        else binding.ivProfileAvatar.setImageDrawable(null)
+        applyCompactAvatar(url)
+    }
+
+    private fun loadAvatarUrl(url: String) {
+        // Upload is a square 1:1 image. Profile tile shows it as a rounded
+        // square (clipped by the container's outline). Chat/header avatars
+        // elsewhere apply their own CircleCropTransformation for the circular
+        // look — same source bitmap, different mask per surface.
+        binding.ivProfileAvatar.load(ProfilePhotos.resolve(url) ?: url) {
+            crossfade(true)
+        }
+    }
+
+    private fun uploadProfilePhoto(bitmap: Bitmap) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = ByteArrayOutputStream().also {
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it)
+                    }.toByteArray()
+                    val mime = "image/jpeg"
+                    val storageResp = api.uploadStorageFile(
+                        token = session.bearerToken,
+                        body = bytes.toRequestBody(mime.toMediaTypeOrNull())
+                    )
+                    val storageId = storageResp.storageId
+                        ?: error(storageResp.error ?: "Upload failed")
+                    val photoResp = api.setMyProfilePhoto(
+                        token = session.bearerToken,
+                        body = SetProfilePhotoRequest(storageId = storageId)
+                    )
+                    val url = photoResp.photo?.url
+                        ?: error(photoResp.error ?: "Could not set photo")
+                    true to url
+                }.getOrElse { err -> false to (err.message ?: "Upload error") }
+            }
+            if (_binding == null) return@launch
+            if (ok) {
+                session.userPhotoUrl = msg
+                loadAvatarUrl(msg)
+                applyCompactAvatar(msg)
+                Toast.makeText(requireContext(), "Profile photo updated", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(requireContext(), "Couldn't update photo: $msg", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun loadStaffProfile() {
@@ -86,6 +212,15 @@ class ProfileFragment : Fragment() {
         binding.tvProfileName.text = name
         binding.tvProfileAvatar.text = initialsFor(name)
 
+        // Only update when the server returned a photo. Never clear here — a
+        // freshly-uploaded photo can race with the next getStaffDetail() and
+        // get wiped if the staff doc hasn't been re-read yet.
+        staff.photo?.takeIf { it.isNotBlank() }?.let { photo ->
+            session.userPhotoUrl = photo
+            loadAvatarUrl(photo)
+            applyCompactAvatar(photo)
+        }
+
         binding.tvProfileRole.text = listOfNotNull(
             staff.designation?.takeIf { it.isNotBlank() },
             staff.department?.takeIf { it.isNotBlank() }
@@ -115,6 +250,11 @@ class ProfileFragment : Fragment() {
         binding.btnProfileBack.setOnClickListener {
             parentFragmentManager.popBackStackImmediate()
         }
+        val photoPicker = View.OnClickListener {
+            pickProfileImage.launch(arrayOf("image/*"))
+        }
+        binding.profileAvatarContainer.setOnClickListener(photoPicker)
+        binding.btnProfileAvatarEdit.setOnClickListener(photoPicker)
 
         binding.rowPersonalData.setOnClickListener {
             parentFragmentManager.beginTransaction()

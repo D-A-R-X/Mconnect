@@ -32,6 +32,10 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_USER_PHONE, null)
         set(value) = prefs.edit().putString(KEY_USER_PHONE, value).apply()
 
+    var userPhotoUrl: String?
+        get() = prefs.getString(KEY_USER_PHOTO_URL, null)
+        set(value) = prefs.edit().putString(KEY_USER_PHOTO_URL, value).apply()
+
     var iamPermissions: Set<String>
         get() = prefs.getStringSet(KEY_IAM_PERMISSIONS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_IAM_PERMISSIONS, value).apply()
@@ -142,5 +146,6 @@ class SessionManager(context: Context) {
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
         private const val KEY_BOUND_BASE_URL = "bound_base_url"
+        private const val KEY_USER_PHOTO_URL = "user_photo_url"
     }
 }

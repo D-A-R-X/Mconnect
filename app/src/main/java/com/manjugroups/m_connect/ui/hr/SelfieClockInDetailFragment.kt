@@ -221,9 +221,17 @@ class SelfieClockInDetailFragment : Fragment() {
                             }
                         }
 
-                        // Background failure after optimistic Success — usually delivered
-                        // after this fragment has already popped, but handled defensively.
-                        is AttendanceFlowEvent.SubmissionFailed -> Unit
+                        // Submission failed after upload — treat the same as a
+                        // pre-flight Error: re-enable the button so the user
+                        // can retry and surface the server's error message.
+                        is AttendanceFlowEvent.SubmissionFailed -> {
+                            if (event.mode == mode) {
+                                binding.btnClockInAction.isEnabled = true
+                                binding.btnClockInAction.text =
+                                    if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_LONG).show()
+                            }
+                        }
 
                         is AttendanceFlowEvent.Success -> {
                             if (event.mode == mode) {

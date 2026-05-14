@@ -1,0 +1,219 @@
+package com.manjugroups.m_connect.ui.library.loans
+
+import com.manjugroups.m_connect.network.LoanData as RemoteLoan
+import com.manjugroups.m_connect.network.LoanRepaymentData as RemoteRepayment
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+
+/**
+ * UI-side loan model. Built from the server's `/api/hr/loans/my` payload.
+ */
+data class Loan(
+    val id: String,
+    val title: String,
+    val loanId: String,
+    val type: LoanType,
+    val status: LoanStatus,
+    val outstandingBalance: Long = 0L,
+    val nextEmiAmount: Long = 0L,
+    val nextEmiDueMillis: Long = 0L,
+    val principal: Long = 0L,
+    val disbursedMillis: Long = 0L,
+    val repayments: List<Repayment> = emptyList()
+)
+
+enum class LoanType { HOME, EDUCATION, OTHER }
+enum class LoanStatus { ACTIVE, PENDING, REPAID }
+
+data class Repayment(
+    val emiIndex: Int,
+    val dueMillis: Long,
+    val amount: Long,
+    val status: RepaymentStatus,
+    val paidVia: String? = null,
+    val onTime: Boolean = true
+)
+
+enum class RepaymentStatus { PAID, UPCOMING, OVERDUE }
+
+object LoanMapper {
+
+    private val isoDayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val monthFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+    private val isoDateTimeFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+
+    fun fromRemote(remote: RemoteLoan, mappedStatus: LoanStatus): Loan {
+        val type = inferType(remote.purpose)
+        val title = remote.purpose?.takeIf { it.isNotBlank() }
+            ?: when (type) {
+                LoanType.HOME -> "Home Loan"
+                LoanType.EDUCATION -> "Education Loan"
+                LoanType.OTHER -> "Loan"
+            }
+
+        val paidEntries = remote.repayments
+            .orEmpty()
+            .sortedBy { parseMonth(it.month) ?: 0L }
+            .mapIndexed { idx, r -> mapRepayment(idx + 1, r) }
+
+        val repayments = when (mappedStatus) {
+            LoanStatus.ACTIVE -> buildFullSchedule(remote, paidEntries)
+            LoanStatus.PENDING -> buildPendingSchedule(remote)
+            LoanStatus.REPAID -> paidEntries
+        }
+
+        val nextEmiMillis = if (mappedStatus == LoanStatus.ACTIVE) {
+            nextUnpaidMonthMillis(remote, paidEntries)
+        } else 0L
+
+        // Pending loans haven't been disbursed, so remainingBalance is the
+        // *expected* outstanding — surface the loanAmount instead of zero so
+        // the card has something meaningful to show.
+        val outstanding = when {
+            mappedStatus == LoanStatus.PENDING -> (remote.loanAmount ?: remote.principalAmount ?: 0.0)
+            else -> (remote.remainingBalance ?: 0.0)
+        }
+
+        return Loan(
+            id = remote.id.orEmpty(),
+            title = title,
+            loanId = remote.loanId.orEmpty(),
+            type = type,
+            status = mappedStatus,
+            outstandingBalance = outstanding.toLong(),
+            nextEmiAmount = (remote.monthlyDeduction ?: 0.0).toLong(),
+            nextEmiDueMillis = nextEmiMillis,
+            principal = (remote.loanAmount ?: remote.principalAmount ?: 0.0).toLong(),
+            disbursedMillis = parseDay(remote.disbursedDate) ?: 0L,
+            repayments = repayments
+        )
+    }
+
+    private fun mapRepayment(emiIndex: Int, r: RemoteRepayment): Repayment {
+        val dueMillis = parseMonth(r.month) ?: parseIsoDateTime(r.createdAt) ?: 0L
+        val status = when {
+            dueMillis == 0L -> RepaymentStatus.PAID
+            dueMillis > System.currentTimeMillis() -> RepaymentStatus.UPCOMING
+            else -> RepaymentStatus.PAID
+        }
+        val mode = r.mode
+        val paidVia = when {
+            status != RepaymentStatus.PAID -> null
+            mode == "salary-deduction" -> "Salary"
+            mode == "manual" -> "Bank"
+            !mode.isNullOrBlank() -> mode.replaceFirstChar { it.uppercase() }
+            else -> null
+        }
+        return Repayment(
+            emiIndex = emiIndex,
+            dueMillis = dueMillis,
+            amount = (r.amount ?: 0.0).toLong(),
+            status = status,
+            paidVia = paidVia,
+            onTime = true
+        )
+    }
+
+    /**
+     * For an active loan, return PAID entries for months that have a server
+     * repayment record and UPCOMING entries for every other month between
+     * [repaymentStartMonth] and [repaymentEndMonth]. This is what the SzkIf
+     * design wants — one timeline mixing paid + upcoming EMIs.
+     */
+    private fun buildFullSchedule(
+        remote: RemoteLoan,
+        paid: List<Repayment>
+    ): List<Repayment> {
+        val start = parseMonth(remote.repaymentStartMonth) ?: return paid
+        val end = parseMonth(remote.repaymentEndMonth) ?: return paid
+        val emiAmount = (remote.monthlyDeduction ?: 0.0).toLong()
+        val paidByMonth = paid.associateBy { it.dueMillis }
+
+        val out = mutableListOf<Repayment>()
+        val cal = Calendar.getInstance().apply { timeInMillis = start }
+        var index = 1
+        while (cal.timeInMillis <= end && index <= 360) {
+            val cursor = cal.timeInMillis
+            val existing = paidByMonth[cursor]
+            out += existing?.copy(emiIndex = index) ?: Repayment(
+                emiIndex = index,
+                dueMillis = cursor,
+                amount = emiAmount,
+                status = RepaymentStatus.UPCOMING
+            )
+            cal.add(Calendar.MONTH, 1)
+            index++
+        }
+        return out
+    }
+
+    /**
+     * Pending (not yet disbursed) loans have no paid history — surface the
+     * full expected schedule as UPCOMING entries so the timeline still has
+     * something useful to show.
+     */
+    private fun buildPendingSchedule(remote: RemoteLoan): List<Repayment> {
+        val start = parseMonth(remote.repaymentStartMonth) ?: return emptyList()
+        val end = parseMonth(remote.repaymentEndMonth) ?: return emptyList()
+        val emiAmount = (remote.monthlyDeduction ?: 0.0).toLong()
+        val out = mutableListOf<Repayment>()
+        val cal = Calendar.getInstance().apply { timeInMillis = start }
+        var index = 1
+        while (cal.timeInMillis <= end && index <= 360) {
+            out += Repayment(
+                emiIndex = index,
+                dueMillis = cal.timeInMillis,
+                amount = emiAmount,
+                status = RepaymentStatus.UPCOMING
+            )
+            cal.add(Calendar.MONTH, 1)
+            index++
+        }
+        return out
+    }
+
+    private fun nextUnpaidMonthMillis(remote: RemoteLoan, paid: List<Repayment>): Long {
+        val start = parseMonth(remote.repaymentStartMonth) ?: return 0L
+        val end = parseMonth(remote.repaymentEndMonth) ?: 0L
+        val paidMonths = paid.map { it.dueMillis }.toSet()
+        val cal = Calendar.getInstance().apply { timeInMillis = start }
+        val now = System.currentTimeMillis()
+        repeat(360) {
+            val cursor = cal.timeInMillis
+            if (end > 0L && cursor > end) return 0L
+            if (cursor !in paidMonths && cursor >= now) return cursor
+            cal.add(Calendar.MONTH, 1)
+        }
+        return 0L
+    }
+
+    private fun parseDay(value: String?): Long? {
+        val raw = value?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { isoDayFormat.parse(raw)?.time }.getOrNull()
+    }
+
+    private fun parseMonth(value: String?): Long? {
+        val raw = value?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { monthFormat.parse(raw)?.time }.getOrNull()
+    }
+
+    private fun parseIsoDateTime(value: String?): Long? {
+        val raw = value?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { isoDateTimeFormat.parse(raw)?.time }.getOrNull()
+    }
+
+    private fun inferType(purpose: String?): LoanType {
+        val p = purpose?.lowercase().orEmpty()
+        return when {
+            p.contains("home") || p.contains("house") || p.contains("property") -> LoanType.HOME
+            p.contains("educ") || p.contains("school") || p.contains("college") -> LoanType.EDUCATION
+            else -> LoanType.OTHER
+        }
+    }
+
+    fun mapLoanList(remoteList: List<RemoteLoan>, status: LoanStatus): List<Loan> =
+        remoteList.mapNotNull {
+            if (it.id.isNullOrBlank()) null else fromRemote(it, status)
+        }
+}

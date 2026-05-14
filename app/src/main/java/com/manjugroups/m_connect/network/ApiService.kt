@@ -119,6 +119,36 @@ interface ApiService {
         @Body body: IdRequest
     ): SimpleResponse
 
+    @POST("api/hr/staff/me/profile-photo")
+    suspend fun setMyProfilePhoto(
+        @Header("Authorization") token: String,
+        @Body body: SetProfilePhotoRequest
+    ): SetProfilePhotoResponse
+
+    @retrofit2.http.DELETE("api/hr/staff/me/profile-photo")
+    suspend fun deleteMyProfilePhoto(
+        @Header("Authorization") token: String
+    ): SimpleResponse
+
+    // ── Loans (read-only) ──
+    @GET("api/hr/loans/my")
+    suspend fun getMyLoans(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null
+    ): MyLoansResponse
+
+    @GET("api/hr/loans/get")
+    suspend fun getLoanDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): LoanDetailResponse
+
+    @GET("api/hr/loans/repayments")
+    suspend fun getLoanRepayments(
+        @Header("Authorization") token: String,
+        @Query("loanId") loanId: String
+    ): LoanRepaymentsResponse
+
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
         @Header("Authorization") token: String,
@@ -847,6 +877,87 @@ data class ApplyPermissionRequest(
 data class ApplyPermissionResponse(val success: Boolean, val permissionId: String?, val error: String? = null)
 
 // Common
+// ── Profile photo ──
+data class SetProfilePhotoRequest(val storageId: String)
+data class SetProfilePhotoResponse(
+    val success: Boolean = false,
+    val staff: StaffFullData? = null,
+    val photo: ProfilePhotoData? = null,
+    val error: String? = null
+)
+data class ProfilePhotoData(val storageId: String? = null, val url: String? = null)
+
+// ── Loans models ──
+// All numeric loan fields use Double to match Convex's v.number() (Float64).
+// Gson throws if a JSON number with any decimal/exponent lands in a Long?
+// field — which is what happens when the backend returns amounts like
+// 25000.0 from a number column.
+data class LoanData(
+    @SerializedName("_id") val id: String?,
+    val loanId: String?,
+    val staffId: String?,
+    val staffName: String?,
+    val employeeId: String?,
+    val principalAmount: Double? = null,
+    val loanAmount: Double? = null,
+    val annualInterestRate: Double? = null,
+    val interestType: String? = null,
+    val disbursedDate: String? = null,
+    val repaymentStartMonth: String? = null,
+    val repaymentEndMonth: String? = null,
+    val monthlyDeduction: Double? = null,
+    val totalRepaid: Double? = null,
+    val remainingBalance: Double? = null,
+    val status: String? = null,
+    val purpose: String? = null,
+    val notes: String? = null,
+    val approvalStatus: String? = null,
+    val repayments: List<LoanRepaymentData>? = null
+)
+
+data class LoanRepaymentData(
+    @SerializedName("_id") val id: String? = null,
+    val loanId: String? = null,
+    val staffId: String? = null,
+    val month: String? = null,
+    val amount: Double? = null,
+    val mode: String? = null,
+    val notes: String? = null,
+    val createdAt: String? = null
+)
+
+data class LoansSummary(
+    val totalLoans: Int = 0,
+    val activeCount: Int = 0,
+    val previousCount: Int = 0,
+    val pendingCount: Int = 0,
+    val totalDisbursed: Double = 0.0,
+    val totalRepaid: Double = 0.0,
+    val currentOutstanding: Double = 0.0
+)
+
+data class MyLoansResponse(
+    val success: Boolean = false,
+    val summary: LoansSummary? = null,
+    val active: List<LoanData> = emptyList(),
+    val previous: List<LoanData> = emptyList(),
+    val pending: List<LoanData> = emptyList(),
+    val error: String? = null
+)
+
+data class LoanDetailResponse(
+    val success: Boolean = false,
+    val loan: LoanData? = null,
+    val error: String? = null
+)
+
+data class LoanRepaymentsResponse(
+    val success: Boolean = false,
+    val total: Int = 0,
+    val repayments: List<LoanRepaymentData> = emptyList(),
+    val error: String? = null
+)
+
 data class IdRequest(val id: String)
 data class RejectRequest(val id: String, val reason: String)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
