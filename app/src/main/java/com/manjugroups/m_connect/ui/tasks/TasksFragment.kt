@@ -131,26 +131,19 @@ class TasksFragment : Fragment() {
 
     private fun startSkeleton() {
         val sk = skeletonContainer ?: return
-        sk.visibility = View.VISIBLE
-        if (skeletonAnimator?.isRunning != true) {
-            skeletonAnimator = ObjectAnimator.ofFloat(sk, View.ALPHA, 0.55f, 1f).apply {
-                duration = 650L
-                repeatMode = ObjectAnimator.REVERSE
-                repeatCount = ObjectAnimator.INFINITE
-                start()
-            }
-        }
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(sk)
+        taskListContainer?.visibility = View.GONE
     }
 
     private fun stopSkeleton() {
-        skeletonAnimator?.cancel()
-        skeletonAnimator = null
-        skeletonContainer?.alpha = 1f
-        skeletonContainer?.visibility = View.GONE
+        val sk = skeletonContainer ?: return
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(sk)
+        taskListContainer?.visibility = View.VISIBLE
     }
 
     override fun onResume() {
         super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         // Coming back from TaskDetailFragment after an update — refresh.
         if (allTasks.isNotEmpty()) loadTasks()
     }

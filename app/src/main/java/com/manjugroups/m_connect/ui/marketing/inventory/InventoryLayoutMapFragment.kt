@@ -12,6 +12,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -57,13 +58,18 @@ class InventoryLayoutMapFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadLayout(root: View) {
-        val loading = root.findViewById<View>(R.id.layoutMapLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvLayoutMapEmpty)
         val mapView = root.findViewById<UnitMapView>(R.id.layoutMapView)
         val count = root.findViewById<TextView>(R.id.tvLayoutMapCount)
 
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         mapView.visibility = View.GONE
         count.text = ""
@@ -71,7 +77,7 @@ class InventoryLayoutMapFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getInventoryLayout(session.bearerToken, projectId)
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load layout"
                     empty.visibility = View.VISIBLE
@@ -93,7 +99,7 @@ class InventoryLayoutMapFragment : Fragment() {
                 mapView.setUnits(rectUnits)
                 mapView.visibility = View.VISIBLE
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

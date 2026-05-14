@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
 import kotlinx.coroutines.launch
@@ -93,6 +94,8 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun loadData() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        binding.attendanceScroll.visibility = View.GONE
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyAttendance(
@@ -115,6 +118,8 @@ class AttendanceHistoryFragment : Fragment() {
                     renderRecords(records)
                 }
             } catch (_: Exception) { }
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.attendanceScroll.visibility = View.VISIBLE
         }
     }
 
@@ -186,6 +191,7 @@ class AttendanceHistoryFragment : Fragment() {
         super.onResume()
         // White system status bar with dark icons to match the white in-app header.
         (activity as? MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+        (activity as? MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onPause() {
@@ -197,6 +203,7 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         _binding = null
     }

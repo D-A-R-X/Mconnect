@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import kotlinx.coroutines.launch
@@ -52,7 +53,10 @@ class NotificationsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
+        }
     }
 
     override fun onPause() {
@@ -61,6 +65,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun loadNotifications() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 api.getNotifications(session.bearerToken)
@@ -74,6 +79,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun renderNotifications(notifications: List<NotificationData>) {
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         binding.notificationList.removeAllViews()
 
         val unreadCount = notifications.count { !it.read }
@@ -206,6 +212,7 @@ class NotificationsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onDestroyView()
         _binding = null

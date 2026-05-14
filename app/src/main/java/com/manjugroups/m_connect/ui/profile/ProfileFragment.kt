@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.databinding.FragmentProfileBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class ProfileFragment : Fragment() {
@@ -44,7 +45,7 @@ class ProfileFragment : Fragment() {
         val cachedName = session.userName?.trim().orEmpty().ifBlank { "User" }
         binding.tvProfileName.text = cachedName
         binding.tvProfileAvatar.text = initialsFor(cachedName)
-        binding.tvProfileRole.text = "Loading…"
+        binding.tvProfileRole.text = ""
         binding.tvContactEmail.text = session.userPhone?.takeIf { it.isNotBlank() } ?: "—"
         binding.tvContactAddress.text = "—"
 
@@ -59,6 +60,8 @@ class ProfileFragment : Fragment() {
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            binding.profileContentScroll.visibility = View.GONE
             try {
                 val resp = api.getStaffDetail(session.bearerToken, staffId)
                 if (resp.success) resp.staff?.let(::renderStaff)
@@ -68,6 +71,9 @@ class ProfileFragment : Fragment() {
                     binding.tvProfileRole.text =
                         if (session.isAdmin) "Administrator" else "Staff"
                 }
+            } finally {
+                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                binding.profileContentScroll.visibility = View.VISIBLE
             }
         }
     }
@@ -162,11 +168,13 @@ class ProfileFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        (activity as? MainActivity)?.setTabBarVisible(false)
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
         if (_binding != null) loadStaffProfile()
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         _binding = null
     }

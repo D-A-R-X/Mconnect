@@ -6,6 +6,7 @@
     android:background="#F4F6F9">
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/profileContentScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
@@ -506,4 +507,18 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:id="@+id/skeletonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F4F6F9"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <include layout="@layout/skeleton_profile_item" />
+        <include layout="@layout/skeleton_detail_item" />
+        <include layout="@layout/skeleton_detail_item" />
+    </LinearLayout>
+
 </FrameLayout>

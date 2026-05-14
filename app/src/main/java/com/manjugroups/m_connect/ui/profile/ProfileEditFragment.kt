@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmergencyContact
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.network.UpdateMyProfileRequest
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -76,10 +77,13 @@ class ProfileEditFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadStaff(root: View) {
-        val loading = root.findViewById<View>(R.id.editLoading)
         val scroll = root.findViewById<View>(R.id.editScroll)
-        loading.visibility = View.VISIBLE
         scroll.visibility = View.GONE
 
         val id = session.staffId?.takeIf { it.isNotBlank() }
@@ -89,6 +93,8 @@ class ProfileEditFragment : Fragment() {
             return
         }
 
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getStaffDetail(session.bearerToken, id)
@@ -103,7 +109,6 @@ class ProfileEditFragment : Fragment() {
                     return@launch
                 }
                 fillForm(root, staff)
-                loading.visibility = View.GONE
                 scroll.visibility = View.VISIBLE
             } catch (e: Exception) {
                 Toast.makeText(
@@ -112,6 +117,8 @@ class ProfileEditFragment : Fragment() {
                     Toast.LENGTH_LONG
                 ).show()
                 parentFragmentManager.popBackStack()
+            } finally {
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             }
         }
     }

@@ -314,6 +314,7 @@ class HrDashboardFragment : Fragment() {
         _binding = null
     }
 
+
     private fun hasPunchPermissions(): Boolean {
         val cameraGranted = ContextCompat.checkSelfPermission(
             requireContext(),
@@ -573,30 +574,21 @@ class HrDashboardFragment : Fragment() {
     private fun updateAttendanceLoadingUi() {
         if (_binding == null) return
         val showSkeleton = isTodayLoading || isHistoryLoading
-        binding.attendanceSkeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
-        binding.cardAttendanceSummary.visibility = if (showSkeleton) View.GONE else View.VISIBLE
-        binding.cardHistory1.visibility = if (showSkeleton) View.GONE else View.VISIBLE
         if (showSkeleton) {
+            com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(binding.attendanceSkeletonContainer)
+            binding.cardAttendanceSummary.visibility = View.GONE
+            binding.cardHistory1.visibility = View.GONE
             binding.cardHistory2.visibility = View.GONE
             binding.cardHistory3.visibility = View.GONE
-            if (!wasShowingSkeleton) {
-                val pulse = AnimationUtils.loadAnimation(requireContext(), R.anim.skeleton_pulse)
-                // Only fade the leaf block Views — keep white card backgrounds
-                // fully opaque so the blue header gradient doesn't bleed through.
-                forEachLeafBlock(binding.attendanceSkeletonContainer) { it.startAnimation(pulse) }
-            }
-        } else if (!showSkeleton && wasShowingSkeleton) {
-            forEachLeafBlock(binding.attendanceSkeletonContainer) { it.clearAnimation() }
+        } else {
+            com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(binding.attendanceSkeletonContainer)
+            binding.cardAttendanceSummary.visibility = View.VISIBLE
             bindRecentHistoryCards(recentHistoryRecords)
         }
         wasShowingSkeleton = showSkeleton
     }
 
     private fun forEachLeafBlock(group: android.view.ViewGroup, action: (View) -> Unit) {
-        for (i in 0 until group.childCount) {
-            val child = group.getChildAt(i)
-            if (child is android.view.ViewGroup) forEachLeafBlock(child, action)
-            else action(child)
-        }
+        // Not used anymore with SkeletonUtils
     }
 }

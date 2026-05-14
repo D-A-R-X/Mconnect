@@ -219,12 +219,12 @@
             android:textColor="@android:color/white"
             android:textSize="12sp" />
 
-        <ProgressBar
-            android:id="@+id/progressSubmit"
+        <View
+            android:id="@+id/skeletonSubmit"
             android:layout_width="22dp"
             android:layout_height="22dp"
             android:layout_gravity="center"
-            android:indeterminateTint="@android:color/white"
+            android:background="@drawable/bg_skeleton_circle_inverse"
             android:visibility="gone" />
     </FrameLayout>
 

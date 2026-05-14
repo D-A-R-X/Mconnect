@@ -42,7 +42,79 @@ class AppLibraryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         setupClickActions()
         setupFilterPills()
+        setupScrollAnimation()
         applyFilter(Filter.ALL)
+        
+        binding.sectionsContainer.post { playLibraryEntryAnimation() }
+    }
+
+    private fun playLibraryEntryAnimation() {
+        if (_binding == null) return
+        val density = binding.root.resources.displayMetrics.density
+        val riseTravel = 36f * density
+
+        // Header pulls slightly downward into place (opposite-direction echo of the home
+        // descent — feels stable while the body content lifts up from below).
+        listOfNotNull(binding.libraryHeaderContent, binding.ivLibraryIllustration).forEach { v ->
+            v.animate().cancel()
+            v.alpha = 0f
+            v.translationY = -10f * density
+            v.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(360L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.2f))
+                .start()
+        }
+
+        // Filter pill (visible at any time) lifts up
+        val pill = binding.pillAllApps.parent as? View
+        pill?.let {
+            it.animate().cancel()
+            it.alpha = 0f
+            it.translationY = riseTravel * 0.5f
+            it.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(380L)
+                .setStartDelay(80L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.3f))
+                .start()
+        }
+
+        // Section cards rise from below in a stagger — the "ascending curtain" that
+        // mirrors the home curtain falling.
+        val container = binding.sectionsContainer
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            child.animate().cancel()
+            child.alpha = 0f
+            child.translationY = riseTravel
+            child.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(460L)
+                .setStartDelay(180L + i * 90L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                .start()
+        }
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null) {
+            binding.sectionsContainer.post { playLibraryEntryAnimation() }
+        }
+    }
+
+    private fun setupScrollAnimation() {
+        binding.scrollLibrary.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            val alpha = (1f - (scrollY.toFloat() / 300f)).coerceIn(0f, 1f)
+            binding.libraryHeaderContent.alpha = alpha
+            binding.ivLibraryIllustration.alpha = alpha
+            binding.ivLibraryIllustration.translationY = scrollY.toFloat() * 0.45f
+            binding.libraryHeaderContent.translationY = scrollY.toFloat() * 0.25f
+        }
     }
 
     private fun setupClickActions() {
@@ -124,6 +196,17 @@ class AppLibraryFragment : Fragment() {
             .replace(R.id.fragmentContainer, PlaceholderFragment.newInstance("$feature - Coming Soon"))
             .addToBackStack(null)
             .commit()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
+            main.setTabBarVisible(true)
+            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+        }
+        if (_binding != null) {
+            binding.sectionsContainer.post { playLibraryEntryAnimation() }
+        }
     }
 
     override fun onDestroyView() {

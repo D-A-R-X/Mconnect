@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -53,12 +54,17 @@ class CpVisitsFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadVisits() {
         val root = rootView ?: return
-        val loading = root.findViewById<View>(R.id.cpVisitsLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvCpVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -72,7 +78,7 @@ class CpVisitsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load CP visits"
                     empty.visibility = View.VISIBLE
@@ -88,7 +94,7 @@ class CpVisitsFragment : Fragment() {
                 }
                 visits.forEach { list.addView(createRow(it, list)) }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

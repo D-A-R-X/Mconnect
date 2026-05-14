@@ -415,10 +415,24 @@
             android:background="#80FFFFFF"
             android:visibility="gone">
 
-            <ProgressBar
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <View
+                    android:layout_width="140dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/bg_skeleton_rounded" />
+
+                <View
+                    android:layout_width="220dp"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_skeleton_rounded" />
+            </LinearLayout>
         </FrameLayout>
     </FrameLayout>
 

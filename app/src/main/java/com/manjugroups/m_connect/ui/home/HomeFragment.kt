@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -36,6 +37,8 @@ class HomeFragment : Fragment() {
         "It looks like you don’t have any meetings scheduled at the moment. " +
             "This space will be updated as new meetings are added!"
 
+    private var pendingEntryAnimation = true
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -49,22 +52,102 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        applyStatusBarInset()
         setupHeader()
         setupActions()
         collectState()
         collectEvents()
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
+        startBannerAnimation()
+    }
+
+    private fun applyStatusBarInset() {
+        val basePaddingTop = binding.homeProfileRow.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeHeaderContainer) { _, insets ->
+            val b = _binding ?: return@setOnApplyWindowInsetsListener insets
+            val topInset = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            b.homeProfileRow.setPadding(
+                b.homeProfileRow.paddingStart,
+                basePaddingTop + topInset,
+                b.homeProfileRow.paddingEnd,
+                b.homeProfileRow.paddingBottom
+            )
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
+    }
+
+    private fun startBannerAnimation() {
+        val anim = binding.ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable
+        anim?.start()
     }
 
     override fun onResume() {
         super.onResume()
         // Defensive: restore tab bar in case a child fragment hid it.
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#0B61CA"),
+            false,
+            fullBleed = true
+        )
         loadUnreadNotifications()
         // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+        // Replay the stagger when returning to the Home tab (either from a child
+        // fragment via back, or after pop-back from another tab via show/hide).
+        if (_binding != null && binding.homeContent.visibility == View.VISIBLE) {
+            binding.homeContent.post { playHomeEntryAnimation() }
+        }
+        startBannerAnimation()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null &&
+            binding.homeContent.visibility == View.VISIBLE) {
+            binding.homeContent.post { playHomeEntryAnimation() }
+        }
+    }
+
+    private fun playHomeEntryAnimation() {
+        if (_binding == null) return
+        val header = binding.homeHeaderContainer
+
+        // Reset any residual offsets from previous animation variants so only
+        // the blue header animates this time.
+        binding.homeProfileRow.animate().cancel()
+        binding.whiteContentArea.animate().cancel()
+        binding.cardWorkSummary.animate().cancel()
+        binding.btnHomeProfile.animate().cancel()
+        binding.btnHomeBell.animate().cancel()
+        binding.tvSummaryTitle.animate().cancel()
+        binding.tvSummarySubtitle.animate().cancel()
+        binding.ivBannerAnimation.animate().cancel()
+        binding.btnViewSummary.animate().cancel()
+        header.animate().cancel()
+
+        listOf(
+            binding.homeProfileRow, binding.whiteContentArea, binding.cardWorkSummary,
+            binding.btnHomeProfile, binding.btnHomeBell, binding.tvSummaryTitle,
+            binding.tvSummarySubtitle, binding.ivBannerAnimation, binding.btnViewSummary
+        ).forEach {
+            it.translationY = 0f
+            it.translationX = 0f
+            it.alpha = 1f
+            it.scaleX = 1f
+            it.scaleY = 1f
+        }
+
+        // Blue header slides down from above the screen.
+        val startOffset = -header.height.toFloat().let { if (it == 0f) -800f else it }
+        header.translationY = startOffset
+        header.animate()
+            .translationY(0f)
+            .setDuration(640L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+            .start()
     }
 
     private fun setupHeader() {
@@ -119,21 +202,25 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            binding.homeLoading.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.GONE
                         }
 
                         is HomeUiState.Loaded -> {
-                            binding.homeLoading.visibility = View.GONE
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.VISIBLE
-                            renderSummary(state)
+                            renderSummary()
                             if (!viewModel.isVisitsLoading.value) {
                                 renderVisitCard(state)
+                            }
+                            if (pendingEntryAnimation) {
+                                pendingEntryAnimation = false
+                                binding.homeContent.post { playHomeEntryAnimation() }
                             }
                         }
 
                         is HomeUiState.Error -> {
-                            binding.homeLoading.visibility = View.GONE
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeContent.visibility = View.VISIBLE
                             binding.tvSummarySubtitle.text = "Today task & presence activity"
                             binding.tvVisitCountBadge.visibility = View.GONE
@@ -206,23 +293,14 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun renderSummary(state: HomeUiState.Loaded) {
-        val totalTasks = state.todayVisits.count { it.status != "cancelled" }
-        val presenceState = when {
-            state.hasOpenSession -> "active presence"
-            state.totalMinutes > 0 -> "presence activity"
-            else -> "presence activity"
-        }
-        binding.tvSummarySubtitle.text =
-            if (totalTasks > 0) "Today $totalTasks task(s) & $presenceState"
-            else "Today task & presence activity"
+    private fun renderSummary() {
+        // As per the provided frames, the banner text is static: "Plan, Visit & Achieve"
+        // But we can update the subtitle or other elements if needed.
+        // For now, keeping it consistent with the image.
     }
 
     private fun renderVisitCard(state: HomeUiState.Loaded) {
-        // Home shows today's visits only. If nothing is scheduled for today,
-        // we surface the empty state — yesterday's in-progress trips don't
-        // bleed into "Today's Visits" (Field Visits page is the place to find
-        // history / cross-day work).
+        // Home shows today's visits only.
         val visits = state.todayVisits.filter { it.status != "cancelled" }
         val displayCount = visits.size
 
@@ -236,8 +314,9 @@ class HomeFragment : Fragment() {
         if (displayCount == 0) {
             binding.visitListContent.visibility = View.GONE
             binding.visitEmptyContent.visibility = View.VISIBLE
-            binding.tvVisitEmptyTitle.text = "No Visits Available"
-            binding.tvVisitEmptySubtitle.text = visitEmptySubtitle
+            // Match Frame 4 text exactly
+            binding.tvVisitEmptyTitle.text = "No Trips Available"
+            binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment. This space will be updated as new meetings are added!"
             return
         }
 
@@ -552,6 +631,7 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         super.onDestroyView()
         _binding = null
     }

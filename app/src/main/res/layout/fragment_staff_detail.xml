@@ -56,6 +56,7 @@
 
     <!-- Profile card -->
     <LinearLayout
+        android:id="@+id/headerCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
@@ -108,6 +109,7 @@
 
     <!-- Horizontal scrollable tab chips -->
     <HorizontalScrollView
+        android:id="@+id/tabStripScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbars="none">
@@ -127,19 +129,38 @@
         android:background="?attr/colorBorder" />
 
     <!-- Tab content -->
-    <ScrollView
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:layout_weight="1">
+
+        <ScrollView
+            android:id="@+id/tabContentScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/tabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="32dp" />
+        </ScrollView>
 
         <LinearLayout
-            android:id="@+id/tabContent"
+            android:id="@+id/skeletonContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/colorSurfacePrimary"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="32dp" />
-    </ScrollView>
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_profile_item" />
+            <include layout="@layout/skeleton_detail_item" />
+            <include layout="@layout/skeleton_detail_item" />
+        </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

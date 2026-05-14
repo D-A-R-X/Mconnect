@@ -8,6 +8,7 @@
 
         <!-- Header -->
         <LinearLayout
+            android:id="@+id/chatListHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
@@ -17,17 +18,7 @@
             android:paddingBottom="14dp">
 
             <TextView
-                android:id="@+id/tvChatAvatarInitial"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:gravity="center"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="?attr/colorForegroundInverse"
-                android:textSize="14sp"
-                android:background="@drawable/bg_chat_avatar_circle"
-                android:layout_marginEnd="10dp" />
-
-            <TextView
+                android:id="@+id/tvChatHeaderTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -36,11 +27,17 @@
                 android:textColor="@color/chat_text_primary"
                 android:textSize="18sp" />
 
+            <TextView
+                android:id="@+id/tvChatAvatarInitial"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
             <FrameLayout
                 android:id="@+id/btnChatMenu"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:background="@drawable/bg_chat_send_circle"
+                android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -50,7 +47,25 @@
                     android:layout_gravity="center"
                     android:contentDescription="New chat"
                     android:src="@drawable/ic_chat_plus"
-                    app:tint="?attr/colorForegroundInverse" />
+                    app:tint="#0B61CA" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnChatSelectionMenu"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Actions"
+                    android:src="@drawable/ic_chat_more_dots"
+                    app:tint="#0B61CA" />
             </FrameLayout>
         </LinearLayout>
 
@@ -89,6 +104,7 @@
 
     <!-- Filter chips -->
     <HorizontalScrollView
+        android:id="@+id/chipScrollView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="15dp"
@@ -133,6 +149,21 @@
                 android:textSize="14sp" />
 
             <TextView
+                android:id="@+id/chipFavourites"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chat_filter_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Favourites"
+                android:textColor="@color/chat_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
                 android:id="@+id/chipChannels"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
@@ -161,6 +192,7 @@
                 android:text="Dm"
                 android:textColor="@color/chat_text_secondary"
                 android:textSize="14sp" />
+
         </LinearLayout>
     </HorizontalScrollView>
 
@@ -177,7 +209,7 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:overScrollMode="never"
-            android:paddingBottom="24dp" />
+            android:paddingBottom="96dp" />
 
         <LinearLayout
             android:id="@+id/emptyState"
@@ -257,6 +289,21 @@
                         android:textSize="16sp" />
                 </LinearLayout>
             </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/skeletonContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="?attr/colorSurfacePrimary"
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
+            <include layout="@layout/skeleton_list_item"/>
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

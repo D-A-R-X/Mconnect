@@ -5,7 +5,13 @@ plugins {
 
 fun envOrEmpty(name: String): String = System.getenv(name) ?: ""
 fun envOrDefault(name: String, defaultValue: String): String = System.getenv(name) ?: defaultValue
-fun ensureTrailingSlash(url: String): String = if (url.endsWith("/")) url else "$url/"
+fun ensureScheme(url: String): String =
+    if (url.isBlank() || url.startsWith("http://") || url.startsWith("https://")) url
+    else "https://$url"
+fun ensureTrailingSlash(url: String): String {
+    val withScheme = ensureScheme(url)
+    return if (withScheme.endsWith("/")) withScheme else "$withScheme/"
+}
 fun gradleProp(name: String): String = (project.findProperty(name) as String?) ?: ""
 
 val googleMapsApiKey = envOrDefault(
@@ -25,7 +31,7 @@ val googleMapsApiKey = envOrDefault(
     )
 )
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://colorful-grouse-456.convex.site/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://convex-http.aivida.in/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
@@ -106,6 +112,9 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.coil)
     implementation(libs.coil.video)
+    implementation(libs.emoji2.emojipicker)
+    implementation("androidx.media3:media3-exoplayer:1.6.0")
+    implementation("androidx.media3:media3-ui:1.6.0")
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

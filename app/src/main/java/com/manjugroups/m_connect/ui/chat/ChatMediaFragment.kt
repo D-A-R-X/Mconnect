@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ChatAttachmentItem
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,11 +65,16 @@ class ChatMediaFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadAttachments(root: View) {
-        val loading = root.findViewById<View>(R.id.mediaLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvMediaEmpty)
         val list = root.findViewById<LinearLayout>(R.id.mediaList)
-        loading.visibility = View.VISIBLE
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -79,7 +85,7 @@ class ChatMediaFragment : Fragment() {
                     channelId = channelId,
                     conversationId = conversationId
                 )
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     Toast.makeText(
                         requireContext(),
@@ -114,7 +120,7 @@ class ChatMediaFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 Toast.makeText(
                     requireContext(),
                     "Network error: ${e.message ?: "unknown"}",

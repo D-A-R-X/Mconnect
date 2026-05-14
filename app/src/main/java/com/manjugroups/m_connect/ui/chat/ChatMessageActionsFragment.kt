@@ -15,6 +15,8 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
         fun onCopy(text: String)
         fun onDelete(messageId: String)
         fun onForward(messageId: String)
+        fun onInfo(messageId: String) {}
+        fun onSelectMore(messageId: String) {}
     }
 
     private var _binding: FragmentChatMessageActionsBinding? = null
@@ -33,7 +35,8 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
         binding.tvMessagePreview.text = body
 
         binding.btnReply.setOnClickListener {
-            callback?.onReply(messageId)
+            val id = arguments?.getString("messageId") ?: ""
+            callback?.onReply(id)
             dismiss()
         }
         binding.btnForward.setOnClickListener {
@@ -42,6 +45,14 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
         }
         binding.btnCopy.setOnClickListener {
             callback?.onCopy(body)
+            dismiss()
+        }
+        binding.btnSelectMore.setOnClickListener {
+            callback?.onSelectMore(messageId)
+            dismiss()
+        }
+        binding.btnInfo.setOnClickListener {
+            callback?.onInfo(messageId)
             dismiss()
         }
         binding.btnDelete.setOnClickListener {

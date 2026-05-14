@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -64,13 +65,18 @@ class SiteVisitsListFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadVisits(root: View) {
-        val loading = root.findViewById<View>(R.id.siteVisitsLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvSiteVisitsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.siteVisitsList)
         val countText = root.findViewById<TextView>(R.id.tvSiteVisitsCount)
 
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         list.removeAllViews()
 
@@ -86,7 +92,7 @@ class SiteVisitsListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load site visits"
                     empty.visibility = View.VISIBLE
@@ -105,7 +111,7 @@ class SiteVisitsListFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

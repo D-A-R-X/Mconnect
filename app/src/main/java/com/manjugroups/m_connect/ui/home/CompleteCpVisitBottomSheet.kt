@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -262,28 +263,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun loadProjects(showErrors: Boolean) {
         if (projectsLoading) return
         projectsLoading = true
-        siteVisitProject?.text = "Loading projects..."
+        siteVisitProject?.let { projectChip ->
+            projectChip.isClickable = false
+            projectChip.text = ""
+            projectChip.setBackgroundResource(R.drawable.bg_skeleton_rounded)
+            SkeletonUtils.startSkeletonPulse(projectChip)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMarketingProjects(session.bearerToken)
                 if (!resp.success) {
-                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
                     if (showErrors) showError(resp.error ?: "Failed to load projects")
                     return@launch
                 }
                 if (resp.projects.isEmpty()) {
-                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
                     if (showErrors) showError("No projects available")
                     return@launch
                 }
                 projects = resp.projects
-                siteVisitProject?.text = selectedProject?.name ?: "Select project"
                 if (showErrors) showProjectPicker(projects)
             } catch (e: Exception) {
-                siteVisitProject?.text = selectedProject?.name ?: "Select project"
                 if (showErrors) showError(e.message ?: "Failed to load projects")
             } finally {
                 projectsLoading = false
+                siteVisitProject?.let { projectChip ->
+                    SkeletonUtils.stopSkeletonPulse(projectChip)
+                    projectChip.setBackgroundResource(R.drawable.bg_chip_inactive)
+                    projectChip.text = selectedProject?.name ?: "Select project"
+                    projectChip.isClickable = true
+                }
             }
         }
     }

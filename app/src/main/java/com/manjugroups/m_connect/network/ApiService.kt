@@ -980,7 +980,8 @@ data class MessageData(
     val channelId: String?, val conversationId: String?,
     val isDeleted: Boolean?, val isEdited: Boolean?,
     val replyCount: Int?, val parentMessageId: String?,
-    val attachments: List<MessageAttachmentData>? = null
+    val attachments: List<MessageAttachmentData>? = null,
+    val reactions: List<ReactionData>? = null
 )
 data class MessageAttachmentData(
     @SerializedName("_id") val id: String? = null,
