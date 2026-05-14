@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingBottom="14dp">
+        android:paddingBottom="96dp">
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -201,7 +201,7 @@
                         android:layout_height="48dp"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_attendance_btn_dark"
+                        android:background="@drawable/bg_attendance_btn_primary"
                         android:fontFamily="@font/inter_medium"
                         android:text="Clock Out"
                         android:textAllCaps="false"

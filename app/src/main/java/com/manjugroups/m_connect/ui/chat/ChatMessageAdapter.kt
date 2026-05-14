@@ -31,8 +31,66 @@ class ChatMessageAdapter(
     private val onMessageReactionClick: (MessageData, View) -> Unit,
     private val onReactionPillClick: (MessageData, View) -> Unit,
     private val onAttachmentClick: (url: String, mime: String, storageId: String?) -> Unit,
-    private val onReplyClick: (messageId: String) -> Unit
+    private val onReplyClick: (messageId: String) -> Unit,
+    private val onMessageTap: ((MessageData) -> Boolean)? = null
 ) : ListAdapter<ChatItem, RecyclerView.ViewHolder>(ChatItemDiffCallback()) {
+
+    var selectionMode: Boolean = false
+        private set
+    private val selectedIds = mutableSetOf<String>()
+    private val selectionTint = android.graphics.Color.parseColor("#1A0B61CA")
+
+    fun isSelected(id: String?): Boolean = id != null && id in selectedIds
+
+    fun selectedIdsSnapshot(): List<String> = selectedIds.toList()
+
+    fun selectionCount(): Int = selectedIds.size
+
+    fun setSelectionMode(enabled: Boolean) {
+        if (selectionMode == enabled) return
+        selectionMode = enabled
+        if (!enabled) selectedIds.clear()
+        notifyDataSetChanged()
+    }
+
+    fun toggleSelected(id: String): Int {
+        if (id in selectedIds) selectedIds.remove(id) else selectedIds.add(id)
+        notifyDataSetChanged()
+        return selectedIds.size
+    }
+
+    fun clearSelection() {
+        if (selectedIds.isEmpty()) return
+        selectedIds.clear()
+        notifyDataSetChanged()
+    }
+
+    fun applySelectionVisual(rootView: View, messageId: String?) {
+        val highlightedSelection = selectionMode && isSelected(messageId)
+        val highlightedSearch = !selectionMode && messageId != null && messageId in searchHighlightIds
+        val color = when {
+            highlightedSelection -> selectionTint
+            highlightedSearch -> searchTint
+            else -> android.graphics.Color.TRANSPARENT
+        }
+        rootView.setBackgroundColor(color)
+    }
+
+    private val searchHighlightIds = mutableSetOf<String>()
+    private val searchTint = android.graphics.Color.parseColor("#33FFD60A")
+
+    fun setSearchHighlight(ids: Collection<String>) {
+        if (searchHighlightIds.size == ids.size && searchHighlightIds.containsAll(ids)) return
+        searchHighlightIds.clear()
+        searchHighlightIds.addAll(ids)
+        notifyDataSetChanged()
+    }
+
+    fun clearSearchHighlight() {
+        if (searchHighlightIds.isEmpty()) return
+        searchHighlightIds.clear()
+        notifyDataSetChanged()
+    }
 
     private var currentlyPlayingStorageId: String? = null
     private var currentlyPlayingProgress: Float = 0f
@@ -47,9 +105,13 @@ class ChatMessageAdapter(
     private val parentMessageCache = mutableMapOf<String, MessageData>()
 
     fun setParentMessageCache(map: Map<String, MessageData>) {
+        // Avoid notifyDataSetChanged here — it forces a full rebind of every
+        // visible message, which causes a visible flicker each time
+        // enrichMessages or the poll loop refreshes parent quotes. Reply-quote
+        // text resolves at bind time, so subsequent submitList() diffs (poll,
+        // send, react) will naturally pick up the new cache values.
         parentMessageCache.clear()
         parentMessageCache.putAll(map)
-        notifyDataSetChanged()
     }
 
     fun setCurrentlyPlayingStorageId(id: String?) {
@@ -151,8 +213,20 @@ class ChatMessageAdapter(
                 ownSenderId = item.data.senderId
             )
 
+            applySelectionVisual(binding.root, item.data.id)
+            binding.root.setOnClickListener {
+                if (selectionMode) {
+                    item.data.id?.let { toggleSelected(it) }
+                    onMessageTap?.invoke(item.data)
+                }
+            }
             binding.root.setOnLongClickListener {
-                onMessageReactionClick(item.data, binding.bubbleFrame)
+                if (selectionMode) {
+                    item.data.id?.let { toggleSelected(it) }
+                    onMessageTap?.invoke(item.data)
+                } else {
+                    onMessageReactionClick(item.data, binding.bubbleFrame)
+                }
                 true
             }
 
@@ -226,8 +300,20 @@ class ChatMessageAdapter(
                 ownSenderId = item.data.senderId
             )
 
+            applySelectionVisual(binding.root, item.data.id)
+            binding.root.setOnClickListener {
+                if (selectionMode) {
+                    item.data.id?.let { toggleSelected(it) }
+                    onMessageTap?.invoke(item.data)
+                }
+            }
             binding.root.setOnLongClickListener {
-                onMessageReactionClick(item.data, binding.bubbleFrame)
+                if (selectionMode) {
+                    item.data.id?.let { toggleSelected(it) }
+                    onMessageTap?.invoke(item.data)
+                } else {
+                    onMessageReactionClick(item.data, binding.bubbleFrame)
+                }
                 true
             }
 
@@ -566,6 +652,58 @@ class ChatMessageAdapter(
         return container
     }
 
+    private fun createVideoPreview(
+        context: android.content.Context,
+        url: String,
+        attachment: MessageAttachmentData,
+        mime: String
+    ): View {
+        val container = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(context, 4) }
+            minimumWidth = dp(context, 200)
+            background = androidx.core.content.ContextCompat.getDrawable(
+                context, R.drawable.bg_chat_media_placeholder
+            )
+            clipToOutline = true
+        }
+
+        val thumb = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                dp(context, 220),
+                dp(context, 140)
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(0xFF1F2937.toInt())
+            load(url) {
+                crossfade(true)
+                placeholder(R.drawable.bg_chat_media_placeholder)
+                decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                transformations(coil.transform.RoundedCornersTransformation(dp(context, 10).toFloat()))
+            }
+        }
+        container.addView(thumb)
+
+        val play = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                dp(context, 48),
+                dp(context, 48),
+                android.view.Gravity.CENTER
+            )
+            setImageResource(R.drawable.ic_chat_media_play)
+            setBackgroundResource(R.drawable.bg_chat_video_play_overlay)
+            imageTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
+        }
+        container.addView(play)
+
+        container.setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
+        container.isLongClickable = false
+        return container
+    }
+
     private fun createAttachmentView(
         parent: ViewGroup,
         attachment: MessageAttachmentData,
@@ -583,31 +721,57 @@ class ChatMessageAdapter(
                       fileName.endsWith(".wav") ||
                       fileName.startsWith("voice-")
 
+        val isVideo = mime.startsWith("video/") ||
+            fileName.endsWith(".mp4") ||
+            fileName.endsWith(".mov") ||
+            fileName.endsWith(".webm") ||
+            fileName.endsWith(".mkv") ||
+            fileName.endsWith(".3gp") ||
+            fileName.endsWith(".avi")
+
         return if (mime.startsWith("image/")) {
-            ImageView(context).apply {
+            FrameLayout(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    dp(context, 220),
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     bottomMargin = dp(context, 4)
                 }
-                minimumWidth = dp(context, 140)
-                maxWidth = dp(context, 240)
-                maxHeight = dp(context, 320)
-                adjustViewBounds = true
-                scaleType = ImageView.ScaleType.FIT_CENTER
                 background = androidx.core.content.ContextCompat.getDrawable(
                     context, R.drawable.bg_chat_media_placeholder
                 )
                 clipToOutline = true
-                load(url) {
-                    crossfade(true)
-                    placeholder(R.drawable.bg_chat_media_placeholder)
-                    transformations(coil.transform.RoundedCornersTransformation(dp(context, 10).toFloat()))
+
+                val img = ImageView(context).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    minimumHeight = dp(context, 140)
+                    maxHeight = dp(context, 320)
+                    adjustViewBounds = true
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    if (!url.isNullOrBlank()) {
+                        load(url) {
+                            crossfade(true)
+                            placeholder(R.drawable.bg_chat_media_placeholder)
+                            error(R.drawable.bg_chat_media_placeholder)
+                            transformations(
+                                coil.transform.RoundedCornersTransformation(
+                                    dp(context, 10).toFloat()
+                                )
+                            )
+                        }
+                    } else {
+                        setImageResource(R.drawable.bg_chat_media_placeholder)
+                    }
                 }
+                addView(img)
                 setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
-                isLongClickable = false  // Let long-press bubble up to the message row
+                isLongClickable = false
             }
+        } else if (isVideo) {
+            createVideoPreview(context, url, attachment, mime)
         } else if (isAudio) {
             createAudioBubble(context, url, attachment, isMine, creationTime)
         } else {

@@ -15,6 +15,7 @@
         android:id="@+id/bubbleFrame"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:maxWidth="280dp"
         android:background="@drawable/bg_chat_bubble_sent"
         android:paddingHorizontal="10dp"
         android:paddingTop="5dp"
@@ -80,8 +81,8 @@
                 android:id="@+id/bodyTimeRow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="bottom"
-                android:orientation="horizontal">
+                android:layout_gravity="end"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tvMessageBody"
@@ -95,7 +96,8 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="2dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 

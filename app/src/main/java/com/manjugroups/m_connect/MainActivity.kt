@@ -181,6 +181,16 @@ class MainActivity : AppCompatActivity() {
             config.tab.setOnClickListener { selectTab(index) }
         }
 
+        // Defensive: keep the floating nav restricted to root tabs.
+        // When a child fragment is pushed onto the back stack, hide the bar;
+        // when the back stack drains, re-apply the active tab's chrome so
+        // header/tab state never bleeds in from the popped fragment.
+        supportFragmentManager.addOnBackStackChangedListener {
+            val onRoot = supportFragmentManager.backStackEntryCount == 0
+            setTabBarVisible(onRoot)
+            if (onRoot) applyTopBarForTab(currentTab)
+        }
+
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
 
         if (savedInstanceState == null) {

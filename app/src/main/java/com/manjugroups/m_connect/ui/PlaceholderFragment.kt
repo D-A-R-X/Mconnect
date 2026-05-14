@@ -24,4 +24,9 @@ class PlaceholderFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         view.findViewById<TextView>(R.id.tvPlaceholder).text = arguments?.getString(ARG_TITLE) ?: "Coming Soon"
     }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+    }
 }

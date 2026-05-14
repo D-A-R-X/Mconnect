@@ -52,6 +52,7 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        applyStatusBarInset()
         setupHeader()
         setupActions()
         collectState()
@@ -59,6 +60,22 @@ class HomeFragment : Fragment() {
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
         startBannerAnimation()
+    }
+
+    private fun applyStatusBarInset() {
+        val basePaddingTop = binding.homeProfileRow.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeHeaderContainer) { _, insets ->
+            val b = _binding ?: return@setOnApplyWindowInsetsListener insets
+            val topInset = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            b.homeProfileRow.setPadding(
+                b.homeProfileRow.paddingStart,
+                basePaddingTop + topInset,
+                b.homeProfileRow.paddingEnd,
+                b.homeProfileRow.paddingBottom
+            )
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
     }
 
     private fun startBannerAnimation() {
@@ -70,7 +87,11 @@ class HomeFragment : Fragment() {
         super.onResume()
         // Defensive: restore tab bar in case a child fragment hid it.
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(Color.WHITE, true)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#0B61CA"),
+            false,
+            fullBleed = true
+        )
         loadUnreadNotifications()
         // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
@@ -92,40 +113,40 @@ class HomeFragment : Fragment() {
 
     private fun playHomeEntryAnimation() {
         if (_binding == null) return
-        val density = binding.root.resources.displayMetrics.density
+        val header = binding.homeHeaderContainer
 
-        // Match the 4-frame "Curtain Descent" flow:
-        // Frame 1: Profile fades in, White card starts very high (covering banner area).
-        // Frame 2-3: White card slides down to reveal the banner.
-        // Frame 4: Final state.
-
-        val whiteStartOffset = -150f * density // Higher up to cover the banner section
-
-        // 1. Profile row fade/slide
-        binding.homeProfileRow.alpha = 0f
-        binding.homeProfileRow.translationY = -20f * density
-        binding.homeProfileRow.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(400L)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-
-        // 2. Banner content fade in (revealed as white card slides down)
-        binding.cardWorkSummary.alpha = 0f
-        binding.cardWorkSummary.animate()
-            .alpha(1f)
-            .setStartDelay(200L)
-            .setDuration(600L)
-            .start()
-
-        // 3. The "Curtain" - Whole white part descending
+        // Reset any residual offsets from previous animation variants so only
+        // the blue header animates this time.
+        binding.homeProfileRow.animate().cancel()
         binding.whiteContentArea.animate().cancel()
-        binding.whiteContentArea.translationY = whiteStartOffset
-        binding.whiteContentArea.animate()
+        binding.cardWorkSummary.animate().cancel()
+        binding.btnHomeProfile.animate().cancel()
+        binding.btnHomeBell.animate().cancel()
+        binding.tvSummaryTitle.animate().cancel()
+        binding.tvSummarySubtitle.animate().cancel()
+        binding.ivBannerAnimation.animate().cancel()
+        binding.btnViewSummary.animate().cancel()
+        header.animate().cancel()
+
+        listOf(
+            binding.homeProfileRow, binding.whiteContentArea, binding.cardWorkSummary,
+            binding.btnHomeProfile, binding.btnHomeBell, binding.tvSummaryTitle,
+            binding.tvSummarySubtitle, binding.ivBannerAnimation, binding.btnViewSummary
+        ).forEach {
+            it.translationY = 0f
+            it.translationX = 0f
+            it.alpha = 1f
+            it.scaleX = 1f
+            it.scaleY = 1f
+        }
+
+        // Blue header slides down from above the screen.
+        val startOffset = -header.height.toFloat().let { if (it == 0f) -800f else it }
+        header.translationY = startOffset
+        header.animate()
             .translationY(0f)
-            .setDuration(800L)
-            .setInterpolator(android.view.animation.DecelerateInterpolator(2f)) // Heavier, smoother descent
+            .setDuration(640L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
             .start()
     }
 

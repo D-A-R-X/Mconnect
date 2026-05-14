@@ -48,6 +48,9 @@ import com.manjugroups.m_connect.network.TypingRequest
 import com.manjugroups.m_connect.network.ReactionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.DeleteMessageRequest
+import android.graphics.Bitmap
+import android.os.Build
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -55,6 +58,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
@@ -79,6 +83,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var conversationId: String? = null
     private var chatTitle: String = ""
     private var chatSubtitle: String = "Last seen recently"
+    private var chatMuted: Boolean = false
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var latestMessageTime: Double = 0.0
@@ -172,9 +177,24 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.tvChatSubtitle.text = chatSubtitle
         
         setupAdapters()
+        setupSelectionToolbar()
         setupSwipeToReply()
         renderPendingAttachments()
         updateSendIcon()
+
+        // Hydrate header (title/subtitle/avatar) from on-disk snapshot so the
+        // chat header doesn't flicker from arguments → API result.
+        hydrateHeaderFromCache()
+
+        // Hydrate from local cache before hitting the network so the screen
+        // paints instantly when re-entering a chat.
+        if (messages.isEmpty()) {
+            val cached = ChatMessageCache.load(requireContext().applicationContext, cacheKey())
+            if (cached.isNotEmpty()) {
+                messages.addAll(cached)
+                latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
+            }
+        }
 
         if (messages.isEmpty()) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
@@ -186,12 +206,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.titleGroup.setOnClickListener { openContactInfo() }
-        binding.btnSearch.setOnClickListener { 
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, ChatSearchFragment.newInstance(channelId, conversationId, chatTitle))
-                .addToBackStack(null)
-                .commit()
-        }
+        binding.btnSearch.setOnClickListener { showInlineSearch() }
+        setupInlineSearch()
+        binding.btnChatHeaderMenu.setOnClickListener { showChatHeaderMenu(it) }
         
         binding.btnSend.setOnTouchListener { _, event ->
             when (event.action) {
@@ -279,7 +296,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             }
             refreshChatMetadata()
-            loadInitialMessages(scrollToBottom = true)
+            // If cache hydrated the list, don't force-scroll again after the
+            // server refresh — that double scroll is the visible "glitch" on
+            // re-entering a chat. Only scroll on a true cold open.
+            loadInitialMessages(scrollToBottom = messages.isEmpty())
             markRead()
         }
     }
@@ -296,13 +316,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             onAttachmentClick = { url: String, mime: String, storageId: String? ->
                 handleAttachmentClick(url, mime, storageId)
             },
-            onReplyClick = { messageId -> scrollToMessage(messageId) }
+            onReplyClick = { messageId -> scrollToMessage(messageId) },
+            onMessageTap = { _ ->
+                updateSelectionToolbar()
+                true
+            }
         )
         binding.rvMessages.apply {
             layoutManager = LinearLayoutManager(requireContext()).apply {
                 stackFromEnd = true
             }
             adapter = chatAdapter
+            itemAnimator = null
+            setHasFixedSize(false)
         }
 
         mentionAdapter = MentionAdapter { person: MentionPerson ->
@@ -367,11 +393,74 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun routeAttachment(url: String, mime: String, storageId: String? = null) {
+        val lowerMime = mime.lowercase(Locale.getDefault())
+        val urlLower = url.lowercase(Locale.getDefault())
+        val isVideo = lowerMime.startsWith("video/") ||
+            urlLower.endsWith(".mp4") ||
+            urlLower.endsWith(".mov") ||
+            urlLower.endsWith(".webm") ||
+            urlLower.endsWith(".mkv") ||
+            urlLower.endsWith(".3gp") ||
+            urlLower.endsWith(".avi")
         when {
-            mime.startsWith("image/") -> showImagePreview(url)
-            mime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
+            lowerMime.startsWith("image/") -> showImagePreview(url)
+            lowerMime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
+            isVideo -> showVideoPreview(url)
             else -> openAttachmentUrl(url)
         }
+    }
+
+    @androidx.media3.common.util.UnstableApi
+    private fun showVideoPreview(url: String) {
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_video_preview, null)
+        val popup = PopupWindow(
+            view,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            true
+        )
+
+        val playerView = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPlayerView)
+        val player = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            playWhenReady = true
+            prepare()
+        }
+        playerView.player = player
+
+        val cleanup = {
+            playerView.player = null
+            runCatching { player.stop() }
+            player.release()
+        }
+        view.findViewById<View>(R.id.btnVideoBack).setOnClickListener { popup.dismiss() }
+        view.findViewById<View>(R.id.btnVideoClose).setOnClickListener { popup.dismiss() }
+        view.findViewById<View>(R.id.btnVideoDownload).setOnClickListener {
+            saveMediaUrlToGallery(url, mediaKind = MediaKind.VIDEO)
+        }
+        view.findViewById<View>(R.id.btnVideoForward).setOnClickListener {
+            popup.dismiss()
+            forwardMediaUrl(url)
+        }
+
+        // Tap on the player toggles our overlay chrome so the video isn't
+        // blocked by the back/download/forward buttons. PlayerView's own
+        // playback controls keep their internal show/hide behavior.
+        val videoControls = view.findViewById<View>(R.id.videoControls)
+        var videoControlsVisible = true
+        playerView.setOnClickListener {
+            videoControlsVisible = !videoControlsVisible
+            videoControls.animate().cancel()
+            videoControls.animate()
+                .alpha(if (videoControlsVisible) 1f else 0f)
+                .setDuration(180L)
+                .withStartAction { if (videoControlsVisible) videoControls.visibility = View.VISIBLE }
+                .withEndAction { if (!videoControlsVisible) videoControls.visibility = View.GONE }
+                .start()
+        }
+        popup.setOnDismissListener { cleanup() }
+
+        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
     }
 
     private fun resolveStorageUrl(storageId: String, onResolved: (String?) -> Unit) {
@@ -392,14 +481,101 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             true
         )
 
-        view.findViewById<ImageView>(R.id.ivPreview).load(url) {
-            crossfade(true)
+        val zoomImg = view.findViewById<ZoomableImageView>(R.id.ivPreview)
+        zoomImg.load(url) { crossfade(true) }
+
+        val controls = view.findViewById<View>(R.id.previewControls)
+        var controlsVisible = true
+        zoomImg.onSingleTap = {
+            controlsVisible = !controlsVisible
+            controls.animate().cancel()
+            controls.animate()
+                .alpha(if (controlsVisible) 1f else 0f)
+                .setDuration(180L)
+                .withStartAction { if (controlsVisible) controls.visibility = View.VISIBLE }
+                .withEndAction { if (!controlsVisible) controls.visibility = View.GONE }
+                .start()
         }
 
         view.findViewById<View>(R.id.btnBack).setOnClickListener { popup.dismiss() }
         view.findViewById<View>(R.id.btnPreviewClose).setOnClickListener { popup.dismiss() }
+        view.findViewById<View>(R.id.btnPreviewDownload).setOnClickListener {
+            saveMediaUrlToGallery(url, mediaKind = MediaKind.IMAGE)
+        }
+        view.findViewById<View>(R.id.btnPreviewForward).setOnClickListener {
+            popup.dismiss()
+            forwardMediaUrl(url)
+        }
 
         popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+    }
+
+    private enum class MediaKind { IMAGE, VIDEO }
+
+    private fun forwardMediaUrl(url: String) {
+        if (url.isBlank()) { toast("Nothing to forward"); return }
+        val synthetic = com.manjugroups.m_connect.network.MessageData(
+            id = "forward-${System.currentTimeMillis()}",
+            creationTime = System.currentTimeMillis().toDouble(),
+            body = url,
+            senderId = myStaffId,
+            senderName = session.userName,
+            channelId = null,
+            conversationId = null,
+            isDeleted = false,
+            isEdited = false,
+            replyCount = 0,
+            parentMessageId = null
+        )
+        openForwardPicker(listOf(synthetic))
+    }
+
+    private fun saveMediaUrlToGallery(url: String, mediaKind: MediaKind) {
+        if (url.isBlank()) { toast("Nothing to save"); return }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bytes = java.net.URL(url).openStream().use { it.readBytes() }
+                    val ctx = context?.applicationContext ?: return@runCatching false
+                    val resolver = ctx.contentResolver
+                    val mime = when (mediaKind) {
+                        MediaKind.IMAGE -> "image/jpeg"
+                        MediaKind.VIDEO -> "video/mp4"
+                    }
+                    val ext = if (mediaKind == MediaKind.IMAGE) "jpg" else "mp4"
+                    val name = "Mconnect-${System.currentTimeMillis()}.$ext"
+                    val collection = if (mediaKind == MediaKind.IMAGE) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                            android.provider.MediaStore.Images.Media.getContentUri(
+                                android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                            )
+                        else android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    } else {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                            android.provider.MediaStore.Video.Media.getContentUri(
+                                android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                            )
+                        else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    }
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                        val rel = if (mediaKind == MediaKind.IMAGE) {
+                            android.os.Environment.DIRECTORY_PICTURES + "/Mconnect"
+                        } else {
+                            android.os.Environment.DIRECTORY_MOVIES + "/Mconnect"
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
+                        }
+                    }
+                    val uri = resolver.insert(collection, values) ?: return@runCatching false
+                    resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    true
+                }.getOrDefault(false)
+            }
+            if (_binding != null) toast(if (ok) "Saved to gallery" else "Couldn't save")
+        }
     }
 
     private fun showImageSendPreview(images: List<PendingAttachment>) {
@@ -415,16 +591,43 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0F0F1A")))
         }
 
-        val ivMain = view.findViewById<ImageView>(R.id.ivPreviewMain)
+        val editView = view.findViewById<MediaEditView>(R.id.ivPreviewMain)
         val stripContainer = view.findViewById<LinearLayout>(R.id.thumbStripContainer)
         val etCaption = view.findViewById<android.widget.EditText>(R.id.etPreviewCaption)
         val btnSend = view.findViewById<View>(R.id.btnPreviewSend)
         val btnBack = view.findViewById<View>(R.id.btnPreviewBack)
+        val editToolBar = view.findViewById<LinearLayout>(R.id.editToolBar)
+        val tvEditModeLabel = view.findViewById<android.widget.TextView>(R.id.tvEditModeLabel)
+        val btnEditApply = view.findViewById<View>(R.id.btnEditApply)
+        val btnEditCancel = view.findViewById<View>(R.id.btnEditCancel)
+        val drawToolBar = view.findViewById<LinearLayout>(R.id.drawToolBar)
+        val cropToolBar = view.findViewById<LinearLayout>(R.id.cropToolBar)
+        val drawColorRow = view.findViewById<LinearLayout>(R.id.drawColorRow)
+        setupDrawToolbar(view, editView, drawColorRow)
+        setupCropToolbar(view, editView)
 
+        // Per-image edit state: we replace the file URI when the user commits
+        // edits, so the sent attachment has the flattened bitmap.
+        val workingImages = images.toMutableList()
         var activeIndex = 0
+
+        fun loadActiveBitmap() {
+            val active = workingImages[activeIndex]
+            viewLifecycleOwner.lifecycleScope.launch {
+                val bm = withContext(Dispatchers.IO) {
+                    runCatching {
+                        requireContext().contentResolver.openInputStream(active.uri)?.use {
+                            android.graphics.BitmapFactory.decodeStream(it)
+                        }
+                    }.getOrNull()
+                }
+                if (_binding == null || bm == null) return@launch
+                editView.setBitmap(bm)
+            }
+        }
+
         fun showActive() {
-            val active = images[activeIndex]
-            ivMain.load(active.uri) { crossfade(true) }
+            loadActiveBitmap()
             for (i in 0 until stripContainer.childCount) {
                 val v = stripContainer.getChildAt(i)
                 v.alpha = if (i == activeIndex) 1f else 0.55f
@@ -433,6 +636,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     else 0
                 )
             }
+        }
+
+        fun showEditToolbar(label: String) {
+            tvEditModeLabel.text = label
+            editToolBar.visibility = View.VISIBLE
+        }
+
+        fun hideEditToolbar() {
+            editToolBar.visibility = View.GONE
         }
 
         images.forEachIndexed { index, attachment ->
@@ -456,16 +668,61 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
         showActive()
 
-        listOf(R.id.btnPreviewSave, R.id.btnPreviewCrop, R.id.btnPreviewDraw, R.id.btnPreviewText).forEach { id ->
-            view.findViewById<View>(id)?.setOnClickListener { toast("Coming soon") }
+        view.findViewById<View>(R.id.btnPreviewCrop)?.setOnClickListener {
+            editView.mode = MediaEditView.Mode.CROP
+            showEditToolbar("Crop")
+            cropToolBar.visibility = View.VISIBLE
+            drawToolBar.visibility = View.GONE
+        }
+        view.findViewById<View>(R.id.btnPreviewDraw)?.setOnClickListener {
+            editView.mode = MediaEditView.Mode.DRAW
+            showEditToolbar("Draw — tap Done when finished")
+            drawToolBar.visibility = View.VISIBLE
+            cropToolBar.visibility = View.GONE
+        }
+        view.findViewById<View>(R.id.btnPreviewText)?.setOnClickListener {
+            showAddTextSheet { text ->
+                if (text.isNotEmpty()) {
+                    editView.addText(text)
+                    showEditToolbar("Drag text to position")
+                }
+            }
+        }
+        btnEditCancel.setOnClickListener {
+            if (editView.mode == MediaEditView.Mode.CROP) editView.cancelCrop()
+            editView.mode = MediaEditView.Mode.NONE
+            hideEditToolbar()
+            cropToolBar.visibility = View.GONE
+            drawToolBar.visibility = View.GONE
+        }
+        btnEditApply.setOnClickListener {
+            if (editView.mode == MediaEditView.Mode.CROP) editView.applyCrop()
+            editView.mode = MediaEditView.Mode.NONE
+            hideEditToolbar()
+            cropToolBar.visibility = View.GONE
+            drawToolBar.visibility = View.GONE
+        }
+
+        view.findViewById<View>(R.id.btnPreviewUndo)?.setOnClickListener {
+            if (!editView.undo()) toast("Nothing to undo")
+        }
+        view.findViewById<View>(R.id.btnPreviewDownload)?.setOnClickListener {
+            val first = workingImages.firstOrNull() ?: return@setOnClickListener
+            savePendingAttachmentToGallery(first)
         }
 
         btnBack.setOnClickListener { popup.dismiss() }
 
         btnSend.setOnClickListener {
             val caption = etCaption.text?.toString()?.trim().orEmpty()
+            // Flatten any current edits into the active image before sending.
+            val edited = editView.getResult()
+            if (edited != null) {
+                val saved = persistEditedBitmap(edited)
+                if (saved != null) workingImages[activeIndex] = saved
+            }
             popup.dismiss()
-            pendingAttachments.addAll(images)
+            pendingAttachments.addAll(workingImages)
             if (caption.isNotEmpty()) {
                 binding.etMessage.setText(caption)
             }
@@ -939,6 +1196,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             runCatching {
                 api.deleteMessage(session.bearerToken, DeleteMessageRequest(messageId))
             }.onSuccess {
+                purgeMessageFromCache(listOf(messageId))
                 loadInitialMessages(scrollToBottom = false)
             }.onFailure {
                 toast("Unable to delete message")
@@ -946,8 +1204,298 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
+    private fun purgeMessageFromCache(messageIds: Collection<String>) {
+        if (messageIds.isEmpty()) return
+        val ids = messageIds.toHashSet()
+        val removed = messages.removeAll { it.id in ids }
+        originalBodyCache.keys.removeAll(ids)
+        if (removed) {
+            renderMessages(scrollToBottom = false)
+        }
+        persistMessageCache()
+    }
+
     override fun onForward(messageId: String) {
-        toast("Forwarding coming soon")
+        val msg = messages.firstOrNull { it.id == messageId } ?: return
+        openForwardPicker(listOf(msg))
+    }
+
+    private var inlineSearchMatches: List<String> = emptyList()
+    private var inlineSearchCursor: Int = -1
+
+    private fun cacheKey(): String? =
+        channelId?.let { "channel-$it" } ?: conversationId?.let { "conversation-$it" }
+
+    private fun persistMessageCache() {
+        val key = cacheKey() ?: return
+        val ctx = context?.applicationContext ?: return
+        ChatMessageCache.save(ctx, key, messages.toList())
+    }
+
+    private fun showChatHeaderMenu(anchor: View) {
+        val view = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_chat_conversation_menu, null)
+        val popup = PopupWindow(
+            view,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 14f
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+        view.findViewById<TextView>(R.id.tvConvMenuMute).text =
+            if (chatMuted) "Unmute" else "Set as silent"
+        view.findViewById<View>(R.id.convMenuMute).setOnClickListener {
+            popup.dismiss()
+            toggleConversationMute(!chatMuted)
+        }
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val loc = IntArray(2)
+        anchor.getLocationOnScreen(loc)
+        val x = (loc[0] + anchor.width - view.measuredWidth).coerceAtLeast(16)
+        val y = loc[1] + anchor.height + 8
+        popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y)
+    }
+
+    private fun toggleConversationMute(mute: Boolean) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = runCatching {
+                if (channelId != null) {
+                    api.setChannelMute(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.SetMuteRequest(
+                            channelId = channelId,
+                            muted = mute
+                        )
+                    )
+                } else if (conversationId != null) {
+                    api.setConversationMute(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.SetMuteRequest(
+                            conversationId = conversationId,
+                            muted = mute
+                        )
+                    )
+                } else null
+            }
+            if (_binding == null) return@launch
+            if (result.isSuccess && result.getOrNull() != null) {
+                chatMuted = mute
+                toast(if (mute) "Muted this chat" else "Unmuted this chat")
+            } else {
+                toast("Couldn't update mute")
+            }
+        }
+    }
+
+    private fun setupInlineSearch() {
+        binding.btnInlineSearchClose.setOnClickListener { hideInlineSearch() }
+        binding.etInlineSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                runInlineSearch(s?.toString().orEmpty())
+            }
+        })
+        binding.btnInlineSearchPrev.setOnClickListener { stepInlineSearch(-1) }
+        binding.btnInlineSearchNext.setOnClickListener { stepInlineSearch(+1) }
+    }
+
+    private fun showInlineSearch() {
+        if (_binding == null) return
+        binding.headerContainer.visibility = View.GONE
+        binding.inlineSearchBar.visibility = View.VISIBLE
+        binding.etInlineSearch.setText("")
+        binding.etInlineSearch.requestFocus()
+        val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+        imm.showSoftInput(binding.etInlineSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun hideInlineSearch() {
+        if (_binding == null) return
+        binding.inlineSearchBar.visibility = View.GONE
+        binding.headerContainer.visibility = View.VISIBLE
+        chatAdapter.clearSearchHighlight()
+        inlineSearchMatches = emptyList()
+        inlineSearchCursor = -1
+        binding.tvInlineSearchCount.visibility = View.GONE
+        val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(binding.etInlineSearch.windowToken, 0)
+    }
+
+    private fun runInlineSearch(query: String) {
+        if (_binding == null) return
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            chatAdapter.clearSearchHighlight()
+            inlineSearchMatches = emptyList()
+            inlineSearchCursor = -1
+            binding.tvInlineSearchCount.visibility = View.GONE
+            return
+        }
+        val needle = trimmed.lowercase(Locale.getDefault())
+        val matches = messages
+            .asSequence()
+            .filter { it.isDeleted != true }
+            .filter { (it.body ?: "").lowercase(Locale.getDefault()).contains(needle) }
+            .mapNotNull { it.id }
+            .toList()
+        inlineSearchMatches = matches
+        inlineSearchCursor = if (matches.isEmpty()) -1 else matches.lastIndex
+        chatAdapter.setSearchHighlight(matches)
+        binding.tvInlineSearchCount.visibility = View.VISIBLE
+        updateInlineSearchCountLabel()
+        if (matches.isNotEmpty()) scrollToMessage(matches.last())
+    }
+
+    private fun stepInlineSearch(delta: Int) {
+        if (inlineSearchMatches.isEmpty()) return
+        inlineSearchCursor = (inlineSearchCursor + delta).let {
+            (it + inlineSearchMatches.size) % inlineSearchMatches.size
+        }
+        scrollToMessage(inlineSearchMatches[inlineSearchCursor])
+        updateInlineSearchCountLabel()
+    }
+
+    private fun updateInlineSearchCountLabel() {
+        if (_binding == null) return
+        binding.tvInlineSearchCount.text = if (inlineSearchMatches.isEmpty()) {
+            "No matches"
+        } else {
+            "${inlineSearchCursor + 1} / ${inlineSearchMatches.size}"
+        }
+    }
+
+    override fun onSelectMore(messageId: String) {
+        if (!chatAdapter.selectionMode) {
+            chatAdapter.setSelectionMode(true)
+        }
+        chatAdapter.toggleSelected(messageId)
+        updateSelectionToolbar()
+    }
+
+    private fun setupSelectionToolbar() {
+        binding.btnSelectionCancel.setOnClickListener { exitSelectionMode() }
+        binding.btnSelectionDelete.setOnClickListener {
+            val ids = chatAdapter.selectedIdsSnapshot()
+            if (ids.isEmpty()) { exitSelectionMode(); return@setOnClickListener }
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Delete ${ids.size} message${if (ids.size == 1) "" else "s"}?")
+                .setMessage("This will permanently delete the selected messages.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete") { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        var failures = 0
+                        val deleted = mutableListOf<String>()
+                        ids.forEach { id ->
+                            runCatching {
+                                api.deleteMessage(
+                                    session.bearerToken,
+                                    com.manjugroups.m_connect.network.DeleteMessageRequest(id)
+                                )
+                            }.onSuccess { deleted += id }
+                                .onFailure { failures++ }
+                        }
+                        purgeMessageFromCache(deleted)
+                        exitSelectionMode()
+                        if (failures > 0) toast("Deleted with $failures error(s)")
+                        loadInitialMessages(scrollToBottom = false)
+                    }
+                }
+                .show()
+        }
+        binding.btnSelectionForward.setOnClickListener {
+            val ids = chatAdapter.selectedIdsSnapshot()
+            val msgs = ids.mapNotNull { id -> messages.firstOrNull { it.id == id } }
+            if (msgs.isEmpty()) { exitSelectionMode(); return@setOnClickListener }
+            openForwardPicker(msgs)
+        }
+    }
+
+    private fun updateSelectionToolbar() {
+        if (_binding == null) return
+        val count = chatAdapter.selectionCount()
+        if (chatAdapter.selectionMode && count > 0) {
+            binding.selectionToolbar.visibility = View.VISIBLE
+            binding.headerContainer.visibility = View.GONE
+            binding.tvSelectionCount.text = "$count selected"
+        } else if (chatAdapter.selectionMode && count == 0) {
+            exitSelectionMode()
+        } else {
+            binding.selectionToolbar.visibility = View.GONE
+            binding.headerContainer.visibility = View.VISIBLE
+        }
+    }
+
+    private fun exitSelectionMode() {
+        chatAdapter.setSelectionMode(false)
+        updateSelectionToolbar()
+    }
+
+    override fun onInfo(messageId: String) {
+        val msg = messages.firstOrNull { it.id == messageId } ?: return
+        showMessageInfoDialog(msg)
+    }
+
+    private fun showMessageInfoDialog(msg: MessageData) {
+        val sentMs = msg.creationTime?.let {
+            if (it < 10_000_000_000.0) (it * 1000).toLong() else it.toLong()
+        } ?: 0L
+        ChatMessageInfoFragment.newInstance(
+            body = msg.body.orEmpty(),
+            sentMillis = sentMs,
+            sender = msg.senderName,
+            isMine = msg.senderId == myStaffId,
+            isEdited = msg.isEdited == true,
+            replyCount = msg.replyCount ?: 0,
+            attachmentCount = msg.attachments?.size ?: 0
+        ).show(childFragmentManager, "ChatMessageInfo")
+    }
+
+    private fun openForwardPicker(toForward: List<MessageData>) {
+        if (toForward.isEmpty()) return
+        val picker = ChatForwardPickerFragment.newInstance(
+            toForward.mapNotNull { it.id }
+        )
+        picker.setListener(object : ChatForwardPickerFragment.Listener {
+            override fun onForwardTo(
+                targetConversationId: String?,
+                targetChannelId: String?,
+                targetName: String
+            ) {
+                val bodies = toForward.mapNotNull { it.body?.takeIf { b -> b.isNotBlank() } }
+                if (bodies.isEmpty()) {
+                    toast("Nothing to forward")
+                    return
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    var failures = 0
+                    bodies.forEach { body ->
+                        runCatching {
+                            api.sendMessage(
+                                session.bearerToken,
+                                com.manjugroups.m_connect.network.SendMessageRequest(
+                                    channelId = targetChannelId,
+                                    conversationId = targetConversationId,
+                                    body = body
+                                )
+                            )
+                        }.onFailure { failures++ }
+                    }
+                    if (failures == 0) toast("Forwarded to $targetName")
+                    else toast("Forwarded with $failures error(s)")
+                    exitSelectionMode()
+                }
+            }
+        })
+        picker.show(childFragmentManager, "ChatForwardPicker")
     }
 
     private fun openAttachmentUrl(url: String) {
@@ -986,21 +1534,44 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         super.onPause()
     }
 
-    private fun showAttachGrid() {
-        val content = layoutInflater.inflate(R.layout.bottom_sheet_attach_grid, null)
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
-        dialog.setContentView(content)
-        dialog.window?.setDimAmount(0.25f)
-        dialog.setOnShowListener {
-            val sheet = dialog.findViewById<View>(
-                com.google.android.material.R.id.design_bottom_sheet
-            )
-            sheet?.setBackgroundResource(android.R.color.transparent)
-        }
+    private var attachTilesWired = false
 
+    private fun showAttachGrid() = toggleAttachPanel()
+
+    private fun toggleAttachPanel() {
+        if (_binding == null) return
+        if (binding.attachPanel.visibility == View.VISIBLE) {
+            hideAttachPanel()
+        } else {
+            openAttachPanel()
+        }
+    }
+
+    private fun openAttachPanel() {
+        if (_binding == null) return
+        // Drop the soft keyboard so the panel sits directly under the input.
+        val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
+
+        binding.emojiPanel.visibility = View.GONE
+        binding.attachPanel.visibility = View.VISIBLE
+        binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
+        wireAttachTiles()
+    }
+
+    private fun hideAttachPanel() {
+        if (_binding == null) return
+        binding.attachPanel.visibility = View.GONE
+        binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
+    }
+
+    private fun wireAttachTiles() {
+        if (attachTilesWired || _binding == null) return
+        val panel = binding.attachPanel
         fun tile(id: Int, onClick: () -> Unit) {
-            content.findViewById<View>(id).setOnClickListener {
-                dialog.dismiss()
+            panel.findViewById<View>(id)?.setOnClickListener {
+                hideAttachPanel()
                 onClick()
             }
         }
@@ -1009,16 +1580,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         tile(R.id.tileAttachAudio) { pickAttachmentsLauncher.launch(arrayOf("audio/*")) }
         tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
         tile(R.id.tileAttachDocument) { pickAttachmentsLauncher.launch(arrayOf("*/*")) }
-        tile(R.id.tileAttachPoll) { toast("Polls coming soon") }
-        tile(R.id.tileAttachEvent) { toast("Events coming soon") }
         tile(R.id.tileAttachContact) { launchContactPicker() }
         tile(R.id.tileAttachCamera) { launchCamera() }
-
-        dialog.show()
+        attachTilesWired = true
     }
 
     private val cameraImageUri: android.net.Uri? get() = pendingCameraUri
     private var pendingCameraUri: android.net.Uri? = null
+    private var pendingCameraMode: CameraMode = CameraMode.PHOTO
+
+    private enum class CameraMode { PHOTO, VIDEO }
 
     private val takePictureLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { saved ->
@@ -1036,18 +1607,60 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
         }
 
+    private val captureVideoLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CaptureVideo()) { saved ->
+            val uri = pendingCameraUri
+            pendingCameraUri = null
+            if (saved == true && uri != null) {
+                val resolver = requireContext().contentResolver
+                val mime = resolver.getType(uri) ?: "video/mp4"
+                val size = runCatching {
+                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                }.getOrNull() ?: 0L
+                val name = "Video-${System.currentTimeMillis()}.mp4"
+                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                pendingAttachments += pending
+                renderPendingAttachments()
+                updateSendIcon()
+            }
+        }
+
     private val cameraPermissionLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) actuallyLaunchCamera() else toast("Camera permission required")
+            if (granted) launchCameraForMode(pendingCameraMode) else toast("Camera permission required")
         }
 
     private fun launchCamera() {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        val sheet = layoutInflater.inflate(R.layout.bottom_sheet_camera_choice, null)
+        dialog.setContentView(sheet)
+        sheet.findViewById<View>(R.id.btnCameraPhoto).setOnClickListener {
+            dialog.dismiss()
+            pendingCameraMode = CameraMode.PHOTO
+            ensureCameraPermissionThen { launchCameraForMode(CameraMode.PHOTO) }
+        }
+        sheet.findViewById<View>(R.id.btnCameraVideo).setOnClickListener {
+            dialog.dismiss()
+            pendingCameraMode = CameraMode.VIDEO
+            ensureCameraPermissionThen { launchCameraForMode(CameraMode.VIDEO) }
+        }
+        dialog.show()
+    }
+
+    private fun ensureCameraPermissionThen(action: () -> Unit) {
         val permission = android.Manifest.permission.CAMERA
         if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), permission)
             == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            actuallyLaunchCamera()
+            action()
         } else {
             cameraPermissionLauncher.launch(permission)
+        }
+    }
+
+    private fun launchCameraForMode(mode: CameraMode) {
+        when (mode) {
+            CameraMode.PHOTO -> actuallyLaunchCamera()
+            CameraMode.VIDEO -> actuallyLaunchVideoCamera()
         }
     }
 
@@ -1062,6 +1675,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         pendingCameraUri = uri
         runCatching { takePictureLauncher.launch(uri) }
             .onFailure { toast("Unable to open camera") }
+    }
+
+    private fun actuallyLaunchVideoCamera() {
+        val videoDir = File(requireContext().cacheDir, "chat_videos").apply { mkdirs() }
+        val videoFile = File(videoDir, "video_${System.currentTimeMillis()}.mp4")
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            videoFile
+        )
+        pendingCameraUri = uri
+        runCatching { captureVideoLauncher.launch(uri) }
+            .onFailure { toast("Unable to open video recorder") }
     }
 
     private val pickContactLauncher =
@@ -1162,6 +1788,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     if (channel?.name?.isNotBlank() == true) {
                         chatTitle = channel.name
                     }
+                    chatMuted = channel?.muted == true
                     val memberCount = channel?.memberCount ?: 0
                     val channelType = channel?.type?.replaceFirstChar { it.uppercase() } ?: "Channel"
                     chatSubtitle = if (memberCount > 0) {
@@ -1175,6 +1802,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 conversationId != null -> {
                     val conversation =
                         api.getConversation(session.bearerToken, conversationId!!).conversation
+                    chatMuted = conversation?.muted == true
 
                     val participant = conversation?.participants
                         ?.firstOrNull { it.id != null && it.id != myStaffId }
@@ -1223,6 +1851,48 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 binding.ivHeaderAvatar.setImageDrawable(null)
                 binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
             }
+
+            // Persist the snapshot so the next entry hydrates instantly.
+            context?.applicationContext?.let { ctx ->
+                ChatMetadataCache.saveChatSnapshot(
+                    ctx,
+                    cacheKey(),
+                    ChatMetadataCache.ChatSnapshot(
+                        title = chatTitle,
+                        subtitle = chatSubtitle,
+                        photoUrl = photoUrl,
+                        initials = initials,
+                        muted = chatMuted,
+                        otherStaffId = otherStaffId,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }
+
+    private fun hydrateHeaderFromCache() {
+        if (_binding == null) return
+        val ctx = context?.applicationContext ?: return
+        val snap = ChatMetadataCache.loadChatSnapshot(ctx, cacheKey()) ?: return
+        snap.title?.takeIf { it.isNotBlank() }?.let {
+            chatTitle = it
+            binding.tvChatTitle.text = it
+            binding.tvChatTitle.visibility = View.VISIBLE
+        }
+        snap.subtitle?.takeIf { it.isNotBlank() }?.let {
+            chatSubtitle = it
+        }
+        applySubtitleState()
+        chatMuted = snap.muted
+        snap.otherStaffId?.takeIf { it.isNotBlank() }?.let { otherStaffId = it }
+        snap.initials?.takeIf { it.isNotBlank() }?.let { binding.tvHeaderAvatarInitials.text = it }
+        val photo = snap.photoUrl
+        if (!photo.isNullOrBlank()) {
+            binding.ivHeaderAvatar.load(photo) { crossfade(false) }
+            binding.tvHeaderAvatarInitials.visibility = View.GONE
+        } else {
+            binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
         }
     }
 
@@ -1456,17 +2126,20 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private suspend fun loadInitialMessages(scrollToBottom: Boolean) {
         runCatching {
+            // Match the web client's `initialNumItems=30` — smaller payload
+            // means faster first paint on a cold chat open. Older messages
+            // load on scroll-to-top via the existing pagination path.
             if (channelId != null) {
                 api.getChannelMessages(
                     token = session.bearerToken,
                     channelId = channelId!!,
-                    numItems = 50
+                    numItems = 30
                 )
             } else {
                 api.getConversationMessages(
                     token = session.bearerToken,
                     conversationId = conversationId!!,
-                    numItems = 50
+                    numItems = 30
                 )
             }
         }.onSuccess { response ->
@@ -1486,6 +2159,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             val mergedInitial = byId.values
                 .sortedBy { it.creationTime ?: 0.0 }
                 .toList()
+
+            // If cache already produced an identical list, skip the second
+            // render — that re-bind is exactly what made re-entry feel glitchy.
+            val cacheMatchesServer = messages.size == mergedInitial.size &&
+                messages.zip(mergedInitial).all { (cached, fresh) -> cached == fresh }
+
             messages.clear()
             messages.addAll(mergedInitial)
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
@@ -1495,7 +2174,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 msg.id?.let { initialParentMap[it] = originalBodyCache[it] ?: msg }
             }
             chatAdapter.setParentMessageCache(initialParentMap)
-            renderMessages(scrollToBottom = scrollToBottom)
+            if (!cacheMatchesServer) {
+                renderMessages(scrollToBottom = scrollToBottom)
+            } else {
+                // Still need to persist the freshly-stamped cache (timestamps
+                // get refreshed) and let the poll loop handle future deltas.
+                persistMessageCache()
+            }
 
             // Background: fetch thread replies + missing parents + audio durations,
             // then re-render with the enriched list.
@@ -1512,11 +2197,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         mainMessages: List<MessageData>,
         byId: MutableMap<String, MessageData>
     ) {
-        val candidateParentIds = mainMessages.mapNotNull { it.id }
-        if (candidateParentIds.isEmpty()) return
+        // Per api-docs.md: top-level message lists already hide thread replies,
+        // and each message is enriched server-side with attachments/reactions/
+        // mentions. Only fan out reply requests for messages that actually
+        // have replies (replyCount > 0) so we don't trigger N redundant HTTP
+        // round-trips on every chat open — that fan-out was the residual
+        // flicker/delay source.
+        val threadedParentIds = mainMessages
+            .filter { (it.replyCount ?: 0) > 0 }
+            .mapNotNull { it.id }
 
-        val replyMessages = coroutineScope {
-            candidateParentIds.map { parentId ->
+        val replyMessages = if (threadedParentIds.isEmpty()) emptyList() else coroutineScope {
+            threadedParentIds.map { parentId ->
                 async {
                     runCatching {
                         api.getMessageReplies(session.bearerToken, parentId)
@@ -1527,27 +2219,37 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         if (_binding == null) return
 
+        var listDidChange = false
         replyMessages.forEach { msg ->
             val id = msg.id ?: return@forEach
             if (msg.isDeleted != true && !originalBodyCache.containsKey(id)) {
                 originalBodyCache[id] = msg
             }
-            if (!byId.containsKey(id)) byId[id] = msg
+            if (!byId.containsKey(id)) {
+                byId[id] = msg
+                listDidChange = true
+            }
         }
-        val merged = byId.values
-            .sortedBy { it.creationTime ?: 0.0 }
-            .toList()
-        messages.clear()
-        messages.addAll(merged)
-        latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
-        renderMessages(scrollToBottom = false)
 
-        val missingParentIds = merged
+        if (listDidChange) {
+            val merged = byId.values
+                .sortedBy { it.creationTime ?: 0.0 }
+                .toList()
+            messages.clear()
+            messages.addAll(merged)
+            latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
+            renderMessages(scrollToBottom = false)
+        }
+
+        // Resolve parent-of-reply quotes — only for newly-fetched replies whose
+        // parent isn't already known. With threads gated above, this collapses
+        // to "do nothing" for the common no-thread case.
+        val missingParentIds = byId.values
             .mapNotNull { it.parentMessageId }
             .filter { it.isNotBlank() && !byId.containsKey(it) }
             .distinct()
         val parentMap = mutableMapOf<String, MessageData>()
-        merged.filter { it.isDeleted == true }.forEach { msg ->
+        byId.values.filter { it.isDeleted == true }.forEach { msg ->
             msg.id?.let { parentMap[it] = originalBodyCache[it] ?: msg }
         }
 
@@ -1571,7 +2273,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
         if (_binding != null) {
             chatAdapter.setParentMessageCache(parentMap)
-            probeAudioDurations(merged)
+            probeAudioDurations(byId.values.toList())
         }
     }
 
@@ -1738,6 +2440,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 binding.rvMessages.scrollToPosition(chatItems.size - 1)
             }
         }
+        persistMessageCache()
     }
 
     private fun dayKey(timestamp: Long): String {
@@ -2152,4 +2855,210 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val fileType: String,
         val fileSize: Long
     )
+
+    /**
+     * Persists an in-memory edited bitmap to a temp cache file and returns a
+     * PendingAttachment that points to it, so the regular send pipeline picks
+     * it up. Returns null if the write fails.
+     */
+    private fun persistEditedBitmap(bitmap: Bitmap): PendingAttachment? {
+        return try {
+            val dir = java.io.File(requireContext().cacheDir, "chat_edits").apply { mkdirs() }
+            val file = java.io.File(dir, "edit_${System.currentTimeMillis()}.jpg")
+            file.outputStream().use { os ->
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, os)
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                file
+            )
+            PendingAttachment(
+                uri = uri,
+                fileName = "Edit-${System.currentTimeMillis()}.jpg",
+                fileType = "image/jpeg",
+                fileSize = file.length()
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private val drawColorPalette = intArrayOf(
+        android.graphics.Color.parseColor("#FFFFFF"),
+        android.graphics.Color.parseColor("#101828"),
+        android.graphics.Color.parseColor("#F04438"),
+        android.graphics.Color.parseColor("#F79009"),
+        android.graphics.Color.parseColor("#EAB308"),
+        android.graphics.Color.parseColor("#12B76A"),
+        android.graphics.Color.parseColor("#0B61CA"),
+        android.graphics.Color.parseColor("#7A5AF8"),
+        android.graphics.Color.parseColor("#EC4899")
+    )
+
+    private fun setupDrawToolbar(
+        root: View,
+        editView: MediaEditView,
+        colorRow: LinearLayout
+    ) {
+        val swatchSize = dpToPx(28)
+        val gap = dpToPx(6)
+        val swatchViews = mutableListOf<View>()
+        drawColorPalette.forEachIndexed { idx, color ->
+            val swatch = View(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(swatchSize, swatchSize).apply {
+                    if (idx > 0) marginStart = gap
+                }
+                background = androidx.core.content.ContextCompat
+                    .getDrawable(requireContext(), R.drawable.bg_edit_color_swatch)
+                    ?.mutate()
+                    ?.also { (it as? android.graphics.drawable.GradientDrawable)?.setColor(color) }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    editView.brushColor = color
+                    swatchViews.forEachIndexed { i, v ->
+                        v.scaleX = if (i == idx) 1.3f else 1f
+                        v.scaleY = if (i == idx) 1.3f else 1f
+                    }
+                }
+            }
+            colorRow.addView(swatch)
+            swatchViews += swatch
+        }
+        // Select white by default
+        swatchViews.firstOrNull()?.apply { scaleX = 1.3f; scaleY = 1.3f }
+
+        val penBtn = root.findViewById<android.widget.TextView>(R.id.btnBrushPen)
+        val hlBtn = root.findViewById<android.widget.TextView>(R.id.btnBrushHighlight)
+        val mkBtn = root.findViewById<android.widget.TextView>(R.id.btnBrushMarker)
+        val brushButtons = listOf(
+            penBtn to MediaEditView.BrushType.PEN,
+            hlBtn to MediaEditView.BrushType.HIGHLIGHTER,
+            mkBtn to MediaEditView.BrushType.MARKER
+        )
+        fun applyBrushSelection(selected: MediaEditView.BrushType) {
+            editView.brushType = selected
+            brushButtons.forEach { (btn, type) ->
+                val on = type == selected
+                btn.background = if (on)
+                    androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.bg_edit_chip_selected)
+                else null
+                btn.setTextColor(
+                    if (on) android.graphics.Color.parseColor("#101828")
+                    else android.graphics.Color.parseColor("#CFDBEC")
+                )
+            }
+        }
+        brushButtons.forEach { (btn, type) -> btn.setOnClickListener { applyBrushSelection(type) } }
+
+        val sBtn = root.findViewById<android.widget.TextView>(R.id.btnSizeSmall)
+        val mBtn = root.findViewById<android.widget.TextView>(R.id.btnSizeMedium)
+        val lBtn = root.findViewById<android.widget.TextView>(R.id.btnSizeLarge)
+        val sizeButtons = listOf(sBtn to 6f, mBtn to 12f, lBtn to 22f)
+        fun applySizeSelection(selectedWidth: Float) {
+            editView.brushStrokeWidth = selectedWidth
+            sizeButtons.forEach { (btn, w) ->
+                val on = w == selectedWidth
+                btn.background = if (on)
+                    androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.bg_edit_chip_selected)
+                else null
+                btn.setTextColor(
+                    if (on) android.graphics.Color.parseColor("#101828")
+                    else android.graphics.Color.parseColor("#CFDBEC")
+                )
+            }
+        }
+        sizeButtons.forEach { (btn, w) -> btn.setOnClickListener { applySizeSelection(w) } }
+        applySizeSelection(12f)
+    }
+
+    private fun setupCropToolbar(root: View, editView: MediaEditView) {
+        val freeBtn = root.findViewById<android.widget.TextView>(R.id.btnRatioFree)
+        val sqBtn = root.findViewById<android.widget.TextView>(R.id.btnRatioSquare)
+        val r43Btn = root.findViewById<android.widget.TextView>(R.id.btnRatio43)
+        val r169Btn = root.findViewById<android.widget.TextView>(R.id.btnRatio169)
+        val rotateBtn = root.findViewById<View>(R.id.btnCropRotate)
+        val ratioButtons = listOf(
+            freeBtn to (null as Float?),
+            sqBtn to 1f,
+            r43Btn to (4f / 3f),
+            r169Btn to (16f / 9f)
+        )
+        fun applyRatio(selected: Float?) {
+            editView.cropAspectRatio = selected
+            ratioButtons.forEach { (btn, ratio) ->
+                val on = ratio == selected
+                btn.background = if (on)
+                    androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.bg_edit_chip_selected)
+                else null
+                btn.setTextColor(
+                    if (on) android.graphics.Color.parseColor("#101828")
+                    else android.graphics.Color.parseColor("#CFDBEC")
+                )
+            }
+        }
+        ratioButtons.forEach { (btn, ratio) -> btn.setOnClickListener { applyRatio(ratio) } }
+        rotateBtn.setOnClickListener { editView.rotateCw90() }
+    }
+
+    private fun showAddTextSheet(onAdd: (String) -> Unit) {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        val sheet = layoutInflater.inflate(R.layout.bottom_sheet_add_text, null)
+        dialog.setContentView(sheet)
+        val input = sheet.findViewById<android.widget.EditText>(R.id.etAddText)
+        sheet.findViewById<View>(R.id.btnAddTextCancel).setOnClickListener { dialog.dismiss() }
+        sheet.findViewById<View>(R.id.btnAddTextDone).setOnClickListener {
+            val text = input.text?.toString()?.trim().orEmpty()
+            dialog.dismiss()
+            onAdd(text)
+        }
+        dialog.setOnShowListener {
+            input.requestFocus()
+            val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as android.view.inputmethod.InputMethodManager
+            imm.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+        }
+        dialog.show()
+    }
+
+    private fun savePendingAttachmentToGallery(attachment: PendingAttachment) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val ctx = context?.applicationContext ?: return@runCatching false
+                    val resolver = ctx.contentResolver
+                    val isVideo = attachment.fileType.startsWith("video/")
+                    val collection = if (isVideo) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                            android.provider.MediaStore.Video.Media.getContentUri(
+                                android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                            )
+                        else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    } else {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                            android.provider.MediaStore.Images.Media.getContentUri(
+                                android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                            )
+                        else android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    }
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, attachment.fileName)
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, attachment.fileType)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val rel = (if (isVideo) android.os.Environment.DIRECTORY_MOVIES
+                            else android.os.Environment.DIRECTORY_PICTURES) + "/Mconnect"
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
+                        }
+                    }
+                    val dest = resolver.insert(collection, values) ?: return@runCatching false
+                    resolver.openOutputStream(dest)?.use { out ->
+                        resolver.openInputStream(attachment.uri)?.use { it.copyTo(out) }
+                    }
+                    true
+                }.getOrDefault(false)
+            }
+            if (_binding != null) toast(if (ok) "Saved to gallery" else "Couldn't save")
+        }
+    }
 }

@@ -89,16 +89,41 @@ class SessionManager(context: Context) {
     val bearerToken: String
         get() = "Bearer $token"
 
+    var boundBaseUrl: String?
+        get() = prefs.getString(KEY_BOUND_BASE_URL, null)
+        set(value) = prefs.edit().putString(KEY_BOUND_BASE_URL, value).apply()
+
     fun hasPermission(perm: String): Boolean = isAdmin || iamPermissions.contains(perm)
 
     fun saveSession(token: String, name: String?, phone: String?) {
         this.token = token
         this.userName = name
         this.userPhone = phone
+        this.boundBaseUrl = com.manjugroups.m_connect.BuildConfig.BASE_URL
     }
 
     fun clearSession() {
         prefs.edit().clear().apply()
+    }
+
+    /**
+     * Wipes the session if the BuildConfig BASE_URL has changed since the
+     * token was minted. Prevents data from a previous backend (e.g., old
+     * Convex deployment) from showing through after switching the URL.
+     * Returns true if the session was purged.
+     */
+    fun purgeIfBaseUrlChanged(): Boolean {
+        val current = com.manjugroups.m_connect.BuildConfig.BASE_URL
+        val bound = boundBaseUrl
+        // Wipe when (a) the bound URL no longer matches the current build, or
+        // (b) the session predates this guard (no bound URL recorded). The
+        // second case treats legacy tokens as untrusted because we can't be
+        // sure which backend they were minted against — safer to re-auth.
+        if (token != null && bound != current) {
+            clearSession()
+            return true
+        }
+        return false
     }
 
     companion object {
@@ -116,5 +141,6 @@ class SessionManager(context: Context) {
         private const val KEY_TRACKING_DEVICE_ID = "tracking_device_id"
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
+        private const val KEY_BOUND_BASE_URL = "bound_base_url"
     }
 }

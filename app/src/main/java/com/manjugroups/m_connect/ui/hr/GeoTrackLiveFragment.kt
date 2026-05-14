@@ -459,6 +459,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
     override fun onResume() {
         super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         _binding?.mapView?.onResume()
     }
 

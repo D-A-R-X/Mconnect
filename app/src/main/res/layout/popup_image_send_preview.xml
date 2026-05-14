@@ -40,21 +40,37 @@
                 android:layout_weight="1" />
 
             <FrameLayout
-                android:id="@+id/btnPreviewSave"
+                android:id="@+id/btnPreviewUndo"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_image_preview_action"
                 android:clickable="true"
                 android:focusable="true">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="center"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="HD"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp" />
+                    android:contentDescription="Undo"
+                    android:src="@drawable/ic_attendance_undo"
+                    app:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnPreviewDownload"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_image_preview_action"
+                android:clickable="true"
+                android:focusable="true">
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Download"
+                    android:src="@drawable/ic_chat_file"
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <FrameLayout
@@ -118,12 +134,286 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.chat.MediaEditView
                 android:id="@+id/ivPreviewMain"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="Selected image"
-                android:scaleType="fitCenter" />
+                android:contentDescription="Selected image" />
+
+            <LinearLayout
+                android:id="@+id/drawToolBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginHorizontal="10dp"
+                android:layout_marginBottom="64dp"
+                android:background="@drawable/bg_edit_pill_dark"
+                android:orientation="vertical"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="10dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/drawBrushRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnBrushPen"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_edit_chip_selected"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_semibold"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:text="Pen"
+                        android:textColor="#101828"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnBrushHighlight"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:text="Highlighter"
+                        android:textColor="#CFDBEC"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnBrushMarker"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:text="Marker"
+                        android:textColor="#CFDBEC"
+                        android:textSize="12sp" />
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="22dp"
+                        android:layout_marginHorizontal="10dp"
+                        android:background="#33FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/btnSizeSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:text="S"
+                        android:textColor="#CFDBEC"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnSizeMedium"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_edit_chip_selected"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_semibold"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:text="M"
+                        android:textColor="#101828"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnSizeLarge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:text="L"
+                        android:textColor="#CFDBEC"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/drawColorRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cropToolBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="64dp"
+                android:background="@drawable/bg_edit_pill_dark"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/btnRatioFree"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_edit_chip_selected"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:text="Free"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/btnRatioSquare"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:text="1:1"
+                    android:textColor="#CFDBEC"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/btnRatio43"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:text="4:3"
+                    android:textColor="#CFDBEC"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/btnRatio169"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:text="16:9"
+                    android:textColor="#CFDBEC"
+                    android:textSize="12sp" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="22dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="#33FFFFFF" />
+
+                <FrameLayout
+                    android:id="@+id/btnCropRotate"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="Rotate"
+                        android:src="@drawable/ic_attendance_undo"
+                        app:tint="#FFFFFF" />
+                </FrameLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/editToolBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_chat_action_card"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="6dp"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:id="@+id/btnEditCancel"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="Cancel"
+                        android:src="@drawable/ic_sheet_close"
+                        app:tint="#475467" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/tvEditModeLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Editing"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+
+                <FrameLayout
+                    android:id="@+id/btnEditApply"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="Done"
+                        android:src="@drawable/ic_chat_check_double"
+                        app:tint="#0B61CA" />
+                </FrameLayout>
+            </LinearLayout>
         </FrameLayout>
 
         <!-- Thumbnail row (multi-selection) -->

@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.chat
 import android.os.Bundle
 import android.text.InputType
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -143,6 +144,66 @@ class ChatListFragment : Fragment() {
         binding.rvChatList.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = chatListAdapter
+            itemAnimator = null
+            addOnScrollListener(chipsCollapseScrollListener)
+        }
+    }
+
+    private var chipsExpanded = true
+    private var chipsExpandedHeight: Int = -1
+    private var chipsExpandedTopMargin: Int = -1
+    private var chipsHeightAnimator: android.animation.ValueAnimator? = null
+    private val chipsCollapseScrollListener = object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+        override fun onScrolled(
+            recyclerView: androidx.recyclerview.widget.RecyclerView,
+            dx: Int,
+            dy: Int
+        ) {
+            if (_binding == null) return
+            val chips = binding.chipScrollView
+            if (chipsExpandedHeight <= 0 && chips.height > 0) {
+                chipsExpandedHeight = chips.height
+            }
+            val lp = chips.layoutParams as? ViewGroup.MarginLayoutParams
+            if (chipsExpandedTopMargin < 0 && lp != null && lp.topMargin > 0) {
+                chipsExpandedTopMargin = lp.topMargin
+            }
+            val lm = recyclerView.layoutManager as? LinearLayoutManager
+            val atTop = (lm?.findFirstCompletelyVisibleItemPosition() ?: -1) == 0
+            when {
+                dy > 6 && chipsExpanded -> animateChips(false)
+                (dy < -6 || atTop) && !chipsExpanded -> animateChips(true)
+            }
+        }
+    }
+
+    private fun animateChips(expand: Boolean) {
+        if (_binding == null) return
+        val chips = binding.chipScrollView
+        val lp = chips.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val fullHeight = chipsExpandedHeight.takeIf { it > 0 }
+            ?: chips.height.takeIf { it > 0 }
+            ?: return
+        val fullMargin = chipsExpandedTopMargin.takeIf { it >= 0 } ?: lp.topMargin
+        chipsExpanded = expand
+        chipsHeightAnimator?.cancel()
+        val startHeight = lp.height.let { if (it <= 0) chips.height else it }
+        val startMargin = lp.topMargin
+        val targetHeight = if (expand) fullHeight else 0
+        val targetMargin = if (expand) fullMargin else 0
+        chipsHeightAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 180L
+            interpolator = android.view.animation.DecelerateInterpolator()
+            addUpdateListener { va ->
+                if (_binding == null) return@addUpdateListener
+                val t = va.animatedValue as Float
+                val mp = chips.layoutParams as ViewGroup.MarginLayoutParams
+                mp.height = (startHeight + (targetHeight - startHeight) * t).toInt()
+                mp.topMargin = (startMargin + (targetMargin - startMargin) * t).toInt()
+                chips.layoutParams = mp
+                chips.alpha = (mp.height.toFloat() / fullHeight).coerceIn(0f, 1f)
+            }
+            start()
         }
     }
 
@@ -201,6 +262,17 @@ class ChatListFragment : Fragment() {
         val allAlreadyFav = selectedChatIds.all { favouriteIds.contains(it) }
         view.findViewById<TextView>(R.id.tvActionFavouriteLabel).text =
             if (allAlreadyFav) "Remove Favourites" else "Add Favourites"
+
+        val selectedItems = buildItems().filter { it.id in selectedChatIds }
+        val allMuted = selectedItems.isNotEmpty() && selectedItems.all { it.isMuted }
+        view.findViewById<TextView>(R.id.tvActionMuteLabel).text =
+            if (allMuted) "Unmute" else "Set as silent"
+        view.findViewById<View>(R.id.actionMute).setOnClickListener {
+            popup.dismiss()
+            toggleChatMute(selectedItems, mute = !allMuted)
+            selectedChatIds.clear()
+            applySelectionState()
+        }
 
         view.findViewById<View>(R.id.actionDelete).setOnClickListener {
             val count = selectedChatIds.size
@@ -295,7 +367,11 @@ class ChatListFragment : Fragment() {
         )
     }
 
+    private var isLoadingChats = false
+
     private fun loadData() {
+        if (isLoadingChats) return
+        isLoadingChats = true
         viewLifecycleOwner.lifecycleScope.launch {
             if (!hasLoadedOnce) {
                 SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
@@ -306,12 +382,14 @@ class ChatListFragment : Fragment() {
                 val channels = api.getChannels(session.bearerToken).channels
                 conversations to channels
             }.onSuccess { (conversations, channels) ->
+                if (_binding == null) { isLoadingChats = false; return@onSuccess }
                 allConversations = conversations
                 allChannels = channels
                 hasLoadedOnce = true
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 renderCurrentList()
             }.onFailure {
+                if (_binding == null) { isLoadingChats = false; return@onFailure }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 if (!hasLoadedOnce) {
                     showEmptyState(
@@ -320,6 +398,7 @@ class ChatListFragment : Fragment() {
                     )
                 }
             }
+            isLoadingChats = false
         }
     }
 
@@ -339,27 +418,89 @@ class ChatListFragment : Fragment() {
     }
 
     private fun showChatActionMenu(anchor: View, item: ChatListItem) {
-        val popup = androidx.appcompat.widget.PopupMenu(requireContext(), anchor)
-        val isFav = favouriteIds.contains(item.id)
-        popup.menu.add(if (isFav) "Remove from Favourites" else "Add to Favourites")
-        popup.menu.add("Delete Chat")
-        popup.setOnMenuItemClickListener { menuItem ->
-            when (menuItem.title) {
-                "Delete Chat" -> toast("Deleting ${item.title}")
-                "Add to Favourites" -> {
-                    favouriteIds.add(item.id)
-                    renderCurrentList()
-                    toast("Added ${item.title} to Favourites")
-                }
-                "Remove from Favourites" -> {
-                    favouriteIds.remove(item.id)
-                    renderCurrentList()
-                    toast("Removed ${item.title} from Favourites")
-                }
-            }
+        val view = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_chat_item_actions, null)
+        val popup = android.widget.PopupWindow(
+            view,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
             true
+        ).apply {
+            elevation = 14f
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
-        popup.show()
+
+        val isFav = favouriteIds.contains(item.id)
+        view.findViewById<TextView>(R.id.tvItemActionFavourite).text =
+            if (isFav) "Remove from Favourites" else "Add to Favourites"
+        view.findViewById<TextView>(R.id.tvItemActionMute).text =
+            if (item.isMuted) "Unmute" else "Set as silent"
+
+        view.findViewById<View>(R.id.itemActionFavourite).setOnClickListener {
+            popup.dismiss()
+            if (isFav) {
+                favouriteIds.remove(item.id)
+                toast("Removed from Favourites")
+            } else {
+                favouriteIds.add(item.id)
+                toast("Added to Favourites")
+            }
+            renderCurrentList()
+        }
+        view.findViewById<View>(R.id.itemActionMute).setOnClickListener {
+            popup.dismiss()
+            toggleChatMute(listOf(item), mute = !item.isMuted)
+        }
+        view.findViewById<View>(R.id.itemActionDelete).setOnClickListener {
+            popup.dismiss()
+            toast("Deleting ${item.title}")
+        }
+
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val loc = IntArray(2)
+        anchor.getLocationOnScreen(loc)
+        val x = (loc[0] + anchor.width - view.measuredWidth).coerceAtLeast(16)
+        val y = loc[1] + anchor.height + 8
+        popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y)
+    }
+
+    private fun toggleChatMute(items: List<ChatListItem>, mute: Boolean) {
+        if (items.isEmpty()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            var failures = 0
+            items.forEach { item ->
+                runCatching {
+                    if (item.kind == ChatListItem.Kind.CHANNEL) {
+                        api.setChannelMute(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.SetMuteRequest(
+                                channelId = item.id,
+                                muted = mute
+                            )
+                        )
+                    } else {
+                        api.setConversationMute(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.SetMuteRequest(
+                                conversationId = item.id,
+                                muted = mute
+                            )
+                        )
+                    }
+                }.onFailure { failures++ }
+            }
+            if (_binding == null) return@launch
+            if (failures == 0) {
+                toast(if (mute) "Muted" else "Unmuted")
+            } else {
+                toast("Updated with $failures error(s)")
+            }
+            loadData()
+        }
     }
 
     private fun buildItems(): List<ChatListItem> {

@@ -103,6 +103,14 @@
             </LinearLayout>
 
             <ImageView
+                android:id="@+id/btnChatHeaderMenu"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <ImageView
                 android:id="@+id/btnSearch"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
@@ -113,6 +121,176 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:tint="#101828" />
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <LinearLayout
+            android:id="@+id/inlineSearchBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/btnInlineSearchClose"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Close search"
+                    android:src="@drawable/ic_arrow_left"
+                    app:tint="#101828" />
+            </FrameLayout>
+
+            <EditText
+                android:id="@+id/etInlineSearch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Search in this chat"
+                android:importantForAutofill="no"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textColor="#101828"
+                android:textColorHint="#98A2B3"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvInlineSearchCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#667085"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/btnInlineSearchPrev"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Previous match"
+                    android:rotation="90"
+                    android:src="@drawable/ic_arrow_left"
+                    app:tint="#101828" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnInlineSearchNext"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Next match"
+                    android:rotation="-90"
+                    android:src="@drawable/ic_arrow_left"
+                    app:tint="#101828" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/selectionToolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#0B61CA"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/btnSelectionCancel"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Cancel"
+                    android:src="@drawable/ic_arrow_left"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvSelectionCount"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
+                android:text="1 selected"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
+
+            <FrameLayout
+                android:id="@+id/btnSelectionForward"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Forward"
+                    android:src="@drawable/ic_chat_forward"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionDelete"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Delete"
+                    android:src="@drawable/ic_chat_delete"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"
@@ -297,6 +475,7 @@
                 android:focusable="true">
 
                 <ImageView
+                    android:id="@+id/ivAttachIcon"
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:layout_gravity="center"
@@ -374,6 +553,18 @@
                     app:tint="#FFFFFF" />
             </FrameLayout>
         </LinearLayout>
+
+        <!-- Inline attach/share panel — replaces the BottomSheetDialog so the
+             chat input visually sits on top of the share toast. -->
+        <FrameLayout
+            android:id="@+id/attachPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:visibility="gone">
+
+            <include layout="@layout/bottom_sheet_attach_grid" />
+        </FrameLayout>
 
         <!-- Emoji Panel (below input section, like WhatsApp keyboard slot) -->
         <FrameLayout

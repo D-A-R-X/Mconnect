@@ -168,6 +168,7 @@ class ProfileFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        (activity as? MainActivity)?.setTabBarVisible(false)
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#795FFC"), false)
         if (_binding != null) loadStaffProfile()
     }
