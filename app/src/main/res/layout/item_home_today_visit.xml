@@ -247,6 +247,7 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/tvVisitItemTimeLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/inter_regular"

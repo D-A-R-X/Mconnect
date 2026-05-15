@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8"
@@ -13,11 +14,14 @@
         android:paddingBottom="96dp">
 
         <FrameLayout
+            android:id="@+id/attendanceHeader"
             android:layout_width="match_parent"
-            android:layout_height="233dp"
-            android:background="@drawable/bg_attendance_header_gradient">
+            android:layout_height="172dp"
+            android:background="@drawable/bg_attendance_header_gradient"
+            android:clipChildren="false">
 
             <LinearLayout
+                android:id="@+id/attendanceHeaderTextGroup"
                 android:layout_width="234dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|start"
@@ -26,6 +30,7 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/tvAttendanceHeaderTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_semibold"
@@ -35,6 +40,7 @@
                     android:textSize="24sp" />
 
                 <TextView
+                    android:id="@+id/tvAttendanceHeaderSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
@@ -46,6 +52,7 @@
             </LinearLayout>
 
             <ImageView
+                android:id="@+id/ivAttendanceHeaderIllustration"
                 android:layout_width="91dp"
                 android:layout_height="76dp"
                 android:layout_gravity="top|end"
@@ -58,7 +65,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="-89dp"
+            android:layout_marginTop="16dp"
             android:orientation="vertical">
 
             <LinearLayout
@@ -67,91 +74,129 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_attendance_summary_card"
                 android:orientation="vertical"
-                android:paddingStart="16dp"
-                android:paddingTop="12dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="16dp">
+                android:paddingStart="20dp"
+                android:paddingTop="20dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="20dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
                     android:text="Total Working Hour"
                     android:textColor="#101828"
-                    android:textSize="14sp" />
+                    android:textSize="16sp" />
 
                 <TextView
                     android:id="@+id/tvPayPeriodLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="4dp"
                     android:fontFamily="@font/inter_regular"
-                    android:text="Period —"
+                    android:includeFontPadding="false"
+                    android:text="Paid Period —"
                     android:textColor="#475467"
-                    android:textSize="12sp" />
+                    android:textSize="13sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="16dp"
                     android:orientation="horizontal">
 
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="72dp"
+                        android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:background="@drawable/bg_attendance_metric_box"
                         android:orientation="vertical"
                         android:paddingStart="12dp"
-                        android:paddingTop="11dp"
-                        android:paddingEnd="12dp">
+                        android:paddingTop="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="12dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="Today"
-                            android:textColor="#475467"
-                            android:textSize="12sp" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_clock"
+                                app:tint="#475467" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Today"
+                                android:textColor="#475467"
+                                android:textSize="12sp" />
+                        </LinearLayout>
 
                         <TextView
                             android:id="@+id/tvTodayHours"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:fontFamily="@font/inter_regular"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
                             android:text="00:00 Hrs"
-                            android:textColor="#161B23"
+                            android:textColor="#101828"
                             android:textSize="22sp" />
                     </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="72dp"
-                        android:layout_marginStart="8dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_attendance_metric_box"
                         android:orientation="vertical"
                         android:paddingStart="12dp"
-                        android:paddingTop="11dp"
-                        android:paddingEnd="12dp">
+                        android:paddingTop="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="12dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="This Pay Period"
-                            android:textColor="#475467"
-                            android:textSize="11sp" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_clock"
+                                app:tint="#475467" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="This Pay Period"
+                                android:textColor="#475467"
+                                android:textSize="12sp" />
+                        </LinearLayout>
 
                         <TextView
                             android:id="@+id/tvPayPeriodHours"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:fontFamily="@font/inter_regular"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
                             android:text="00:00 Hrs"
-                            android:textColor="#161B23"
+                            android:textColor="#101828"
                             android:textSize="22sp" />
                     </LinearLayout>
                 </LinearLayout>
@@ -160,7 +205,7 @@
                     android:id="@+id/clockInButtonGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="20dp"
                     android:orientation="vertical">
 
                     <androidx.appcompat.widget.AppCompatButton
@@ -168,7 +213,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:background="@drawable/bg_attendance_btn_primary"
-                        android:fontFamily="@font/inter_medium"
+                        android:fontFamily="@font/inter_semibold"
                         android:text="Clock In Now"
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
@@ -179,7 +224,7 @@
                     android:id="@+id/clockedInButtonGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="20dp"
                     android:orientation="horizontal"
                     android:visibility="gone">
 
@@ -189,11 +234,11 @@
                         android:layout_height="48dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_attendance_btn_secondary"
-                        android:fontFamily="@font/inter_medium"
+                        android:fontFamily="@font/inter_semibold"
                         android:text="Take A Break"
                         android:textAllCaps="false"
-                        android:textColor="#6938EF"
-                        android:textSize="13sp" />
+                        android:textColor="#1BCA0B"
+                        android:textSize="14sp" />
 
                     <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/btnClockOut"
@@ -202,11 +247,11 @@
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_attendance_btn_primary"
-                        android:fontFamily="@font/inter_medium"
+                        android:fontFamily="@font/inter_semibold"
                         android:text="Clock Out"
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="14sp" />
                 </LinearLayout>
             </LinearLayout>
 

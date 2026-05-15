@@ -51,51 +51,81 @@ class AppLibraryFragment : Fragment() {
     private fun playLibraryEntryAnimation() {
         if (_binding == null) return
         val density = binding.root.resources.displayMetrics.density
-        val riseTravel = 36f * density
+        val emphasized = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
+        val expoOut = android.view.animation.PathInterpolator(0.19f, 1f, 0.22f, 1f)
 
-        // Header pulls slightly downward into place (opposite-direction echo of the home
-        // descent — feels stable while the body content lifts up from below).
-        listOfNotNull(binding.libraryHeaderContent, binding.ivLibraryIllustration).forEach { v ->
-            v.animate().cancel()
-            v.alpha = 0f
-            v.translationY = -10f * density
-            v.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(360L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.2f))
-                .start()
-        }
+        // 1. Header text slides in from the left — mirrors the Home banner title cadence.
+        binding.libraryHeaderContent.animate().cancel()
+        binding.libraryHeaderContent.alpha = 0f
+        binding.libraryHeaderContent.translationX = -28f * density
+        binding.libraryHeaderContent.translationY = 0f
+        binding.libraryHeaderContent.animate()
+            .alpha(1f).translationX(0f)
+            .setStartDelay(80L)
+            .setDuration(420L)
+            .setInterpolator(emphasized)
+            .start()
 
-        // Filter pill (visible at any time) lifts up
+        // 2. Illustration drifts in from the right with a subtle scale-up.
+        binding.ivLibraryIllustration.animate().cancel()
+        binding.ivLibraryIllustration.alpha = 0f
+        binding.ivLibraryIllustration.translationX = 32f * density
+        binding.ivLibraryIllustration.translationY = 0f
+        binding.ivLibraryIllustration.scaleX = 0.88f
+        binding.ivLibraryIllustration.scaleY = 0.88f
+        binding.ivLibraryIllustration.animate()
+            .alpha(1f).translationX(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay(180L)
+            .setDuration(520L)
+            .setInterpolator(expoOut)
+            .start()
+
+        // 3. Filter pill strip rises in from below as the white curtain over the blue.
         val pill = binding.pillAllApps.parent as? View
         pill?.let {
             it.animate().cancel()
             it.alpha = 0f
-            it.translationY = riseTravel * 0.5f
+            it.translationY = 28f * density
             it.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(380L)
-                .setStartDelay(80L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.3f))
+                .alpha(1f).translationY(0f)
+                .setStartDelay(260L)
+                .setDuration(460L)
+                .setInterpolator(expoOut)
                 .start()
         }
 
-        // Section cards rise from below in a stagger — the "ascending curtain" that
-        // mirrors the home curtain falling.
+        // 4. Each pill icon scale-pops in after the strip arrives — gives the toolbar
+        //    a small "items dropping into place" rhythm.
+        val pillIcons = listOf(
+            binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
+            binding.pillProjectIcon, binding.pillSettingsIcon
+        )
+        pillIcons.forEachIndexed { i, icon ->
+            icon.animate().cancel()
+            icon.scaleX = 0.6f
+            icon.scaleY = 0.6f
+            icon.alpha = 0f
+            icon.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setStartDelay(420L + i * 40L)
+                .setDuration(320L)
+                .setInterpolator(expoOut)
+                .start()
+        }
+
+        // 5. Section cards rise from below in a stagger — the "ascending curtain" mirror
+        //    of the Home curtain descending. 60ms stagger so 4 cards finish around 900ms.
         val container = binding.sectionsContainer
         for (i in 0 until container.childCount) {
             val child = container.getChildAt(i)
             child.animate().cancel()
             child.alpha = 0f
-            child.translationY = riseTravel
+            child.translationY = 36f * density
             child.animate()
-                .alpha(1f)
-                .translationY(0f)
+                .alpha(1f).translationY(0f)
+                .setStartDelay(340L + i * 60L)
                 .setDuration(460L)
-                .setStartDelay(180L + i * 90L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                .setInterpolator(expoOut)
                 .start()
         }
     }

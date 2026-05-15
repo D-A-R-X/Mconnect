@@ -139,38 +139,41 @@ class MainActivity : AppCompatActivity() {
         }
         ViewCompat.requestApplyInsets(mainRoot)
 
+        // Same outline icon for active + inactive — only the tint changes,
+        // matching the design where the shape stays constant and color flips
+        // between bright green (#1BCA0B) and soft gray (#D0D5DD).
         tabs = listOf(
             TabConfig(
                 findViewById(R.id.tabHome),
                 findViewById(R.id.tabHomeIcon),
                 findViewById(R.id.tabHomeIndicator),
                 findViewById(R.id.tabHomeText),
-                R.drawable.ic_tab_home_pencil,
-                R.drawable.ic_tab_home
+                R.drawable.ic_nav_home,
+                R.drawable.ic_nav_home
             ),
             TabConfig(
                 findViewById(R.id.tabHr),
                 findViewById(R.id.tabHrIcon),
                 findViewById(R.id.tabHrIndicator),
                 findViewById(R.id.tabHrText),
-                R.drawable.ic_tab_calendar_pencil,
-                R.drawable.ic_tab_calendar_pencil
+                R.drawable.ic_nav_attendance,
+                R.drawable.ic_nav_attendance
             ),
             TabConfig(
                 findViewById(R.id.tabChat),
                 findViewById(R.id.tabChatIcon),
                 findViewById(R.id.tabChatIndicator),
                 findViewById(R.id.tabChatText),
-                R.drawable.ic_home_messages_exact,
-                R.drawable.ic_tab_chat
+                R.drawable.ic_nav_chat,
+                R.drawable.ic_nav_chat
             ),
             TabConfig(
                 findViewById(R.id.tabProfile),
                 findViewById(R.id.tabProfileIcon),
                 findViewById(R.id.tabProfileIndicator),
                 findViewById(R.id.tabProfileText),
-                R.drawable.ic_tab_apps_bnydh,
-                R.drawable.ic_tab_apps_bnydh
+                R.drawable.ic_nav_apps,
+                R.drawable.ic_nav_apps
             )
         )
 
@@ -308,8 +311,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTabUi(index: Int) {
+        // Matches the design tokens — bright green for the active tab, light cool gray
+        // for inactive ones. Same outline icon in both states, only the tint changes.
         val activeColor = Color.parseColor("#1BCA0B")
-        val inactiveColor = Color.parseColor("#999CA0")
+        val inactiveColor = Color.parseColor("#D0D5DD")
 
         tabs.forEachIndexed { i, config ->
             val isActive = i == index

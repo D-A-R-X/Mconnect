@@ -414,7 +414,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             lowerMime.startsWith("image/") -> showImagePreview(url)
             lowerMime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
             isVideo -> showVideoPreview(url)
-            else -> openAttachmentUrl(url)
+            else -> openAttachmentUrl(url, mime)
         }
     }
 
@@ -853,7 +853,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 val isAudio = mime.startsWith("audio/") ||
                     name.endsWith(".m4a") || name.endsWith(".mp3") ||
                     name.endsWith(".wav") || name.endsWith(".aac") ||
-                    name.endsWith(".caf") || name.startsWith("voice-")
+                    name.endsWith(".caf") || name.endsWith(".ogg") ||
+                    name.endsWith(".opus") ||
+                    name.startsWith("voice-") || name.startsWith("voice_message_")
                 if (isAudio) Triple(sid, att.url, mime) else null
             }
         if (targets.isEmpty()) return
@@ -1506,12 +1508,77 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         picker.show(childFragmentManager, "ChatForwardPicker")
     }
 
-    private fun openAttachmentUrl(url: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            toast("Unable to open attachment")
+    private fun openAttachmentUrl(url: String, mime: String = "") {
+        if (url.isBlank()) { toast("Unable to open attachment"); return }
+        val isRemote = url.startsWith("http://", true) || url.startsWith("https://", true)
+        if (!isRemote) {
+            // Local content/file URI — launch the chooser directly.
+            launchAttachmentChooser(Uri.parse(url), mime)
+            return
         }
+        // Remote URL — Android's default handler for https is the browser,
+        // which renders the file inline instead of asking which app to open
+        // it with. Download to cache and offer the system "Open with" sheet
+        // via FileProvider so users get their installed PDF / Office viewers.
+        val ctx = context?.applicationContext ?: return
+        toast("Opening…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = File(ctx.cacheDir, "chat_documents").apply { mkdirs() }
+                    val name = pickCachedAttachmentName(url, mime)
+                    val out = File(dir, name)
+                    if (!out.exists() || out.length() == 0L) {
+                        java.net.URL(url).openStream().use { input ->
+                            out.outputStream().use { input.copyTo(it) }
+                        }
+                    }
+                    out
+                }.getOrNull()
+            }
+            if (_binding == null) return@launch
+            if (cached == null) { toast("Unable to open attachment"); return@launch }
+            val uri = runCatching {
+                androidx.core.content.FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.fileprovider",
+                    cached,
+                )
+            }.getOrNull()
+            if (uri == null) { toast("Unable to open attachment"); return@launch }
+            launchAttachmentChooser(uri, mime)
+        }
+    }
+
+    private fun launchAttachmentChooser(uri: Uri, mime: String) {
+        val resolvedMime = mime.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                val ext = uri.lastPathSegment?.substringAfterLast('.', "")
+                if (!ext.isNullOrBlank()) {
+                    android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase(Locale.US))
+                } else null
+            }.getOrNull()
+            ?: "*/*"
+        runCatching {
+            val view = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, resolvedMime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(view, "Open with"))
+        }.onFailure { toast("Unable to open attachment") }
+    }
+
+    private fun pickCachedAttachmentName(url: String, mime: String): String {
+        val raw = runCatching { Uri.parse(url).lastPathSegment.orEmpty() }.getOrDefault("")
+        val sanitised = raw.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('_', '.')
+        if (sanitised.isNotBlank() && sanitised.contains('.')) return sanitised
+        val ext = (sanitised.substringAfterLast('.', "").ifBlank {
+            android.webkit.MimeTypeMap.getSingleton()
+                .getExtensionFromMimeType(mime.substringBefore(';').trim()) ?: ""
+        }).lowercase(Locale.US)
+        val base = sanitised.substringBeforeLast('.', sanitised)
+            .ifBlank { "attachment-${System.currentTimeMillis()}" }
+        return if (ext.isNotBlank()) "$base.$ext" else base
     }
 
     private fun insertMention(person: MentionPerson) {
@@ -1807,14 +1874,55 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewLifecycleOwner.lifecycleScope.launch {
+            var refreshCounter = 0
             while (true) {
                 pollForMessages()
                 pollTyping()
                 presencePollCounter++
+                refreshCounter++
                 if (presencePollCounter % 6 == 0) {
                     refreshPresence()
                 }
+                // The `pollMessages` endpoint only returns rows created after
+                // `latestMessageTime`, so updates to existing messages
+                // (deletes from the web, edits, reactions) never reach the
+                // client. Periodically re-fetch the most recent window and
+                // overwrite local copies whose server state has changed.
+                if (refreshCounter % 4 == 0) {
+                    syncRecentMessagesForUpdates()
+                }
                 delay(2_500)
+            }
+        }
+    }
+
+    private suspend fun syncRecentMessagesForUpdates() {
+        val channel = channelId
+        val conversation = conversationId
+        if (channel == null && conversation == null) return
+
+        runCatching {
+            if (channel != null) {
+                api.getChannelMessages(session.bearerToken, channel, numItems = 50)
+            } else {
+                api.getConversationMessages(session.bearerToken, conversation!!, numItems = 50)
+            }
+        }.onSuccess { response ->
+            if (!response.success) return@onSuccess
+            val incoming = response.page ?: response.messages ?: return@onSuccess
+            if (incoming.isEmpty()) return@onSuccess
+
+            var changed = false
+            incoming.forEach { server ->
+                val sid = server.id ?: return@forEach
+                val idx = messages.indexOfFirst { it.id == sid }
+                if (idx >= 0 && messages[idx] != server) {
+                    messages[idx] = server
+                    changed = true
+                }
+            }
+            if (changed && _binding != null) {
+                renderMessages(scrollToBottom = false)
             }
         }
     }

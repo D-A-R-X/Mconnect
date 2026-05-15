@@ -19,7 +19,7 @@
 
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="240dp"
+                android:layout_height="212dp"
                 android:background="@drawable/bg_attendance_header_gradient">
 
                 <LinearLayout
@@ -27,8 +27,8 @@
                     android:layout_width="234dp"
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|start"
-                    android:layout_marginStart="24dp"
-                    android:layout_marginTop="80dp"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="60dp"
                     android:orientation="vertical">
 
                     <TextView
@@ -56,7 +56,7 @@
                     android:layout_width="119dp"
                     android:layout_height="89dp"
                     android:layout_gravity="top|end"
-                    android:layout_marginTop="71dp"
+                    android:layout_marginTop="48dp"
                     android:layout_marginEnd="14dp"
                     android:contentDescription="@null"
                     android:scaleType="fitCenter"

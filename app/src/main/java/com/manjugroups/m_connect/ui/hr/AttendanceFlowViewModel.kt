@@ -94,11 +94,14 @@ class AttendanceFlowViewModel(
                 val lastPunchOut = dayResp?.lastPunchOut ?: attendance?.lastPunchOut
                 val hasOpenSession = attendance?.hasOpenSession == true ||
                     dayResp?.hasOpenSession == true
-                val isClockedInForToday = shouldTreatAsClockedIn(
-                    firstPunchIn = firstPunchIn,
-                    hasOpenSession = hasOpenSession,
-                )
-                val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForToday)
+                // UI clock-out button must only enable when an open session
+                // actually exists on the server. `shouldTreatAsClockedIn` is the
+                // looser geo-tracking semantic (stays true after punch-out so
+                // trip tracking continues) — using it here would let users tap
+                // "Clock Out" after they've already punched out, which the
+                // server rejects with "No active punch-in found for today".
+                val isClockedInForUi = hasOpenSession
+                val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
 
@@ -108,7 +111,7 @@ class AttendanceFlowViewModel(
                 _uiState.value = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
-                    isClockedIn = isClockedInForToday,
+                    isClockedIn = isClockedInForUi,
                     todayMinutes = totalMinutes,
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
@@ -146,7 +149,7 @@ class AttendanceFlowViewModel(
         val labelFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).apply {
             timeZone = tz
         }
-        val label = "Period ${labelFmt.format(firstDate)} – ${labelFmt.format(lastDate)}"
+        val label = "Paid Period ${labelFmt.format(firstDate)} - ${labelFmt.format(lastDate)}"
 
         val summed = try {
             val resp = api.getMyAttendance(token, fromDate = from, toDate = to)

@@ -1,12 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The attach panel host is fixed at 280dp tall (keyboard slot), but the
+     three-row grid below is ~310dp once tile padding is included. Wrapping
+     the rows in a NestedScrollView lets the user reach the Contacts row on
+     phones where the panel can't expand any further. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FFFFFF"
+    android:fillViewport="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="8dp"
-    android:paddingBottom="20dp">
+    android:paddingTop="4dp"
+    android:paddingBottom="12dp">
 
     <View
         android:layout_width="match_parent"
@@ -32,7 +41,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -66,7 +75,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -100,7 +109,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -143,7 +152,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -177,7 +186,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -211,7 +220,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -255,7 +264,7 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingVertical="14dp">
+            android:paddingVertical="10dp">
 
             <FrameLayout
                 android:layout_width="52dp"
@@ -290,3 +299,4 @@
             android:layout_weight="1" />
     </LinearLayout>
 </LinearLayout>
+</androidx.core.widget.NestedScrollView>

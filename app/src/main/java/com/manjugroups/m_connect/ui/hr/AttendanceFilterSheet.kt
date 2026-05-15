@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -9,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.fragment.app.setFragmentResultListener
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -19,10 +19,13 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Date-range filter sheet for the My Attendance screen. Same visual language
- * as the leave-category sheet (corner-rounded, full-width primary button).
+ * Filter sheet for the My Attendance screen. Matches the design's "Filter" toast:
+ *   - close icon (left) + centered title + subtitle
+ *   - three preset chips: This month / Last month / Last 7 days
+ *   - date range field that opens the Material range picker (brand-blue themed)
+ *   - Cancel (outline green) + Select (filled green) actions
  *
- * On Apply, emits a fragment result containing fromDate / toDate (ISO YYYY-MM-DD).
+ * On Select, emits a fragment result with fromDate / toDate (ISO yyyy-MM-dd).
  */
 class AttendanceFilterSheet : BottomSheetDialogFragment() {
 
@@ -32,8 +35,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
     private var fromDate: String = ""
     private var toDate: String = ""
 
-    private var btnFrom: TextView? = null
-    private var btnTo: TextView? = null
+    private var tvDateRangeValue: TextView? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -61,12 +63,17 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         fromDate = arguments?.getString(ARG_FROM).orEmpty()
         toDate = arguments?.getString(ARG_TO).orEmpty()
 
-        btnFrom = view.findViewById(R.id.btnFromDate)
-        btnTo = view.findViewById(R.id.btnToDate)
-        renderDates()
+        tvDateRangeValue = view.findViewById(R.id.tvDateRangeValue)
+        renderDateRange()
 
-        btnFrom?.setOnClickListener { pickDate(initial = fromDate) { picked -> setFrom(picked) } }
-        btnTo?.setOnClickListener { pickDate(initial = toDate) { picked -> setTo(picked) } }
+        // Capture the range chosen by the calendar sheet.
+        childFragmentManager.setFragmentResultListener(CAL_RESULT_KEY, this) { _, bundle ->
+            fromDate = bundle.getString(CalendarRangePickerSheet.KEY_FROM).orEmpty()
+            toDate = bundle.getString(CalendarRangePickerSheet.KEY_TO).orEmpty()
+            renderDateRange()
+        }
+
+        view.findViewById<View>(R.id.dateRangeField).setOnClickListener { openCalendarPicker() }
 
         view.findViewById<View>(R.id.presetThisMonth).setOnClickListener { applyThisMonth() }
         view.findViewById<View>(R.id.presetLastMonth).setOnClickListener { applyLastMonth() }
@@ -75,8 +82,12 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.btnFilterClose).setOnClickListener {
             dismissAllowingStateLoss()
         }
+        view.findViewById<View>(R.id.btnFilterCancel).setOnClickListener {
+            dismissAllowingStateLoss()
+        }
         view.findViewById<View>(R.id.btnFilterApply).setOnClickListener {
             if (fromDate.isBlank() || toDate.isBlank()) {
+                // Nothing picked yet — close silently.
                 dismissAllowingStateLoss()
                 return@setOnClickListener
             }
@@ -90,38 +101,24 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun pickDate(initial: String, onPick: (String) -> Unit) {
-        val cal = Calendar.getInstance()
-        runCatching { ymd.parse(initial) }.getOrNull()?.let { cal.time = it }
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                val c = Calendar.getInstance().apply { set(year, month, day) }
-                onPick(ymd.format(c.time))
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH)
-        ).show()
+    // ---------- Calendar picker ----------
+
+    private fun openCalendarPicker() {
+        val today = ymd.format(Date())
+        CalendarRangePickerSheet.newInstance(
+            // Custom titles for the attendance filter context — design uses
+            // "Leave Duration" / "Select Leave Duration" elsewhere; here we say
+            // we're picking the attendance date range.
+            title = "Date Range",
+            subtitle = "Pick a date range",
+            initialFrom = fromDate.ifBlank { null },
+            initialTo = toDate.ifBlank { null },
+            maxDate = today,
+            resultKey = CAL_RESULT_KEY,
+        ).show(childFragmentManager, "cal_range")
     }
 
-    private fun setFrom(value: String) {
-        fromDate = value
-        renderDates()
-    }
-
-    private fun setTo(value: String) {
-        toDate = value
-        renderDates()
-    }
-
-    private fun renderDates() {
-        btnFrom?.text = if (fromDate.isBlank()) "Select" else displayDate(fromDate)
-        btnTo?.text = if (toDate.isBlank()) "Select" else displayDate(toDate)
-    }
-
-    private fun displayDate(iso: String): String =
-        runCatching { display.format(ymd.parse(iso) ?: Date()) }.getOrDefault(iso)
+    // ---------- Presets ----------
 
     private fun applyThisMonth() {
         val cal = Calendar.getInstance()
@@ -129,7 +126,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         fromDate = ymd.format(cal.time)
         cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
         toDate = ymd.format(cal.time)
-        renderDates()
+        renderDateRange()
     }
 
     private fun applyLastMonth() {
@@ -139,7 +136,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         fromDate = ymd.format(cal.time)
         cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
         toDate = ymd.format(cal.time)
-        renderDates()
+        renderDateRange()
     }
 
     private fun applyLast7Days() {
@@ -147,8 +144,20 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         toDate = ymd.format(cal.time)
         cal.add(Calendar.DAY_OF_YEAR, -6)
         fromDate = ymd.format(cal.time)
-        renderDates()
+        renderDateRange()
     }
+
+    private fun renderDateRange() {
+        val text = when {
+            fromDate.isBlank() || toDate.isBlank() -> "Select date range"
+            fromDate == toDate -> displayDate(fromDate)
+            else -> "${displayDate(fromDate)} - ${displayDate(toDate)}"
+        }
+        tvDateRangeValue?.text = text
+    }
+
+    private fun displayDate(iso: String): String =
+        runCatching { display.format(ymd.parse(iso) ?: Date()) }.getOrDefault(iso)
 
     companion object {
         const val RESULT_KEY = "attendance_filter_result"
@@ -156,6 +165,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
         const val KEY_TO = "toDate"
         private const val ARG_FROM = "arg_from"
         private const val ARG_TO = "arg_to"
+        private const val CAL_RESULT_KEY = "attendance_filter_cal_range"
 
         fun newInstance(currentFrom: String?, currentTo: String?): AttendanceFilterSheet =
             AttendanceFilterSheet().apply {
