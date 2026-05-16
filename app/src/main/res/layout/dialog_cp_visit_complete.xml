@@ -1,4 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Outcome Information sheet — full Booking flow.
+
+  TOP TAB BAR (Pencil "Tabs" SVG ref):
+    Booking · Site visit · Postpone · Not Interested
+    36dp gradient-blue circle for the active outcome, white-ish circle
+    for inactive. Tab labels use the same gradient when active. A 2dp
+    rounded underline sits below the active label, and 1dp vertical
+    dividers separate the four cells.
+
+  BOOKING SUB-TABS (horizontally scrollable):
+    Client · Professional · Office · Booking · Charges · Payment · Staff
+    Green-gradient pill for the active sub-tab.
+
+  BODY (only one visible at a time):
+    bodyBookingFindClient      — Frame 2 (find client mobile)
+    bodyBookingClientForm      — Frame 3 (personal details)
+    bodyBookingProfessional    — Profession / Designation / Income
+    bodyBookingOffice          — Office Name / Email / Mobile / Phone / Address
+    bodyBookingBooking         — Booking Ref / Type / Source / CEF / etc.
+    bodyBookingCharges         — Booking Cost / Guideline / SC / Promotional
+    bodyBookingPayment         — Reg. Charges / GST / Schedule
+    bodyBookingStaff           — AVP / GM / Senior Manager / References / Save as
+    bodyComingSoon             — fallback for non-Booking outcomes
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -9,539 +34,459 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="18dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="20dp">
 
         <View
             android:layout_width="40dp"
             android:layout_height="4dp"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="14dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
             android:background="#E4E7EC" />
 
-        <!-- Figma 365:28263 — header -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Outcome Information"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="16sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:fontFamily="@font/inter_regular"
-            android:text="Information about Client Details"
-            android:textColor="#667085"
-            android:textSize="12sp" />
-
-        <!-- Outcome tab strip (existing horizontal chip row, restyled) -->
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/outcomeChipRow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-        <!-- ── Site Visit details (existing) ───────────────────────────── -->
+        <!-- Header row -->
         <LinearLayout
-            android:id="@+id/siteVisitDetailsGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Site visit details"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Schedule"
-                android:textColor="#667085"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitProject"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select project"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvCpSiteVisitDate"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_chip_inactive"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="@font/inter_medium"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="12dp"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Outcome Information"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
 
                 <TextView
-                    android:id="@+id/tvCpSiteVisitTime"
-                    android:layout_width="0dp"
+                    android:id="@+id/tvOutcomeSubtitle"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_chip_inactive"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="@font/inter_medium"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="12dp"
-                    android:text="Pick time"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="13sp" />
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Information about Client Details"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <TextView
+                android:id="@+id/btnOutcomeEdit"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_outcome_edit_chip"
+                android:clickable="true"
+                android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Pickup"
-                android:textColor="#667085"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitTravelMode"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
                 android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Client travel: Cab required"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
+                android:text="Edit"
+                android:textColor="#2DAE12"
+                android:textSize="12sp" />
+        </LinearLayout>
 
-            <EditText
-                android:id="@+id/etCpSiteVisitPickupAddress"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Pickup address if different"
-                android:minLines="2"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitBdo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="BDO: keep original"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Sales ownership"
-                android:textColor="#667085"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitIncharge"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select SiteIncharge"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitHod"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select HOD"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitAvp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select AVP"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitGm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select GM"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCpSiteVisitSeniorManager"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:text="Select Senior Manager"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Visitors"
-                android:textColor="#667085"
-                android:textSize="11sp" />
-
-            <EditText
-                android:id="@+id/etCpSiteVisitVisitorCount"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="No. of visitors"
-                android:inputType="number"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
+        <!-- Top tab bar (4 outcomes) with vertical dividers + active underline -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
 
             <LinearLayout
-                android:id="@+id/visitorRows"
-                android:layout_width="match_parent"
+                android:id="@+id/outcomeTopBooking"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="vertical" />
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <EditText
-                android:id="@+id/etCpSiteVisitFoodPreference"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Food preferences"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
-        </LinearLayout>
+                <FrameLayout
+                    android:id="@+id/circleOutcomeTopBooking"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_outcome_tab_active">
 
-        <!-- ── Postpone details (figma 414:19622) ──────────────────────── -->
-        <LinearLayout
-            android:id="@+id/postponeDetailsGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="vertical"
-            android:visibility="gone">
+                    <ImageView
+                        android:id="@+id/ivOutcomeTopBooking"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_outcome_booking" />
+                </FrameLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Postpone Reasons"
-                android:textColor="#475467"
-                android:textSize="12sp" />
-
-            <HorizontalScrollView
-                android:id="@+id/postponeReasonScroll"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:id="@+id/postponeReasonRow"
+                <TextView
+                    android:id="@+id/tvOutcomeTopBooking"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Booking"
+                    android:textColor="#0B61CA"
+                    android:textSize="11sp" />
 
-            <TextView
-                android:id="@+id/tvPostponeReasonsLabel"
+                <View
+                    android:id="@+id/indicatorOutcomeTopBooking"
+                    android:layout_width="24dp"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_outcome_tab_indicator" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:background="#F3F3F5" />
+
+            <LinearLayout
+                android:id="@+id/outcomeTopSiteVisit"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-
-            <TextView
-                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Please specify the budget concern"
-                android:textColor="#475467"
-                android:textSize="12sp" />
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <EditText
-                android:id="@+id/etCpPostponeBudgetConcern"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="textMultiLine"
-                android:minLines="2"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
+                <FrameLayout
+                    android:id="@+id/circleOutcomeTopSiteVisit"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_outcome_tab_inactive">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="What's the timing?"
-                android:textColor="#475467"
-                android:textSize="12sp" />
+                    <ImageView
+                        android:id="@+id/ivOutcomeTopSiteVisit"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_outcome_site_visit" />
+                </FrameLayout>
 
-            <EditText
-                android:id="@+id/etCpPostponeTiming"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="text"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/tvOutcomeTopSiteVisit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Site visit"
+                    android:textColor="#6A6D78"
+                    android:textSize="11sp" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Tell the Project Details"
-                android:textColor="#475467"
-                android:textSize="12sp" />
+                <View
+                    android:id="@+id/indicatorOutcomeTopSiteVisit"
+                    android:layout_width="24dp"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_outcome_tab_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
 
-            <EditText
-                android:id="@+id/etCpPostponeProjectDetails"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="textMultiLine"
-                android:minLines="2"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
+            <View
+                android:layout_width="1dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:background="#F3F3F5" />
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/outcomeTopPostpone"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Tell Other Details"
-                android:textColor="#475467"
-                android:textSize="12sp" />
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <EditText
-                android:id="@+id/etCpPostponeOtherDetails"
-                android:layout_width="match_parent"
+                <FrameLayout
+                    android:id="@+id/circleOutcomeTopPostpone"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_outcome_tab_inactive">
+
+                    <ImageView
+                        android:id="@+id/ivOutcomeTopPostpone"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_outcome_postpone" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/tvOutcomeTopPostpone"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Postpone"
+                    android:textColor="#6A6D78"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/indicatorOutcomeTopPostpone"
+                    android:layout_width="24dp"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_outcome_tab_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:background="#F3F3F5" />
+
+            <LinearLayout
+                android:id="@+id/outcomeTopNotInterested"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="textMultiLine"
-                android:minLines="2"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:id="@+id/circleOutcomeTopNotInterested"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_outcome_tab_inactive">
+
+                    <ImageView
+                        android:id="@+id/ivOutcomeTopNotInterested"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_outcome_not_interested" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/tvOutcomeTopNotInterested"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Not Interested"
+                    android:textColor="#6A6D78"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/indicatorOutcomeTopNotInterested"
+                    android:layout_width="24dp"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_outcome_tab_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- ── Not Interested details (figma 372:41265) ────────────────── -->
-        <LinearLayout
-            android:id="@+id/notInterestedDetailsGroup"
+        <!-- Booking sub-tabs — horizontally scrollable so all 7 are reachable -->
+        <HorizontalScrollView
+            android:id="@+id/bookingSubTabsScroll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:orientation="vertical"
-            android:visibility="gone">
+            android:overScrollMode="never"
+            android:paddingHorizontal="20dp"
+            android:scrollbars="none">
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/bookingSubTabsRow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Why is the client not interested?"
-                android:textColor="#475467"
-                android:textSize="12sp" />
+                android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/etCpNotInterestedNotes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="textMultiLine"
-                android:minLines="3"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
-        </LinearLayout>
+                <TextView
+                    android:id="@+id/subTabClientDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_outcome_subtab_active"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Client Details"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
 
-        <!-- ── Wait / Interested details ───────────────────────────────── -->
-        <LinearLayout
-            android:id="@+id/waitDetailsGroup"
+                <TextView
+                    android:id="@+id/subTabProfessionalDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Professional Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subTabOfficeDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Office Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subTabBookingDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Booking Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subTabChargesDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Charges Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subTabPaymentDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Payment Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subTabStaffDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_outcome_subtab_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="14dp"
+                    android:text="Staff Details"
+                    android:textColor="#475467"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <FrameLayout
+            android:id="@+id/outcomeBodyContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="vertical"
-            android:visibility="gone">
+            android:layout_marginTop="20dp"
+            android:paddingHorizontal="20dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Add notes"
-                android:textColor="#475467"
-                android:textSize="12sp" />
-
-            <EditText
-                android:id="@+id/etCpWaitNotes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Type here..."
-                android:inputType="textMultiLine"
-                android:minLines="3"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textColorHint="#98A2B3"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvCpError"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:fontFamily="@font/inter_medium"
-            android:textColor="?attr/colorError"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            <!-- Each included layout already has its own root @id (bodyComingSoon,
+                 bodyBookingFindClient, etc.) — DO NOT set android:id on the
+                 <include> tags or it overrides those inner ids and the
+                 Kotlin findViewById() calls return null (which is exactly
+                 what made Site visit silently keep showing the Find Client
+                 body). -->
+            <include layout="@layout/outcome_body_coming_soon" />
+            <include layout="@layout/outcome_body_booking_find_client" />
+            <include layout="@layout/outcome_body_booking_client_form" />
+            <include layout="@layout/outcome_body_booking_professional" />
+            <include layout="@layout/outcome_body_booking_office" />
+            <include layout="@layout/outcome_body_booking_booking" />
+            <include layout="@layout/outcome_body_booking_charges" />
+            <include layout="@layout/outcome_body_booking_payment" />
+            <include layout="@layout/outcome_body_booking_staff" />
+            <include layout="@layout/outcome_body_site_visit" />
+            <include layout="@layout/outcome_body_postpone" />
+            <include layout="@layout/outcome_body_not_interested" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/btnCpSubmit"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_chip_active"
+            android:layout_height="52dp"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/bg_outcome_primary_button"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
-            android:text="Submit"
-            android:textColor="?attr/colorForegroundInverse"
+            android:includeFontPadding="false"
+            android:text="Next"
+            android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
+        <TextView
+            android:id="@+id/tvCpError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#D92D20"
+            android:textSize="12sp"
+            android:visibility="gone" />
     </LinearLayout>
 </ScrollView>

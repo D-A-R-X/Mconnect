@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- "Have you seen the client?" floating avatar background.
+     Brand-blue gradient rounded square (matches the Pencil reference
+     #0B61CA → #02499D). The icon sits half-above the sheet edge so the
+     soft drop-shadow on the layout floats it visually. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#006BEA" />
-    <corners android:radius="10dp" />
+    <gradient
+        android:angle="270"
+        android:startColor="#0B61CA"
+        android:endColor="#02499D"
+        android:type="linear" />
+    <corners android:radius="16dp" />
 </shape>

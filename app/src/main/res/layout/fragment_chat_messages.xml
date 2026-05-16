@@ -256,7 +256,7 @@
                 android:textSize="16sp" />
 
             <FrameLayout
-                android:id="@+id/btnSelectionForward"
+                android:id="@+id/btnSelectionReply"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:layout_marginStart="4dp"
@@ -268,8 +268,44 @@
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:layout_gravity="center"
-                    android:contentDescription="Forward"
-                    android:src="@drawable/ic_chat_forward"
+                    android:contentDescription="Reply"
+                    android:src="@drawable/ic_chat_reply"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionStar"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Star"
+                    android:src="@drawable/ic_chat_star"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionInfo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Info"
+                    android:src="@drawable/ic_chat_info"
                     android:tint="#FFFFFF" />
             </FrameLayout>
 
@@ -288,6 +324,24 @@
                     android:layout_gravity="center"
                     android:contentDescription="Delete"
                     android:src="@drawable/ic_chat_delete"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionForward"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Forward"
+                    android:src="@drawable/ic_chat_forward"
                     android:tint="#FFFFFF" />
             </FrameLayout>
         </LinearLayout>

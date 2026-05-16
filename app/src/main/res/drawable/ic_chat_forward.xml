@@ -1,9 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Right-pointing forward arrow used in the chat message-action sheet. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#000000"
-        android:pathData="M14,9V5l7,7 -7,7v-4.1c-5,0 -8.5,1.6 -11,5.1 1,-5 4,-10 11,-11z"/>
+        android:fillColor="#1D2939"
+        android:pathData="M14,9 L14,5 L21,12 L14,19 L14,14.9 C9,14.9 5.5,16.5 3,20 C4,15 7,10 14,9 Z" />
 </vector>

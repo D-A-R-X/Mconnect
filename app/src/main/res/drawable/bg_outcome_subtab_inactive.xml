@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive sub-tab pill (e.g. "Professional Details" before tapping).
+     White fill with a subtle outline so the active state stands out. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#E2E8F0" />
+    <corners android:radius="20dp" />
+</shape>

@@ -542,20 +542,21 @@ class HomeFragment : Fragment() {
             }
         }
 
-        val canOpen = !isCompleted
-        if (canOpen) {
+        if (isCompleted) {
+            // Completed visits open a read-only summary instead of the trip flow.
+            val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
+            itemView.isClickable = true
+            itemView.isFocusable = true
+            itemView.setOnClickListener(openDetail)
+            actionBtn.isClickable = true
+            actionBtn.setOnClickListener(openDetail)
+        } else {
             val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
             itemView.isClickable = true
             itemView.isFocusable = true
             itemView.setOnClickListener(openNav)
             actionBtn.isClickable = true
             actionBtn.setOnClickListener(openNav)
-        } else {
-            itemView.isClickable = false
-            itemView.isFocusable = false
-            itemView.setOnClickListener(null)
-            actionBtn.isClickable = false
-            actionBtn.setOnClickListener(null)
         }
 
         applyItemSpacing(itemView, index, total)
@@ -632,6 +633,15 @@ class HomeFragment : Fragment() {
             cpClientMet = visit.cpVisit?.clientMet,
             cpOutcome = visit.cpVisit?.outcome,
         )
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openCompletedVisitDetail(visit: TodayVisit) {
+        val fragment = com.manjugroups.m_connect.ui.marketing
+            .CompletedVisitDetailFragment.forVisit(visit)
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)

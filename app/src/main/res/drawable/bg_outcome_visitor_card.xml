@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-visitor card on the Site Visit form. Dashed outline + rounded
+     corners to mirror the Pencil reference's "draft-y" feel for each
+     additional attendee row. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <stroke
+        android:width="1dp"
+        android:color="#CBD5E1"
+        android:dashWidth="4dp"
+        android:dashGap="3dp" />
+    <corners android:radius="12dp" />
+</shape>

@@ -364,7 +364,9 @@ class CpVisitsFragment : Fragment() {
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
 
-        var clickable = true
+        // Three click outcomes: open the trip flow, open the completed-visit
+        // detail (read-only summary), or no-op (cancelled cards stay inert).
+        var tapMode: TapMode = TapMode.TRIP
 
         when {
             cancelled -> {
@@ -379,7 +381,7 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.setImageResource(R.drawable.ic_cpv_action_cancelled)
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
-                clickable = false
+                tapMode = TapMode.NONE
             }
             completed -> {
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_ready)
@@ -393,7 +395,8 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.setImageResource(R.drawable.ic_cpv_action_completed)
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
-                clickable = false
+                // Tap routes to the read-only Completed Visit Detail screen.
+                tapMode = TapMode.COMPLETED_DETAIL
             }
             needsCpDetails -> {
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
@@ -463,18 +466,40 @@ class CpVisitsFragment : Fragment() {
             }
         }
 
-        if (clickable) {
-            val openNav: (View) -> Unit = { openVisit(visit) }
-            itemView.isClickable = true
-            itemView.setOnClickListener(openNav)
-            actionBtn.isClickable = true
-            actionBtn.setOnClickListener(openNav)
-        } else {
-            itemView.isClickable = false
-            itemView.setOnClickListener(null)
-            actionBtn.isClickable = false
-            actionBtn.setOnClickListener(null)
+        when (tapMode) {
+            TapMode.TRIP -> {
+                val openNav: (View) -> Unit = { openVisit(visit) }
+                itemView.isClickable = true
+                itemView.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
+            }
+            TapMode.COMPLETED_DETAIL -> {
+                val openDetail: (View) -> Unit = { openCompletedDetail(visit) }
+                itemView.isClickable = true
+                itemView.setOnClickListener(openDetail)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openDetail)
+            }
+            TapMode.NONE -> {
+                itemView.isClickable = false
+                itemView.setOnClickListener(null)
+                actionBtn.isClickable = false
+                actionBtn.setOnClickListener(null)
+            }
         }
+    }
+
+    private enum class TapMode { TRIP, COMPLETED_DETAIL, NONE }
+
+    private fun openCompletedDetail(visit: TodayVisit) {
+        parentFragmentManager.beginTransaction()
+            .replace(
+                R.id.fragmentContainer,
+                CompletedVisitDetailFragment.forVisit(visit),
+            )
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun openVisit(visit: TodayVisit) {

@@ -71,6 +71,40 @@
                     android:visibility="gone" />
             </LinearLayout>
 
+            <!-- "Forwarded" label — visible only when this bubble was added to
+                 ForwardedMessageStore (set by the local forward flow). Mirrors
+                 WhatsApp's small italic indicator above the body. -->
+            <LinearLayout
+                android:id="@+id/forwardedTagRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivForwardedIcon"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chat_forwarded_arrow"
+                    app:tint="?attr/colorForegroundInverse" />
+
+                <TextView
+                    android:id="@+id/tvForwardedTag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.78"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Forwarded"
+                    android:textColor="?attr/colorForegroundInverse"
+                    android:textSize="11sp"
+                    android:textStyle="italic" />
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/attachmentsContainer"
                 android:layout_width="wrap_content"

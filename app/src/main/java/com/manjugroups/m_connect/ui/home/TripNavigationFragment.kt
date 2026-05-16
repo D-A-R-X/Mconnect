@@ -38,7 +38,6 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
-import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
@@ -567,7 +566,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun renderPreStartPhase() {
         applyStatusPill("Start")
         hideTripStartTime()
-        hideLoadingOverlay()
+        loadingOverlay?.visibility = View.GONE
         btnOpenMaps?.visibility = View.VISIBLE
         tvStartTripLabel?.text = "Start Trip"
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
@@ -580,22 +579,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         fetchCurrentLocationAndUpdate()
     }
 
-    private fun showLoadingOverlay() {
-        loadingOverlay?.let {
-            it.visibility = View.VISIBLE
-            SkeletonUtils.startSkeletonPulse(it)
-        }
-    }
-
-    private fun hideLoadingOverlay() {
-        loadingOverlay?.let {
-            SkeletonUtils.stopSkeletonPulse(it)
-            it.visibility = View.GONE
-        }
-    }
-
     private fun ensureVisitStarted() {
-        showLoadingOverlay()
+        loadingOverlay?.visibility = View.VISIBLE
         applyStatusPill("Starting…")
         hideTripStartTime()
         btnOpenMaps?.isEnabled = false
@@ -664,7 +649,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (alreadyArrived) arrivalConfirmedForProgress = true
                 showTripStartTime()
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
-                hideLoadingOverlay()
+                loadingOverlay?.visibility = View.GONE
                 btnOpenMaps?.visibility = View.GONE
                 btnOpenMaps?.isEnabled = true
                 applyStatusPill(when {
@@ -688,7 +673,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun failAndClose(message: String) {
         if (!isAdded) return
-        hideLoadingOverlay()
+        loadingOverlay?.visibility = View.GONE
         Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
         parentFragmentManager.popBackStack()
     }

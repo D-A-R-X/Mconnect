@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Outcome · Site visit — full conversion form (Pencil reference Frame
+  390x1322). The "Next" CTA at the bottom of the sheet becomes "Save"
+  when this body is visible and triggers convertCpVisitToSiteVisit.
+
+  Layout sections:
+    Schedule:    project picker + date + time
+    Pickup From: travel-mode segmented control (own_vehicle / cab)
+    Pickup Address (If Needed): free-text textarea
+    Business Development Organisation: read-only "Keep Original"
+    Sales Ownership: 5 staff dropdowns (Site Incharge / HOD / AVP / GM / Senior Manager)
+    Visitors: count + per-visitor cards (inflated dynamically)
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodySiteVisit"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <!-- Schedule -->
+    <TextView style="@style/OutcomeFieldLabel" android:text="Schedule" />
+
+    <LinearLayout android:id="@+id/rowSvProject" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvSvProject" style="@style/OutcomeFieldValue" android:hint="Select Project" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <!-- Date + Time (side by side, with > chevrons) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView style="@style/OutcomeFieldLabel" android:text="Date" />
+
+            <LinearLayout android:id="@+id/rowSvDate" style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+                <TextView android:id="@+id/tvSvDate" style="@style/OutcomeFieldValue" android:hint="dd-mm-yyyy" />
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_outcome_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView style="@style/OutcomeFieldLabel" android:text="Time" />
+
+            <LinearLayout android:id="@+id/rowSvTime" style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
+                <TextView android:id="@+id/tvSvTime" style="@style/OutcomeFieldValue" android:hint="hh:mm" />
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_outcome_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Pickup From — segmented control -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Pickup From" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btnSvTravelOwn"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_segment_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="Own Vehicle"
+            android:textColor="#475467"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btnSvTravelCab"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_segment_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="Cab Vehicle"
+            android:textColor="#475467"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Pickup Address (If Needed) -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Pickup Address (If Needed)" />
+
+    <EditText
+        android:id="@+id/etSvPickupAddress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="top"
+        android:hint="Enter Address"
+        android:includeFontPadding="false"
+        android:inputType="textMultiLine|textCapSentences"
+        android:minLines="3"
+        android:padding="14dp"
+        android:textColor="#101828"
+        android:textColorHint="#94A3B8"
+        android:textSize="13sp" />
+
+    <!-- Business Development Organisation (read-only "Keep Original") -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Business Development Organisation" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_readonly"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Keep Original"
+            android:textColor="#64748B"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Sales Ownership -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Sales Ownership" />
+
+    <LinearLayout android:id="@+id/rowSvIncharge" style="@style/OutcomeFieldPillClickable" android:layout_marginTop="6dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvSvIncharge" style="@style/OutcomeFieldValue" android:hint="Select Site Incharge" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/rowSvHod" style="@style/OutcomeFieldPillClickable" android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvSvHod" style="@style/OutcomeFieldValue" android:hint="Select HOD" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/rowSvAvp" style="@style/OutcomeFieldPillClickable" android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvSvAvp" style="@style/OutcomeFieldValue" android:hint="Select AVP" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/rowSvGm" style="@style/OutcomeFieldPillClickable" android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvSvGm" style="@style/OutcomeFieldValue" android:hint="Select GM" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/rowSvSm" style="@style/OutcomeFieldPillClickable" android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvSvSm" style="@style/OutcomeFieldValue" android:hint="Select Senior Manager" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <!-- Visitors -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Visitors" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <EditText
+            android:id="@+id/etSvVisitorCount"
+            style="@style/OutcomeFieldEdit"
+            android:hint="0"
+            android:inputType="number"
+            android:maxLength="2" />
+    </LinearLayout>
+
+    <!-- Per-visitor cards inflated here by SiteVisitFragment -->
+    <LinearLayout
+        android:id="@+id/siteVisitorRows"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

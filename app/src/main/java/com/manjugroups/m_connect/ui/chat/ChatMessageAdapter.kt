@@ -65,6 +65,36 @@ class ChatMessageAdapter(
         notifyDataSetChanged()
     }
 
+    /**
+     * Unified long-press handler used by both text bubbles and media attachments.
+     *
+     * - In selection mode: behaves like a regular tap (toggle selection on this message).
+     * - Outside selection mode: pops the emoji reaction sheet AND enters selection
+     *   mode with this message pre-selected. That second part is what lets users
+     *   subsequently tap other messages to multi-select WhatsApp-style — without
+     *   it, only the long-pressed message would ever be a candidate for delete /
+     *   forward / star.
+     */
+    private fun handleLongPress(data: MessageData, anchorView: View) {
+        if (selectionMode) {
+            data.id?.let { toggleSelected(it) }
+            onMessageTap?.invoke(data)
+            return
+        }
+        onMessageReactionClick(data, anchorView)
+        val id = data.id
+        if (id != null) {
+            // Enter selection mode AFTER the reaction sheet is invoked so the
+            // sheet can still anchor to the bubble's current visual state.
+            if (!selectionMode) {
+                selectionMode = true
+            }
+            if (id !in selectedIds) selectedIds.add(id)
+            notifyDataSetChanged()
+            onMessageTap?.invoke(data)
+        }
+    }
+
     fun applySelectionVisual(rootView: View, messageId: String?) {
         val highlightedSelection = selectionMode && isSelected(messageId)
         val highlightedSearch = !selectionMode && messageId != null && messageId in searchHighlightIds
@@ -184,6 +214,12 @@ class ChatMessageAdapter(
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = true)
             applyBodyMaxWidth(binding.tvMessageBody)
             binding.ivSeenStatus.visibility = if (isDeleted) View.GONE else View.VISIBLE
+            // "Forwarded" tag — visible when this message was forwarded from
+            // this device. Tracked locally because the backend schema has no
+            // isForwarded field yet.
+            binding.forwardedTagRow.visibility =
+                if (!isDeleted && ForwardedMessageStore.isForwarded(binding.root.context, item.data.id)) View.VISIBLE
+                else View.GONE
             if (isDeleted) {
                 renderDeletedBubble(
                     body = binding.tvMessageBody,
@@ -221,23 +257,22 @@ class ChatMessageAdapter(
                 }
             }
             binding.root.setOnLongClickListener {
-                if (selectionMode) {
-                    item.data.id?.let { toggleSelected(it) }
-                    onMessageTap?.invoke(item.data)
-                } else {
-                    onMessageReactionClick(item.data, binding.bubbleFrame)
-                }
+                handleLongPress(item.data, binding.bubbleFrame)
                 true
             }
 
             binding.attachmentsContainer.removeAllViews()
+            val sentLongPress: () -> Unit = {
+                handleLongPress(item.data, binding.bubbleFrame)
+            }
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(
                     createAttachmentView(
                         binding.attachmentsContainer,
                         attachment,
                         isMine = true,
-                        creationTime = item.data.creationTime
+                        creationTime = item.data.creationTime,
+                        onLongPress = sentLongPress,
                     )
                 )
             }
@@ -271,6 +306,13 @@ class ChatMessageAdapter(
                 binding.ivSenderAvatar.setImageDrawable(null)
             }
 
+            // "Forwarded" tag for received bubbles — same local store as the
+            // sent side; the tag shows up only if THIS device originated the
+            // forward. Cross-user forward detection waits on a backend flag.
+            binding.forwardedTagRow.visibility =
+                if (!isDeleted && ForwardedMessageStore.isForwarded(binding.root.context, item.data.id)) View.VISIBLE
+                else View.GONE
+
             if (isDeleted) {
                 renderDeletedBubble(
                     body = binding.tvMessageBody,
@@ -308,23 +350,22 @@ class ChatMessageAdapter(
                 }
             }
             binding.root.setOnLongClickListener {
-                if (selectionMode) {
-                    item.data.id?.let { toggleSelected(it) }
-                    onMessageTap?.invoke(item.data)
-                } else {
-                    onMessageReactionClick(item.data, binding.bubbleFrame)
-                }
+                handleLongPress(item.data, binding.bubbleFrame)
                 true
             }
 
             binding.attachmentsContainer.removeAllViews()
+            val receivedLongPress: () -> Unit = {
+                handleLongPress(item.data, binding.bubbleFrame)
+            }
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(
                     createAttachmentView(
                         binding.attachmentsContainer,
                         attachment,
                         isMine = false,
-                        creationTime = item.data.creationTime
+                        creationTime = item.data.creationTime,
+                        onLongPress = receivedLongPress,
                     )
                 )
             }
@@ -730,7 +771,9 @@ class ChatMessageAdapter(
         container.addView(play)
 
         container.setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
-        container.isLongClickable = false
+        // Long-press is wired by createAttachmentView (which delegates to the
+        // bubble's selection/reaction handler), so we leave the container
+        // long-clickable here.
         return container
     }
 
@@ -738,7 +781,8 @@ class ChatMessageAdapter(
         parent: ViewGroup,
         attachment: MessageAttachmentData,
         isMine: Boolean = false,
-        creationTime: Double? = null
+        creationTime: Double? = null,
+        onLongPress: (() -> Unit)? = null,
     ): View {
         val context = parent.context
         val url = attachment.url ?: ""
@@ -761,7 +805,7 @@ class ChatMessageAdapter(
                 fileName.endsWith(".avi")
             )
 
-        return if (mime.startsWith("image/")) {
+        val attachmentView = if (mime.startsWith("image/")) {
             FrameLayout(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     dp(context, 220),
@@ -800,7 +844,6 @@ class ChatMessageAdapter(
                 }
                 addView(img)
                 setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
-                isLongClickable = false
             }
         } else if (isVideo) {
             createVideoPreview(context, url, attachment, mime)
@@ -809,6 +852,20 @@ class ChatMessageAdapter(
         } else {
             createDocumentBubble(context, url, mime, attachment, isMine)
         }
+
+        // Wire long-press on the attachment view so the same selection/reaction
+        // flow fires for voice notes, PDFs, images, videos, and docs — not just
+        // text bubbles. Previously these views were either marked
+        // isLongClickable=false or had setOnClickListener that suppressed the
+        // event, blocking forward / react gestures on media-only messages.
+        if (onLongPress != null) {
+            attachmentView.isLongClickable = true
+            attachmentView.setOnLongClickListener {
+                onLongPress.invoke()
+                true
+            }
+        }
+        return attachmentView
     }
 
     /**

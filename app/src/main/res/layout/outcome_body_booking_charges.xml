@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Booking · Charges Details — Frame 3 in the current reference set. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyBookingCharges"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Booking Cost" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <EditText android:id="@+id/etChargeBookingCost" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Guideline Value" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+        <EditText android:id="@+id/etChargeGuidelineValue" style="@style/OutcomeFieldEdit" android:hint="Enter Value" android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Special Consideration" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etChargeSpecialConsideration" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Discount Approved By" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etChargeDiscountApprovedBy" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="SC Reason" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etChargeScReason" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="SC Validity" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+        <EditText android:id="@+id/etChargeScValidity" style="@style/OutcomeFieldEdit" android:hint="Enter Days" android:inputType="number" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Promotional Offers" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <EditText android:id="@+id/etChargePromoOffers" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Promotional Offers T&amp;C" />
+    <LinearLayout android:id="@+id/rowChargePromoTnc" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+        <TextView android:id="@+id/tvChargePromoTnc" style="@style/OutcomeFieldValue" android:hint="Select Offers" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Promotional Offers Value" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+        <EditText android:id="@+id/etChargePromoValue" style="@style/OutcomeFieldEdit" android:hint="Enter Value" android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Offer Validity Period" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+        <EditText android:id="@+id/etChargeOfferValidity" style="@style/OutcomeFieldEdit" android:hint="Enter Days" android:inputType="number" />
+    </LinearLayout>
+</LinearLayout>

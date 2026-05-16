@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Outcome · Not Interested — same four free-text fields as Postpone
+  (the back-office reads "what did they tell us" verbatim) but no
+  follow-up Date & Time since the visit is terminal.
+  Submits via setCpVisitOutcome(outcome="not_interested", notes=...).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyNotInterested"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Please specify the budget concern" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="top"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_rupee" />
+
+        <EditText
+            android:id="@+id/etNiBudget"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top"
+            android:hint="Enter Details"
+            android:includeFontPadding="false"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="3"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="What's the timing?" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
+        <EditText android:id="@+id/etNiTiming" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Tell the Project Details" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
+        <EditText android:id="@+id/etNiProject" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Tell Other Details" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
+        <EditText android:id="@+id/etNiOther" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
+    </LinearLayout>
+</LinearLayout>

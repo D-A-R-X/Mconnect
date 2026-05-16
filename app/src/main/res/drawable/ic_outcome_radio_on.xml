@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selected radio dot (blue gradient ring + blue dot). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <size android:width="18dp" android:height="18dp" />
+            <stroke android:width="2dp" android:color="#0B61CA" />
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+    <item
+        android:width="10dp"
+        android:height="10dp"
+        android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="#0B61CA" />
+        </shape>
+    </item>
+</layer-list>

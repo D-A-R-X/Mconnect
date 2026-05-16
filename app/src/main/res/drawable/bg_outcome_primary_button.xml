@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Green pill primary CTA (e.g. "Next") for the Outcome Information sheet.
+     Matches the brand green gradient seen across other primary actions. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#1BCA0B"
+        android:endColor="#3D9D02"
+        android:type="linear" />
+    <corners android:radius="26dp" />
+</shape>

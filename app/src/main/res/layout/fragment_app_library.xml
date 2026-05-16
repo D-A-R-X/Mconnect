@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8">
@@ -87,8 +88,10 @@
                             android:id="@+id/pillAllAppsIcon"
                             android:layout_width="36dp"
                             android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_active"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_apps_pill_all" />
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_all" />
 
                         <TextView
                             android:id="@+id/pillAllAppsText"
@@ -129,8 +132,11 @@
                             android:id="@+id/pillHrIcon"
                             android:layout_width="36dp"
                             android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_apps_pill_hr" />
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_hr"
+                            app:tint="#6A6D78" />
 
                         <TextView
                             android:id="@+id/pillHrText"
@@ -172,8 +178,11 @@
                             android:id="@+id/pillMarketingIcon"
                             android:layout_width="36dp"
                             android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_apps_pill_marketing" />
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_marketing"
+                            app:tint="#6A6D78" />
 
                         <TextView
                             android:id="@+id/pillMarketingText"
@@ -215,8 +224,11 @@
                             android:id="@+id/pillProjectIcon"
                             android:layout_width="36dp"
                             android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_apps_pill_project" />
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_project"
+                            app:tint="#6A6D78" />
 
                         <TextView
                             android:id="@+id/pillProjectText"
@@ -258,8 +270,11 @@
                             android:id="@+id/pillSettingsIcon"
                             android:layout_width="36dp"
                             android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_apps_pill_settings" />
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_settings"
+                            app:tint="#6A6D78" />
 
                         <TextView
                             android:id="@+id/pillSettingsText"
@@ -591,6 +606,50 @@
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
                                 android:text="CP Visits"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <!-- Site Visits — client-comes-to-plot trips owned by the
+                             site incharge. Sits below CP Visits in the Marketing
+                             group to mirror the web sidebar order. -->
+                        <LinearLayout
+                            android:id="@+id/itemMarketingSiteVisits"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_field_visits" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Site Visits"
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 

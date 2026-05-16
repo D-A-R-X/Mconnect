@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Rupee currency glyph for amounts. -->
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M7,5 H17 V7 H13.5 C14.27,7.46 14.84,8.18 15.11,9 H17 V11 H15.11 C14.66,12.86 13,14.13 11.06,14 L17,21 H14.4 L8.4,14 H10 C11.66,14 13,12.66 13,11 H7 V9 H12.94 C12.74,8.13 11.97,7.5 11,7.5 H7 V5 Z" />
+</vector>

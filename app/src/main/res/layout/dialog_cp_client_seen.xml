@@ -1,87 +1,115 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  "Have you seen the client?" sheet.
+
+  Structure:
+   • Root FrameLayout — clip-free so the floating verification chip can
+     paint outside the white card edges.
+   • Card (LinearLayout) — offset by half-chip-height from the top so its
+     edge sits exactly under the chip's middle; the top padding then makes
+     room for the chip overlap inside.
+   • Floating chip — a sibling FrameLayout anchored top|center_horizontal,
+     so half its height naturally overflows above the card without any
+     negative margins.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_cp_seen_sheet"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:paddingStart="14dp"
-    android:paddingTop="0dp"
-    android:paddingEnd="14dp"
-    android:paddingBottom="16dp">
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
+    <!-- The white card body. Pushed down 32dp from the FrameLayout top so
+         the chip sits half-above / half-inside its edge. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:background="@drawable/bg_cp_seen_sheet"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="46dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="22dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="Have you seen the client?"
+            android:textColor="#1D2939"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:lineSpacingExtra="2dp"
+            android:text="Please confirm if you have seen or met the client at this location."
+            android:textColor="#475467"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btnCpSeenYes"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_cp_seen_yes"
+                android:clickable="true"
+                android:drawableStart="@drawable/ic_cp_seen_check"
+                android:drawablePadding="10dp"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="Yes , I saw"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnCpSeenNo"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_cp_seen_no"
+                android:clickable="true"
+                android:drawableStart="@drawable/ic_cp_seen_x"
+                android:drawablePadding="10dp"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="No i didn't"
+                android:textColor="#2DAE12"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Floating verification chip — anchored top|center_horizontal of the
+         root FrameLayout. Drawn after the card so it sits on top.
+         64dp is small enough to not crash into the trip-progress steppers
+         showing behind the dim layer, while still leaving room for the
+         person + verification badge to read clearly. -->
     <FrameLayout
-        android:layout_width="62dp"
-        android:layout_height="62dp"
-        android:layout_marginTop="-31dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="top|center_horizontal"
         android:background="@drawable/bg_cp_seen_icon"
         android:elevation="8dp">
 
         <ImageView
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:layout_gravity="center"
+            android:contentDescription="@null"
             android:src="@drawable/ic_cp_seen_people" />
     </FrameLayout>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="26dp"
-        android:fontFamily="@font/inter_bold"
-        android:text="Have you seen the client?"
-        android:textColor="#1D2939"
-        android:textSize="16sp" />
-
-    <TextView
-        android:layout_width="260dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:fontFamily="@font/inter_regular"
-        android:gravity="center"
-        android:lineSpacingExtra="1dp"
-        android:text="Please confirm if you have seen or met the client at this location."
-        android:textColor="#475467"
-        android:textSize="10sp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="14dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/btnCpSeenYes"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_cp_seen_yes"
-            android:clickable="true"
-            android:drawableStart="@drawable/ic_cp_seen_check"
-            android:drawablePadding="8dp"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:text="Yes, I saw"
-            android:textColor="@android:color/white"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/btnCpSeenNo"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_cp_seen_no"
-            android:clickable="true"
-            android:drawableStart="@drawable/ic_cp_seen_x"
-            android:drawablePadding="8dp"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:text="No I didn't"
-            android:textColor="#19B900"
-            android:textSize="12sp" />
-    </LinearLayout>
-</LinearLayout>
+</FrameLayout>

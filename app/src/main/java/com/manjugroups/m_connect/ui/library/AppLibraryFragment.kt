@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
+import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
@@ -156,6 +157,7 @@ class AppLibraryFragment : Fragment() {
         }
 
         binding.itemMarketingCpVisits.setOnClickListener { openScreen(CpVisitsFragment()) }
+        binding.itemMarketingSiteVisits.setOnClickListener { openScreen(SiteVisitsFragment()) }
         binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }
         binding.itemMarketingMyLeads.setOnClickListener {
             openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))
@@ -189,18 +191,31 @@ class AppLibraryFragment : Fragment() {
         binding.cardProject.visibility = if (filter == Filter.ALL || filter == Filter.PROJECT) View.VISIBLE else View.GONE
         binding.cardConfig.visibility = if (filter == Filter.ALL || filter == Filter.SETTINGS) View.VISIBLE else View.GONE
 
-        styleTab(binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
-        styleTab(binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
-        styleTab(binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
-        styleTab(binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
-        styleTab(binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
+        styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
+        styleTab(binding.pillHrIcon, binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
+        styleTab(binding.pillMarketingIcon, binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
+        styleTab(binding.pillProjectIcon, binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
+        styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
-    private fun styleTab(label: TextView, indicator: View, active: Boolean) {
+    /**
+     * Flips a pill between active and inactive look:
+     * - Active: solid blue circle + white icon + blue label + visible underline
+     * - Inactive: light grey circle + grey icon + grey label + hidden underline
+     */
+    private fun styleTab(icon: android.widget.ImageView, label: TextView, indicator: View, active: Boolean) {
         if (active) {
+            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_active)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#FFFFFF")
+            )
             label.setTextColor(Color.parseColor("#0B61CA"))
             indicator.visibility = View.VISIBLE
         } else {
+            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_inactive)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#6A6D78")
+            )
             label.setTextColor(Color.parseColor("#6A6D78"))
             indicator.visibility = View.INVISIBLE
         }

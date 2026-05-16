@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2dp underline pill that sits below the active outcome tab label.
+     Brand blue gradient matching the circle above it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#0B61CA"
+        android:endColor="#02499D"
+        android:type="linear" />
+    <corners android:radius="1dp" />
+</shape>

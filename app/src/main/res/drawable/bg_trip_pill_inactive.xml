@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive step in the new pill-tab trip progress (Tabs.svg ref).
+     White fill with subtle dark border, fully rounded ends. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#BA3F3A3A" />
+    <corners android:radius="15.5dp" />
+</shape>

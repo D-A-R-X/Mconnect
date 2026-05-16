@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 24x24 checkbox with two states (selected = checked, unselected = empty
+     rounded square). Used by the outcome completion sheet rows so the user
+     can multi-select outcome categories like the design's checkbox list. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:drawable="@drawable/ic_outcome_checkbox_checked" />
+    <item android:drawable="@drawable/ic_outcome_checkbox_empty" />
+</selector>

@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Frame 3: full client details form (10 personal fields). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyBookingClientForm"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Client Phone Number *"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_phone" />
+
+        <TextView
+            android:id="@+id/tvFormClientPhone"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#101828"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Title"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/rowFormTitle"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_person" />
+
+        <TextView
+            android:id="@+id/tvFormClientTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Select Title"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_chevron_down" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Client Name *"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_person" />
+
+        <EditText
+            android:id="@+id/etFormClientName"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Client Name"
+            android:includeFontPadding="false"
+            android:inputType="textCapWords"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Father/Spouse Name"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_person" />
+
+        <EditText
+            android:id="@+id/etFormFatherName"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Name"
+            android:includeFontPadding="false"
+            android:inputType="textCapWords"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Date of Birth"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/rowFormDob"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_calendar" />
+
+        <TextView
+            android:id="@+id/tvFormDob"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:hint="dd/mm/yyyy"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Anniversary Date"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/rowFormAnniversary"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_calendar" />
+
+        <TextView
+            android:id="@+id/tvFormAnniversary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:hint="dd/mm/yyyy"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Alternate Numbers"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_phone" />
+
+        <EditText
+            android:id="@+id/etFormAlternateNumber"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Number"
+            android:includeFontPadding="false"
+            android:inputType="phone"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Whats app Number"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_whatsapp" />
+
+        <EditText
+            android:id="@+id/etFormWhatsApp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Number"
+            android:includeFontPadding="false"
+            android:inputType="phone"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Email"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_mail" />
+
+        <EditText
+            android:id="@+id/etFormEmail"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Email Id"
+            android:includeFontPadding="false"
+            android:inputType="textEmailAddress"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Nationality"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/rowFormNationality"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_flag" />
+
+        <TextView
+            android:id="@+id/tvFormNationality"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Select Nationality"
+            android:includeFontPadding="false"
+            android:text=""
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_chevron_down" />
+    </LinearLayout>
+
+    <!-- Home Address (multiline textarea) -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Home Address" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="top"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_pin" />
+
+        <EditText
+            android:id="@+id/etFormHomeAddress"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top"
+            android:hint="Enter Address"
+            android:includeFontPadding="false"
+            android:inputType="textMultiLine|textCapSentences|textPostalAddress"
+            android:minLines="3"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Pincode -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Pincode" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_globe" />
+        <EditText
+            android:id="@+id/etFormPincode"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter Pincode"
+            android:inputType="number"
+            android:maxLength="6" />
+    </LinearLayout>
+
+    <!-- State -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="State" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText
+            android:id="@+id/etFormState"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter State"
+            android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <!-- District -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="District" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText
+            android:id="@+id/etFormDistrict"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter District"
+            android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <!-- Location -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Location" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText
+            android:id="@+id/etFormLocation"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter Location"
+            android:inputType="textCapWords" />
+    </LinearLayout>
+</LinearLayout>

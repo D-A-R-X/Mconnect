@@ -177,6 +177,15 @@ interface GeoTrackApi {
         @Body body: ConvertCpVisitToSiteVisitRequest
     ): ConvertCpVisitToSiteVisitResponse
 
+    // Returns the enriched CP visit (lead + client + place + fieldVisit +
+    // arrivalProof) used by the Completed Visit Detail screen. Mirrors the
+    // web's clientPlaceVisits.get() Convex query.
+    @GET("api/marketing/clientPlaceVisits/get")
+    suspend fun getCpVisitDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): CpVisitDetailResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -619,6 +628,112 @@ data class ConvertCpVisitToSiteVisitResponse(
     val siteVisitId: String? = null,
     val visitId: String? = null,
     val error: String? = null,
+)
+
+// ── Enriched CP visit detail (mirrors web clientPlaceVisits.get) ──────────
+// Every field is optional because (a) older rows pre-date some columns and
+// (b) the backend returns the doc as-is. Defensive nullability prevents
+// Gson from blowing up when a key is missing.
+
+data class CpVisitDetailResponse(
+    val success: Boolean,
+    val visit: CpVisitDetail? = null,
+    val error: String? = null,
+)
+
+data class CpVisitDetail(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val leadId: String? = null,
+    val clientId: String? = null,
+    val clientPlaceId: String? = null,
+    val origin: String? = null,
+    val telecallerStaffId: String? = null,
+    val assignedStaffId: String? = null,
+    val assignedAt: Long? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val status: String? = null,
+    val clientMet: Boolean? = null,
+    val clientMetAt: Long? = null,
+    val clientNoShowReason: String? = null,
+    val outcome: String? = null,
+    val postponeReasons: List<String>? = null,
+    val convertedSiteVisitId: String? = null,
+    val convertedBookingId: String? = null,
+    val fieldVisitId: String? = null,
+    val notes: String? = null,
+    val completedAt: Long? = null,
+    val cancelledAt: Long? = null,
+    val expectedAttendeeCount: Int? = null,
+    val foodPreferences: String? = null,
+    val vehiclePreference: String? = null,
+    val isBookingCompleted: Boolean? = null,
+    val createdAt: Long? = null,
+    val updatedAt: Long? = null,
+    // Joined references the web `enrichVisit` helper attaches:
+    val lead: CpVisitLead? = null,
+    val client: CpVisitClient? = null,
+    val telecaller: CpVisitStaff? = null,
+    val assignedStaff: CpVisitStaff? = null,
+    val clientPlace: CpVisitPlace? = null,
+    val fieldVisit: CpVisitFieldVisit? = null,
+    val arrivalProof: CpVisitArrivalProof? = null,
+)
+
+data class CpVisitLead(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val city: String? = null,
+    val preferredArea: String? = null,
+    val followUpStatus: String? = null,
+)
+
+data class CpVisitClient(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val city: String? = null,
+)
+
+data class CpVisitStaff(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val staffName: String? = null,
+    val staffCode: String? = null,
+)
+
+data class CpVisitPlace(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val address: String? = null,
+    val formattedAddress: String? = null,
+    val landmark: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val contactPerson: String? = null,
+    val contactPhone: String? = null,
+)
+
+data class CpVisitFieldVisit(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val status: String? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val distanceMeters: Double? = null,
+    val durationMinutes: Double? = null,
+)
+
+data class CpVisitArrivalProof(
+    val photoStorageId: String? = null,
+    val photoUrl: String? = null,
+    val otpVerifiedAt: Long? = null,
+    val otpRequestedAt: Long? = null,
+    val gpsLat: Double? = null,
+    val gpsLng: Double? = null,
+    val distanceFromPlaceMeters: Double? = null,
 )
 
 data class AssignedPlace(

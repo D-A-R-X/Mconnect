@@ -1391,8 +1391,38 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         updateSelectionToolbar()
     }
 
+    private fun firstSelectedMessage(): MessageData? {
+        val firstId = chatAdapter.selectedIdsSnapshot().firstOrNull() ?: return null
+        return messages.firstOrNull { it.id == firstId }
+    }
+
     private fun setupSelectionToolbar() {
         binding.btnSelectionCancel.setOnClickListener { exitSelectionMode() }
+
+        // Reply / Star / Info act on the FIRST selected message. Reply + Info
+        // route through the same handlers the old per-message bottom sheet used,
+        // so existing flows light up from the toolbar without duplication.
+        binding.btnSelectionReply.setOnClickListener {
+            val first = firstSelectedMessage()
+            if (first?.id == null) { exitSelectionMode(); return@setOnClickListener }
+            val id = first.id
+            exitSelectionMode()
+            onReply(id)
+        }
+        binding.btnSelectionInfo.setOnClickListener {
+            val first = firstSelectedMessage()
+            if (first?.id == null) { exitSelectionMode(); return@setOnClickListener }
+            val id = first.id
+            exitSelectionMode()
+            onInfo(id)
+        }
+        binding.btnSelectionStar.setOnClickListener {
+            // Starred-messages backend isn't wired yet. The affordance is in
+            // place so the toolbar matches the design; hook up to a Convex
+            // flag once the backend endpoint exists.
+            toast("Starred messages — coming soon")
+        }
+
         binding.btnSelectionDelete.setOnClickListener {
             val ids = chatAdapter.selectedIdsSnapshot()
             if (ids.isEmpty()) { exitSelectionMode(); return@setOnClickListener }
@@ -1480,27 +1510,64 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 targetChannelId: String?,
                 targetName: String
             ) {
-                val bodies = toForward.mapNotNull { it.body?.takeIf { b -> b.isNotBlank() } }
-                if (bodies.isEmpty()) {
+                // Forward EVERY selected message regardless of type. Old code
+                // only forwarded `body`-bearing messages, which silently dropped
+                // voice notes, PDFs, images and other attachment-only messages.
+                if (toForward.isEmpty()) {
                     toast("Nothing to forward")
                     return
                 }
                 viewLifecycleOwner.lifecycleScope.launch {
                     var failures = 0
-                    bodies.forEach { body ->
+                    var skipped = 0
+                    val newMessageIds = mutableListOf<String>()
+                    toForward.forEach { msg ->
+                        val body = msg.body?.trim().orEmpty()
+                        val attachments = msg.attachments
+                            ?.mapNotNull { att ->
+                                val sid = att.storageId?.takeIf { it.isNotBlank() }
+                                    ?: return@mapNotNull null
+                                com.manjugroups.m_connect.network.MessageAttachmentUpload(
+                                    storageId = sid,
+                                    fileName = att.fileName.orEmpty().ifBlank { "attachment" },
+                                    fileType = att.fileType.orEmpty().ifBlank { "application/octet-stream" },
+                                    fileSize = att.fileSize ?: 0L,
+                                )
+                            }
+                            ?.takeIf { it.isNotEmpty() }
+                        // Skip messages that have neither text nor attachments
+                        // (deleted placeholders, system notes etc.).
+                        if (body.isEmpty() && attachments == null) {
+                            skipped++
+                            return@forEach
+                        }
                         runCatching {
                             api.sendMessage(
                                 session.bearerToken,
                                 com.manjugroups.m_connect.network.SendMessageRequest(
                                     channelId = targetChannelId,
                                     conversationId = targetConversationId,
-                                    body = body
+                                    body = body,
+                                    attachments = attachments,
                                 )
                             )
+                        }.onSuccess { resp ->
+                            resp.messageId?.takeIf { it.isNotBlank() }
+                                ?.let { newMessageIds.add(it) }
                         }.onFailure { failures++ }
                     }
-                    if (failures == 0) toast("Forwarded to $targetName")
-                    else toast("Forwarded with $failures error(s)")
+                    // Stamp every successful forward into the local
+                    // ForwardedMessageStore so the resulting bubble renders
+                    // with a "Forwarded" tag when the server echoes it back.
+                    if (newMessageIds.isNotEmpty()) {
+                        ForwardedMessageStore.markForwarded(requireContext(), newMessageIds)
+                    }
+                    val sent = toForward.size - skipped - failures
+                    when {
+                        failures == 0 && skipped == 0 -> toast("Forwarded to $targetName")
+                        failures == 0 -> toast("Forwarded $sent to $targetName ($skipped skipped)")
+                        else -> toast("Forwarded $sent to $targetName ($failures error(s))")
+                    }
                     exitSelectionMode()
                 }
             }

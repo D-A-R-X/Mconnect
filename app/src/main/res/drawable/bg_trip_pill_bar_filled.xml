@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Green-gradient 6dp progress bar that sits behind the pill chips
+     in the new trip progress widget (Tabs.svg ref). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#1BCA0B"
+        android:endColor="#3D9D02"
+        android:type="linear" />
+</shape>
