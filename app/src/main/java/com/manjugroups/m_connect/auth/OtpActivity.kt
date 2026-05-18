@@ -264,6 +264,21 @@ class OtpActivity : AppCompatActivity() {
                 session.isAdmin = iam.isAdmin
             }
 
+            // Cache the reporting officer so the very first leave/permission
+            // apply (before the user opens Profile) can route to the right
+            // approver. Best-effort — if it fails, ApplyLeaveFragment will
+            // refetch on demand.
+            session.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->
+                runCatching {
+                    api.getStaffDetail(session.bearerToken, staffId)
+                }.onSuccess { resp ->
+                    resp.staff?.let { staff ->
+                        session.reportingToId = staff.reportingTo
+                        session.reportingToName = staff.reportingToName
+                    }
+                }
+            }
+
             requestNotificationAccessThenContinue()
         }
     }

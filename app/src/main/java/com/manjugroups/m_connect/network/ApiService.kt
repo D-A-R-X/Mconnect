@@ -822,7 +822,9 @@ data class ApplyLeaveRequest(
     val leaveType: String,
     val fromDate: String,
     val toDate: String,
-    val reason: String
+    val reason: String,
+    val reportingToId: String? = null,
+    val reportingToName: String? = null
 )
 data class ApplyLeaveResponse(val success: Boolean, val leaveId: String?, val error: String? = null)
 
@@ -872,7 +874,9 @@ data class ApplyPermissionRequest(
     val date: String,
     val fromTime: String,
     val toTime: String,
-    val reason: String
+    val reason: String,
+    val reportingToId: String? = null,
+    val reportingToName: String? = null
 )
 data class ApplyPermissionResponse(val success: Boolean, val permissionId: String?, val error: String? = null)
 
@@ -1027,6 +1031,7 @@ data class StaffFullData(
     val religion: String?, val nationality: String?,
     val qualification: String?, val experienceYears: Int?,
     // Employment
+    val reportingTo: String? = null,
     val reportingToName: String?, val roleLevel: Int?,
     // Documents
     val documents: List<StaffDocument>?,

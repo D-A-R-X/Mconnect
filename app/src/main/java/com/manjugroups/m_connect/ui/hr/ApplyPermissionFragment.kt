@@ -72,7 +72,17 @@ class ApplyPermissionFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.applyPermission(session.bearerToken, ApplyPermissionRequest(date, from, to, reason))
+                val resp = api.applyPermission(
+                    session.bearerToken,
+                    ApplyPermissionRequest(
+                        date = date,
+                        fromTime = from,
+                        toTime = to,
+                        reason = reason,
+                        reportingToId = session.reportingToId,
+                        reportingToName = session.reportingToName,
+                    )
+                )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Permission applied!", Toast.LENGTH_SHORT).show()
                     parentFragmentManager.popBackStack()

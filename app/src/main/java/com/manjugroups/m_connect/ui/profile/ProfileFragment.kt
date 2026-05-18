@@ -239,6 +239,11 @@ class ProfileFragment : Fragment() {
             if (session.isAdmin) "Administrator" else "Staff"
         }
 
+        // Refresh cached reporting officer — keeps leave/permission apply
+        // routing in sync if the user is reassigned to a different manager.
+        session.reportingToId = staff.reportingTo
+        session.reportingToName = staff.reportingToName
+
         binding.tvContactEmail.text = staff.email?.takeIf { it.isNotBlank() }
             ?: staff.phone?.takeIf { it.isNotBlank() }
             ?: "—"
@@ -295,6 +300,12 @@ class ProfileFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 PushTokenManager.unregisterCurrentToken(requireContext(), session)
+            }
+            // Invalidate the bearer token server-side before wiping the local
+            // session — otherwise the token stays valid for its full TTL even
+            // though the device has signed out.
+            runCatching {
+                api.logout(session.bearerToken)
             }
 
             session.clearSession()

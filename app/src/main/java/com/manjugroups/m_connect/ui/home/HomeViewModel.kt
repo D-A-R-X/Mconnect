@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import android.content.Intent
+import android.location.Geocoder
 import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
@@ -17,6 +18,7 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
@@ -189,10 +192,17 @@ class HomeViewModel : ViewModel() {
                     storageId = uploadPhoto(bearerToken, photoFile)
                 }
 
-                // Step 2: Call punch API
+                // Step 2: Resolve a human-readable address from the punch
+                // coordinates. The backend can geocode too, but sending an
+                // on-device address gives the punch record a value even when
+                // the server-side geocoder is rate-limited / offline.
+                val address = reverseGeocode(context, lat, lng)
+
+                // Step 3: Call punch API
                 val request = PunchRequest(
                     latitude = lat,
                     longitude = lng,
+                    address = address,
                     photo = storageId,
                     deviceId = SessionManager(context).trackingDeviceId,
                     source = "mobile"
@@ -374,6 +384,24 @@ class HomeViewModel : ViewModel() {
         val current = cachedState ?: return
         cachedState = current.copy(showTripSelector = false)
         _uiState.value = cachedState!!
+    }
+
+    private suspend fun reverseGeocode(context: Context, lat: Double?, lng: Double?): String? {
+        if (lat == null || lng == null) return null
+        if (!Geocoder.isPresent()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                @Suppress("DEPRECATION")
+                val results = Geocoder(context, Locale.getDefault())
+                    .getFromLocation(lat, lng, 1)
+                results?.firstOrNull()?.let { addr ->
+                    (0..addr.maxAddressLineIndex)
+                        .mapNotNull { addr.getAddressLine(it) }
+                        .joinToString(", ")
+                        .takeIf { it.isNotBlank() }
+                }
+            }.getOrNull()
+        }
     }
 
     private suspend fun uploadPhoto(bearerToken: String, file: File): String? {
