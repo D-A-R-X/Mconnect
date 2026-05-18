@@ -437,8 +437,10 @@ class CpVisitsFragment : Fragment() {
             }
             !isClockedIn -> {
                 // Scheduled but the user hasn't clocked in for the day. Matches the
-                // design's "Need to Clock In" state. Tapping still opens the trip flow
-                // so the user can drive themselves to the attendance screen.
+                // design's "Need to Clock In" state. Tap routes to the clock-in
+                // attendance screen — opening the trip flow at this point would let
+                // the salesperson start a visit without an active attendance session,
+                // which the backend allows but defeats the field-tracking guarantee.
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_ready)
                 statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
                 statusText.text = "Ready"
@@ -450,6 +452,7 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.setImageResource(R.drawable.ic_cpv_action_clockin)
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
+                tapMode = TapMode.CLOCK_IN
             }
             else -> {
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_ready)
@@ -481,6 +484,13 @@ class CpVisitsFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openDetail)
             }
+            TapMode.CLOCK_IN -> {
+                val openClockIn: (View) -> Unit = { openClockInFlow() }
+                itemView.isClickable = true
+                itemView.setOnClickListener(openClockIn)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openClockIn)
+            }
             TapMode.NONE -> {
                 itemView.isClickable = false
                 itemView.setOnClickListener(null)
@@ -490,7 +500,28 @@ class CpVisitsFragment : Fragment() {
         }
     }
 
-    private enum class TapMode { TRIP, COMPLETED_DETAIL, NONE }
+    private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, NONE }
+
+    /**
+     * Routes the "Need to Clock In" card tap to the clock-in attendance
+     * screen so the user has to actually start their day before launching
+     * a trip. Same destination HrDashboardFragment uses for its Clock In
+     * tile — see HrDashboardFragment.kt:160.
+     */
+    private fun openClockInFlow() {
+        android.widget.Toast.makeText(
+            requireContext(),
+            "Clock in to continue",
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+        parentFragmentManager.beginTransaction()
+            .replace(
+                R.id.fragmentContainer,
+                com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+            )
+            .addToBackStack(null)
+            .commit()
+    }
 
     private fun openCompletedDetail(visit: TodayVisit) {
         parentFragmentManager.beginTransaction()
