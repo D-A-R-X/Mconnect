@@ -20,6 +20,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrStaffBinding
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
@@ -29,6 +30,7 @@ class HrStaffFragment : Fragment() {
     private val binding get() = _binding!!
     private val viewModel: HrStaffViewModel by viewModels()
     private lateinit var session: SessionManager
+    private val api = ApiService.create()
     private val searchHandler = Handler(Looper.getMainLooper())
     private var searchRunnable: Runnable? = null
 
@@ -46,6 +48,23 @@ class HrStaffFragment : Fragment() {
         setupSearch()
         collectState()
         viewModel.loadStaff(session.bearerToken)
+        loadStaffCount()
+    }
+
+    /**
+     * One-shot fetch of the org-wide active/inactive/total roll-up. Lives
+     * outside the list ViewModel because the count is a header chip, not
+     * paginated list state — and it never needs to refresh as the user
+     * scrolls.
+     */
+    private fun loadStaffCount() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching { api.getStaffCount(session.bearerToken) }.getOrNull()
+            if (_binding == null || resp == null || !resp.success) return@launch
+            binding.tvStaffCountSummary.text =
+                "Active ${resp.active} · Inactive ${resp.inactive} · Total ${resp.all}"
+            binding.tvStaffCountSummary.visibility = View.VISIBLE
+        }
     }
 
     private fun setupSearch() {
