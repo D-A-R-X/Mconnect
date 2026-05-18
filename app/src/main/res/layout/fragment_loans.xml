@@ -91,14 +91,17 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Populated state: scroll the whole thing as one unit -->
+    <!-- Populated state: scroll the whole thing as one unit.
+         Starts gone so we don't flash the populated header before the API
+         call decides whether to swap to the empty state's separate header. -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/loansContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:fillViewport="true"
-        android:overScrollMode="never">
+        android:overScrollMode="never"
+        android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"

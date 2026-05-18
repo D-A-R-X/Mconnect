@@ -371,7 +371,15 @@ class CompletedVisitDetailFragment : Fragment() {
 
         // ---- Arrival proof card ----
         val proof = visit.arrivalProof
-        if (proof != null && (proof.photoUrl != null || proof.otpVerifiedAt != null || proof.gpsLat != null)) {
+        // Surface the salesperson's free-text context alongside the photo.
+        // Order: clientNoShowReason (set explicitly on the "didn't see client"
+        // path) → visit notes (set by setOutcome). Either one means the field
+        // staff left something the office should read.
+        val arrivalDescription = visit.clientNoShowReason
+            ?.takeIf { it.isNotBlank() && !it.equals("Client not seen", ignoreCase = true) }
+            ?: visit.notes?.takeIf { it.isNotBlank() && !it.equals("Client not seen", ignoreCase = true) }
+        val hasDescription = !arrivalDescription.isNullOrBlank()
+        if (proof != null && (proof.photoUrl != null || proof.otpVerifiedAt != null || proof.gpsLat != null || hasDescription)) {
             root.findViewById<View>(R.id.cvdArrivalProofCard).visibility = View.VISIBLE
             val photo = root.findViewById<ImageView>(R.id.ivCvdArrivalPhoto)
             if (!proof.photoUrl.isNullOrBlank()) {
@@ -380,6 +388,13 @@ class CompletedVisitDetailFragment : Fragment() {
                     placeholder(android.R.color.darker_gray)
                     error(android.R.color.darker_gray)
                 }
+            }
+            val descriptionView = root.findViewById<TextView>(R.id.tvCvdArrivalDescription)
+            if (hasDescription) {
+                descriptionView.text = arrivalDescription
+                descriptionView.visibility = View.VISIBLE
+            } else {
+                descriptionView.visibility = View.GONE
             }
             root.findViewById<TextView>(R.id.tvCvdOtpVerifiedAt).text =
                 proof.otpVerifiedAt?.let { formatEpochMillis(it) } ?: "—"
