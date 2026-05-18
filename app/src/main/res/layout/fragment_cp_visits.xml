@@ -6,85 +6,289 @@
     android:background="#F1F3F8"
     android:orientation="vertical">
 
-    <LinearLayout
+    <!-- TOP BAR: back  /  centered title  /  plus -->
+    <FrameLayout
+        android:id="@+id/cpvTopBar"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="18dp">
+        android:background="#FFFFFF">
 
         <ImageView
             android:id="@+id/btnCpVisitsBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:contentDescription="Back"
             android:focusable="true"
+            android:padding="8dp"
             android:src="@drawable/ic_arrow_left"
-            app:tint="#111827" />
+            app:tint="#0B61CA" />
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
-            android:text="CP Visits"
-            android:textColor="#111827"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/btnCreateCpVisit"
+            android:id="@+id/tvCpVisitsTitle"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:background="@drawable/bg_home_trip_action_ready"
-            android:clickable="true"
-            android:focusable="true"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
             android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="Create"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
-    </LinearLayout>
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.01"
+            android:text="Cp Visits"
+            android:textColor="#101828"
+            android:textSize="17sp" />
 
+        <ImageView
+            android:id="@+id/btnCreateCpVisit"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Create"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_cpv_plus" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#EEF0F5" />
+
+    <!-- SEARCH BAR -->
+    <FrameLayout
+        android:id="@+id/cpvSearchContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp">
+
+        <EditText
+            android:id="@+id/etCpvSearch"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_cpv_search_bar"
+            android:fontFamily="@font/inter_regular"
+            android:hint="Search Client Places"
+            android:imeOptions="actionSearch"
+            android:includeFontPadding="false"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="44dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cpv_search" />
+    </FrameLayout>
+
+    <!-- FILTER PILLS -->
+    <HorizontalScrollView
+        android:id="@+id/cpvFilterScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:overScrollMode="never"
+        android:paddingHorizontal="16dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/cpvFilterRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pillAll"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="All"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillScheduled"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_active"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Scheduled"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillPostponed"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Postponed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillInProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="In progress"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillCompleted"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Completed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillCancelled"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Cancelled"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- CONTENT: list / empty / skeleton -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/tvCpVisitsEmpty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="20dp"
-            android:layout_marginTop="24dp"
-            android:fontFamily="@font/inter_regular"
-            android:gravity="center"
-            android:textColor="#667085"
-            android:textSize="13sp"
-            android:visibility="gone" />
-
         <androidx.core.widget.NestedScrollView
+            android:id="@+id/cpvScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:fillViewport="true"
+            android:overScrollMode="never">
 
-            <LinearLayout
-                android:id="@+id/cpVisitsList"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="18dp" />
+                android:layout_height="wrap_content">
+
+                <!-- LIST -->
+                <LinearLayout
+                    android:id="@+id/cpVisitsList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="16dp"
+                    android:paddingBottom="32dp" />
+
+                <!-- EMPTY STATE -->
+                <LinearLayout
+                    android:id="@+id/cpvEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="32dp"
+                    android:paddingTop="64dp"
+                    android:paddingBottom="32dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivCpvEmptyIllustration"
+                        android:layout_width="182dp"
+                        android:layout_height="142dp"
+                        android:alpha="0.56"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_cpv_empty" />
+
+                    <TextView
+                        android:id="@+id/tvCpvEmptyTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:includeFontPadding="false"
+                        android:text="No Cp Visits Yet"
+                        android:textColor="#101828"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/tvCpvEmptySubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:lineSpacingExtra="2dp"
+                        android:text="Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place."
+                        android:textColor="#667085"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </FrameLayout>
         </androidx.core.widget.NestedScrollView>
 
+        <!-- SKELETON OVERLAY -->
         <LinearLayout
             android:id="@+id/skeletonContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
-            android:paddingTop="12dp"
+            android:paddingTop="16dp"
             android:visibility="gone">
 
             <include layout="@layout/skeleton_list_item" />

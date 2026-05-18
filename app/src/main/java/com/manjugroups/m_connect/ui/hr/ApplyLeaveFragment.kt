@@ -123,7 +123,14 @@ class ApplyLeaveFragment : Fragment() {
             try {
                 val resp = api.applyLeave(
                     session.bearerToken,
-                    ApplyLeaveRequest(selectedLeaveType, from, to, reason)
+                    ApplyLeaveRequest(
+                        leaveType = selectedLeaveType,
+                        fromDate = from,
+                        toDate = to,
+                        reason = reason,
+                        reportingToId = session.reportingToId,
+                        reportingToName = session.reportingToName,
+                    )
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Leave applied!", Toast.LENGTH_SHORT).show()

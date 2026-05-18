@@ -32,6 +32,10 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_USER_PHONE, null)
         set(value) = prefs.edit().putString(KEY_USER_PHONE, value).apply()
 
+    var userPhotoUrl: String?
+        get() = prefs.getString(KEY_USER_PHOTO_URL, null)
+        set(value) = prefs.edit().putString(KEY_USER_PHOTO_URL, value).apply()
+
     var iamPermissions: Set<String>
         get() = prefs.getStringSet(KEY_IAM_PERMISSIONS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_IAM_PERMISSIONS, value).apply()
@@ -39,6 +43,17 @@ class SessionManager(context: Context) {
     var isAdmin: Boolean
         get() = prefs.getBoolean(KEY_IS_ADMIN, false)
         set(value) = prefs.edit().putBoolean(KEY_IS_ADMIN, value).apply()
+
+    // Reporting officer (manager) — sent in leave/permission apply requests so
+    // the backend can route the approval to the right person. Populated from
+    // the user's staff record on bootstrap and on every profile refresh.
+    var reportingToId: String?
+        get() = prefs.getString(KEY_REPORTING_TO_ID, null)
+        set(value) = prefs.edit().putString(KEY_REPORTING_TO_ID, value).apply()
+
+    var reportingToName: String?
+        get() = prefs.getString(KEY_REPORTING_TO_NAME, null)
+        set(value) = prefs.edit().putString(KEY_REPORTING_TO_NAME, value).apply()
 
     var pushToken: String?
         get() = prefs.getString(KEY_PUSH_TOKEN, null)
@@ -142,5 +157,8 @@ class SessionManager(context: Context) {
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
         private const val KEY_BOUND_BASE_URL = "bound_base_url"
+        private const val KEY_USER_PHOTO_URL = "user_photo_url"
+        private const val KEY_REPORTING_TO_ID = "reporting_to_id"
+        private const val KEY_REPORTING_TO_NAME = "reporting_to_name"
     }
 }

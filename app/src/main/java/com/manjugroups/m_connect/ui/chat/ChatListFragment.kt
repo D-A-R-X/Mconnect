@@ -573,9 +573,11 @@ class ChatListFragment : Fragment() {
                         .contains(query)
                 }
             }
+            // Newest-message-first ordering, matching WhatsApp / iOS. Unread
+            // status is conveyed by the badge, not by hoisting old unread
+            // chats to the top.
             .sortedWith(
-                compareByDescending<ChatListItem> { it.unreadCount > 0 }
-                    .thenByDescending { it.timestamp ?: Long.MIN_VALUE }
+                compareByDescending<ChatListItem> { it.timestamp ?: Long.MIN_VALUE }
                     .thenBy { it.title.lowercase(Locale.getDefault()) }
             )
 

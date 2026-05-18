@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback empty state used when an outcome (or sub-tab) has no
+     content built yet. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyComingSoon"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingVertical="28dp"
+    android:visibility="gone">
+
+    <ImageView
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_outcome_coming_soon" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:text="Coming Soon"
+        android:textColor="#101828"
+        android:textSize="15sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="20dp"
+        android:text="It looks like you don't have any meetings scheduled at the moment. This space will be updated as new meetings are added!"
+        android:textColor="#94A3B8"
+        android:textSize="12sp" />
+</LinearLayout>

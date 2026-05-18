@@ -121,6 +121,38 @@
                             android:scaleType="centerCrop"
                             android:visibility="gone" />                    </LinearLayout>
 
+                    <!-- "Forwarded" label — same WhatsApp-style indicator as
+                         the sent layout, in muted dark grey on the white bubble. -->
+                    <LinearLayout
+                        android:id="@+id/forwardedTagRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/ivForwardedIcon"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_chat_forwarded_arrow"
+                            app:tint="#667085" />
+
+                        <TextView
+                            android:id="@+id/tvForwardedTag"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Forwarded"
+                            android:textColor="#667085"
+                            android:textSize="11sp"
+                            android:textStyle="italic" />
+                    </LinearLayout>
+
                     <LinearLayout
                         android:id="@+id/attachmentsContainer"
                         android:layout_width="wrap_content"
@@ -131,7 +163,6 @@
                         android:id="@+id/bodyTimeRow"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="end"
                         android:orientation="vertical">
 
                         <TextView

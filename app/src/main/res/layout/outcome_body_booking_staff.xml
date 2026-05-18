@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Booking · Staff Details — Frame 6 in the current reference set.
+     Captures the booking-side staff hierarchy + KYC + references and a
+     final Save-as draft/confirmed toggle. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyBookingStaff"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="AVP" />
+    <LinearLayout android:id="@+id/rowStaffAvp" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvStaffAvp" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="General Manager" />
+    <LinearLayout android:id="@+id/rowStaffGm" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvStaffGm" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Senior Manager" />
+    <LinearLayout android:id="@+id/rowStaffSm" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvStaffSm" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="BDO" />
+    <LinearLayout android:id="@+id/rowStaffBdo" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView android:id="@+id/tvStaffBdo" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Telecaller" />
+    <LinearLayout android:id="@+id/rowStaffTelecaller" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <TextView android:id="@+id/tvStaffTelecaller" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhar Details" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etStaffAadhar" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="number" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Pancard Details" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etStaffPancard" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapCharacters" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Name 1" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <EditText android:id="@+id/etStaffRefName1" style="@style/OutcomeFieldEdit" android:hint="Enter Name" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Mobile 1" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <EditText android:id="@+id/etStaffRefMobile1" style="@style/OutcomeFieldEdit" android:hint="Enter No" android:inputType="phone" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Profession 1" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <EditText android:id="@+id/etStaffRefProf1" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Name 2" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <EditText android:id="@+id/etStaffRefName2" style="@style/OutcomeFieldEdit" android:hint="Enter Name" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Mobile 2" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <EditText android:id="@+id/etStaffRefMobile2" style="@style/OutcomeFieldEdit" android:hint="Enter No" android:inputType="phone" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Profession 2" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <EditText android:id="@+id/etStaffRefProf2" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Document to be prepared in" />
+    <LinearLayout android:id="@+id/rowStaffDocPrep" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <TextView android:id="@+id/tvStaffDocPrep" style="@style/OutcomeFieldValue" android:hint="Select" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Save as" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/rowStaffSaveDraft"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Draft"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/ivStaffSaveDraft"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_outcome_radio_on" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/rowStaffSaveConfirmed"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Confirmed"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/ivStaffSaveConfirmed"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_outcome_radio_off" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

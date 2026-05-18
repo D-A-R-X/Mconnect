@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
+import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
@@ -51,51 +52,81 @@ class AppLibraryFragment : Fragment() {
     private fun playLibraryEntryAnimation() {
         if (_binding == null) return
         val density = binding.root.resources.displayMetrics.density
-        val riseTravel = 36f * density
+        val emphasized = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
+        val expoOut = android.view.animation.PathInterpolator(0.19f, 1f, 0.22f, 1f)
 
-        // Header pulls slightly downward into place (opposite-direction echo of the home
-        // descent — feels stable while the body content lifts up from below).
-        listOfNotNull(binding.libraryHeaderContent, binding.ivLibraryIllustration).forEach { v ->
-            v.animate().cancel()
-            v.alpha = 0f
-            v.translationY = -10f * density
-            v.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(360L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.2f))
-                .start()
-        }
+        // 1. Header text slides in from the left — mirrors the Home banner title cadence.
+        binding.libraryHeaderContent.animate().cancel()
+        binding.libraryHeaderContent.alpha = 0f
+        binding.libraryHeaderContent.translationX = -28f * density
+        binding.libraryHeaderContent.translationY = 0f
+        binding.libraryHeaderContent.animate()
+            .alpha(1f).translationX(0f)
+            .setStartDelay(80L)
+            .setDuration(420L)
+            .setInterpolator(emphasized)
+            .start()
 
-        // Filter pill (visible at any time) lifts up
+        // 2. Illustration drifts in from the right with a subtle scale-up.
+        binding.ivLibraryIllustration.animate().cancel()
+        binding.ivLibraryIllustration.alpha = 0f
+        binding.ivLibraryIllustration.translationX = 32f * density
+        binding.ivLibraryIllustration.translationY = 0f
+        binding.ivLibraryIllustration.scaleX = 0.88f
+        binding.ivLibraryIllustration.scaleY = 0.88f
+        binding.ivLibraryIllustration.animate()
+            .alpha(1f).translationX(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay(180L)
+            .setDuration(520L)
+            .setInterpolator(expoOut)
+            .start()
+
+        // 3. Filter pill strip rises in from below as the white curtain over the blue.
         val pill = binding.pillAllApps.parent as? View
         pill?.let {
             it.animate().cancel()
             it.alpha = 0f
-            it.translationY = riseTravel * 0.5f
+            it.translationY = 28f * density
             it.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(380L)
-                .setStartDelay(80L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.3f))
+                .alpha(1f).translationY(0f)
+                .setStartDelay(260L)
+                .setDuration(460L)
+                .setInterpolator(expoOut)
                 .start()
         }
 
-        // Section cards rise from below in a stagger — the "ascending curtain" that
-        // mirrors the home curtain falling.
+        // 4. Each pill icon scale-pops in after the strip arrives — gives the toolbar
+        //    a small "items dropping into place" rhythm.
+        val pillIcons = listOf(
+            binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
+            binding.pillProjectIcon, binding.pillSettingsIcon
+        )
+        pillIcons.forEachIndexed { i, icon ->
+            icon.animate().cancel()
+            icon.scaleX = 0.6f
+            icon.scaleY = 0.6f
+            icon.alpha = 0f
+            icon.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setStartDelay(420L + i * 40L)
+                .setDuration(320L)
+                .setInterpolator(expoOut)
+                .start()
+        }
+
+        // 5. Section cards rise from below in a stagger — the "ascending curtain" mirror
+        //    of the Home curtain descending. 60ms stagger so 4 cards finish around 900ms.
         val container = binding.sectionsContainer
         for (i in 0 until container.childCount) {
             val child = container.getChildAt(i)
             child.animate().cancel()
             child.alpha = 0f
-            child.translationY = riseTravel
+            child.translationY = 36f * density
             child.animate()
-                .alpha(1f)
-                .translationY(0f)
+                .alpha(1f).translationY(0f)
+                .setStartDelay(340L + i * 60L)
                 .setDuration(460L)
-                .setStartDelay(180L + i * 90L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                .setInterpolator(expoOut)
                 .start()
         }
     }
@@ -121,9 +152,12 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrAttendance.setOnClickListener { openScreen(AttendanceHistoryFragment()) }
         binding.itemHrLeave.setOnClickListener { openScreen(LeavesFragment()) }
         binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
-        binding.itemHrLoans.setOnClickListener { comingSoon("Loans") }
+        binding.itemHrLoans.setOnClickListener {
+            openScreen(com.manjugroups.m_connect.ui.library.loans.LoansFragment())
+        }
 
         binding.itemMarketingCpVisits.setOnClickListener { openScreen(CpVisitsFragment()) }
+        binding.itemMarketingSiteVisits.setOnClickListener { openScreen(SiteVisitsFragment()) }
         binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }
         binding.itemMarketingMyLeads.setOnClickListener {
             openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))
@@ -157,18 +191,31 @@ class AppLibraryFragment : Fragment() {
         binding.cardProject.visibility = if (filter == Filter.ALL || filter == Filter.PROJECT) View.VISIBLE else View.GONE
         binding.cardConfig.visibility = if (filter == Filter.ALL || filter == Filter.SETTINGS) View.VISIBLE else View.GONE
 
-        styleTab(binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
-        styleTab(binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
-        styleTab(binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
-        styleTab(binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
-        styleTab(binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
+        styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
+        styleTab(binding.pillHrIcon, binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
+        styleTab(binding.pillMarketingIcon, binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
+        styleTab(binding.pillProjectIcon, binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
+        styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
-    private fun styleTab(label: TextView, indicator: View, active: Boolean) {
+    /**
+     * Flips a pill between active and inactive look:
+     * - Active: solid blue circle + white icon + blue label + visible underline
+     * - Inactive: light grey circle + grey icon + grey label + hidden underline
+     */
+    private fun styleTab(icon: android.widget.ImageView, label: TextView, indicator: View, active: Boolean) {
         if (active) {
+            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_active)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#FFFFFF")
+            )
             label.setTextColor(Color.parseColor("#0B61CA"))
             indicator.visibility = View.VISIBLE
         } else {
+            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_inactive)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#6A6D78")
+            )
             label.setTextColor(Color.parseColor("#6A6D78"))
             indicator.visibility = View.INVISIBLE
         }

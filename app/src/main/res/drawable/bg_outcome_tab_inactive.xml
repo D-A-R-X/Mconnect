@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive outcome tab circle. Soft neutral fill matching the SVG ref. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#CCFAFAFA" />
+</shape>

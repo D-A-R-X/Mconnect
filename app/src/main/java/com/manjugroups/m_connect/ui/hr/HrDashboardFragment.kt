@@ -62,6 +62,8 @@ class HrDashboardFragment : Fragment() {
     private var wasShowingSkeleton = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
     private var liveTickerJob: Job? = null
+    private var pendingEntryAnimation = true
+    private var hasPlayedEntryAnimation = false
 
     private val capturePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -164,6 +166,14 @@ class HrDashboardFragment : Fragment() {
             ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
         }
 
+        // Server has no separate "break" concept — each punch-in/out pair is
+        // its own session and successive ones in a day are implicit breaks.
+        // Wire Take a Break to the same punch-out capture; the user can
+        // simply Clock In again when they return.
+        binding.btnTakeBreak.setOnClickListener {
+            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
+        }
+
         parentFragmentManager.setFragmentResultListener(
             ClockOutConfirmBottomSheet.RESULT_KEY,
             viewLifecycleOwner
@@ -194,6 +204,87 @@ class HrDashboardFragment : Fragment() {
         collectEvents()
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
+
+        // Header pieces start hidden — content pieces are wired to enter once their
+        // skeleton drops in updateAttendanceLoadingUi.
+        primeHeaderForEntryAnimation()
+        binding.attendanceHeader.post { playHeaderEntryAnimation() }
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null) {
+            // Replay when returning to the Attendance tab.
+            primeHeaderForEntryAnimation()
+            binding.attendanceHeader.post { playHeaderEntryAnimation() }
+            // Re-trigger content entry if data is already loaded.
+            if (!isTodayLoading && !isHistoryLoading) {
+                pendingEntryAnimation = true
+                binding.root.post { playContentEntryAnimation() }
+            }
+        }
+    }
+
+    private fun primeHeaderForEntryAnimation() {
+        if (_binding == null) return
+        val density = binding.root.resources.displayMetrics.density
+        binding.attendanceHeaderTextGroup.animate().cancel()
+        binding.attendanceHeaderTextGroup.alpha = 0f
+        binding.attendanceHeaderTextGroup.translationX = -30f * density
+        binding.ivAttendanceHeaderIllustration.animate().cancel()
+        binding.ivAttendanceHeaderIllustration.alpha = 0f
+        binding.ivAttendanceHeaderIllustration.translationX = 30f * density
+        binding.ivAttendanceHeaderIllustration.scaleX = 0.85f
+        binding.ivAttendanceHeaderIllustration.scaleY = 0.85f
+    }
+
+    private fun playHeaderEntryAnimation() {
+        if (_binding == null) return
+        val emphasized = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
+        val expoOut = android.view.animation.PathInterpolator(0.19f, 1f, 0.22f, 1f)
+
+        binding.attendanceHeaderTextGroup.animate()
+            .alpha(1f).translationX(0f)
+            .setStartDelay(80L)
+            .setDuration(420L)
+            .setInterpolator(emphasized)
+            .start()
+
+        binding.ivAttendanceHeaderIllustration.animate()
+            .alpha(1f).translationX(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay(200L)
+            .setDuration(520L)
+            .setInterpolator(expoOut)
+            .start()
+    }
+
+    private fun playContentEntryAnimation() {
+        if (_binding == null || !pendingEntryAnimation) return
+        pendingEntryAnimation = false
+        val density = binding.root.resources.displayMetrics.density
+        val riseTravel = 32f * density
+        val easeOut = android.view.animation.DecelerateInterpolator(1.5f)
+
+        // Cards rise from below in a stagger — same "ascending content" feel as the
+        // Home curtain + Apps section reveal.
+        val cards = listOfNotNull(
+            binding.cardAttendanceSummary.takeIf { it.visibility == View.VISIBLE },
+            binding.cardHistory1.takeIf { it.visibility == View.VISIBLE },
+            binding.cardHistory2.takeIf { it.visibility == View.VISIBLE },
+            binding.cardHistory3.takeIf { it.visibility == View.VISIBLE },
+        )
+        cards.forEachIndexed { index, card ->
+            card.animate().cancel()
+            card.alpha = 0f
+            card.translationY = riseTravel
+            card.animate()
+                .alpha(1f).translationY(0f)
+                .setStartDelay(60L + index * 90L)
+                .setDuration(440L)
+                .setInterpolator(easeOut)
+                .start()
+        }
+        hasPlayedEntryAnimation = true
     }
 
     override fun onResume() {
@@ -312,6 +403,8 @@ class HrDashboardFragment : Fragment() {
         super.onDestroyView()
         stopLiveTodayTicker()
         _binding = null
+        pendingEntryAnimation = true
+        hasPlayedEntryAnimation = false
     }
 
 
@@ -584,6 +677,10 @@ class HrDashboardFragment : Fragment() {
             com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(binding.attendanceSkeletonContainer)
             binding.cardAttendanceSummary.visibility = View.VISIBLE
             bindRecentHistoryCards(recentHistoryRecords)
+            // Trigger the staggered card entrance once we have real content to show.
+            if (wasShowingSkeleton || !hasPlayedEntryAnimation) {
+                binding.root.post { playContentEntryAnimation() }
+            }
         }
         wasShowingSkeleton = showSkeleton
     }

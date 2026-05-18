@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Booking · Professional Details — Profession / Designation / Income. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyBookingProfessional"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Profession *" />
+
+    <LinearLayout
+        android:id="@+id/rowProfProfession"
+        style="@style/OutcomeFieldPillClickable">
+
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+
+        <TextView
+            android:id="@+id/tvProfProfession"
+            style="@style/OutcomeFieldValue"
+            android:hint="Select Profession" />
+
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Designation" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <EditText
+            android:id="@+id/etProfDesignation"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter Designation"
+            android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Income Per Annum" />
+
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+        <EditText
+            android:id="@+id/etProfIncome"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Enter Income"
+            android:inputType="number" />
+    </LinearLayout>
+</LinearLayout>

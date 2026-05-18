@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-visitor card used inside the Site Visit body. The host fragment
+  inflates one of these per attendee (count comes from the "Visitors"
+  number field). All inputs are read back through findViewWithTag so the
+  card can stay reusable.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp"
+    android:background="@drawable/bg_outcome_visitor_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <!-- Name -->
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <EditText
+            android:tag="name"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Name"
+            android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <!-- Relation -->
+    <LinearLayout
+        android:tag="relationRow"
+        style="@style/OutcomeFieldPillClickable"
+        android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
+        <TextView
+            android:tag="relation"
+            style="@style/OutcomeFieldValue"
+            android:hint="Relation" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <!-- Age — sync-style glyph from the Pencil reference. -->
+    <LinearLayout style="@style/OutcomeFieldPill" android:layout_marginTop="10dp">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_sync" />
+        <EditText
+            android:tag="age"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Age"
+            android:inputType="number"
+            android:maxLength="3" />
+    </LinearLayout>
+
+    <!-- Food Preferences toggle (Veg / Non-Veg). Both start outlined so
+         the user explicitly picks — no pre-selection. -->
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Food Preferences" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:tag="foodVeg"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_segment_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="Veg"
+            android:textColor="#475467"
+            android:textSize="13sp" />
+
+        <TextView
+            android:tag="foodNonVeg"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_segment_inactive"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="Non-Veg"
+            android:textColor="#475467"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

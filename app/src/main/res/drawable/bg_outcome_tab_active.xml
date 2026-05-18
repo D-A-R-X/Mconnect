@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Active outcome tab circle (Booking selected etc.) for the new
+     Outcome Information sheet. Now uses the brand blue vertical gradient
+     #0B61CA → #02499D from the Pencil tab-bar SVG. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:angle="270"
+        android:startColor="#0B61CA"
+        android:endColor="#02499D"
+        android:type="linear" />
+</shape>

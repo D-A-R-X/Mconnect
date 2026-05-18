@@ -256,7 +256,7 @@
                 android:textSize="16sp" />
 
             <FrameLayout
-                android:id="@+id/btnSelectionForward"
+                android:id="@+id/btnSelectionReply"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:layout_marginStart="4dp"
@@ -268,8 +268,44 @@
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:layout_gravity="center"
-                    android:contentDescription="Forward"
-                    android:src="@drawable/ic_chat_forward"
+                    android:contentDescription="Reply"
+                    android:src="@drawable/ic_chat_reply"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionStar"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Star"
+                    android:src="@drawable/ic_chat_star"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionInfo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Info"
+                    android:src="@drawable/ic_chat_info"
                     android:tint="#FFFFFF" />
             </FrameLayout>
 
@@ -290,6 +326,24 @@
                     android:src="@drawable/ic_chat_delete"
                     android:tint="#FFFFFF" />
             </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSelectionForward"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Forward"
+                    android:src="@drawable/ic_chat_forward"
+                    android:tint="#FFFFFF" />
+            </FrameLayout>
         </LinearLayout>
 
         <View
@@ -300,7 +354,8 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:background="@drawable/bg_chat_pattern">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvMessages"
@@ -554,12 +609,13 @@
             </FrameLayout>
         </LinearLayout>
 
-        <!-- Inline attach/share panel — replaces the BottomSheetDialog so the
-             chat input visually sits on top of the share toast. -->
+        <!-- WhatsApp-style attach panel: occupies the keyboard slot so the
+             chat input stays anchored in place and the grid simply replaces
+             the IME — no floating card, no extra margins. -->
         <FrameLayout
             android:id="@+id/attachPanel"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="280dp"
             android:background="#FFFFFF"
             android:visibility="gone">
 

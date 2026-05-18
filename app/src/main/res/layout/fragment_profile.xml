@@ -69,11 +69,15 @@
                 </LinearLayout>
 
                 <FrameLayout
+                    android:id="@+id/profileAvatarContainer"
                     android:layout_width="120dp"
                     android:layout_height="120dp"
                     android:layout_gravity="top|center_horizontal"
                     android:layout_marginTop="116dp"
-                    android:background="@drawable/bg_profile_avatar">
+                    android:background="@drawable/bg_profile_avatar"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:clipToOutline="true">
 
                     <TextView
                         android:id="@+id/tvProfileAvatar"
@@ -83,6 +87,31 @@
                         android:fontFamily="@font/inter_semibold"
                         android:textColor="#7A5AF8"
                         android:textSize="30sp" />
+
+                    <ImageView
+                        android:id="@+id/ivProfileAvatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:scaleType="centerCrop" />
+
+                    <FrameLayout
+                        android:id="@+id/btnProfileAvatarEdit"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:layout_gravity="bottom|end"
+                        android:background="@drawable/bg_profile_avatar_edit"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Edit photo"
+                            android:src="@drawable/ic_chat_camera"
+                            app:tint="#FFFFFF" />
+                    </FrameLayout>
                 </FrameLayout>
 
                 <LinearLayout
@@ -516,9 +545,82 @@
         android:orientation="vertical"
         android:visibility="gone">
 
+        <!-- Mirror the page's purple gradient header so the skeleton does
+             not paint a white slab over the blue/purple section above. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="190dp"
+            android:background="@drawable/bg_profile_top_gradient" />
+
         <include layout="@layout/skeleton_profile_item" />
         <include layout="@layout/skeleton_detail_item" />
         <include layout="@layout/skeleton_detail_item" />
+    </LinearLayout>
+
+    <!-- Compact sticky header that fades in once the large avatar is
+         scrolled out of view. Sits above the scroll content. -->
+    <LinearLayout
+        android:id="@+id/compactHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:background="#FEFEFE"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp">
+
+        <FrameLayout
+            android:id="@+id/btnCompactBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_home_new_action_circle"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:contentDescription="Back"
+                android:src="@drawable/ic_arrow_left"
+                app:tint="#7A5AF8" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_semibold"
+            android:text="My Profile"
+            android:textColor="#101828"
+            android:textSize="16sp" />
+
+        <FrameLayout
+            android:id="@+id/compactAvatarContainer"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_profile_avatar_circle"
+            android:clipToOutline="true">
+
+            <TextView
+                android:id="@+id/tvCompactAvatar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#7A5AF8"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/ivCompactAvatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop" />
+        </FrameLayout>
     </LinearLayout>
 
 </FrameLayout>

@@ -282,7 +282,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         binding.etMessage.addTextChangedListener(typingWatcher)
         binding.etMessage.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && isEmojiPanelVisible) hideEmojiPanel()
+            if (hasFocus) {
+                if (isEmojiPanelVisible) hideEmojiPanel()
+                if (binding.attachPanel.visibility == View.VISIBLE) hideAttachPanel()
+            }
+        }
+        // Tapping the input even when it already has focus should still
+        // dismiss any open share panel so the keyboard slot isn't doubled up.
+        binding.etMessage.setOnClickListener {
+            if (binding.attachPanel.visibility == View.VISIBLE) hideAttachPanel()
         }
 
         applyKeyboardAndSystemInsets(view)
@@ -406,7 +414,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             lowerMime.startsWith("image/") -> showImagePreview(url)
             lowerMime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
             isVideo -> showVideoPreview(url)
-            else -> openAttachmentUrl(url)
+            else -> openAttachmentUrl(url, mime)
         }
     }
 
@@ -845,7 +853,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 val isAudio = mime.startsWith("audio/") ||
                     name.endsWith(".m4a") || name.endsWith(".mp3") ||
                     name.endsWith(".wav") || name.endsWith(".aac") ||
-                    name.endsWith(".caf") || name.startsWith("voice-")
+                    name.endsWith(".caf") || name.endsWith(".ogg") ||
+                    name.endsWith(".opus") ||
+                    name.startsWith("voice-") || name.startsWith("voice_message_")
                 if (isAudio) Triple(sid, att.url, mime) else null
             }
         if (targets.isEmpty()) return
@@ -1381,8 +1391,38 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         updateSelectionToolbar()
     }
 
+    private fun firstSelectedMessage(): MessageData? {
+        val firstId = chatAdapter.selectedIdsSnapshot().firstOrNull() ?: return null
+        return messages.firstOrNull { it.id == firstId }
+    }
+
     private fun setupSelectionToolbar() {
         binding.btnSelectionCancel.setOnClickListener { exitSelectionMode() }
+
+        // Reply / Star / Info act on the FIRST selected message. Reply + Info
+        // route through the same handlers the old per-message bottom sheet used,
+        // so existing flows light up from the toolbar without duplication.
+        binding.btnSelectionReply.setOnClickListener {
+            val first = firstSelectedMessage()
+            if (first?.id == null) { exitSelectionMode(); return@setOnClickListener }
+            val id = first.id
+            exitSelectionMode()
+            onReply(id)
+        }
+        binding.btnSelectionInfo.setOnClickListener {
+            val first = firstSelectedMessage()
+            if (first?.id == null) { exitSelectionMode(); return@setOnClickListener }
+            val id = first.id
+            exitSelectionMode()
+            onInfo(id)
+        }
+        binding.btnSelectionStar.setOnClickListener {
+            // Starred-messages backend isn't wired yet. The affordance is in
+            // place so the toolbar matches the design; hook up to a Convex
+            // flag once the backend endpoint exists.
+            toast("Starred messages — coming soon")
+        }
+
         binding.btnSelectionDelete.setOnClickListener {
             val ids = chatAdapter.selectedIdsSnapshot()
             if (ids.isEmpty()) { exitSelectionMode(); return@setOnClickListener }
@@ -1470,27 +1510,64 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 targetChannelId: String?,
                 targetName: String
             ) {
-                val bodies = toForward.mapNotNull { it.body?.takeIf { b -> b.isNotBlank() } }
-                if (bodies.isEmpty()) {
+                // Forward EVERY selected message regardless of type. Old code
+                // only forwarded `body`-bearing messages, which silently dropped
+                // voice notes, PDFs, images and other attachment-only messages.
+                if (toForward.isEmpty()) {
                     toast("Nothing to forward")
                     return
                 }
                 viewLifecycleOwner.lifecycleScope.launch {
                     var failures = 0
-                    bodies.forEach { body ->
+                    var skipped = 0
+                    val newMessageIds = mutableListOf<String>()
+                    toForward.forEach { msg ->
+                        val body = msg.body?.trim().orEmpty()
+                        val attachments = msg.attachments
+                            ?.mapNotNull { att ->
+                                val sid = att.storageId?.takeIf { it.isNotBlank() }
+                                    ?: return@mapNotNull null
+                                com.manjugroups.m_connect.network.MessageAttachmentUpload(
+                                    storageId = sid,
+                                    fileName = att.fileName.orEmpty().ifBlank { "attachment" },
+                                    fileType = att.fileType.orEmpty().ifBlank { "application/octet-stream" },
+                                    fileSize = att.fileSize ?: 0L,
+                                )
+                            }
+                            ?.takeIf { it.isNotEmpty() }
+                        // Skip messages that have neither text nor attachments
+                        // (deleted placeholders, system notes etc.).
+                        if (body.isEmpty() && attachments == null) {
+                            skipped++
+                            return@forEach
+                        }
                         runCatching {
                             api.sendMessage(
                                 session.bearerToken,
                                 com.manjugroups.m_connect.network.SendMessageRequest(
                                     channelId = targetChannelId,
                                     conversationId = targetConversationId,
-                                    body = body
+                                    body = body,
+                                    attachments = attachments,
                                 )
                             )
+                        }.onSuccess { resp ->
+                            resp.messageId?.takeIf { it.isNotBlank() }
+                                ?.let { newMessageIds.add(it) }
                         }.onFailure { failures++ }
                     }
-                    if (failures == 0) toast("Forwarded to $targetName")
-                    else toast("Forwarded with $failures error(s)")
+                    // Stamp every successful forward into the local
+                    // ForwardedMessageStore so the resulting bubble renders
+                    // with a "Forwarded" tag when the server echoes it back.
+                    if (newMessageIds.isNotEmpty()) {
+                        ForwardedMessageStore.markForwarded(requireContext(), newMessageIds)
+                    }
+                    val sent = toForward.size - skipped - failures
+                    when {
+                        failures == 0 && skipped == 0 -> toast("Forwarded to $targetName")
+                        failures == 0 -> toast("Forwarded $sent to $targetName ($skipped skipped)")
+                        else -> toast("Forwarded $sent to $targetName ($failures error(s))")
+                    }
                     exitSelectionMode()
                 }
             }
@@ -1498,12 +1575,77 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         picker.show(childFragmentManager, "ChatForwardPicker")
     }
 
-    private fun openAttachmentUrl(url: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            toast("Unable to open attachment")
+    private fun openAttachmentUrl(url: String, mime: String = "") {
+        if (url.isBlank()) { toast("Unable to open attachment"); return }
+        val isRemote = url.startsWith("http://", true) || url.startsWith("https://", true)
+        if (!isRemote) {
+            // Local content/file URI — launch the chooser directly.
+            launchAttachmentChooser(Uri.parse(url), mime)
+            return
         }
+        // Remote URL — Android's default handler for https is the browser,
+        // which renders the file inline instead of asking which app to open
+        // it with. Download to cache and offer the system "Open with" sheet
+        // via FileProvider so users get their installed PDF / Office viewers.
+        val ctx = context?.applicationContext ?: return
+        toast("Opening…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = File(ctx.cacheDir, "chat_documents").apply { mkdirs() }
+                    val name = pickCachedAttachmentName(url, mime)
+                    val out = File(dir, name)
+                    if (!out.exists() || out.length() == 0L) {
+                        java.net.URL(url).openStream().use { input ->
+                            out.outputStream().use { input.copyTo(it) }
+                        }
+                    }
+                    out
+                }.getOrNull()
+            }
+            if (_binding == null) return@launch
+            if (cached == null) { toast("Unable to open attachment"); return@launch }
+            val uri = runCatching {
+                androidx.core.content.FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.fileprovider",
+                    cached,
+                )
+            }.getOrNull()
+            if (uri == null) { toast("Unable to open attachment"); return@launch }
+            launchAttachmentChooser(uri, mime)
+        }
+    }
+
+    private fun launchAttachmentChooser(uri: Uri, mime: String) {
+        val resolvedMime = mime.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                val ext = uri.lastPathSegment?.substringAfterLast('.', "")
+                if (!ext.isNullOrBlank()) {
+                    android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase(Locale.US))
+                } else null
+            }.getOrNull()
+            ?: "*/*"
+        runCatching {
+            val view = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, resolvedMime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(view, "Open with"))
+        }.onFailure { toast("Unable to open attachment") }
+    }
+
+    private fun pickCachedAttachmentName(url: String, mime: String): String {
+        val raw = runCatching { Uri.parse(url).lastPathSegment.orEmpty() }.getOrDefault("")
+        val sanitised = raw.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('_', '.')
+        if (sanitised.isNotBlank() && sanitised.contains('.')) return sanitised
+        val ext = (sanitised.substringAfterLast('.', "").ifBlank {
+            android.webkit.MimeTypeMap.getSingleton()
+                .getExtensionFromMimeType(mime.substringBefore(';').trim()) ?: ""
+        }).lowercase(Locale.US)
+        val base = sanitised.substringBeforeLast('.', sanitised)
+            .ifBlank { "attachment-${System.currentTimeMillis()}" }
+        return if (ext.isNotBlank()) "$base.$ext" else base
     }
 
     private fun insertMention(person: MentionPerson) {
@@ -1555,14 +1697,47 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
 
         binding.emojiPanel.visibility = View.GONE
-        binding.attachPanel.visibility = View.VISIBLE
-        binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
         wireAttachTiles()
+
+        val panel = binding.attachPanel
+        panel.animate().cancel()
+        panel.visibility = View.VISIBLE
+        if (panel.height > 0) {
+            panel.translationY = panel.height.toFloat()
+        } else {
+            panel.translationY = (280f * resources.displayMetrics.density)
+        }
+        panel.alpha = 0f
+        panel.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setDuration(220L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+        binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
     }
 
     private fun hideAttachPanel() {
         if (_binding == null) return
-        binding.attachPanel.visibility = View.GONE
+        val panel = binding.attachPanel
+        if (panel.visibility != View.VISIBLE) {
+            binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
+            return
+        }
+        panel.animate().cancel()
+        panel.animate()
+            .translationY(panel.height.toFloat())
+            .alpha(0f)
+            .setDuration(180L)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                if (_binding != null) {
+                    panel.visibility = View.GONE
+                    panel.translationY = 0f
+                    panel.alpha = 1f
+                }
+            }
+            .start()
         binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
     }
 
@@ -1766,14 +1941,55 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewLifecycleOwner.lifecycleScope.launch {
+            var refreshCounter = 0
             while (true) {
                 pollForMessages()
                 pollTyping()
                 presencePollCounter++
+                refreshCounter++
                 if (presencePollCounter % 6 == 0) {
                     refreshPresence()
                 }
+                // The `pollMessages` endpoint only returns rows created after
+                // `latestMessageTime`, so updates to existing messages
+                // (deletes from the web, edits, reactions) never reach the
+                // client. Periodically re-fetch the most recent window and
+                // overwrite local copies whose server state has changed.
+                if (refreshCounter % 4 == 0) {
+                    syncRecentMessagesForUpdates()
+                }
                 delay(2_500)
+            }
+        }
+    }
+
+    private suspend fun syncRecentMessagesForUpdates() {
+        val channel = channelId
+        val conversation = conversationId
+        if (channel == null && conversation == null) return
+
+        runCatching {
+            if (channel != null) {
+                api.getChannelMessages(session.bearerToken, channel, numItems = 50)
+            } else {
+                api.getConversationMessages(session.bearerToken, conversation!!, numItems = 50)
+            }
+        }.onSuccess { response ->
+            if (!response.success) return@onSuccess
+            val incoming = response.page ?: response.messages ?: return@onSuccess
+            if (incoming.isEmpty()) return@onSuccess
+
+            var changed = false
+            incoming.forEach { server ->
+                val sid = server.id ?: return@forEach
+                val idx = messages.indexOfFirst { it.id == sid }
+                if (idx >= 0 && messages[idx] != server) {
+                    messages[idx] = server
+                    changed = true
+                }
+            }
+            if (changed && _binding != null) {
+                renderMessages(scrollToBottom = false)
             }
         }
     }

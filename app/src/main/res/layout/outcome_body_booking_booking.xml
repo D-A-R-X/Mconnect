@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Booking · Booking Details — Frame 2 in the current reference set.
+     Captures the booking metadata before charges / payment / staff. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyBookingBooking"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Booking Ref No" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <TextView android:id="@+id/tvBookRefNo" style="@style/OutcomeFieldValue" android:hint="Auto" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Booking Type" />
+    <LinearLayout android:id="@+id/rowBookType" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookType" style="@style/OutcomeFieldValue" android:hint="Select Type" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Source Type" />
+    <LinearLayout android:id="@+id/rowBookSource" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookSource" style="@style/OutcomeFieldValue" android:hint="Select Type" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF No" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etBookCef" style="@style/OutcomeFieldEdit" android:hint="Enter Number" android:inputType="text" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Booking Date *" />
+    <LinearLayout android:id="@+id/rowBookDate" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+        <TextView android:id="@+id/tvBookDate" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Project" />
+    <LinearLayout android:id="@+id/rowBookProject" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookProject" style="@style/OutcomeFieldValue" android:hint="Select Project" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Plot available Only" />
+    <LinearLayout android:id="@+id/rowBookPlot" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookPlot" style="@style/OutcomeFieldValue" android:hint="Select Project First" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Property Type" />
+    <LinearLayout android:id="@+id/rowBookProperty" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookProperty" style="@style/OutcomeFieldValue" android:hint="Select Type" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Booking Mode" />
+    <LinearLayout android:id="@+id/rowBookMode" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookMode" style="@style/OutcomeFieldValue" android:hint="Select Mode" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <!-- Yes / No (Online Sales) radio pair -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Is Against Client Visit" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/rowBookVisitYes"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Yes"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/ivBookVisitYes"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_outcome_radio_on" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/rowBookVisitNo"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="No (Online Sales)"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/ivBookVisitNo"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_outcome_radio_off" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Duplicate Bookings (single-cell Yes radio) -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Duplicate Bookings" />
+    <LinearLayout
+        android:id="@+id/rowBookDuplicate"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Yes"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <ImageView
+            android:id="@+id/ivBookDuplicate"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_radio_on" />
+    </LinearLayout>
+</LinearLayout>

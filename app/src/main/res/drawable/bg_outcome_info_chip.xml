@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft green info chip for the "We will fetch and auto-fill..." note
+     in the booking find-client step. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E8F8E5" />
+    <corners android:radius="10dp" />
+</shape>

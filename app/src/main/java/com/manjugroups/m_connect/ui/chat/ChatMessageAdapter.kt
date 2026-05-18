@@ -65,6 +65,36 @@ class ChatMessageAdapter(
         notifyDataSetChanged()
     }
 
+    /**
+     * Unified long-press handler used by both text bubbles and media attachments.
+     *
+     * - In selection mode: behaves like a regular tap (toggle selection on this message).
+     * - Outside selection mode: pops the emoji reaction sheet AND enters selection
+     *   mode with this message pre-selected. That second part is what lets users
+     *   subsequently tap other messages to multi-select WhatsApp-style — without
+     *   it, only the long-pressed message would ever be a candidate for delete /
+     *   forward / star.
+     */
+    private fun handleLongPress(data: MessageData, anchorView: View) {
+        if (selectionMode) {
+            data.id?.let { toggleSelected(it) }
+            onMessageTap?.invoke(data)
+            return
+        }
+        onMessageReactionClick(data, anchorView)
+        val id = data.id
+        if (id != null) {
+            // Enter selection mode AFTER the reaction sheet is invoked so the
+            // sheet can still anchor to the bubble's current visual state.
+            if (!selectionMode) {
+                selectionMode = true
+            }
+            if (id !in selectedIds) selectedIds.add(id)
+            notifyDataSetChanged()
+            onMessageTap?.invoke(data)
+        }
+    }
+
     fun applySelectionVisual(rootView: View, messageId: String?) {
         val highlightedSelection = selectionMode && isSelected(messageId)
         val highlightedSearch = !selectionMode && messageId != null && messageId in searchHighlightIds
@@ -184,6 +214,12 @@ class ChatMessageAdapter(
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = true)
             applyBodyMaxWidth(binding.tvMessageBody)
             binding.ivSeenStatus.visibility = if (isDeleted) View.GONE else View.VISIBLE
+            // "Forwarded" tag — visible when this message was forwarded from
+            // this device. Tracked locally because the backend schema has no
+            // isForwarded field yet.
+            binding.forwardedTagRow.visibility =
+                if (!isDeleted && ForwardedMessageStore.isForwarded(binding.root.context, item.data.id)) View.VISIBLE
+                else View.GONE
             if (isDeleted) {
                 renderDeletedBubble(
                     body = binding.tvMessageBody,
@@ -221,23 +257,22 @@ class ChatMessageAdapter(
                 }
             }
             binding.root.setOnLongClickListener {
-                if (selectionMode) {
-                    item.data.id?.let { toggleSelected(it) }
-                    onMessageTap?.invoke(item.data)
-                } else {
-                    onMessageReactionClick(item.data, binding.bubbleFrame)
-                }
+                handleLongPress(item.data, binding.bubbleFrame)
                 true
             }
 
             binding.attachmentsContainer.removeAllViews()
+            val sentLongPress: () -> Unit = {
+                handleLongPress(item.data, binding.bubbleFrame)
+            }
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(
                     createAttachmentView(
                         binding.attachmentsContainer,
                         attachment,
                         isMine = true,
-                        creationTime = item.data.creationTime
+                        creationTime = item.data.creationTime,
+                        onLongPress = sentLongPress,
                     )
                 )
             }
@@ -271,6 +306,13 @@ class ChatMessageAdapter(
                 binding.ivSenderAvatar.setImageDrawable(null)
             }
 
+            // "Forwarded" tag for received bubbles — same local store as the
+            // sent side; the tag shows up only if THIS device originated the
+            // forward. Cross-user forward detection waits on a backend flag.
+            binding.forwardedTagRow.visibility =
+                if (!isDeleted && ForwardedMessageStore.isForwarded(binding.root.context, item.data.id)) View.VISIBLE
+                else View.GONE
+
             if (isDeleted) {
                 renderDeletedBubble(
                     body = binding.tvMessageBody,
@@ -308,23 +350,22 @@ class ChatMessageAdapter(
                 }
             }
             binding.root.setOnLongClickListener {
-                if (selectionMode) {
-                    item.data.id?.let { toggleSelected(it) }
-                    onMessageTap?.invoke(item.data)
-                } else {
-                    onMessageReactionClick(item.data, binding.bubbleFrame)
-                }
+                handleLongPress(item.data, binding.bubbleFrame)
                 true
             }
 
             binding.attachmentsContainer.removeAllViews()
+            val receivedLongPress: () -> Unit = {
+                handleLongPress(item.data, binding.bubbleFrame)
+            }
             item.data.attachments?.forEach { attachment ->
                 binding.attachmentsContainer.addView(
                     createAttachmentView(
                         binding.attachmentsContainer,
                         attachment,
                         isMine = false,
-                        creationTime = item.data.creationTime
+                        creationTime = item.data.creationTime,
+                        onLongPress = receivedLongPress,
                     )
                 )
             }
@@ -390,16 +431,27 @@ class ChatMessageAdapter(
         if (!data.body.isNullOrBlank()) return false
         val attachments = data.attachments ?: return false
         if (attachments.size != 1) return false
-        val a = attachments.first()
+        return isAudioAttachment(attachments.first())
+    }
+
+    // True for any attachment that should render as a voice/audio bubble.
+    // Web composer sends `voice_message_<ts>.webm` with `fileType=audio/webm`
+    // (Chrome/Edge/Firefox) or `.m4a` + `audio/mp4` on Safari. `.webm` is
+    // also a video container, so callers must short-circuit audio before
+    // video — otherwise the webm voice note renders as a video preview.
+    private fun isAudioAttachment(a: MessageAttachmentData): Boolean {
         val mime = a.fileType.orEmpty().lowercase()
         val name = a.fileName.orEmpty().lowercase()
-        return mime.startsWith("audio/") ||
-            name.endsWith(".m4a") ||
+        if (mime.startsWith("audio/")) return true
+        return name.endsWith(".m4a") ||
             name.endsWith(".mp3") ||
             name.endsWith(".wav") ||
             name.endsWith(".aac") ||
             name.endsWith(".caf") ||
-            name.startsWith("voice-")
+            name.endsWith(".ogg") ||
+            name.endsWith(".opus") ||
+            name.startsWith("voice-") ||
+            name.startsWith("voice_message_")
     }
 
     private fun renderDeletedBubble(
@@ -451,15 +503,7 @@ class ChatMessageAdapter(
         nameView.text = if (parent.senderId == ownSenderId) "You" else parent.senderName
 
         val imageAttachment = parent.attachments?.firstOrNull { it.fileType?.startsWith("image/") == true }
-        val hasAudio = parent.attachments?.any {
-            it.fileType?.startsWith("audio/") == true ||
-                it.fileName?.endsWith(".m4a") == true ||
-                it.fileName?.endsWith(".mp3") == true ||
-                it.fileName?.endsWith(".wav") == true ||
-                it.fileName?.endsWith(".aac") == true ||
-                it.fileName?.endsWith(".caf") == true ||
-                it.fileName?.startsWith("voice-") == true
-        } == true
+        val hasAudio = parent.attachments?.any { isAudioAttachment(it) } == true
 
         when {
             hasAudio -> {
@@ -532,12 +576,23 @@ class ChatMessageAdapter(
         val storageId = attachment.storageId
         val isPlaying = !storageId.isNullOrBlank() && storageId == currentlyPlayingStorageId
 
+        // Color scheme flips between sent (blue bubble → white inner) and received
+        // (white bubble → blue inner). Keeps both bubbles readable.
+        val activeColor = if (isMine) activeBarColor else accentColor
+        val mutedColor = if (isMine) mutedBarColor else android.graphics.Color.parseColor("#D0D5DD")
+        val playBubbleBg = if (isMine) R.drawable.bg_audio_play_circle
+        else R.drawable.bg_audio_play_circle_accent
+        val playIconTint = if (isMine) accentColor
+        else android.graphics.Color.WHITE
+        val footerTextColor = if (isMine) activeBarColor
+        else android.graphics.Color.parseColor("#475467")
+
         val playBtn = ImageView(context).apply {
             layoutParams = LinearLayout.LayoutParams(dp(context, 40), dp(context, 40))
             setImageResource(if (isPlaying) R.drawable.ic_chat_media_pause else R.drawable.ic_chat_media_play)
             setPadding(dp(context, 10), dp(context, 10), dp(context, 10), dp(context, 10))
-            setBackgroundResource(R.drawable.bg_audio_play_circle)
-            imageTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            setBackgroundResource(playBubbleBg)
+            imageTintList = android.content.res.ColorStateList.valueOf(playIconTint)
             isClickable = true
             isFocusable = true
             contentDescription = if (isPlaying) "Pause voice message" else "Play voice message"
@@ -547,8 +602,16 @@ class ChatMessageAdapter(
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 weight = 1f
-                marginStart = dp(context, 12)
-                marginEnd = dp(context, 6)
+                // For received messages we'll mount the play button on the
+                // right of the waveform (WhatsApp-style), so flip the side
+                // margins to keep the wave row visually balanced.
+                if (isMine) {
+                    marginStart = dp(context, 12)
+                    marginEnd = dp(context, 6)
+                } else {
+                    marginStart = dp(context, 6)
+                    marginEnd = dp(context, 12)
+                }
             }
         }
 
@@ -571,7 +634,7 @@ class ChatMessageAdapter(
         repeat(barCount) { index ->
             val h = 4 + random.nextInt(18)
             baseHeights[index] = dp(context, h)
-            val color = if (index < activeCount) activeBarColor else mutedBarColor
+            val color = if (index < activeCount) activeColor else mutedColor
             val bar = View(context).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(context, 3), baseHeights[index]).apply {
                     marginEnd = dp(context, 2)
@@ -592,8 +655,8 @@ class ChatMessageAdapter(
                 weight = 1f
             }
             text = audioDurationCache[storageId.orEmpty()] ?: "Voice message"
-            setTextColor(activeBarColor)
-            alpha = 0.85f
+            setTextColor(footerTextColor)
+            alpha = if (isMine) 0.85f else 1f
             textSize = 11f
         }
         if (!storageId.isNullOrBlank()) {
@@ -606,8 +669,8 @@ class ChatMessageAdapter(
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { marginStart = dp(context, 6) }
             text = formatTime(creationTime)
-            setTextColor(activeBarColor)
-            alpha = 0.75f
+            setTextColor(footerTextColor)
+            alpha = if (isMine) 0.75f else 0.85f
             textSize = 10f
         }
 
@@ -616,7 +679,7 @@ class ChatMessageAdapter(
                 marginStart = dp(context, 3)
             }
             setImageResource(R.drawable.ic_chat_check_double)
-            setColorFilter(activeBarColor)
+            setColorFilter(footerTextColor)
             alpha = 0.75f
             visibility = if (isMine) View.VISIBLE else View.GONE
         }
@@ -636,8 +699,16 @@ class ChatMessageAdapter(
         waveAndMeta.addView(waveformRow)
         waveAndMeta.addView(footerRow)
 
-        container.addView(playBtn)
-        container.addView(waveAndMeta)
+        // Sent: play button on the left (next to the avatar/bubble origin).
+        // Received: play button on the right, mirroring WhatsApp's layout
+        // for incoming voice notes.
+        if (isMine) {
+            container.addView(playBtn)
+            container.addView(waveAndMeta)
+        } else {
+            container.addView(waveAndMeta)
+            container.addView(playBtn)
+        }
 
         val click = View.OnClickListener {
             onAttachmentClick(url, "audio/mp4", storageId)
@@ -700,7 +771,9 @@ class ChatMessageAdapter(
         container.addView(play)
 
         container.setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
-        container.isLongClickable = false
+        // Long-press is wired by createAttachmentView (which delegates to the
+        // bubble's selection/reaction handler), so we leave the container
+        // long-clickable here.
         return container
     }
 
@@ -708,28 +781,31 @@ class ChatMessageAdapter(
         parent: ViewGroup,
         attachment: MessageAttachmentData,
         isMine: Boolean = false,
-        creationTime: Double? = null
+        creationTime: Double? = null,
+        onLongPress: (() -> Unit)? = null,
     ): View {
         val context = parent.context
         val url = attachment.url ?: ""
         val mime = attachment.fileType.orEmpty().lowercase()
         val fileName = attachment.fileName.orEmpty().lowercase()
-        
-        val isAudio = mime.startsWith("audio/") || 
-                      fileName.endsWith(".m4a") || 
-                      fileName.endsWith(".mp3") || 
-                      fileName.endsWith(".wav") ||
-                      fileName.startsWith("voice-")
 
-        val isVideo = mime.startsWith("video/") ||
-            fileName.endsWith(".mp4") ||
-            fileName.endsWith(".mov") ||
-            fileName.endsWith(".webm") ||
-            fileName.endsWith(".mkv") ||
-            fileName.endsWith(".3gp") ||
-            fileName.endsWith(".avi")
+        val isAudio = isAudioAttachment(attachment)
 
-        return if (mime.startsWith("image/")) {
+        // NOTE: must be evaluated AFTER isAudio because `.webm` and `.mp4`
+        // are valid containers for both audio and video; voice notes from the
+        // web composer arrive as `voice_message_*.webm` which would otherwise
+        // collide with the video-extension list below.
+        val isVideo = !isAudio && (
+            mime.startsWith("video/") ||
+                fileName.endsWith(".mp4") ||
+                fileName.endsWith(".mov") ||
+                fileName.endsWith(".webm") ||
+                fileName.endsWith(".mkv") ||
+                fileName.endsWith(".3gp") ||
+                fileName.endsWith(".avi")
+            )
+
+        val attachmentView = if (mime.startsWith("image/")) {
             FrameLayout(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     dp(context, 220),
@@ -768,23 +844,213 @@ class ChatMessageAdapter(
                 }
                 addView(img)
                 setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
-                isLongClickable = false
             }
         } else if (isVideo) {
             createVideoPreview(context, url, attachment, mime)
         } else if (isAudio) {
             createAudioBubble(context, url, attachment, isMine, creationTime)
         } else {
-            // Document style
-            TextView(context).apply {
-                text = attachment.fileName ?: "File"
-                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chat_file, 0, 0, 0)
-                compoundDrawablePadding = 8
-                setPadding(12, 8, 12, 8)
-                setBackgroundResource(R.drawable.bg_chat_action_card)
-                setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
+            createDocumentBubble(context, url, mime, attachment, isMine)
+        }
+
+        // Wire long-press on the attachment view so the same selection/reaction
+        // flow fires for voice notes, PDFs, images, videos, and docs — not just
+        // text bubbles. Previously these views were either marked
+        // isLongClickable=false or had setOnClickListener that suppressed the
+        // event, blocking forward / react gestures on media-only messages.
+        if (onLongPress != null) {
+            attachmentView.isLongClickable = true
+            attachmentView.setOnLongClickListener {
+                onLongPress.invoke()
+                true
             }
         }
+        return attachmentView
+    }
+
+    /**
+     * Renders a rich document (PDF / file) attachment card matching the design:
+     * a red "PDF" badge, filename + size, and Open / Save as actions.
+     * Bubble background flips for sent (blue gradient) vs received (white).
+     */
+    private fun createDocumentBubble(
+        context: android.content.Context,
+        url: String,
+        mime: String,
+        attachment: MessageAttachmentData,
+        isMine: Boolean,
+    ): View {
+        val primaryText = if (isMine) android.graphics.Color.WHITE
+        else android.graphics.Color.parseColor("#101828")
+        val secondaryText = if (isMine) android.graphics.Color.parseColor("#CCFFFFFF")
+        else android.graphics.Color.parseColor("#667085")
+        val actionText = if (isMine) android.graphics.Color.WHITE
+        else android.graphics.Color.parseColor("#0B61CA")
+        val dividerBg = if (isMine) R.drawable.bg_chat_doc_divider_sent
+        else R.drawable.bg_chat_doc_divider_received
+
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(
+                if (isMine) R.drawable.bg_chat_doc_sent
+                else R.drawable.bg_chat_doc_received
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                (260 * context.resources.displayMetrics.density).toInt(),
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(context, 4) }
+            setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 4))
+        }
+
+        // Top row: PDF badge + filename/size
+        val topRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+        }
+
+        // Red PDF badge (40×40). For non-PDF docs we still show the badge with
+        // the extension uppercased (e.g. DOCX, XLSX) so the visual remains clean.
+        val badge = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(context, 40), dp(context, 40))
+            setBackgroundResource(R.drawable.bg_chat_pdf_badge)
+        }
+        val badgeLabel = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+            gravity = android.view.Gravity.CENTER
+            text = inferDocBadgeLabel(attachment.fileName, mime)
+            setTextColor(android.graphics.Color.parseColor("#B42318"))
+            textSize = 10f
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            includeFontPadding = false
+        }
+        badge.addView(badgeLabel)
+
+        val infoCol = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginStart = dp(context, 10) }
+        }
+        val fileNameView = TextView(context).apply {
+            text = attachment.fileName ?: "Document"
+            setTextColor(primaryText)
+            textSize = 13f
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+            includeFontPadding = false
+        }
+        val metaView = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(context, 2) }
+            text = formatDocMeta(attachment.fileName, mime, attachment.fileSize)
+            setTextColor(secondaryText)
+            textSize = 11f
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_regular)
+            includeFontPadding = false
+        }
+        infoCol.addView(fileNameView)
+        infoCol.addView(metaView)
+
+        topRow.addView(badge)
+        topRow.addView(infoCol)
+
+        container.addView(topRow)
+
+        // Divider above the action row
+        val divider = View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(context, 1),
+            ).apply {
+                topMargin = dp(context, 12)
+                marginStart = dp(context, -12)
+                marginEnd = dp(context, -12)
+            }
+            setBackgroundResource(dividerBg)
+        }
+        container.addView(divider)
+
+        // Action row: Open | Save as
+        val openClick = View.OnClickListener {
+            onAttachmentClick(url, mime, attachment.storageId)
+        }
+        val actionsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        val openBtn = TextView(context).apply {
+            text = "Open"
+            gravity = android.view.Gravity.CENTER
+            setTextColor(actionText)
+            textSize = 13f
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            layoutParams = LinearLayout.LayoutParams(0, dp(context, 36), 1f)
+            isClickable = true
+            isFocusable = true
+            background = androidx.core.content.ContextCompat.getDrawable(
+                context, android.R.color.transparent
+            )
+            setOnClickListener(openClick)
+        }
+        val vDivider = View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(context, 1), dp(context, 24)).apply {
+                topMargin = dp(context, 6)
+            }
+            setBackgroundResource(dividerBg)
+        }
+        val saveBtn = TextView(context).apply {
+            text = "Save as…"
+            gravity = android.view.Gravity.CENTER
+            setTextColor(actionText)
+            textSize = 13f
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            layoutParams = LinearLayout.LayoutParams(0, dp(context, 36), 1f)
+            isClickable = true
+            isFocusable = true
+            // "Save as…" routes to the same open intent — the OS doc viewer
+            // surfaces its own share/save actions. Keeping it on the same
+            // callback avoids needing a new permission flow for this round.
+            setOnClickListener(openClick)
+        }
+        actionsRow.addView(openBtn)
+        actionsRow.addView(vDivider)
+        actionsRow.addView(saveBtn)
+        container.addView(actionsRow)
+
+        container.setOnClickListener(openClick)
+        return container
+    }
+
+    /** Returns "PDF", "DOC", "DOCX", "XLSX", "ZIP", etc. for the badge label. */
+    private fun inferDocBadgeLabel(fileName: String?, mime: String): String {
+        val nameExt = fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
+        if (nameExt.isNotEmpty() && nameExt.length <= 5) return nameExt.uppercase()
+        if (mime.contains("pdf")) return "PDF"
+        if (mime.contains("word") || mime.contains("msword")) return "DOC"
+        if (mime.contains("excel") || mime.contains("spreadsheet")) return "XLSX"
+        if (mime.contains("zip") || mime.contains("compressed")) return "ZIP"
+        return "FILE"
+    }
+
+    /** Returns "PDF · 58.5 KB" — design's meta line format. */
+    private fun formatDocMeta(fileName: String?, mime: String, size: Long?): String {
+        val badge = inferDocBadgeLabel(fileName, mime)
+        val sizeText = if (size != null && size > 0) humanReadableSize(size) else null
+        return if (sizeText != null) "$badge · $sizeText" else badge
     }
 
     private fun startWavePulse(storageId: String, bars: List<View>, baseHeights: IntArray) {

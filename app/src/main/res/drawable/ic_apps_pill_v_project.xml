@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Converted from Downloads/png/Projects.svg — folder outline. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M13.332,13.333 c0.736,0 1.333,-0.597 1.333,-1.333 V5.333 c0,-0.736 -0.597,-1.333 -1.333,-1.333 H8.065 a1.333,1.333 0 0 1 -1.126,-0.6 l-0.54,-0.8 A1.333,1.333 0 0 0 5.285,2 h-2.62 c-0.736,0 -1.333,0.597 -1.333,1.333 V12 c0,0.736 0.597,1.333 1.333,1.333 h10.667"
+        android:strokeWidth="1.333"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

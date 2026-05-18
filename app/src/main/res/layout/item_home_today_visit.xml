@@ -132,11 +132,12 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/tvVisitItemSiteLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/inter_regular"
                         android:includeFontPadding="false"
-                        android:text="Site/Client"
+                        android:text="Client"
                         android:textColor="#667085"
                         android:textSize="10sp" />
 
@@ -247,6 +248,7 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/tvVisitItemTimeLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/inter_regular"
