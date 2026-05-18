@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.network.*
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 data class LeavesState(
     val casualLeft: Int = 0,
@@ -55,10 +57,12 @@ class LeavesViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
-                val balance = try { api.getLeaveBalance(bearerToken) } catch (_: Exception) { null }
-                val history = try { api.getMyLeaves(bearerToken) } catch (_: Exception) { null }
+                Log.d(TAG, "load → canApprove=$canApprove canViewAll=$canViewAll")
+                val previous = _uiState.value
+                val balance = safeCall("getLeaveBalance") { api.getLeaveBalance(bearerToken) }
+                val history = safeCall("getMyLeaves") { api.getMyLeaves(bearerToken) }
                 val pending = if (canApprove) {
-                    try { api.getPendingLeaveApprovals(bearerToken) } catch (_: Exception) { null }
+                    safeCall("getPendingLeaveApprovals") { api.getPendingLeaveApprovals(bearerToken) }
                 } else {
                     null
                 }
@@ -67,11 +71,11 @@ class LeavesViewModel : ViewModel() {
                 // permission just returns the bearer's own leaves so the
                 // gate here is mostly to avoid an unnecessary round-trip.
                 val all = if (canViewAll) {
-                    try { api.getAllLeaves(bearerToken) } catch (_: Exception) { null }
+                    safeCall("getAllLeaves") { api.getAllLeaves(bearerToken) }
                 } else {
                     null
                 }
-                val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
+                val policyResp = safeCall("getPolicy") { api.getPolicy(bearerToken) }
 
                 val b = balance?.balance
                 val policy = policyResp?.policy?.leave
@@ -91,6 +95,27 @@ class LeavesViewModel : ViewModel() {
                 val sickAlloc = policy?.sickPerYear ?: 0
                 val earnedAlloc = policy?.earnedPerYear ?: 0
 
+                // Don't wipe a previously-loaded list when a refresh's network
+                // call fails. The empty fallback ONLY applies when no prior
+                // value existed; otherwise we keep the last good list so a
+                // transient blip (returning from ApplyLeave on a flaky
+                // connection, etc.) doesn't flicker the screen to empty.
+                val nextMyLeaves = history?.leaves
+                    ?: previous.myLeaves.takeIf { it.isNotEmpty() }
+                    ?: emptyList()
+                val nextPending = pending?.leaves
+                    ?: previous.pendingApprovals.takeIf { canApprove && it.isNotEmpty() }
+                    ?: emptyList()
+                val nextAll = all?.leaves
+                    ?: previous.allLeaves.takeIf { canViewAll && it.isNotEmpty() }
+                    ?: emptyList()
+
+                Log.d(
+                    TAG,
+                    "load result → balance=${b != null} my=${nextMyLeaves.size} " +
+                        "pending=${nextPending.size} all=${nextAll.size}",
+                )
+
                 _uiState.value = _uiState.value.copy(
                     casualLeft = if (casualAlloc > 0) (b?.casual ?: 0) - (b?.casualUsed ?: 0) else 0,
                     sickLeft = if (sickAlloc > 0) (b?.sick ?: 0) - (b?.sickUsed ?: 0) else 0,
@@ -98,15 +123,39 @@ class LeavesViewModel : ViewModel() {
                     casualTotal = if (casualAlloc > 0) b?.casual ?: 0 else 0,
                     sickTotal = if (sickAlloc > 0) b?.sick ?: 0 else 0,
                     earnedTotal = if (earnedAlloc > 0) b?.earned ?: 0 else 0,
-                    myLeaves = history?.leaves ?: emptyList(),
-                    pendingApprovals = pending?.leaves ?: emptyList(),
-                    allLeaves = all?.leaves ?: emptyList(),
+                    myLeaves = nextMyLeaves,
+                    pendingApprovals = nextPending,
+                    allLeaves = nextAll,
                     leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")
                 )
             } finally {
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }
         }
+    }
+
+    /**
+     * Wraps a network call so transport failures are visible to the user
+     * instead of vanishing into a null. The empty-state-with-no-toast UX
+     * we had before made it impossible to tell whether the user actually
+     * has no leaves or whether the request 401'd / timed out.
+     */
+    private suspend fun <T> safeCall(label: String, block: suspend () -> T): T? {
+        return try {
+            block()
+        } catch (e: Exception) {
+            val detail = when (e) {
+                is HttpException -> "${e.code()} ${e.message()}"
+                else -> e.message ?: e::class.java.simpleName
+            }
+            Log.w(TAG, "$label failed: $detail", e)
+            _event.emit("Couldn't load $label: $detail")
+            null
+        }
+    }
+
+    private companion object {
+        const val TAG = "LeavesViewModel"
     }
 
     /**
