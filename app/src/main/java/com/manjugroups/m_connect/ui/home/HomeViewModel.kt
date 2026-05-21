@@ -254,17 +254,51 @@ class HomeViewModel : ViewModel() {
             val places = placesResp.data ?: emptyList()
             Log.d(TAG, "Assigned places: ${places.size}")
 
-            // Load today's scheduled visits
+            // Load today's scheduled visits from the legacy fieldVisits
+            // pipeline (rows that already have a fieldVisits child).
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val visitsResp = geoApi.getTodayVisits(bearerToken, todayStr)
-            val visits = visitsResp.data?.filter { it.status != "cancelled" } ?: emptyList()
-            Log.d(TAG, "Today visits: ${visits.size}")
+            val legacyVisits = visitsResp.data?.filter { it.status != "cancelled" } ?: emptyList()
+            Log.d(TAG, "Today visits (legacy fieldVisits): ${legacyVisits.size}")
+
+            // Merge: CP visits assigned to me for today that may not have
+            // spawned a fieldVisits row yet (marketing-origin visits don't
+            // create one until the trip actually starts). Without this
+            // merge, the home card was empty for staff whose only work
+            // for the day was a freshly-assigned CP visit. Dedup against
+            // legacy rows by clientPlaceVisitId so we don't double-show.
+            val merged = mutableListOf<TodayVisit>()
+            merged.addAll(legacyVisits)
+            try {
+                val cpResp = geoApi.getMyMarketingCpVisits(
+                    bearerToken,
+                    fromDate = todayStr,
+                    toDate = todayStr,
+                )
+                if (cpResp.success) {
+                    val legacyCpIds = legacyVisits.mapNotNull { it.clientPlaceVisitId }.toHashSet()
+                    val extras = cpResp.visits
+                        .filter { detail ->
+                            val id = detail.id ?: return@filter false
+                            id !in legacyCpIds &&
+                                detail.status != "cancelled" &&
+                                detail.status != "completed"
+                        }
+                        .mapNotNull { detail -> detail.toTodayVisitOrNull() }
+                    Log.d(TAG, "Today visits (CP merge): +${extras.size}")
+                    merged.addAll(extras)
+                }
+            } catch (e: Exception) {
+                // Best-effort: a failure here must NOT clobber the legacy
+                // list we already have. Just log and move on.
+                Log.w(TAG, "CP visit merge failed: ${e.message}")
+            }
 
             val current = cachedState ?: return
             val updated = current.copy(
-                todayVisits = visits,
+                todayVisits = merged,
                 assignedPlaces = places,
-                activeVisitId = visits.firstOrNull { it.status == "in-progress" }?.id
+                activeVisitId = merged.firstOrNull { it.status == "in-progress" }?.id,
             )
             cachedState = updated
             _uiState.value = updated
@@ -273,6 +307,42 @@ class HomeViewModel : ViewModel() {
         } finally {
             _isVisitsLoading.value = false
         }
+    }
+
+    /**
+     * Map a marketing-side CpVisitDetail row onto the legacy TodayVisit
+     * shape the home card already knows how to render. Returns null
+     * (skips the row) if the CP visit is too sparse to produce a
+     * usable card — we need an id, a clientPlaceId proxy, and at
+     * minimum a scheduledDate.
+     */
+    private fun com.manjugroups.m_connect.network.CpVisitDetail.toTodayVisitOrNull(): TodayVisit? {
+        val cpId = this.id ?: return null
+        val scheduled = this.scheduledDate ?: return null
+        // We use the CP visit id as the row id because the server-side
+        // resolver added earlier accepts either a fieldVisits id or a
+        // clientPlaceVisits id on startVisit / OTP / completeVisit. That
+        // keeps this merge minimal — no extra lookups to find the
+        // companion fieldVisits id when one exists.
+        return TodayVisit(
+            id = cpId,
+            clientPlaceId = this.clientPlaceId ?: cpId,
+            scheduledDate = scheduled,
+            status = this.status ?: "scheduled",
+            placeName = this.clientPlace?.name
+                ?: this.client?.clientName
+                ?: this.lead?.contactName
+                ?: "CP visit",
+            placeAddress = this.clientPlace?.address
+                ?: this.clientPlace?.formattedAddress,
+            placeLat = this.clientPlace?.lat,
+            placeLng = this.clientPlace?.lng,
+            tripType = "client_place",
+            clientPlaceVisitId = cpId,
+            leadName = this.lead?.contactName ?: this.client?.clientName,
+            leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
+            scheduledStartTime = this.scheduledTime,
+        )
     }
 
     fun loadTodayVisits(bearerToken: String) {

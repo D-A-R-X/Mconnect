@@ -186,6 +186,17 @@ interface GeoTrackApi {
         @Query("id") id: String
     ): CpVisitDetailResponse
 
+    // Marketing CP visits assigned to the bearer in a date range.
+    // Used by Home's "Today's Trip" merge so visits that exist in
+    // `clientPlaceVisits` but have no companion fieldVisits row yet
+    // still surface on the home screen.
+    @GET("api/marketing/clientPlaceVisits/my")
+    suspend fun getMyMarketingCpVisits(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null
+    ): MyMarketingCpVisitsResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -638,6 +649,16 @@ data class ConvertCpVisitToSiteVisitResponse(
 data class CpVisitDetailResponse(
     val success: Boolean,
     val visit: CpVisitDetail? = null,
+    val error: String? = null,
+)
+
+// Marketing CP visits list response — used by Home today's trip merge.
+// Each visit is the enriched clientPlaceVisits row (same shape as
+// `CpVisitDetail` minus arrival proof we don't need for the home card).
+data class MyMarketingCpVisitsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val visits: List<CpVisitDetail> = emptyList(),
     val error: String? = null,
 )
 
