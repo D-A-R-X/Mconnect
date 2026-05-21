@@ -324,11 +324,22 @@ class HomeViewModel : ViewModel() {
         // clientPlaceVisits id on startVisit / OTP / completeVisit. That
         // keeps this merge minimal — no extra lookups to find the
         // companion fieldVisits id when one exists.
+        //
+        // Status precedence: the spawned fieldVisits row carries the
+        // authoritative trip status ("in-progress" / "arrived" /
+        // "completed"), while the CP visit's own status only tracks the
+        // CP lifecycle ("scheduled" / "in_progress" / "completed"). If
+        // a fieldVisits row exists we prefer its status so the trip
+        // nav screen doesn't drop the user back on "Start Trip" after
+        // they've already verified arrival.
+        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
+            ?: this.status?.takeIf { it.isNotBlank() }
+            ?: "scheduled"
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
-            status = this.status ?: "scheduled",
+            status = effectiveStatus,
             placeName = this.clientPlace?.name
                 ?: this.client?.clientName
                 ?: this.lead?.contactName
