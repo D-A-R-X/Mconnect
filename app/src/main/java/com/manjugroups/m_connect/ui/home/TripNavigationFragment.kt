@@ -1184,8 +1184,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {
-        val isCpVisit = isCpVisit()
-        val shouldFillCpDetails = alreadyArrived && isCpVisit && !cpVisitDecisionCaptured
+        // Use cpVisitId presence (not the stricter tripType check in
+        // isCpVisit()) as the gate for showing the outcome-sheet CTA.
+        // Stale Home cache, older Home merge code, or a missing
+        // tripType arg on legacy rows would otherwise drop the user
+        // back onto the swipe path with no way out ("deadlock"). If
+        // we have a CP visit id, we have everything needed to open the
+        // outcome sheet — tripType is just an annotation.
+        val hasCpRow = !cpVisitId.isNullOrBlank()
+        val shouldFillCpDetails =
+            alreadyArrived && hasCpRow && !cpVisitDecisionCaptured
+
+        android.util.Log.d(
+            "TripNav",
+            "renderArrivalPhase alreadyArrived=$alreadyArrived hasCpRow=$hasCpRow " +
+                "tripType=$tripType cpVisitId=$cpVisitId " +
+                "cpVisitDecisionCaptured=$cpVisitDecisionCaptured " +
+                "-> showCpButton=$shouldFillCpDetails",
+        )
 
         if (alreadyArrived) arrivalConfirmedForProgress = true
 
