@@ -215,14 +215,25 @@ class CpVisitsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
+                // Switched from /api/sitevisits/my (legacy fieldVisits) to
+                // /api/marketing/clientPlaceVisits/my so each row carries
+                // the proposedSiteVisit / lead.followUpStatus / party
+                // data we need to label the category (SV cum CP vs
+                // Direct CP) on each card. The mapper below converts to
+                // the existing TodayVisit shape so downstream filter /
+                // sort / render code is unchanged.
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load CP visits")
                     return@launch
                 }
                 allVisits = resp.visits
-                    .filter { it.tripType == "client_place" || it.clientPlaceVisitId != null }
+                    .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedByDescending { it.scheduledDate }
                 renderList()
             } catch (e: Exception) {
@@ -230,6 +241,65 @@ class CpVisitsFragment : Fragment() {
                 showLoadError("Network error: ${e.message ?: "unknown"}")
             }
         }
+    }
+
+    /**
+     * Map a marketing CpVisitDetail onto the TodayVisit shape the rest
+     * of this fragment already knows how to render. Mirrors
+     * HomeViewModel.toTodayVisitOrNull so the two surfaces show the
+     * same category badge for the same row. Returns null when the row
+     * is too sparse to produce a usable card (no id or scheduled date).
+     */
+    private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
+        val cpId = this.id ?: return null
+        val scheduled = this.scheduledDate ?: return null
+        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
+            ?: this.status?.takeIf { it.isNotBlank() }
+            ?: "scheduled"
+        val proposedHasFields = this.proposedSiteVisit?.let { p ->
+            !p.projectId.isNullOrBlank() ||
+                !p.scheduledDate.isNullOrBlank() ||
+                !p.scheduledTime.isNullOrBlank() ||
+                !p.inchargeStaffId.isNullOrBlank() ||
+                !p.hodStaffId.isNullOrBlank() ||
+                !p.bdoStaffId.isNullOrBlank() ||
+                !p.avpStaffId.isNullOrBlank() ||
+                !p.gmStaffId.isNullOrBlank() ||
+                !p.seniorManagerStaffId.isNullOrBlank()
+        } ?: false
+        val leadFlaggedSvFixed = this.lead?.followUpStatus
+            ?.lowercase(java.util.Locale.getDefault())
+            ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+            ?: false
+        val hasSvFixParty = (this.expectedAttendeeCount ?: 0) > 0 ||
+            (this.attendees?.isNotEmpty() == true) ||
+            !this.foodPreferences.isNullOrBlank() ||
+            !this.vehiclePreference.isNullOrBlank()
+        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+            "sv_cum_cp"
+        } else {
+            "direct_cp"
+        }
+        return TodayVisit(
+            id = cpId,
+            clientPlaceId = this.clientPlaceId ?: cpId,
+            scheduledDate = scheduled,
+            status = effectiveStatus,
+            visitCategory = category,
+            placeName = this.clientPlace?.name
+                ?: this.client?.clientName
+                ?: this.lead?.contactName
+                ?: "CP visit",
+            placeAddress = this.clientPlace?.address
+                ?: this.clientPlace?.formattedAddress,
+            placeLat = this.clientPlace?.lat,
+            placeLng = this.clientPlace?.lng,
+            tripType = "client_place",
+            clientPlaceVisitId = cpId,
+            leadName = this.lead?.contactName ?: this.client?.clientName,
+            leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
+            scheduledStartTime = this.scheduledTime,
+        )
     }
 
     private fun renderList() {
@@ -303,7 +373,22 @@ class CpVisitsFragment : Fragment() {
         val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
-        lead.visibility = View.GONE
+        // Reuse the otherwise-hidden "lead" TextView as the category
+        // badge — same trick HomeFragment uses on its row, so a row
+        // appears identically labelled across Home today's trip and
+        // the CP Visits list.
+        val categoryLabel = when (visit.visitCategory) {
+            "sv_cum_cp" -> "SV cum CP"
+            "direct_cp" -> "Direct CP"
+            "site_visit" -> "Site Visit"
+            else -> if (visit.clientPlaceVisitId != null) "CP visit" else null
+        }
+        if (categoryLabel != null) {
+            lead.text = categoryLabel
+            lead.visibility = View.VISIBLE
+        } else {
+            lead.visibility = View.GONE
+        }
 
         // Identity header — CP visits identify the CLIENT, not the staff member.
         // Use placeName / leadName as primary, placeAddress as the supporting line.
