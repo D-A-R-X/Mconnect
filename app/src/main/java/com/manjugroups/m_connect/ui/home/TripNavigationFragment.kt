@@ -345,6 +345,76 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 btnCompleteCpDetails?.visibility = View.GONE
             }
         }
+
+        // Self-healing: ARG_STATUS comes from whatever the home list said,
+        // which can lag the server (e.g. the legacy /today-visits row
+        // says "scheduled" but the spawned fieldVisits row is already
+        // "arrived" because the staff finished arrival OTP on a prior
+        // session). For CP visits, re-check the server-side truth and
+        // jump straight to the post-arrival phase so we never push the
+        // user through Start Trip → Swipe again on a trip they've
+        // already done.
+        if (!cpVisitId.isNullOrBlank()) {
+            reconcileCpVisitStatusFromServer()
+        }
+    }
+
+    private fun reconcileCpVisitStatusFromServer() {
+        val cpId = cpVisitId ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
+                if (!resp.success) return@launch
+                val cp = resp.visits.firstOrNull { it.id == cpId } ?: return@launch
+                if (!isAdded) return@launch
+
+                // Pick the most-advanced authoritative status: prefer the
+                // spawned fieldVisits row (where "arrived" lives) over
+                // the CP-side lifecycle (which only tracks
+                // scheduled/in_progress/completed).
+                val effective = (cp.fieldVisit?.status ?: cp.status).orEmpty()
+                    .lowercase(Locale.getDefault())
+                when (effective) {
+                    "arrived", "arrival_verified", "arrival-verified" -> {
+                        visitStarted = true
+                        arrivalConfirmedForProgress = true
+                        showTripStartTime()
+                        applyStatusPill("Reaching")
+                        btnOpenMaps?.visibility = View.GONE
+                        renderArrivalPhase(alreadyArrived = true)
+                    }
+                    "in-progress", "in_progress", "ongoing", "started", "active" -> {
+                        // Only flip if we weren't already past the
+                        // enroute phase locally. Don't downgrade the UI
+                        // from arrived to enroute.
+                        if (!arrivalConfirmedForProgress) {
+                            visitStarted = true
+                            showTripStartTime()
+                            applyStatusPill("Enroute")
+                            btnOpenMaps?.visibility = View.GONE
+                            renderArrivalPhase(alreadyArrived = false)
+                        }
+                    }
+                    "completed", "complete", "done", "closed" -> {
+                        visitStarted = true
+                        showTripStartTime()
+                        applyStatusPill("Complete")
+                        btnOpenMaps?.visibility = View.GONE
+                        swipeArrived?.visibility = View.GONE
+                        btnCompleteCpDetails?.visibility = View.GONE
+                    }
+                    // "scheduled" or empty: leave the locally-rendered
+                    // pre-start phase as-is so the user can Start Trip.
+                    else -> { /* no-op */ }
+                }
+            } catch (_: Exception) {
+                // Network blip: don't disturb the locally-rendered UI.
+            }
+        }
     }
 
     override fun onResume() {
