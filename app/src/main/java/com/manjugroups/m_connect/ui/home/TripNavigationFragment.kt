@@ -1191,9 +1191,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // back onto the swipe path with no way out ("deadlock"). If
         // we have a CP visit id, we have everything needed to open the
         // outcome sheet — tripType is just an annotation.
+        //
+        // We also intentionally IGNORE cpVisitDecisionCaptured here.
+        // The flag can be set from an ARG_CP_OUTCOME that originated
+        // in a *prior* aborted attempt (e.g. user opened the sheet,
+        // tapped a tab, dismissed without completing); the visit's
+        // real terminal state has to come from the server (the
+        // reconcile path will hide both buttons on "completed"). In
+        // any non-terminal "arrived" state we always want the
+        // outcome-sheet CTA visible, since that's the only way to
+        // actually finish the trip.
         val hasCpRow = !cpVisitId.isNullOrBlank()
-        val shouldFillCpDetails =
-            alreadyArrived && hasCpRow && !cpVisitDecisionCaptured
+        val shouldFillCpDetails = alreadyArrived && hasCpRow
 
         android.util.Log.d(
             "TripNav",
@@ -1217,7 +1226,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         swipeArrived?.visibility = View.VISIBLE
         swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
 
-        if (alreadyArrived && isCpVisit && cpVisitDecisionCaptured) {
+        // Non-CP arrival with decision captured (plain field visit where
+        // OTP verify is the only decision needed) — finalize the trip
+        // without further user action. CP visits never reach this branch
+        // because shouldFillCpDetails captures every arrived CP above.
+        if (alreadyArrived && isCpVisit() && cpVisitDecisionCaptured) {
             finalizeCompleteVisit()
         }
     }
