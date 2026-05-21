@@ -326,8 +326,33 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
             ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it } }
 
+        // If TripNavigationFragment already detected this is an SV-fix
+        // CP, switch to Site Visit + fade the other tabs BEFORE the
+        // first renderState() call. Without this the user briefly sees
+        // the Booking tab default for one frame while the async detect
+        // resolves, then it snaps to locked Site Visit — visible as a
+        // flicker. Applying the hint synchronously here makes the first
+        // paint show locked Site Visit straight away. detectAndApply
+        // below still runs and refines the pre-fill values + final
+        // verification.
+        val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
+        if (isSvFixedHint) {
+            activeOutcome = Outcome.SITE_VISIT
+        }
+
         wireInteractions()
         renderState()
+
+        if (isSvFixedHint) {
+            // Pale-out the non-SV tabs immediately so the first paint
+            // matches the locked layout. detectAndApplyLockedSvMode
+            // below adds the read-only / Reject-Confirm footer once
+            // the server-side payload arrives.
+            listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+                tab.cell?.isClickable = false
+                tab.cell?.alpha = 0.35f
+            }
+        }
 
         // Check whether the CP visit was pre-fixed by the telecaller. If
         // so, lock the sheet to Site Visit and surface Reject / Confirm.
@@ -1879,6 +1904,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        // Pre-pass from TripNavigationFragment when the upstream
+        // reconcile already determined this CP came from a telecaller-
+        // fixed SV. Lets us avoid the brief Booking-tab flash while the
+        // sheet's own detect call resolves.
+        private const val ARG_IS_SV_FIXED_HINT = "arg_is_sv_fixed_hint"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -1889,12 +1919,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpVisitId: String,
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
+            isSvFixedHint: Boolean = false,
         ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CP_VISIT_ID, cpVisitId)
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
+                    if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
                 }
             }
     }

@@ -387,11 +387,43 @@ class HomeViewModel : ViewModel() {
         val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
             ?: this.status?.takeIf { it.isNotBlank() }
             ?: "scheduled"
+        // Detect "this CP was an SV-fix routed through CP first" using
+        // the same three signals the outcome sheet uses for its locked
+        // mode. Any one of these is enough: an explicit proposed SV
+        // payload (the web's `same_area` create path writes it), the
+        // lead being flagged sv_fixed by an upstream convert step, or
+        // party data (expectedAttendeeCount / attendees / food /
+        // vehicle) which only the SV-fix create path attaches.
+        val proposedHasFields = this.proposedSiteVisit?.let { p ->
+            !p.projectId.isNullOrBlank() ||
+                !p.scheduledDate.isNullOrBlank() ||
+                !p.scheduledTime.isNullOrBlank() ||
+                !p.inchargeStaffId.isNullOrBlank() ||
+                !p.hodStaffId.isNullOrBlank() ||
+                !p.bdoStaffId.isNullOrBlank() ||
+                !p.avpStaffId.isNullOrBlank() ||
+                !p.gmStaffId.isNullOrBlank() ||
+                !p.seniorManagerStaffId.isNullOrBlank()
+        } ?: false
+        val leadFlaggedSvFixed = this.lead?.followUpStatus
+            ?.lowercase(Locale.getDefault())
+            ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+            ?: false
+        val hasSvFixParty = (this.expectedAttendeeCount ?: 0) > 0 ||
+            (this.attendees?.isNotEmpty() == true) ||
+            !this.foodPreferences.isNullOrBlank() ||
+            !this.vehiclePreference.isNullOrBlank()
+        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+            "sv_cum_cp"
+        } else {
+            "direct_cp"
+        }
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
+            visitCategory = category,
             placeName = this.clientPlace?.name
                 ?: this.client?.clientName
                 ?: this.lead?.contactName

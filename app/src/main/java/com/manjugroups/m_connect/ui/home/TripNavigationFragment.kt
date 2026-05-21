@@ -112,6 +112,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpClientMet: Boolean? = null
     private var cpOutcome: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
+    // True once the reconcile detects this CP visit was opened as part of
+    // a telecaller-fixed SV (proposedSiteVisit / lead.sv_fixed / party
+    // data). Drives two UI changes:
+    //   - the post-arrival CTA reads "Complete SV details" instead of
+    //     "Complete CP details"
+    //   - the outcome sheet opens directly in locked SV mode (no flash
+    //     of the Booking tab while detect runs async inside the sheet)
+    private var cpIsSvFixed: Boolean = false
     private var showClientNotSeenCompletion = false
     // KOS-52: Set when the user picked "No, didn't see client" on the Yes/No
     // sheet. We still capture an arrival photo for proof but skip the OTP
@@ -372,6 +380,41 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val cp = resp.visits.firstOrNull { it.id == cpId } ?: return@launch
                 if (!isAdded) return@launch
 
+                // Detect SV-fix mode from the same three signals the
+                // outcome sheet uses (proposedSiteVisit / lead.sv_fixed
+                // / party data). Drives two surfaces: the CTA label on
+                // this screen flips to "Complete SV details", and the
+                // sheet open is hinted so it skips the Booking-tab
+                // default render that was causing the visible flash.
+                val proposedHasFields = cp.proposedSiteVisit?.let { p ->
+                    !p.projectId.isNullOrBlank() ||
+                        !p.scheduledDate.isNullOrBlank() ||
+                        !p.scheduledTime.isNullOrBlank() ||
+                        !p.inchargeStaffId.isNullOrBlank() ||
+                        !p.hodStaffId.isNullOrBlank() ||
+                        !p.bdoStaffId.isNullOrBlank() ||
+                        !p.avpStaffId.isNullOrBlank() ||
+                        !p.gmStaffId.isNullOrBlank() ||
+                        !p.seniorManagerStaffId.isNullOrBlank()
+                } ?: false
+                val leadFlaggedSvFixed = cp.lead?.followUpStatus
+                    ?.lowercase(Locale.getDefault())
+                    ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+                    ?: false
+                val hasSvFixParty = (cp.expectedAttendeeCount ?: 0) > 0 ||
+                    (cp.attendees?.isNotEmpty() == true) ||
+                    !cp.foodPreferences.isNullOrBlank() ||
+                    !cp.vehiclePreference.isNullOrBlank()
+                cpIsSvFixed = proposedHasFields || leadFlaggedSvFixed || hasSvFixParty
+                if (cpIsSvFixed) {
+                    btnCompleteCpDetails?.text = "Complete SV details"
+                }
+                android.util.Log.d(
+                    "TripNav",
+                    "reconcile: cpIsSvFixed=$cpIsSvFixed (proposed=$proposedHasFields " +
+                        "lead=$leadFlaggedSvFixed party=$hasSvFixParty)",
+                )
+
                 // Pick the most-advanced authoritative status: prefer the
                 // spawned fieldVisits row (where "arrived" lives) over
                 // the CP-side lifecycle (which only tracks
@@ -419,7 +462,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            // The trip top bar is white (#FEFEFE) and only has paddingTop=14dp,
+            // which is not enough to clear the OS status bar when the previous
+            // screen left the activity in full-bleed mode. Tell MainActivity to
+            // paint a matching white strip behind the status bar with dark
+            // icons, so the back button + "Trip Details" title sit cleanly
+            // below the notification icons instead of overlapping them.
+            main.setTopBarAppearance(
+                android.graphics.Color.parseColor("#FEFEFE"),
+                darkStatusIcons = true,
+                fullBleed = false,
+            )
+        }
         mapView?.onResume()
     }
 
@@ -611,10 +667,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
             }
             TripStepState.ACTIVE -> {
-                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_outline)
-                icon?.setImageResource(activeIcon)
+                // "Current step" look: same green fill + white icon as a DONE
+                // step, but with the halo-ring drawable so the user can tell
+                // at a glance which step they're on right now (matches the
+                // En Route circle in the reference design).
+                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_active_current)
+                icon?.setImageResource(doneIcon)
                 label?.setTextColor(Color.parseColor("#19B900"))
-                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
+                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_semibold)
             }
             TripStepState.INACTIVE -> {
                 container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_inactive)
@@ -1244,6 +1304,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpVisitId = cpId,
                 cpClientMet = cpClientMet,
                 cpOutcome = cpOutcome,
+                // Pre-pass the SV-fix verdict so the sheet can switch
+                // straight to its locked Site Visit mode in onViewCreated
+                // — no flash of the default Booking tab while the
+                // sheet's own async detect runs.
+                isSvFixedHint = cpIsSvFixed,
             )
             .show(parentFragmentManager, "cp_visit_complete")
     }

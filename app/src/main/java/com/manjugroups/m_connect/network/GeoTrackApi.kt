@@ -831,7 +831,17 @@ data class TodayVisit(
         value = "scheduledEndTime",
         alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
-    val scheduledEndTime: String? = null
+    val scheduledEndTime: String? = null,
+    // Mobile-only annotation set by the Home merge once we know whether
+    // the underlying CP visit carries an SV-fix payload. Server never
+    // sends this key so Gson leaves it as the default null on legacy
+    // /today-visits rows; the Home merge copies the data class with a
+    // non-null value for CP-merge rows. Values:
+    //   "sv_cum_cp"  → telecaller-fixed SV verified through a CP
+    //   "direct_cp"  → regular CP visit (no SV-fix payload)
+    //   "site_visit" → direct site visit (no CP intermediary)
+    //   null         → unknown
+    val visitCategory: String? = null,
 )
 
 data class CpVisitState(
