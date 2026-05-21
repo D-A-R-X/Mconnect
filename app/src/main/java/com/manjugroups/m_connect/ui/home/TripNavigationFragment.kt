@@ -956,6 +956,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 )
                 if (!resp.success) {
                     arrivalInProgress = false
+                    // If the server tells us this visit is already in the
+                    // "arrived" state (e.g. the user swiped successfully on
+                    // a prior session, the OTP was verified, but the
+                    // outcome step was never finished), don't dump them
+                    // back on the "Swipe to Complete Trip" loop forever —
+                    // jump straight to the post-arrival phase so the
+                    // "Complete CP details" button surfaces.
+                    val errMsg = resp.error.orEmpty().lowercase(Locale.getDefault())
+                    val alreadyVerified =
+                        errMsg.contains("already verified") ||
+                            errMsg.contains("finish the outcome")
+                    if (alreadyVerified) {
+                        arrivalConfirmedForProgress = true
+                        renderArrivalPhase(alreadyArrived = true)
+                        return@launch
+                    }
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                     Toast.makeText(
                         requireContext(),
