@@ -285,6 +285,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                // UX hardening — the form sheet was getting dismissed by a
+                // plain content scroll because the nested-scroll handoff
+                // promoted the gesture to a sheet drag. Killing drag means
+                // the sheet only closes via the Reject/Confirm/Save buttons
+                // or the system back press — never by a stray finger swipe
+                // inside the form. Programmatic dismiss() still works.
+                behavior.isDraggable = false
                 isCancelable = true
             }
         }
@@ -1741,9 +1748,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         prefillProjectIfPossible(proposed.projectId)
         prefillSvStaff(proposed)
 
-        // 4. Disable every input row inside the SV body so the form
-        //    reads as a read-only confirmation surface.
-        applyReadOnlyToSvBody()
+        // 4. SV form fields stay EDITABLE in locked mode — the CP visit
+        //    staff often needs to adjust telecaller-fixed details (e.g.
+        //    swap the BDO if they're not available, tweak pickup address
+        //    after talking to the client, change schedule). The locked
+        //    aspect is the *outcome path* — only Reject / Confirm exits
+        //    are allowed (no Postpone / Booking tabs). Earlier we used
+        //    applyReadOnlyToSvBody() here but that contradicted the
+        //    field-staff workflow.
 
         // 5. Swap the single Save button for the Reject / Confirm pair.
         btnSubmit?.visibility = View.GONE
@@ -1805,9 +1817,33 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun applyReadOnlyToSvBody() {
         val body = bodySiteVisit ?: return
-        // Walk the SV body and dim + disable every interactive view.
-        // We deliberately leave TextViews readable (not transparent) —
-        // the user still needs to see the values.
+        // 1. Explicitly NULL the click listeners on every interactive row.
+        //    bindSiteVisitFields wired these in onViewCreated, and the row
+        //    LinearLayouts use OutcomeFieldPillClickable which sets
+        //    clickable=true in the style — so just toggling isClickable
+        //    off later was racing the style. Clearing the listener is the
+        //    only bulletproof block.
+        val rowIds = intArrayOf(
+            R.id.rowSvProject,
+            R.id.rowSvDate,
+            R.id.rowSvTime,
+            R.id.rowSvIncharge,
+            R.id.rowSvHod,
+            R.id.rowSvAvp,
+            R.id.rowSvGm,
+            R.id.rowSvSm,
+        )
+        for (id in rowIds) {
+            body.findViewById<View>(id)?.apply {
+                setOnClickListener(null)
+                isClickable = false
+                isFocusable = false
+                alpha = 0.7f
+            }
+        }
+
+        // 2. Walk the body to disable every EditText so the address /
+        //    visitor-count inputs can't be typed into either.
         fun walk(v: View) {
             if (v is EditText) {
                 v.isFocusable = false
@@ -1815,21 +1851,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 v.isCursorVisible = false
                 v.isEnabled = false
                 v.alpha = 0.7f
+                v.setOnClickListener(null)
             } else if (v is android.view.ViewGroup) {
-                v.isClickable = false
                 for (i in 0 until v.childCount) walk(v.getChildAt(i))
-            } else {
-                v.isClickable = false
-                v.isFocusable = false
             }
         }
         walk(body)
-        // Buttons (Own / Cab travel pills) are TextView siblings — kill
-        // their click listeners too.
-        btnSvTravelOwn?.isClickable = false
-        btnSvTravelCab?.isClickable = false
-        btnSvTravelOwn?.alpha = 0.7f
-        btnSvTravelCab?.alpha = 0.7f
+
+        // 3. Pickup From segmented control — kill the travel-mode toggles.
+        btnSvTravelOwn?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+        btnSvTravelCab?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+
     }
 
     private fun onLockedConfirmTap() {

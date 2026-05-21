@@ -380,6 +380,7 @@ class SiteVisitsFragment : Fragment() {
                     clientPlaceVisitId = visit.clientPlaceVisitId,
                     cpClientMet = visit.cpVisit?.clientMet,
                     cpOutcome = visit.cpVisit?.outcome,
+                    visitCategory = visit.visitCategory ?: "site_visit",
                 )
             )
             .addToBackStack(null)

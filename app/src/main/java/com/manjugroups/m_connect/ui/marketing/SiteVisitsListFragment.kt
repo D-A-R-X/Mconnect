@@ -235,6 +235,7 @@ class SiteVisitsListFragment : Fragment() {
             destLat = v.placeLat,
             destLng = v.placeLng,
             status = v.status,
+            visitCategory = v.visitCategory ?: "site_visit",
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)

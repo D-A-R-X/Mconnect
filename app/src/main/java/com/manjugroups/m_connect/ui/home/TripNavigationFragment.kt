@@ -283,7 +283,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
 
         tvTitle?.text = "Trip Details"
-        tvDestName?.text = placeName
+        // The "Type" cell on the Trip Details card now surfaces the visit
+        // category rather than echoing the client name (which the header
+        // already shows). Same vocabulary as Home / CP Visits rows so the
+        // user gets one consistent label across surfaces.
+        val visitCategory = args.getString(ARG_VISIT_CATEGORY)
+        val cpVisitIdLocal = args.getString(ARG_CP_VISIT_ID)
+        val isPlaceOnly = args.containsKey(ARG_PLACE_ID) && args.getString(ARG_VISIT_ID).isNullOrBlank()
+        tvDestName?.text = when (visitCategory) {
+            "sv_cum_cp" -> "SV confirmation CP"
+            "direct_cp" -> "Direct CP"
+            "site_visit" -> "Site Visit"
+            else -> when {
+                isPlaceOnly -> "Assigned place"
+                !cpVisitIdLocal.isNullOrBlank() -> "CP visit"
+                else -> "Visit"
+            }
+        }
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
         tvOriginName?.text = "Current Location"
         bindTripClientHeader(view, placeName)
@@ -1549,6 +1565,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        // Visit category — feeds the Trip Details "Type" cell. Same
+        // vocabulary the Home + CP Visits lists use:
+        // "sv_cum_cp" / "direct_cp" / "site_visit" / null (places).
+        private const val ARG_VISIT_CATEGORY = "arg_visit_category"
 
         fun forVisit(
             visitId: String,
@@ -1561,6 +1581,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             clientPlaceVisitId: String? = null,
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
+            visitCategory: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -1573,6 +1594,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (clientPlaceVisitId != null) putString(ARG_CP_VISIT_ID, clientPlaceVisitId)
                 if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                 if (cpOutcome != null) putString(ARG_CP_OUTCOME, cpOutcome)
+                if (visitCategory != null) putString(ARG_VISIT_CATEGORY, visitCategory)
             }
         }
 
