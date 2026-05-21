@@ -1597,6 +1597,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         "origin=${visit.origin} " +
                         "outcome=${visit.outcome} " +
                         "fieldVisitStatus=${visit.fieldVisit?.status} " +
+                        "expectedAttendeeCount=${visit.expectedAttendeeCount} " +
+                        "attendeesSize=${visit.attendees?.size ?: 0} " +
+                        "foodPreferences=${visit.foodPreferences} " +
+                        "vehiclePreference=${visit.vehiclePreference} " +
                         "proposed.project=${visit.proposedSiteVisit?.projectId} " +
                         "proposed.incharge=${visit.proposedSiteVisit?.inchargeStaffId} " +
                         "proposed.date=${visit.proposedSiteVisit?.scheduledDate}",
@@ -1608,27 +1612,37 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     ?.lowercase(Locale.getDefault())
                     ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
                     ?: false
+                // The telecaller-fixed SV path on web (telecaller/leads/[id]
+                // page.tsx, lines 1133-1158) is the ONLY CP-create flow
+                // that spreads partyArgs — expectedAttendeeCount /
+                // attendees / foodPreferences / vehiclePreference — onto
+                // the CP visit row. Regular CP-only creates never include
+                // them, and createFromMobile / mobile-side createCpVisit
+                // doesn't take those args either. So any party data on a
+                // CP visit is a strong server-side fingerprint that the
+                // telecaller went through "Fix Site Visit -> same area"
+                // for this row.
+                val hasSvFixParty =
+                    (visit.expectedAttendeeCount ?: 0) > 0 ||
+                        (visit.attendees?.isNotEmpty() == true) ||
+                        !visit.foodPreferences.isNullOrBlank() ||
+                        !visit.vehiclePreference.isNullOrBlank()
 
-                // Lock the sheet if EITHER signal fires:
+                // Lock the sheet if ANY signal fires:
                 //   1. proposedSiteVisit has at least one populated field
-                //      (web-side SV-fix flow wrote a real payload).
-                //   2. The lead's followUpStatus is "sv_fixed" — the
-                //      telecaller marked the lead as SV-fixed, which on
-                //      the same-area routing path must mean this CP is
-                //      the verification step for that SV. Even with an
-                //      empty proposed payload (web bug), we still want
-                //      the read-only Reject / Confirm UX rather than
-                //      letting the field staff re-pick an outcome.
-                if (!proposedMeaningful && !leadFlaggedSvFixed) {
+                //   2. The lead's followUpStatus is already "sv_fixed"
+                //   3. Party data is on the CP visit row (SV-fix-only)
+                if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: cpVisitId=$cpVisitId has no proposedSiteVisit -> normal mode",
+                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode",
                     )
                     return@launch
                 }
                 val source = when {
                     proposedMeaningful -> "proposedSiteVisit"
-                    else -> "lead.followUpStatus=sv_fixed"
+                    leadFlaggedSvFixed -> "lead.followUpStatus=sv_fixed"
+                    else -> "partyData"
                 }
                 android.util.Log.d(
                     LOG_TAG,
