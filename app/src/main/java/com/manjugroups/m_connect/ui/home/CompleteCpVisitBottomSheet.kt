@@ -1552,19 +1552,75 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // payload and re-shapes the sheet accordingly.
 
     private fun detectAndApplyLockedSvMode() {
-        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID) ?: return
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+        if (cpVisitId.isNullOrBlank()) {
+            android.util.Log.d(LOG_TAG, "detect: no cpVisitId arg, skipping")
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getCpVisitDetail(session.bearerToken, cpVisitId)
-                val visit = resp.takeIf { it.success }?.visit ?: return@launch
-                val proposed = visit.proposedSiteVisit ?: return@launch
+                // We previously called /api/marketing/clientPlaceVisits/get
+                // here, but the server side never wired up that HTTP route.
+                // Use the existing /my list endpoint and find the visit by
+                // id — the list is paginated to the latest 200 CP visits
+                // for the bearer, which always includes the one we're
+                // actively completing.
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
+                if (!resp.success) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: list call failed: ${resp.error ?: "(no error)"}",
+                    )
+                    return@launch
+                }
+                val visit = resp.visits.firstOrNull { it.id == cpVisitId }
+                if (visit == null) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId not in list of ${resp.visits.size} visits",
+                    )
+                    return@launch
+                }
+                val proposed = visit.proposedSiteVisit
+                if (proposed == null || !proposed.isMeaningful()) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId has no proposedSiteVisit -> normal mode",
+                    )
+                    return@launch
+                }
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId has proposedSiteVisit -> locked SV mode",
+                )
                 applyLockedSvMode(visit, proposed)
-            } catch (_: Exception) {
-                // Best-effort: if the lookup fails we just leave the
-                // normal outcome flow in place. The user can still pick
-                // an outcome manually.
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "detect: exception ${e.message}", e)
             }
         }
+    }
+
+    /**
+     * proposedSiteVisit can be persisted as an empty object `{}` if the
+     * web form was opened and abandoned, which Gson deserialises into a
+     * ProposedSiteVisit with every field null. Lock the sheet only
+     * when at least one meaningful field has been populated — that
+     * way an empty stub doesn't accidentally hide all the other tabs.
+     */
+    private fun ProposedSiteVisit.isMeaningful(): Boolean {
+        return !projectId.isNullOrBlank() ||
+            !scheduledDate.isNullOrBlank() ||
+            !scheduledTime.isNullOrBlank() ||
+            !inchargeStaffId.isNullOrBlank() ||
+            !hodStaffId.isNullOrBlank() ||
+            !bdoStaffId.isNullOrBlank() ||
+            !avpStaffId.isNullOrBlank() ||
+            !gmStaffId.isNullOrBlank() ||
+            !seniorManagerStaffId.isNullOrBlank()
     }
 
     private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
@@ -1760,6 +1816,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     companion object {
+        private const val LOG_TAG = "CpOutcomeSheet"
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
