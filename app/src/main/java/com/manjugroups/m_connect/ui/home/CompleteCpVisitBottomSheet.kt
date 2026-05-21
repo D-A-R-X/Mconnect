@@ -1585,19 +1585,61 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     )
                     return@launch
                 }
+                // Diagnostic dump of every signal we use to detect
+                // "this CP came from a telecaller-fixed SV". If the
+                // locked UI still doesn't activate on a known SV-fixed
+                // visit, this line in logcat tells us which signal is
+                // missing on the server-side row.
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId " +
+                        "leadFollowUpStatus=${visit.lead?.followUpStatus} " +
+                        "origin=${visit.origin} " +
+                        "outcome=${visit.outcome} " +
+                        "fieldVisitStatus=${visit.fieldVisit?.status} " +
+                        "proposed.project=${visit.proposedSiteVisit?.projectId} " +
+                        "proposed.incharge=${visit.proposedSiteVisit?.inchargeStaffId} " +
+                        "proposed.date=${visit.proposedSiteVisit?.scheduledDate}",
+                )
+
                 val proposed = visit.proposedSiteVisit
-                if (proposed == null || !proposed.isMeaningful()) {
+                val proposedMeaningful = proposed?.isMeaningful() == true
+                val leadFlaggedSvFixed = visit.lead?.followUpStatus
+                    ?.lowercase(Locale.getDefault())
+                    ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+                    ?: false
+
+                // Lock the sheet if EITHER signal fires:
+                //   1. proposedSiteVisit has at least one populated field
+                //      (web-side SV-fix flow wrote a real payload).
+                //   2. The lead's followUpStatus is "sv_fixed" — the
+                //      telecaller marked the lead as SV-fixed, which on
+                //      the same-area routing path must mean this CP is
+                //      the verification step for that SV. Even with an
+                //      empty proposed payload (web bug), we still want
+                //      the read-only Reject / Confirm UX rather than
+                //      letting the field staff re-pick an outcome.
+                if (!proposedMeaningful && !leadFlaggedSvFixed) {
                     android.util.Log.d(
                         LOG_TAG,
                         "detect: cpVisitId=$cpVisitId has no proposedSiteVisit -> normal mode",
                     )
                     return@launch
                 }
+                val source = when {
+                    proposedMeaningful -> "proposedSiteVisit"
+                    else -> "lead.followUpStatus=sv_fixed"
+                }
                 android.util.Log.d(
                     LOG_TAG,
-                    "detect: cpVisitId=$cpVisitId has proposedSiteVisit -> locked SV mode",
+                    "detect: cpVisitId=$cpVisitId locked SV mode (source=$source)",
                 )
-                applyLockedSvMode(visit, proposed)
+                // Pass the proposed payload through whenever it's
+                // meaningful so the form pre-fills. Otherwise hand a
+                // blank payload — the locked UX (Reject / Confirm,
+                // other tabs pale) still applies, just without
+                // pre-filled values.
+                applyLockedSvMode(visit, proposed ?: ProposedSiteVisit())
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "detect: exception ${e.message}", e)
             }
