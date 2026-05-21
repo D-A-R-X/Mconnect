@@ -87,8 +87,24 @@ class RepaymentHistoryFragment : Fragment() {
                     if (_binding == null) return@onSuccess
                     val loan = resp.loan ?: return@onSuccess
                     val mapped = LoanMapper.fromRemote(loan, status)
+                    bindSummary(mapped)
                     adapter.submit(mapped.repayments.sortedByDescending { it.dueMillis })
                 }
+        }
+    }
+
+    private fun bindSummary(loan: Loan) {
+        if (_binding == null) return
+        binding.loanSummaryCard.visibility = View.VISIBLE
+        binding.tvLoanSummaryTitle.text = loan.title
+        binding.tvLoanSummaryId.text = loan.loanId.ifBlank { "—" }
+        binding.tvLoanSummaryPrincipal.text = LoansAdapter.formatRupees(loan.principal)
+        binding.tvLoanSummaryEmi.text = LoansAdapter.formatRupees(loan.nextEmiAmount)
+        binding.tvLoanSummaryRemaining.text = LoansAdapter.formatRupees(loan.outstandingBalance)
+        binding.tvLoanSummaryDisbursed.text = if (loan.disbursedMillis > 0L) {
+            SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(loan.disbursedMillis))
+        } else {
+            "—"
         }
     }
 

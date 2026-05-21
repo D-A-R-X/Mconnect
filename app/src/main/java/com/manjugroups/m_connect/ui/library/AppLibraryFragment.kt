@@ -11,6 +11,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentAppLibraryBinding
 import com.manjugroups.m_connect.ui.PlaceholderFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
+import com.manjugroups.m_connect.ui.hr.AttendanceReviewFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
@@ -172,6 +173,17 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemMarketingNewBooking,
             allowed = session.hasPermission("marketing.bookings.create"),
         ) { openScreen(BookingCreateFragment.newEmpty()) }
+
+        // Managers only — surfaced when the backend grants attendance.approve.
+        // Show the matching divider so the row joins the HR card cleanly when
+        // it's visible, and stays invisible (no orphan separator) when it's not.
+        val canApproveAttendance = session.hasPermission("attendance.approve")
+        binding.dividerHrAttendanceReview.visibility =
+            if (canApproveAttendance) View.VISIBLE else View.GONE
+        bindIamEntry(
+            row = binding.itemHrAttendanceReview,
+            allowed = canApproveAttendance,
+        ) { openScreen(AttendanceReviewFragment.newInstance()) }
 
         binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }

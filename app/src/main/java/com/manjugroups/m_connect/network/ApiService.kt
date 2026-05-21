@@ -70,6 +70,24 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    // Attendance — manager approval queue (mirrors leaves/permissions approval).
+    @GET("api/hr/attendance/pending-approvals")
+    suspend fun getPendingAttendanceApprovals(
+        @Header("Authorization") token: String
+    ): AttendanceApprovalsResponse
+
+    @POST("api/hr/attendance/approve")
+    suspend fun approveAttendance(
+        @Header("Authorization") token: String,
+        @Body body: ApproveAttendanceRequest
+    ): SimpleResponse
+
+    @POST("api/hr/attendance/reject")
+    suspend fun rejectAttendance(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest
+    ): SimpleResponse
+
     // Shifts
     @GET("api/hr/shifts/today")
     suspend fun getTodayShift(
@@ -767,6 +785,39 @@ data class DaySessionsResponse(
     val hasOpenSession: Boolean? = null,
     val firstPunchIn: String? = null,
     val lastPunchOut: String? = null,
+)
+
+// Attendance approval queue — manager pending-approvals payload.
+// Backend returns the records key (not "attendance"), see http.ts:2724.
+data class AttendanceApprovalsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val records: List<AttendanceApprovalRecord> = emptyList()
+)
+
+data class AttendanceApprovalRecord(
+    @SerializedName("_id") val id: String?,
+    val staffId: String? = null,
+    val staffName: String? = null,
+    val date: String? = null,
+    val punchInTime: String? = null,
+    val punchOutTime: String? = null,
+    val totalMinutes: Int? = null,
+    val source: String? = null,
+    val status: String? = null,
+    // Backend categorisation chosen by the approver — present | half-day | absent | weekoff | holiday.
+    val approvedAttendance: String? = null,
+    val department: String? = null,
+    val designation: String? = null,
+    val employeeId: String? = null
+)
+
+// Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
+// to "present" when omitted; the app always sends an explicit choice to make
+// audit logs unambiguous.
+data class ApproveAttendanceRequest(
+    val id: String,
+    val approvedAttendance: String
 )
 
 // Punch models

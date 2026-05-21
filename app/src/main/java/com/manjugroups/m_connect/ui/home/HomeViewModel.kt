@@ -254,25 +254,190 @@ class HomeViewModel : ViewModel() {
             val places = placesResp.data ?: emptyList()
             Log.d(TAG, "Assigned places: ${places.size}")
 
-            // Load today's scheduled visits
+            // Load today's scheduled visits from the legacy fieldVisits
+            // pipeline (rows that already have a fieldVisits child).
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val visitsResp = geoApi.getTodayVisits(bearerToken, todayStr)
-            val visits = visitsResp.data?.filter { it.status != "cancelled" } ?: emptyList()
-            Log.d(TAG, "Today visits: ${visits.size}")
+            val legacyVisits = visitsResp.data?.filter { it.status != "cancelled" } ?: emptyList()
+            Log.d(TAG, "Today visits (legacy fieldVisits): ${legacyVisits.size}")
+
+            // Merge: CP visits assigned to me that may not have spawned
+            // a fieldVisits row yet. We capture each step's result so the
+            // empty-state Toast can tell the user exactly what came back
+            // (server returned nothing vs returned N but filter dropped
+            // all of them vs threw an exception).
+            val merged = mutableListOf<TodayVisit>()
+            merged.addAll(legacyVisits)
+            var cpFetched: Int = -1            // -1 = never returned; 0+ = real count
+            var cpKept: Int = 0
+            var cpError: String? = null
+            try {
+                val cpResp = geoApi.getMyMarketingCpVisits(
+                    bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
+                Log.d(
+                    TAG,
+                    "CP merge: success=${cpResp.success} total=${cpResp.visits.size} " +
+                        "error=${cpResp.error}",
+                )
+                if (cpResp.success) {
+                    cpFetched = cpResp.visits.size
+                    val legacyCpIds = legacyVisits.mapNotNull { it.clientPlaceVisitId }.toHashSet()
+                    // Keep every CP visit the server returned, dedup'd
+                    // against the legacy list. We deliberately do NOT
+                    // filter by scheduledDate here: the previous
+                    // today-only / today-or-overdue clamps dropped
+                    // every visit on the test backend because they
+                    // were all dated for future days. The trip card's
+                    // own status pill ("Start", "Enroute", "Reaching",
+                    // "Complete") tells the user where each visit is
+                    // in its lifecycle; the date is just metadata.
+                    // Only "cancelled" and "completed" are hard
+                    // exclusions — cancelled visits aren't actionable,
+                    // and completed ones already lived their day.
+                    val extras = cpResp.visits
+                        .filter { detail ->
+                            val id = detail.id ?: return@filter false
+                            if (id in legacyCpIds) return@filter false
+                            val status = detail.status?.lowercase(Locale.getDefault())
+                            if (status == "cancelled") return@filter false
+                            if (status == "completed") return@filter false
+                            true
+                        }
+                        .mapNotNull { detail -> detail.toTodayVisitOrNull() }
+                    cpKept = extras.size
+                    Log.d(TAG, "Today visits (CP merge): +${extras.size}")
+                    merged.addAll(extras)
+                } else {
+                    cpError = cpResp.error ?: "success=false"
+                }
+            } catch (e: Exception) {
+                cpError = e.message ?: e.javaClass.simpleName
+                Log.w(TAG, "CP visit merge failed: ${e.message}")
+            }
 
             val current = cachedState ?: return
             val updated = current.copy(
-                todayVisits = visits,
+                todayVisits = merged,
                 assignedPlaces = places,
-                activeVisitId = visits.firstOrNull { it.status == "in-progress" }?.id
+                activeVisitId = merged.firstOrNull { it.status == "in-progress" }?.id,
             )
             cachedState = updated
             _uiState.value = updated
+            // Diagnostic ping so the user can see what came back without
+            // needing adb. Only emits when the merged list is empty AND
+            // we attempted both fetches — so a healthy home stays quiet.
+            if (merged.isEmpty()) {
+                // Build a precise diagnostic the user can read in-app.
+                // Each field carries a specific meaning:
+                //   legacy=N    fieldVisits scheduled for me today
+                //   places=N    assigned clientPlaces (proxies auth health)
+                //   cpFetched=N CP visits the server returned (-1 = call
+                //               never returned a body at all)
+                //   cpKept=N    visits we kept after the today-or-overdue
+                //               filter
+                //   cpError=…   present iff the CP call threw or returned
+                //               success:false
+                val parts = mutableListOf(
+                    "legacy=${legacyVisits.size}",
+                    "places=${places.size}",
+                    "cpFetched=$cpFetched",
+                    "cpKept=$cpKept",
+                )
+                if (cpError != null) parts += "cpError=$cpError"
+                _punchEvent.emit(
+                    PunchEvent.Error("Home empty: ${parts.joinToString(", ")}"),
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load visits/places: ${e.message}", e)
+            _punchEvent.emit(
+                PunchEvent.Error("Home load error: ${e.message ?: "unknown"}"),
+            )
         } finally {
             _isVisitsLoading.value = false
         }
+    }
+
+    /**
+     * Map a marketing-side CpVisitDetail row onto the legacy TodayVisit
+     * shape the home card already knows how to render. Returns null
+     * (skips the row) if the CP visit is too sparse to produce a
+     * usable card — we need an id, a clientPlaceId proxy, and at
+     * minimum a scheduledDate.
+     */
+    private fun com.manjugroups.m_connect.network.CpVisitDetail.toTodayVisitOrNull(): TodayVisit? {
+        val cpId = this.id ?: return null
+        val scheduled = this.scheduledDate ?: return null
+        // We use the CP visit id as the row id because the server-side
+        // resolver added earlier accepts either a fieldVisits id or a
+        // clientPlaceVisits id on startVisit / OTP / completeVisit. That
+        // keeps this merge minimal — no extra lookups to find the
+        // companion fieldVisits id when one exists.
+        //
+        // Status precedence: the spawned fieldVisits row carries the
+        // authoritative trip status ("in-progress" / "arrived" /
+        // "completed"), while the CP visit's own status only tracks the
+        // CP lifecycle ("scheduled" / "in_progress" / "completed"). If
+        // a fieldVisits row exists we prefer its status so the trip
+        // nav screen doesn't drop the user back on "Start Trip" after
+        // they've already verified arrival.
+        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
+            ?: this.status?.takeIf { it.isNotBlank() }
+            ?: "scheduled"
+        // Detect "this CP was an SV-fix routed through CP first" using
+        // the same three signals the outcome sheet uses for its locked
+        // mode. Any one of these is enough: an explicit proposed SV
+        // payload (the web's `same_area` create path writes it), the
+        // lead being flagged sv_fixed by an upstream convert step, or
+        // party data (expectedAttendeeCount / attendees / food /
+        // vehicle) which only the SV-fix create path attaches.
+        val proposedHasFields = this.proposedSiteVisit?.let { p ->
+            !p.projectId.isNullOrBlank() ||
+                !p.scheduledDate.isNullOrBlank() ||
+                !p.scheduledTime.isNullOrBlank() ||
+                !p.inchargeStaffId.isNullOrBlank() ||
+                !p.hodStaffId.isNullOrBlank() ||
+                !p.bdoStaffId.isNullOrBlank() ||
+                !p.avpStaffId.isNullOrBlank() ||
+                !p.gmStaffId.isNullOrBlank() ||
+                !p.seniorManagerStaffId.isNullOrBlank()
+        } ?: false
+        val leadFlaggedSvFixed = this.lead?.followUpStatus
+            ?.lowercase(Locale.getDefault())
+            ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+            ?: false
+        val hasSvFixParty = (this.expectedAttendeeCount ?: 0) > 0 ||
+            (this.attendees?.isNotEmpty() == true) ||
+            !this.foodPreferences.isNullOrBlank() ||
+            !this.vehiclePreference.isNullOrBlank()
+        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+            "sv_cum_cp"
+        } else {
+            "direct_cp"
+        }
+        return TodayVisit(
+            id = cpId,
+            clientPlaceId = this.clientPlaceId ?: cpId,
+            scheduledDate = scheduled,
+            status = effectiveStatus,
+            visitCategory = category,
+            placeName = this.clientPlace?.name
+                ?: this.client?.clientName
+                ?: this.lead?.contactName
+                ?: "CP visit",
+            placeAddress = this.clientPlace?.address
+                ?: this.clientPlace?.formattedAddress,
+            placeLat = this.clientPlace?.lat,
+            placeLng = this.clientPlace?.lng,
+            tripType = "client_place",
+            clientPlaceVisitId = cpId,
+            leadName = this.lead?.contactName ?: this.client?.clientName,
+            leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
+            scheduledStartTime = this.scheduledTime,
+        )
     }
 
     fun loadTodayVisits(bearerToken: String) {

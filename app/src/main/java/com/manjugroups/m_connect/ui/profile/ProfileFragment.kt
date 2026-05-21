@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import androidx.appcompat.app.AlertDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -271,6 +272,15 @@ class ProfileFragment : Fragment() {
         }
         binding.profileAvatarContainer.setOnClickListener(photoPicker)
         binding.btnProfileAvatarEdit.setOnClickListener(photoPicker)
+        // Long-press the avatar to surface the remove option. Keeping the
+        // single-tap behaviour the same (opens the picker) avoids regressing
+        // the existing photo-change UX while still wiring delete-my-photo.
+        val photoChooser = View.OnLongClickListener {
+            showPhotoOptionsDialog()
+            true
+        }
+        binding.profileAvatarContainer.setOnLongClickListener(photoChooser)
+        binding.btnProfileAvatarEdit.setOnLongClickListener(photoChooser)
 
         binding.rowPersonalData.setOnClickListener {
             parentFragmentManager.beginTransaction()
@@ -293,6 +303,46 @@ class ProfileFragment : Fragment() {
 
         binding.rowLogout.setOnClickListener {
             signOut()
+        }
+    }
+
+    private fun showPhotoOptionsDialog() {
+        val hasPhoto = !session.userPhotoUrl.isNullOrBlank()
+        val options = if (hasPhoto) {
+            arrayOf("Change photo", "Remove photo")
+        } else {
+            arrayOf("Change photo")
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Profile photo")
+            .setItems(options) { _, which ->
+                when {
+                    which == 0 -> pickProfileImage.launch(arrayOf("image/*"))
+                    hasPhoto && which == 1 -> removeProfilePhoto()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun removeProfilePhoto() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) {
+                runCatching {
+                    val resp = api.deleteMyProfilePhoto(session.bearerToken)
+                    if (!resp.success) error(resp.error ?: "Could not remove photo")
+                    true to "Photo removed"
+                }.getOrElse { err -> false to (err.message ?: "Network error") }
+            }
+            if (_binding == null) return@launch
+            if (ok) {
+                session.userPhotoUrl = null
+                binding.ivProfileAvatar.setImageDrawable(null)
+                applyCompactAvatar(null)
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(requireContext(), "Couldn't remove photo: $msg", Toast.LENGTH_LONG).show()
+            }
         }
     }
 

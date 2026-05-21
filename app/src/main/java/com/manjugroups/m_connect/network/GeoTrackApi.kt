@@ -186,6 +186,17 @@ interface GeoTrackApi {
         @Query("id") id: String
     ): CpVisitDetailResponse
 
+    // Marketing CP visits assigned to the bearer in a date range.
+    // Used by Home's "Today's Trip" merge so visits that exist in
+    // `clientPlaceVisits` but have no companion fieldVisits row yet
+    // still surface on the home screen.
+    @GET("api/marketing/clientPlaceVisits/my")
+    suspend fun getMyMarketingCpVisits(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null
+    ): MyMarketingCpVisitsResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -641,6 +652,16 @@ data class CpVisitDetailResponse(
     val error: String? = null,
 )
 
+// Marketing CP visits list response — used by Home today's trip merge.
+// Each visit is the enriched clientPlaceVisits row (same shape as
+// `CpVisitDetail` minus arrival proof we don't need for the home card).
+data class MyMarketingCpVisitsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val visits: List<CpVisitDetail> = emptyList(),
+    val error: String? = null,
+)
+
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
     val leadId: String? = null,
@@ -670,6 +691,12 @@ data class CpVisitDetail(
     val isBookingCompleted: Boolean? = null,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,
+    // SV-via-CP path: when the telecaller pre-fixed an SV via the
+    // dialer's "same area" routing, the CP visit carries the full SV
+    // payload here. Mobile uses this to lock the outcome sheet to the
+    // Site Visit tab and pre-fill the form with the telecaller's plan.
+    val proposedSiteVisit: ProposedSiteVisit? = null,
+    val attendees: List<CpVisitAttendee>? = null,
     // Joined references the web `enrichVisit` helper attaches:
     val lead: CpVisitLead? = null,
     val client: CpVisitClient? = null,
@@ -678,6 +705,31 @@ data class CpVisitDetail(
     val clientPlace: CpVisitPlace? = null,
     val fieldVisit: CpVisitFieldVisit? = null,
     val arrivalProof: CpVisitArrivalProof? = null,
+)
+
+/**
+ * Telecaller's pre-fixed SV details snapshot. When non-null on a
+ * CP visit, the mobile bottom sheet locks to Site Visit mode and
+ * surfaces these fields as read-only with Reject / Confirm buttons.
+ */
+data class ProposedSiteVisit(
+    val projectId: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val inchargeStaffId: String? = null,
+    val hodStaffId: String? = null,
+    val bdoStaffId: String? = null,
+    val avpStaffId: String? = null,
+    val gmStaffId: String? = null,
+    val seniorManagerStaffId: String? = null,
+)
+
+data class CpVisitAttendee(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null,
+    val notes: String? = null,
 )
 
 data class CpVisitLead(
@@ -779,7 +831,17 @@ data class TodayVisit(
         value = "scheduledEndTime",
         alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
-    val scheduledEndTime: String? = null
+    val scheduledEndTime: String? = null,
+    // Mobile-only annotation set by the Home merge once we know whether
+    // the underlying CP visit carries an SV-fix payload. Server never
+    // sends this key so Gson leaves it as the default null on legacy
+    // /today-visits rows; the Home merge copies the data class with a
+    // non-null value for CP-merge rows. Values:
+    //   "sv_cum_cp"  → telecaller-fixed SV verified through a CP
+    //   "direct_cp"  → regular CP visit (no SV-fix payload)
+    //   "site_visit" → direct site visit (no CP intermediary)
+    //   null         → unknown
+    val visitCategory: String? = null,
 )
 
 data class CpVisitState(

@@ -480,7 +480,22 @@ class HomeFragment : Fragment() {
         distance.text = if (visit.placeLat != null && visit.placeLng != null) "Open route" else "Not mapped"
 
         val isCpVisit = visit.clientPlaceVisitId != null
-        lead.visibility = View.GONE
+        // Surface the visit category so the field staff can tell at a
+        // glance which lane this row belongs to before tapping in.
+        // "sv_cum_cp" rows open into the locked Reject/Confirm sheet on
+        // the trip nav; "direct_cp" rows open the full outcome flow.
+        val categoryLabel = when (visit.visitCategory) {
+            "sv_cum_cp" -> "SV cum CP"
+            "direct_cp" -> "Direct CP"
+            "site_visit" -> "Site Visit"
+            else -> if (isCpVisit) "CP visit" else null
+        }
+        if (categoryLabel != null) {
+            lead.text = categoryLabel
+            lead.visibility = View.VISIBLE
+        } else {
+            lead.visibility = View.GONE
+        }
 
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")

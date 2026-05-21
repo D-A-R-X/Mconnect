@@ -25,9 +25,11 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
+import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
@@ -90,6 +92,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tabSiteVisit = OutcomeTab(null, null, null, null)
     private var tabPostpone = OutcomeTab(null, null, null, null)
     private var tabNotInterested = OutcomeTab(null, null, null, null)
+
+    // SV-via-CP locked mode. When the CP visit carries proposedSiteVisit,
+    // the sheet locks to Site Visit only, fades + disables every other
+    // tab, renders form fields read-only, and swaps Save for a Reject /
+    // Confirm pair.
+    private var lockedFromProposedSv: Boolean = false
+    private var cpLockedFooter: View? = null
+    private var btnCpLockedReject: TextView? = null
+    private var btnCpLockedConfirm: TextView? = null
 
     // ---- Sub-tab views --------------------------------------------------
     private var subTabsScroll: HorizontalScrollView? = null
@@ -307,13 +318,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnEdit = view.findViewById(R.id.btnOutcomeEdit)
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
+        cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
+        btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
+        btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
 
         // Pre-seed from args if caller passed an outcome.
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
             ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it } }
 
+        // If TripNavigationFragment already detected this is an SV-fix
+        // CP, switch to Site Visit + fade the other tabs BEFORE the
+        // first renderState() call. Without this the user briefly sees
+        // the Booking tab default for one frame while the async detect
+        // resolves, then it snaps to locked Site Visit — visible as a
+        // flicker. Applying the hint synchronously here makes the first
+        // paint show locked Site Visit straight away. detectAndApply
+        // below still runs and refines the pre-fill values + final
+        // verification.
+        val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
+        if (isSvFixedHint) {
+            activeOutcome = Outcome.SITE_VISIT
+        }
+
         wireInteractions()
         renderState()
+
+        if (isSvFixedHint) {
+            // Pale-out the non-SV tabs immediately so the first paint
+            // matches the locked layout. detectAndApplyLockedSvMode
+            // below adds the read-only / Reject-Confirm footer once
+            // the server-side payload arrives.
+            listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+                tab.cell?.isClickable = false
+                tab.cell?.alpha = 0.35f
+            }
+        }
+
+        // Check whether the CP visit was pre-fixed by the telecaller. If
+        // so, lock the sheet to Site Visit and surface Reject / Confirm.
+        detectAndApplyLockedSvMode()
     }
 
     // ---- View binding helpers ------------------------------------------
@@ -1522,13 +1565,350 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         else -> null
     }
 
+    // ── SV-via-CP locked-tab mode ───────────────────────────────────────
+    //
+    // The telecaller can fix a Site Visit via the "same area" routing
+    // from the dialer. That path doesn't create the SV directly — it
+    // creates a CP visit with a `proposedSiteVisit` payload and assigns
+    // a field staff to verify with the client first. When the field
+    // staff opens this sheet after meeting the client, the proper UX
+    // is "you don't fill anything in, you just Reject or Confirm what
+    // the telecaller already prepared". This helper detects that
+    // payload and re-shapes the sheet accordingly.
+
+    private fun detectAndApplyLockedSvMode() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+        if (cpVisitId.isNullOrBlank()) {
+            android.util.Log.d(LOG_TAG, "detect: no cpVisitId arg, skipping")
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // We previously called /api/marketing/clientPlaceVisits/get
+                // here, but the server side never wired up that HTTP route.
+                // Use the existing /my list endpoint and find the visit by
+                // id — the list is paginated to the latest 200 CP visits
+                // for the bearer, which always includes the one we're
+                // actively completing.
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
+                if (!resp.success) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: list call failed: ${resp.error ?: "(no error)"}",
+                    )
+                    return@launch
+                }
+                val visit = resp.visits.firstOrNull { it.id == cpVisitId }
+                if (visit == null) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId not in list of ${resp.visits.size} visits",
+                    )
+                    return@launch
+                }
+                // Diagnostic dump of every signal we use to detect
+                // "this CP came from a telecaller-fixed SV". If the
+                // locked UI still doesn't activate on a known SV-fixed
+                // visit, this line in logcat tells us which signal is
+                // missing on the server-side row.
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId " +
+                        "leadFollowUpStatus=${visit.lead?.followUpStatus} " +
+                        "origin=${visit.origin} " +
+                        "outcome=${visit.outcome} " +
+                        "fieldVisitStatus=${visit.fieldVisit?.status} " +
+                        "expectedAttendeeCount=${visit.expectedAttendeeCount} " +
+                        "attendeesSize=${visit.attendees?.size ?: 0} " +
+                        "foodPreferences=${visit.foodPreferences} " +
+                        "vehiclePreference=${visit.vehiclePreference} " +
+                        "proposed.project=${visit.proposedSiteVisit?.projectId} " +
+                        "proposed.incharge=${visit.proposedSiteVisit?.inchargeStaffId} " +
+                        "proposed.date=${visit.proposedSiteVisit?.scheduledDate}",
+                )
+
+                val proposed = visit.proposedSiteVisit
+                val proposedMeaningful = proposed?.isMeaningful() == true
+                val leadFlaggedSvFixed = visit.lead?.followUpStatus
+                    ?.lowercase(Locale.getDefault())
+                    ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+                    ?: false
+                // The telecaller-fixed SV path on web (telecaller/leads/[id]
+                // page.tsx, lines 1133-1158) is the ONLY CP-create flow
+                // that spreads partyArgs — expectedAttendeeCount /
+                // attendees / foodPreferences / vehiclePreference — onto
+                // the CP visit row. Regular CP-only creates never include
+                // them, and createFromMobile / mobile-side createCpVisit
+                // doesn't take those args either. So any party data on a
+                // CP visit is a strong server-side fingerprint that the
+                // telecaller went through "Fix Site Visit -> same area"
+                // for this row.
+                val hasSvFixParty =
+                    (visit.expectedAttendeeCount ?: 0) > 0 ||
+                        (visit.attendees?.isNotEmpty() == true) ||
+                        !visit.foodPreferences.isNullOrBlank() ||
+                        !visit.vehiclePreference.isNullOrBlank()
+
+                // Lock the sheet if ANY signal fires:
+                //   1. proposedSiteVisit has at least one populated field
+                //   2. The lead's followUpStatus is already "sv_fixed"
+                //   3. Party data is on the CP visit row (SV-fix-only)
+                if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode",
+                    )
+                    return@launch
+                }
+                val source = when {
+                    proposedMeaningful -> "proposedSiteVisit"
+                    leadFlaggedSvFixed -> "lead.followUpStatus=sv_fixed"
+                    else -> "partyData"
+                }
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId locked SV mode (source=$source)",
+                )
+                // Pass the proposed payload through whenever it's
+                // meaningful so the form pre-fills. Otherwise hand a
+                // blank payload — the locked UX (Reject / Confirm,
+                // other tabs pale) still applies, just without
+                // pre-filled values.
+                applyLockedSvMode(visit, proposed ?: ProposedSiteVisit())
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "detect: exception ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * proposedSiteVisit can be persisted as an empty object `{}` if the
+     * web form was opened and abandoned, which Gson deserialises into a
+     * ProposedSiteVisit with every field null. Lock the sheet only
+     * when at least one meaningful field has been populated — that
+     * way an empty stub doesn't accidentally hide all the other tabs.
+     */
+    private fun ProposedSiteVisit.isMeaningful(): Boolean {
+        return !projectId.isNullOrBlank() ||
+            !scheduledDate.isNullOrBlank() ||
+            !scheduledTime.isNullOrBlank() ||
+            !inchargeStaffId.isNullOrBlank() ||
+            !hodStaffId.isNullOrBlank() ||
+            !bdoStaffId.isNullOrBlank() ||
+            !avpStaffId.isNullOrBlank() ||
+            !gmStaffId.isNullOrBlank() ||
+            !seniorManagerStaffId.isNullOrBlank()
+    }
+
+    private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
+        if (!isAdded) return
+        lockedFromProposedSv = true
+
+        // 1. Force the active outcome to Site Visit and re-render so the
+        //    SV body is the one on screen.
+        activeOutcome = Outcome.SITE_VISIT
+        renderState()
+
+        // 2. Fade non-SV tabs and make them unclickable.
+        listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+            tab.cell?.isClickable = false
+            tab.cell?.alpha = 0.35f
+        }
+
+        // 3. Pre-fill the SV form from `proposedSiteVisit` + visit-level
+        //    fields (attendees, food prefs, pickup address from the
+        //    client place if we have it).
+        tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
+        tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        if (visitorCount > 0) {
+            etSvVisitorCount?.setText(visitorCount.toString())
+        }
+        etSvPickupAddress?.setText(
+            visit.clientPlace?.address
+                ?: visit.clientPlace?.formattedAddress
+                ?: visit.lead?.preferredArea
+                ?: "",
+        )
+
+        // Resolve project + staff names from the caches (load them if
+        // they're cold so the labels render as something meaningful
+        // instead of "Selected").
+        prefillProjectIfPossible(proposed.projectId)
+        prefillSvStaff(proposed)
+
+        // 4. Disable every input row inside the SV body so the form
+        //    reads as a read-only confirmation surface.
+        applyReadOnlyToSvBody()
+
+        // 5. Swap the single Save button for the Reject / Confirm pair.
+        btnSubmit?.visibility = View.GONE
+        cpLockedFooter?.visibility = View.VISIBLE
+        btnCpLockedReject?.setOnClickListener { onLockedRejectTap() }
+        btnCpLockedConfirm?.setOnClickListener { onLockedConfirmTap() }
+    }
+
+    private suspend fun prefillProjectIfPossible(projectId: String?) {
+        if (projectId.isNullOrBlank()) return
+        if (svProjectCache.isEmpty()) {
+            runCatching {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (resp.success && resp.projects.isNotEmpty()) {
+                    svProjectCache = resp.projects
+                }
+            }
+        }
+        val match = svProjectCache.firstOrNull { it.id == projectId }
+        if (match != null) {
+            svProject = match
+            tvSvProject?.text = match.name ?: "Selected"
+        } else {
+            tvSvProject?.text = "Selected"
+        }
+    }
+
+    private suspend fun prefillSvStaff(proposed: ProposedSiteVisit) {
+        // Build the label-set we need to resolve. If anything is set,
+        // load the staff cache once and map IDs -> names.
+        val anyStaff = listOfNotNull(
+            proposed.inchargeStaffId,
+            proposed.hodStaffId,
+            proposed.avpStaffId,
+            proposed.gmStaffId,
+            proposed.seniorManagerStaffId,
+        )
+        if (anyStaff.isEmpty()) return
+        if (svStaffCache.isEmpty()) {
+            runCatching {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                svStaffCache = resp.staff
+            }
+        }
+        fun byId(id: String?): StaffData? =
+            if (id.isNullOrBlank()) null else svStaffCache.firstOrNull { it.id == id }
+
+        byId(proposed.inchargeStaffId)?.let { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.inchargeStaffId.isNullOrBlank()) tvSvIncharge?.text = "Selected" }
+        byId(proposed.hodStaffId)?.let { svHod = it; tvSvHod?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.hodStaffId.isNullOrBlank()) tvSvHod?.text = "Selected" }
+        byId(proposed.avpStaffId)?.let { svAvp = it; tvSvAvp?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.avpStaffId.isNullOrBlank()) tvSvAvp?.text = "Selected" }
+        byId(proposed.gmStaffId)?.let { svGm = it; tvSvGm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.gmStaffId.isNullOrBlank()) tvSvGm?.text = "Selected" }
+        byId(proposed.seniorManagerStaffId)?.let { svSm = it; tvSvSm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.seniorManagerStaffId.isNullOrBlank()) tvSvSm?.text = "Selected" }
+    }
+
+    private fun applyReadOnlyToSvBody() {
+        val body = bodySiteVisit ?: return
+        // Walk the SV body and dim + disable every interactive view.
+        // We deliberately leave TextViews readable (not transparent) —
+        // the user still needs to see the values.
+        fun walk(v: View) {
+            if (v is EditText) {
+                v.isFocusable = false
+                v.isFocusableInTouchMode = false
+                v.isCursorVisible = false
+                v.isEnabled = false
+                v.alpha = 0.7f
+            } else if (v is android.view.ViewGroup) {
+                v.isClickable = false
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            } else {
+                v.isClickable = false
+                v.isFocusable = false
+            }
+        }
+        walk(body)
+        // Buttons (Own / Cab travel pills) are TextView siblings — kill
+        // their click listeners too.
+        btnSvTravelOwn?.isClickable = false
+        btnSvTravelCab?.isClickable = false
+        btnSvTravelOwn?.alpha = 0.7f
+        btnSvTravelCab?.alpha = 0.7f
+    }
+
+    private fun onLockedConfirmTap() {
+        // Confirming just reuses the existing persistSiteVisit flow —
+        // it already calls markClientMet + convertCpVisitToSiteVisit with
+        // the populated SV fields, which we filled from the telecaller's
+        // proposed payload.
+        clearError()
+        persistSiteVisit()
+    }
+
+    private fun onLockedRejectTap() {
+        // Rejection records the field-staff "client said no" decision
+        // on the CP visit. We piggyback on the Not Interested flow's
+        // mutation contract — markClientMet=true (the staff did meet
+        // the client) + outcome=not_interested — so the back office
+        // sees a clean terminal status.
+        clearError()
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+            ?: return showError("Missing CP visit id")
+        btnCpLockedConfirm?.isClickable = false
+        btnCpLockedReject?.isClickable = false
+        btnCpLockedReject?.text = "Rejecting…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
+                )
+                if (!metResp.success) {
+                    finishLockedReject(metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    SetOutcomeRequest(
+                        id = cpVisitId,
+                        outcome = OUTCOME_NOT_INTERESTED,
+                        notes = "Rejected by client at CP visit",
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    finishLockedReject(outcomeResp.error ?: "Failed to record rejection")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_NOT_INTERESTED,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                finishLockedReject(e.message ?: "Network error")
+            }
+        }
+    }
+
+    private fun finishLockedReject(error: String) {
+        btnCpLockedConfirm?.isClickable = true
+        btnCpLockedReject?.isClickable = true
+        btnCpLockedReject?.text = "Reject It"
+        showError(error)
+    }
+
     companion object {
+        private const val LOG_TAG = "CpOutcomeSheet"
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        // Pre-pass from TripNavigationFragment when the upstream
+        // reconcile already determined this CP came from a telecaller-
+        // fixed SV. Lets us avoid the brief Booking-tab flash while the
+        // sheet's own detect call resolves.
+        private const val ARG_IS_SV_FIXED_HINT = "arg_is_sv_fixed_hint"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -1539,12 +1919,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpVisitId: String,
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
+            isSvFixedHint: Boolean = false,
         ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CP_VISIT_ID, cpVisitId)
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
+                    if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
                 }
             }
     }

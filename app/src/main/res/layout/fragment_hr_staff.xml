@@ -23,14 +23,32 @@
             android:focusable="true"
             app:tint="?attr/colorForegroundPrimary" />
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
-            android:fontFamily="@font/inter_bold"
-            android:text="Staff"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="18sp" />
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="Staff"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="18sp" />
+
+            <!-- Active / Inactive / Total roll-up from getStaffCount. Hidden
+                 until the API responds so a "0 active" string doesn't flash. -->
+            <TextView
+                android:id="@+id/tvStaffCountSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
 
     </LinearLayout>
 

@@ -15,14 +15,11 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import coil.load
-import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
 import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
-import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -340,8 +337,6 @@ class LeavesFragment : Fragment() {
 
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
-            val staffAvatar = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStaffAvatar)
-            val staffVerified = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStaffVerified)
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
@@ -355,26 +350,6 @@ class LeavesFragment : Fragment() {
             staffName.visibility = View.VISIBLE
             staffName.text = displayName
             staffInitial.text = initial
-
-            // If this leave belongs to the current user, swap the initial chip for
-            // their profile photo and surface the verified-tick badge next to the
-            // name (same convention the Home header uses).
-            val isCurrentUser = displayName.equals("Self", ignoreCase = true) ||
-                displayName.equals(session.userName?.trim(), ignoreCase = true) ||
-                leave.staffName.isNullOrBlank()
-            val resolvedPhoto = if (isCurrentUser) ProfilePhotos.resolve(session.userPhotoUrl) else null
-            if (resolvedPhoto != null) {
-                staffAvatar.visibility = View.VISIBLE
-                staffInitial.visibility = View.INVISIBLE
-                staffAvatar.load(resolvedPhoto) {
-                    crossfade(true)
-                    transformations(CircleCropTransformation())
-                }
-            } else {
-                staffAvatar.visibility = View.GONE
-                staffInitial.visibility = View.VISIBLE
-            }
-            staffVerified.visibility = if (isCurrentUser) View.VISIBLE else View.GONE
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
@@ -463,23 +438,19 @@ class LeavesFragment : Fragment() {
     }
 
     private fun startSkeletonPulse() {
-        com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        if (skeletonAnimator?.isRunning == true) return
+        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
+            duration = 650L
+            repeatMode = ObjectAnimator.REVERSE
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
     }
 
     private fun stopSkeletonPulse() {
-        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
-        // Match the Attendance/Home page convention — system status bar transparent,
-        // blue header bleeds to the very top of the screen.
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
-            android.graphics.Color.parseColor("#0B61CA"),
-            darkStatusIcons = false,
-            fullBleed = true,
-        )
+        skeletonAnimator?.cancel()
+        skeletonAnimator = null
+        binding.skeletonContainer.alpha = 1f
     }
 
     override fun onDestroyView() {

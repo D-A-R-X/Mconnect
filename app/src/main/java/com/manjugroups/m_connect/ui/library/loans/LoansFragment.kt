@@ -121,9 +121,12 @@ class LoansFragment : Fragment() {
         if (hero != null) {
             bindHeroCard(hero)
             binding.heroActiveCard.visibility = View.VISIBLE
-            binding.heroActiveCard.setOnClickListener {
-                openRepaymentHistory(hero)
-            }
+            // Click handler is attached only *after* the fade-in animation
+            // completes (see playContentEntryAnim). Attaching it here would
+            // make the card respond to taps while it's still translucent and
+            // sliding in, which lets a stray touch open RepaymentHistory for
+            // a loan the user hadn't actually decided to view.
+            binding.heroActiveCard.setOnClickListener(null)
         } else {
             binding.heroActiveCard.visibility = View.GONE
             binding.heroActiveCard.setOnClickListener(null)
@@ -133,7 +136,7 @@ class LoansFragment : Fragment() {
             if (previous.isEmpty()) View.GONE else View.VISIBLE
         adapter.submit(previous)
 
-        playContentEntryAnim()
+        playContentEntryAnim(hero)
     }
 
     private fun bindHeroCard(loan: Loan) {
@@ -167,7 +170,7 @@ class LoansFragment : Fragment() {
         }
     }
 
-    private fun playContentEntryAnim() {
+    private fun playContentEntryAnim(activeHero: Loan?) {
         if (_binding == null) return
         val density = resources.displayMetrics.density
         val art = binding.ivLoansHeaderArt
@@ -184,17 +187,28 @@ class LoansFragment : Fragment() {
             .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
             .start()
 
-        val hero = binding.heroActiveCard
-        if (hero.visibility == View.VISIBLE) {
-            hero.animate().cancel()
-            hero.alpha = 0f
-            hero.translationY = 24f * density
-            hero.animate()
+        val heroView = binding.heroActiveCard
+        if (heroView.visibility == View.VISIBLE) {
+            heroView.animate().cancel()
+            heroView.alpha = 0f
+            heroView.translationY = 24f * density
+            heroView.animate()
                 .alpha(1f)
                 .translationY(0f)
                 .setStartDelay(120L)
                 .setDuration(480L)
                 .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                .withEndAction {
+                    // Only arm the click once the card is fully visible and
+                    // settled — prevents the fade-in window from absorbing a
+                    // stray tap and opening RepaymentHistory for a loan the
+                    // user wasn't actually trying to open.
+                    if (_binding != null && activeHero != null) {
+                        binding.heroActiveCard.setOnClickListener {
+                            openRepaymentHistory(activeHero)
+                        }
+                    }
+                }
                 .start()
         }
 
