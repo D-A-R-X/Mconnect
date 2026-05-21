@@ -670,6 +670,12 @@ data class CpVisitDetail(
     val isBookingCompleted: Boolean? = null,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,
+    // SV-via-CP path: when the telecaller pre-fixed an SV via the
+    // dialer's "same area" routing, the CP visit carries the full SV
+    // payload here. Mobile uses this to lock the outcome sheet to the
+    // Site Visit tab and pre-fill the form with the telecaller's plan.
+    val proposedSiteVisit: ProposedSiteVisit? = null,
+    val attendees: List<CpVisitAttendee>? = null,
     // Joined references the web `enrichVisit` helper attaches:
     val lead: CpVisitLead? = null,
     val client: CpVisitClient? = null,
@@ -678,6 +684,31 @@ data class CpVisitDetail(
     val clientPlace: CpVisitPlace? = null,
     val fieldVisit: CpVisitFieldVisit? = null,
     val arrivalProof: CpVisitArrivalProof? = null,
+)
+
+/**
+ * Telecaller's pre-fixed SV details snapshot. When non-null on a
+ * CP visit, the mobile bottom sheet locks to Site Visit mode and
+ * surfaces these fields as read-only with Reject / Confirm buttons.
+ */
+data class ProposedSiteVisit(
+    val projectId: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val inchargeStaffId: String? = null,
+    val hodStaffId: String? = null,
+    val bdoStaffId: String? = null,
+    val avpStaffId: String? = null,
+    val gmStaffId: String? = null,
+    val seniorManagerStaffId: String? = null,
+)
+
+data class CpVisitAttendee(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null,
+    val notes: String? = null,
 )
 
 data class CpVisitLead(

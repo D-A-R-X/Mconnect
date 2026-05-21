@@ -476,6 +476,54 @@
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
+        <!--
+          SV-via-CP locked mode footer: shown only when the CP visit
+          carries a `proposedSiteVisit` payload (telecaller pre-fixed
+          the SV). Replaces the single Save button with a Reject / Confirm
+          pair so the field staff confirms or rejects the telecaller's
+          plan without re-entering anything.
+        -->
+        <LinearLayout
+            android:id="@+id/cpLockedFooter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="22dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/btnCpLockedReject"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outcome_segment_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="Reject It"
+                android:textColor="#D92D20"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnCpLockedConfirm"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outcome_primary_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="Confirm It"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvCpError"
             android:layout_width="match_parent"

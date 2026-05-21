@@ -25,9 +25,11 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
+import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
@@ -90,6 +92,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tabSiteVisit = OutcomeTab(null, null, null, null)
     private var tabPostpone = OutcomeTab(null, null, null, null)
     private var tabNotInterested = OutcomeTab(null, null, null, null)
+
+    // SV-via-CP locked mode. When the CP visit carries proposedSiteVisit,
+    // the sheet locks to Site Visit only, fades + disables every other
+    // tab, renders form fields read-only, and swaps Save for a Reject /
+    // Confirm pair.
+    private var lockedFromProposedSv: Boolean = false
+    private var cpLockedFooter: View? = null
+    private var btnCpLockedReject: TextView? = null
+    private var btnCpLockedConfirm: TextView? = null
 
     // ---- Sub-tab views --------------------------------------------------
     private var subTabsScroll: HorizontalScrollView? = null
@@ -307,6 +318,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnEdit = view.findViewById(R.id.btnOutcomeEdit)
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
+        cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
+        btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
+        btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
 
         // Pre-seed from args if caller passed an outcome.
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
@@ -314,6 +328,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         wireInteractions()
         renderState()
+
+        // Check whether the CP visit was pre-fixed by the telecaller. If
+        // so, lock the sheet to Site Visit and surface Reject / Confirm.
+        detectAndApplyLockedSvMode()
     }
 
     // ---- View binding helpers ------------------------------------------
@@ -1520,6 +1538,225 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         OUTCOME_POSTPONED -> Outcome.POSTPONE
         OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
         else -> null
+    }
+
+    // ── SV-via-CP locked-tab mode ───────────────────────────────────────
+    //
+    // The telecaller can fix a Site Visit via the "same area" routing
+    // from the dialer. That path doesn't create the SV directly — it
+    // creates a CP visit with a `proposedSiteVisit` payload and assigns
+    // a field staff to verify with the client first. When the field
+    // staff opens this sheet after meeting the client, the proper UX
+    // is "you don't fill anything in, you just Reject or Confirm what
+    // the telecaller already prepared". This helper detects that
+    // payload and re-shapes the sheet accordingly.
+
+    private fun detectAndApplyLockedSvMode() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID) ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getCpVisitDetail(session.bearerToken, cpVisitId)
+                val visit = resp.takeIf { it.success }?.visit ?: return@launch
+                val proposed = visit.proposedSiteVisit ?: return@launch
+                applyLockedSvMode(visit, proposed)
+            } catch (_: Exception) {
+                // Best-effort: if the lookup fails we just leave the
+                // normal outcome flow in place. The user can still pick
+                // an outcome manually.
+            }
+        }
+    }
+
+    private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
+        if (!isAdded) return
+        lockedFromProposedSv = true
+
+        // 1. Force the active outcome to Site Visit and re-render so the
+        //    SV body is the one on screen.
+        activeOutcome = Outcome.SITE_VISIT
+        renderState()
+
+        // 2. Fade non-SV tabs and make them unclickable.
+        listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+            tab.cell?.isClickable = false
+            tab.cell?.alpha = 0.35f
+        }
+
+        // 3. Pre-fill the SV form from `proposedSiteVisit` + visit-level
+        //    fields (attendees, food prefs, pickup address from the
+        //    client place if we have it).
+        tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
+        tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        if (visitorCount > 0) {
+            etSvVisitorCount?.setText(visitorCount.toString())
+        }
+        etSvPickupAddress?.setText(
+            visit.clientPlace?.address
+                ?: visit.clientPlace?.formattedAddress
+                ?: visit.lead?.preferredArea
+                ?: "",
+        )
+
+        // Resolve project + staff names from the caches (load them if
+        // they're cold so the labels render as something meaningful
+        // instead of "Selected").
+        prefillProjectIfPossible(proposed.projectId)
+        prefillSvStaff(proposed)
+
+        // 4. Disable every input row inside the SV body so the form
+        //    reads as a read-only confirmation surface.
+        applyReadOnlyToSvBody()
+
+        // 5. Swap the single Save button for the Reject / Confirm pair.
+        btnSubmit?.visibility = View.GONE
+        cpLockedFooter?.visibility = View.VISIBLE
+        btnCpLockedReject?.setOnClickListener { onLockedRejectTap() }
+        btnCpLockedConfirm?.setOnClickListener { onLockedConfirmTap() }
+    }
+
+    private suspend fun prefillProjectIfPossible(projectId: String?) {
+        if (projectId.isNullOrBlank()) return
+        if (svProjectCache.isEmpty()) {
+            runCatching {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (resp.success && resp.projects.isNotEmpty()) {
+                    svProjectCache = resp.projects
+                }
+            }
+        }
+        val match = svProjectCache.firstOrNull { it.id == projectId }
+        if (match != null) {
+            svProject = match
+            tvSvProject?.text = match.name ?: "Selected"
+        } else {
+            tvSvProject?.text = "Selected"
+        }
+    }
+
+    private suspend fun prefillSvStaff(proposed: ProposedSiteVisit) {
+        // Build the label-set we need to resolve. If anything is set,
+        // load the staff cache once and map IDs -> names.
+        val anyStaff = listOfNotNull(
+            proposed.inchargeStaffId,
+            proposed.hodStaffId,
+            proposed.avpStaffId,
+            proposed.gmStaffId,
+            proposed.seniorManagerStaffId,
+        )
+        if (anyStaff.isEmpty()) return
+        if (svStaffCache.isEmpty()) {
+            runCatching {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                svStaffCache = resp.staff
+            }
+        }
+        fun byId(id: String?): StaffData? =
+            if (id.isNullOrBlank()) null else svStaffCache.firstOrNull { it.id == id }
+
+        byId(proposed.inchargeStaffId)?.let { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.inchargeStaffId.isNullOrBlank()) tvSvIncharge?.text = "Selected" }
+        byId(proposed.hodStaffId)?.let { svHod = it; tvSvHod?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.hodStaffId.isNullOrBlank()) tvSvHod?.text = "Selected" }
+        byId(proposed.avpStaffId)?.let { svAvp = it; tvSvAvp?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.avpStaffId.isNullOrBlank()) tvSvAvp?.text = "Selected" }
+        byId(proposed.gmStaffId)?.let { svGm = it; tvSvGm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.gmStaffId.isNullOrBlank()) tvSvGm?.text = "Selected" }
+        byId(proposed.seniorManagerStaffId)?.let { svSm = it; tvSvSm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.seniorManagerStaffId.isNullOrBlank()) tvSvSm?.text = "Selected" }
+    }
+
+    private fun applyReadOnlyToSvBody() {
+        val body = bodySiteVisit ?: return
+        // Walk the SV body and dim + disable every interactive view.
+        // We deliberately leave TextViews readable (not transparent) —
+        // the user still needs to see the values.
+        fun walk(v: View) {
+            if (v is EditText) {
+                v.isFocusable = false
+                v.isFocusableInTouchMode = false
+                v.isCursorVisible = false
+                v.isEnabled = false
+                v.alpha = 0.7f
+            } else if (v is android.view.ViewGroup) {
+                v.isClickable = false
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            } else {
+                v.isClickable = false
+                v.isFocusable = false
+            }
+        }
+        walk(body)
+        // Buttons (Own / Cab travel pills) are TextView siblings — kill
+        // their click listeners too.
+        btnSvTravelOwn?.isClickable = false
+        btnSvTravelCab?.isClickable = false
+        btnSvTravelOwn?.alpha = 0.7f
+        btnSvTravelCab?.alpha = 0.7f
+    }
+
+    private fun onLockedConfirmTap() {
+        // Confirming just reuses the existing persistSiteVisit flow —
+        // it already calls markClientMet + convertCpVisitToSiteVisit with
+        // the populated SV fields, which we filled from the telecaller's
+        // proposed payload.
+        clearError()
+        persistSiteVisit()
+    }
+
+    private fun onLockedRejectTap() {
+        // Rejection records the field-staff "client said no" decision
+        // on the CP visit. We piggyback on the Not Interested flow's
+        // mutation contract — markClientMet=true (the staff did meet
+        // the client) + outcome=not_interested — so the back office
+        // sees a clean terminal status.
+        clearError()
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+            ?: return showError("Missing CP visit id")
+        btnCpLockedConfirm?.isClickable = false
+        btnCpLockedReject?.isClickable = false
+        btnCpLockedReject?.text = "Rejecting…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
+                )
+                if (!metResp.success) {
+                    finishLockedReject(metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    SetOutcomeRequest(
+                        id = cpVisitId,
+                        outcome = OUTCOME_NOT_INTERESTED,
+                        notes = "Rejected by client at CP visit",
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    finishLockedReject(outcomeResp.error ?: "Failed to record rejection")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_NOT_INTERESTED,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                finishLockedReject(e.message ?: "Network error")
+            }
+        }
+    }
+
+    private fun finishLockedReject(error: String) {
+        btnCpLockedConfirm?.isClickable = true
+        btnCpLockedReject?.isClickable = true
+        btnCpLockedReject?.text = "Reject It"
+        showError(error)
     }
 
     companion object {
