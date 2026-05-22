@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3-line filter glyph used at top-right of the attendance banner.
+     White by default; tinted by code if it ever lands on a light bg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,6 H21 V8 H3 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,11 H18 V13 H6 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10,16 H14 V18 H10 Z" />
+</vector>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Greyed-out Submit Now pill, used while the leave form is incomplete.
+  Same shape + radius as `bg_leave_sheet_button_filled` so toggling the
+  background doesn't shift the button geometry.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E4E7EC" />
+    <corners android:radius="20dp" />
+</shape>

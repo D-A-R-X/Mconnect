@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Background for the "Fill Leave Information" modal. White fill with all
+  four corners rounded so the sheet reads as a floating card over the
+  dimmed Leave Summary — matches the design where the modal sits centered
+  in the viewport rather than flush against the bottom edge.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/white" />
+    <corners android:radius="20dp" />
+</shape>

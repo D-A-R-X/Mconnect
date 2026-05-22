@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GM-handoff CP visit form (KOS-XX). Minimal because there's no physical
+  visit — the GM works the call by phone. Fields:
+    • Client name (optional, lookups by phone if blank)
+    • Mobile (required)
+    • Date + time of the planned call
+    • GM picker (required)
+    • Notes (free-text context for the GM)
+
+  No `assignedStaffId` / address / maps link inputs — server-side those
+  are intentionally skipped for `out_of_station` / `immediate_pickup`
+  lanes.
+
+  The "Urgent" badge at the top is set programmatically when the lane
+  is `immediate_pickup`; for `out_of_station` it stays hidden.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_apply_leave_sheet"
+    android:fillViewport="false"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvGmHandoffTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
+                android:text="GM Handoff"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/tvGmHandoffUrgent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip_inactive"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="Urgent"
+                android:textColor="?attr/colorError"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvGmHandoffSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Out-of-area prospect. GM handles by phone — no field visit."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+
+        <!-- Client Name -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Client name (optional)"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="11sp" />
+
+        <EditText
+            android:id="@+id/etGmHandoffClientName"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_leave_form_field"
+            android:fontFamily="@font/inter_regular"
+            android:hint="Type name if known"
+            android:inputType="textPersonName"
+            android:maxLines="1"
+            android:paddingHorizontal="12dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textSize="14sp" />
+
+        <!-- Mobile -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Mobile number"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="11sp" />
+
+        <EditText
+            android:id="@+id/etGmHandoffMobile"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_leave_form_field"
+            android:fontFamily="@font/inter_regular"
+            android:hint="10-digit mobile"
+            android:inputType="phone"
+            android:maxLines="1"
+            android:paddingHorizontal="12dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textSize="14sp" />
+
+        <!-- Date + Time row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Date"
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="11sp" />
+
+                <EditText
+                    android:id="@+id/etGmHandoffDate"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_leave_form_field"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_regular"
+                    android:hint="yyyy-mm-dd"
+                    android:paddingHorizontal="12dp"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textColorHint="?attr/colorForegroundMuted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Time (optional)"
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="11sp" />
+
+                <EditText
+                    android:id="@+id/etGmHandoffTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_leave_form_field"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_regular"
+                    android:hint="hh:mm"
+                    android:paddingHorizontal="12dp"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textColorHint="?attr/colorForegroundMuted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- GM picker -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Hand off to"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:id="@+id/rowGmHandoffPicker"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_leave_form_field"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
+
+            <TextView
+                android:id="@+id/tvGmHandoffPicker"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_regular"
+                android:text="Select GM"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_leave_chevron_down" />
+        </LinearLayout>
+
+        <!-- Notes -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Notes for the GM"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="11sp" />
+
+        <EditText
+            android:id="@+id/etGmHandoffNotes"
+            android:layout_width="match_parent"
+            android:layout_height="90dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_leave_form_field"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="top|start"
+            android:hint="Anything the GM should know before the call?"
+            android:inputType="textMultiLine"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textSize="13sp" />
+
+        <!-- Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:id="@+id/btnGmHandoffCancel"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_leave_sheet_button_outline"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Cancel"
+                    android:textColor="#1BCA0B"
+                    android:textSize="13sp" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnGmHandoffSubmit"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_leave_sheet_button_filled"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Send to GM"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp" />
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

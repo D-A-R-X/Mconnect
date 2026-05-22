@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft translucent white circle behind the back chevron on the
+     attendance banner — gives the icon a tap target without breaking
+     the gradient. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#22FFFFFF" />
+</shape>

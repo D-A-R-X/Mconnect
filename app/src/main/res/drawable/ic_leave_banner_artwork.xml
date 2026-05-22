@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Self-contained leave banner illustration. Replaces the
+  `leavebannergroup` + `leave_banner_suitcase` PNG composite that was
+  positioned with a hardcoded marginStart and consequently slid off-screen
+  on narrow phones. Single vector means predictable rendering across all
+  densities and screen widths.
+
+  Composition (left → right):
+    • Sparkles / stars on the left
+    • Teal-blue trolley suitcase
+    • Leave document card overlapping the suitcase (white with rainbow
+      bar, three text-stub lines, and a green check)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="120dp"
+    android:viewportWidth="180"
+    android:viewportHeight="120">
+
+    <!-- Sparkle / star — top-left small -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.85"
+        android:pathData="M14,42 L16,46 L20,48 L16,50 L14,54 L12,50 L8,48 L12,46 z" />
+    <!-- Sparkle / star — mid-left tiny -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.65"
+        android:pathData="M30,72 L31,74 L33,75 L31,76 L30,78 L29,76 L27,75 L29,74 z" />
+    <!-- Sparkle / star — top-mid -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.7"
+        android:pathData="M48,26 L49.5,29 L52.5,30.5 L49.5,32 L48,35 L46.5,32 L43.5,30.5 L46.5,29 z" />
+
+    <!-- Suitcase telescoping handle -->
+    <path
+        android:fillColor="#1E3A8A"
+        android:pathData="M70,46 L70,38 Q70,34 74,34 L96,34 Q100,34 100,38 L100,46 L96,46 L96,40 L74,40 L74,46 z" />
+    <!-- Suitcase top trim (lighter teal) -->
+    <path
+        android:fillColor="#1FB6C5"
+        android:pathData="M60,52 Q60,46 66,46 L104,46 Q110,46 110,52 L110,58 L60,58 z" />
+    <!-- Suitcase body -->
+    <path
+        android:fillColor="#1FB6C5"
+        android:pathData="M60,58 L110,58 L110,100 Q110,106 104,106 L66,106 Q60,106 60,100 z" />
+    <!-- Suitcase darker stripe (middle band) -->
+    <path
+        android:fillColor="#0F8F9C"
+        android:pathData="M60,72 L110,72 L110,82 L60,82 z" />
+    <!-- Suitcase corner highlight -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.18"
+        android:pathData="M64,60 L70,60 L70,98 L64,98 z" />
+
+    <!-- Leave document card — white background, sits on top of right
+         half of the suitcase per the design composition -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M98,30 Q98,26 102,26 L160,26 Q164,26 164,30 L164,102 Q164,106 160,106 L102,106 Q98,106 98,102 z" />
+    <!-- Document rainbow bar at top -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M102,30 L120,30 L120,36 L102,36 z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M120,30 L138,30 L138,36 L120,36 z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M138,30 L160,30 L160,34 Q160,36 158,36 L138,36 z" />
+    <!-- Document title "LEAVE" placeholder -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M104,46 L138,46 L138,50 L104,50 z" />
+    <!-- Document body lines -->
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M104,58 L158,58 L158,61 L104,61 z" />
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M104,66 L150,66 L150,69 L104,69 z" />
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M104,74 L155,74 L155,77 L104,77 z" />
+    <!-- Green check circle bottom-right of document -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M148,82 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+    <!-- White check mark -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M146,82 l-3,-3 l-2,2 l5,5 l8,-8 l-2,-2 z" />
+
+    <!-- Sparkle / star — top-right of document -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.85"
+        android:pathData="M166,20 L168,24 L172,26 L168,28 L166,32 L164,28 L160,26 L164,24 z" />
+</vector>

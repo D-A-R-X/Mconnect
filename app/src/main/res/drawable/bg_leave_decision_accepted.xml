@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Read-only "Accepted" pill on decided Team-scope cards. Muted green fill
+  so it reads as completed/disabled — clearly the same family as the
+  active Accept button but visibly inert.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#B7EBC3" />
+    <corners android:radius="10dp" />
+</shape>

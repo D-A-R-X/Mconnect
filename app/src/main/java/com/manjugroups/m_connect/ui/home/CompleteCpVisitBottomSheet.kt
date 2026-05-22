@@ -1569,6 +1569,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         OUTCOME_SITE_VISIT -> Outcome.SITE_VISIT
         OUTCOME_POSTPONED -> Outcome.POSTPONE
         OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
+        // Map rejected → NOT_INTERESTED for the UI enum since both
+        // are terminal-decline tabs; the actual outcome string saved
+        // server-side stays distinct ("rejected"). This only matters
+        // for the visual highlight on a resumed sheet — the
+        // server-truth value isn't overwritten.
+        OUTCOME_REJECTED -> Outcome.NOT_INTERESTED
         else -> null
     }
 
@@ -1884,58 +1890,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun onLockedRejectTap() {
-        // Rejection records the field-staff "client said no" decision
-        // on the CP visit. We piggyback on the Not Interested flow's
-        // mutation contract — markClientMet=true (the staff did meet
-        // the client) + outcome=not_interested — so the back office
-        // sees a clean terminal status.
+        // Hand off to the Rejection Case sub-sheet so the field staff
+        // can capture a free-text reason ("client backed out due to
+        // budget", "site location mismatch", etc.). That sheet fires
+        // the same markClientMet + setCpVisitOutcome(not_interested)
+        // chain we used to invoke directly here, but with the reason
+        // shipped as the outcome notes so back-office surfaces have
+        // context. On success it re-emits this sheet's RESULT_KEY so
+        // the upstream TripNavigationFragment flow continues as
+        // before — no caller change needed.
         clearError()
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        btnCpLockedConfirm?.isClickable = false
-        btnCpLockedReject?.isClickable = false
-        btnCpLockedReject?.text = "Rejecting…"
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
-                )
-                if (!metResp.success) {
-                    finishLockedReject(metResp.error ?: "Failed to record client met")
-                    return@launch
-                }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
-                    SetOutcomeRequest(
-                        id = cpVisitId,
-                        outcome = OUTCOME_NOT_INTERESTED,
-                        notes = "Rejected by client at CP visit",
-                    ),
-                )
-                if (!outcomeResp.success) {
-                    finishLockedReject(outcomeResp.error ?: "Failed to record rejection")
-                    return@launch
-                }
+
+        // Listen on the reason sheet's RESULT_KEY (a distinct key from
+        // this sheet's own RESULT_KEY so re-broadcasting can't loop).
+        // When the reason sheet succeeds we forward the result upstream
+        // on our own key so the TripNavigationFragment listener — which
+        // expects CompleteCpVisitBottomSheet.RESULT_KEY — fires
+        // exactly as it always did, and then dismiss this sheet too.
+        parentFragmentManager.setFragmentResultListener(
+            RejectReasonBottomSheet.RESULT_KEY,
+            this,
+        ) { _, bundle ->
+            val outcome = bundle.getString(RejectReasonBottomSheet.KEY_OUTCOME)
+            if (outcome == OUTCOME_REJECTED) {
                 setFragmentResult(
                     RESULT_KEY,
                     bundleOf(
                         KEY_CLIENT_MET to true,
-                        KEY_OUTCOME to OUTCOME_NOT_INTERESTED,
+                        KEY_OUTCOME to OUTCOME_REJECTED,
                     ),
                 )
                 dismissAllowingStateLoss()
-            } catch (e: Exception) {
-                finishLockedReject(e.message ?: "Network error")
             }
         }
-    }
 
-    private fun finishLockedReject(error: String) {
-        btnCpLockedConfirm?.isClickable = true
-        btnCpLockedReject?.isClickable = true
-        btnCpLockedReject?.text = "Reject It"
-        showError(error)
+        RejectReasonBottomSheet
+            .newInstance(cpVisitId)
+            .show(parentFragmentManager, "cp_reject_reason")
     }
 
     companion object {
@@ -1956,6 +1949,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
+        // SV-cum-CP rejection (distinct from not_interested). Set by
+        // the RejectReasonBottomSheet sub-flow with the captured reason
+        // shipped as notes; Convex outcomeValidator was extended to
+        // accept this value.
+        private const val OUTCOME_REJECTED = "rejected"
 
         fun newInstance(
             cpVisitId: String,

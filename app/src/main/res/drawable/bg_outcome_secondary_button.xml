@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outline secondary CTA used as "Reject It" sibling of the primary
+     "Confirm It" button on the SV-via-CP outcome footer. Red border on
+     a transparent fill mirrors the web's destructive-secondary button. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <stroke
+        android:width="1.5dp"
+        android:color="#D92D20" />
+    <corners android:radius="26dp" />
+</shape>
