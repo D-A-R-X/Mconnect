@@ -81,10 +81,7 @@ class ProjectExpensesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        // Push the blue header below the OS status bar. Without this, the
-        // title + subtitle + illustration are drawn behind the notification
-        // icons because the activity runs in full-bleed mode and the header
-        // only has paddingTop=12dp.
+        // Push the blue header below the OS status bar.
         val expenseHeader = view.findViewById<View>(R.id.expenseHeader)
         val baseHeaderTopPadding = expenseHeader.paddingTop
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(expenseHeader) { v, insets ->
@@ -137,7 +134,11 @@ class ProjectExpensesFragment : Fragment() {
                 R.id.chipOther -> "other"
                 else -> null
             }
-            refreshExpenses()
+            // Smooth fade transition for the list
+            rvExpenses.animate().alpha(0f).setDuration(150L).withEndAction {
+                refreshExpenses()
+                rvExpenses.animate().alpha(1f).setDuration(150L).start()
+            }.start()
         }
 
         btnAddExpense.setOnClickListener {
@@ -162,6 +163,22 @@ class ProjectExpensesFragment : Fragment() {
         ) { _, _ -> refreshExpenses() }
 
         loadProjects()
+        
+        // Initial entry animations
+        playEntryAnimations(view)
+    }
+
+    private fun playEntryAnimations(view: View) {
+        val totalsCard = view.findViewById<View>(R.id.cardTotals)
+        val chips = view.findViewById<View>(R.id.categoryPills).parent as View
+        
+        totalsCard.alpha = 0f
+        totalsCard.translationY = 40f
+        totalsCard.animate().alpha(1f).translationY(0f).setDuration(400L).setStartDelay(100L).start()
+        
+        chips.alpha = 0f
+        chips.translationY = 20f
+        chips.animate().alpha(1f).translationY(0f).setDuration(400L).setStartDelay(200L).start()
     }
 
     override fun onResume() {
@@ -228,18 +245,23 @@ class ProjectExpensesFragment : Fragment() {
     }
 
     private fun showDateFilter() {
-        val picker = MaterialDatePicker.Builder.dateRangePicker()
-            .setTitleText("Filter expenses")
-            .build()
-        picker.addOnPositiveButtonClickListener { pair ->
-            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-            fromDate = fmt.format(Date(pair.first))
-            toDate = fmt.format(Date(pair.second))
-            tvDateRange.text = "$fromDate → $toDate"
+        DateFilterBottomSheet.newInstance().show(parentFragmentManager, "date_filter")
+        parentFragmentManager.setFragmentResultListener(DateFilterBottomSheet.REQUEST_KEY, viewLifecycleOwner) { _, bundle ->
+            fromDate = bundle.getString(DateFilterBottomSheet.RESULT_FROM)
+            toDate = bundle.getString(DateFilterBottomSheet.RESULT_TO)
+            
+            // Format for display
+            val display = runCatching {
+                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val formatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
+                val start = formatter.format(parser.parse(fromDate!!)!!)
+                val end = formatter.format(parser.parse(toDate!!)!!)
+                "$start - $end"
+            }.getOrDefault("$fromDate - $toDate")
+            
+            tvDateRange.text = display
             refreshExpenses()
         }
-        picker.show(parentFragmentManager, "expense_date_filter")
     }
 
     private fun refreshExpenses() {

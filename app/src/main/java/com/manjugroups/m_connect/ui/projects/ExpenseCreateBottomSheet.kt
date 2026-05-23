@@ -65,27 +65,20 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         val etPaymentMethod = view.findViewById<AutoCompleteTextView>(R.id.etPaymentMethod)
         val etNotes = view.findViewById<TextInputEditText>(R.id.etNotes)
         val btnSave = view.findViewById<MaterialButton>(R.id.btnSave)
-        val btnCancel = view.findViewById<MaterialButton>(R.id.btnCancel)
+        // Layout dropped the standalone Cancel button — users dismiss via
+        // back-press or the sheet drag handle. Keep the variable out of
+        // findViewById so we don't crash with a null lookup.
 
         // Seed today's date so the picker has a sensible default.
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         var pickedDateIso = fmt.format(Calendar.getInstance().time)
         etDate.setText(pickedDateIso)
         etDate.setOnClickListener {
-            val cal = Calendar.getInstance().apply {
-                runCatching { time = fmt.parse(pickedDateIso)!! }
+            DateFilterBottomSheet.newInstance().show(parentFragmentManager, "date_filter")
+            parentFragmentManager.setFragmentResultListener(DateFilterBottomSheet.REQUEST_KEY, viewLifecycleOwner) { _, bundle ->
+                pickedDateIso = bundle.getString(DateFilterBottomSheet.RESULT_FROM) ?: pickedDateIso
+                etDate.setText(pickedDateIso)
             }
-            DatePickerDialog(
-                requireContext(),
-                { _, y, m, d ->
-                    cal.set(y, m, d)
-                    pickedDateIso = fmt.format(cal.time)
-                    etDate.setText(pickedDateIso)
-                },
-                cal.get(Calendar.YEAR),
-                cal.get(Calendar.MONTH),
-                cal.get(Calendar.DAY_OF_MONTH),
-            ).show()
         }
 
         // Payment method dropdown.
@@ -114,8 +107,6 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
             "other" -> chipOther.isChecked = true
             else -> chipLabour.isChecked = true
         }
-
-        btnCancel.setOnClickListener { dismissAllowingStateLoss() }
 
         btnSave.setOnClickListener {
             val category = when (categoryChips.checkedChipId) {
@@ -173,6 +164,28 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                     btnSave.isEnabled = true
                 }
             }
+        }
+        
+        playEntryAnimations(view)
+    }
+
+    private fun playEntryAnimations(view: View) {
+        val formItems = listOf(
+            view.findViewById<View>(R.id.categoryChips),
+            view.findViewById<View>(R.id.etDate).parent.parent as View,
+            view.findViewById<View>(R.id.etAmount).parent.parent as View,
+            view.findViewById<View>(R.id.etNotes).parent.parent as View,
+            view.findViewById<View>(R.id.etPaymentMethod).parent.parent as View,
+            view.findViewById<View>(R.id.btnSave)
+        )
+        formItems.forEachIndexed { i, item ->
+            item.alpha = 0f
+            item.translationY = 20f
+            item.animate().alpha(1f).translationY(0f)
+                .setDuration(350L)
+                .setStartDelay(100L + i * 50L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
         }
     }
 

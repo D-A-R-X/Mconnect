@@ -102,6 +102,7 @@
 
         <!-- Amount row -->
         <LinearLayout
+            android:id="@+id/rowAmount"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -132,6 +133,7 @@
 
         <!-- Date row -->
         <LinearLayout
+            android:id="@+id/rowDate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -161,6 +163,7 @@
 
         <!-- Payment method row -->
         <LinearLayout
+            android:id="@+id/rowPayment"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -190,6 +193,7 @@
 
         <!-- Notes section -->
         <TextView
+            android:id="@+id/labelNotes"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"

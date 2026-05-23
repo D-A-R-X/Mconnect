@@ -27,26 +27,26 @@
         android:id="@+id/expenseHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_expense_header"
+        android:background="#0B61CA"
         android:paddingHorizontal="16dp"
         android:paddingTop="12dp"
-        android:paddingBottom="20dp">
+        android:paddingBottom="24dp">
 
-        <!-- Decorative illustration in the top-right corner -->
         <ImageView
-            android:layout_width="130dp"
-            android:layout_height="100dp"
+            android:layout_width="140dp"
+            android:layout_height="110dp"
             android:layout_gravity="end|top"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="-10dp"
             android:src="@drawable/ic_expense_illustration"
-            android:contentDescription="@null" />
+            android:contentDescription="@null"
+            android:scaleType="fitCenter" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Back arrow (kept for nav even though mockup omits it) -->
             <ImageView
                 android:id="@+id/btnBack"
                 android:layout_width="36dp"
@@ -60,37 +60,37 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:text="Expenses"
+                android:fontFamily="@font/inter_bold"
                 android:textColor="@android:color/white"
-                android:textSize="22sp"
-                android:textStyle="bold" />
+                android:textSize="24sp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="4dp"
                 android:text="Manage and track all Expenses"
-                android:textColor="#E5FFFFFF"
-                android:textSize="12sp" />
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#D9D6FE"
+                android:textSize="13sp" />
 
-            <!-- Project picker (white pill with name + red dot + chevron-down)
-                 + Calendar (white square with blue icon) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="20dp"
                 android:orientation="horizontal">
 
                 <LinearLayout
                     android:id="@+id/btnProjectPicker"
                     android:layout_width="0dp"
                     android:layout_weight="1"
-                    android:layout_height="44dp"
-                    android:background="@drawable/bg_pill_white"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_home_soft_pill"
+                    android:backgroundTint="#FFFFFF"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:paddingHorizontal="14dp"
+                    android:paddingHorizontal="16dp"
                     android:clickable="true"
                     android:focusable="true">
 
@@ -100,19 +100,20 @@
                         android:layout_weight="1"
                         android:layout_height="wrap_content"
                         android:text="Choose a project"
-                        android:textColor="#FF18181B"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#101828"
                         android:textSize="14sp"
-                        android:textStyle="bold"
                         android:singleLine="true"
                         android:ellipsize="end" />
 
                     <View
                         android:id="@+id/dotRed"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
-                        android:layout_marginStart="6dp"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_red_dot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_home_status_dot"
+                        android:backgroundTint="#F04438"
                         android:visibility="gone"
                         tools:visibility="visible" />
 
@@ -121,47 +122,46 @@
                         android:layout_height="20dp"
                         android:src="@drawable/ic_chevron_down"
                         android:contentDescription="@null"
-                        app:tint="#FF52525B" />
+                        app:tint="#667085" />
                 </LinearLayout>
 
                 <FrameLayout
                     android:id="@+id/btnDateFilter"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_pill_white"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_home_soft_pill"
+                    android:backgroundTint="#FFFFFF"
                     android:clickable="true"
                     android:focusable="true">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:layout_gravity="center"
                         android:src="@drawable/ic_calendar_days"
                         android:contentDescription="Date filter"
-                        app:tint="@color/category_labour" />
+                        app:tint="#0B61CA" />
                 </FrameLayout>
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
-    <!-- ─── Totals card (white, slight overlap onto blue) ──────────── -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cardTotals"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="-12dp"
-        app:cardCornerRadius="14dp"
-        app:cardElevation="3dp"
-        app:cardBackgroundColor="@color/lt_surface_primary">
+        android:layout_marginTop="-20dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#FFFFFF">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
 
-            <!-- Headline row: text stack on left, donut on right -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -178,41 +178,42 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Total Expenses"
-                        android:textColor="#FF52525B"
+                        android:fontFamily="@font/inter_medium"
+                        android:textColor="#667085"
                         android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/tvTotalAmount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
+                        android:layout_marginTop="4dp"
                         android:text="RS 0"
-                        android:textColor="#FF18181B"
-                        android:textSize="26sp"
-                        android:textStyle="bold"
+                        android:fontFamily="@font/inter_bold"
+                        android:textColor="#101828"
+                        android:textSize="28sp"
                         tools:text="RS 2,40,000" />
 
                     <TextView
                         android:id="@+id/tvDateRange"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#FF71717A"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:textColor="#98A2B3"
                         android:textSize="12sp"
                         tools:text="January 2024" />
                 </LinearLayout>
 
                 <com.manjugroups.m_connect.ui.projects.DonutChartView
                     android:id="@+id/donutChart"
-                    android:layout_width="86dp"
-                    android:layout_height="86dp" />
+                    android:layout_width="96dp"
+                    android:layout_height="96dp" />
             </LinearLayout>
 
-            <!-- 3-up legend: dot + name on top, bold amount on bottom -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="20dp"
                 android:orientation="horizontal">
 
                 <!-- Labour -->
@@ -227,26 +228,27 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
                         <View
-                            android:layout_width="9dp"
-                            android:layout_height="9dp"
-                            android:background="@drawable/bg_category_dot"
-                            android:backgroundTint="@color/category_labour" />
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/bg_home_status_dot"
+                            android:backgroundTint="#2563EB" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
+                            android:layout_marginStart="8dp"
                             android:text="Labour"
-                            android:textColor="#FF18181B"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#101828"
                             android:textSize="12sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/tvTotalLabour"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#FF18181B"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:textColor="#101828"
+                        android:textSize="14sp"
                         tools:text="Rs 40000" />
                 </LinearLayout>
 
@@ -262,26 +264,27 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
                         <View
-                            android:layout_width="9dp"
-                            android:layout_height="9dp"
-                            android:background="@drawable/bg_category_dot"
-                            android:backgroundTint="@color/category_materials" />
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/bg_home_status_dot"
+                            android:backgroundTint="#F97316" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
+                            android:layout_marginStart="8dp"
                             android:text="Materials"
-                            android:textColor="#FF18181B"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#101828"
                             android:textSize="12sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/tvTotalMaterials"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#FF18181B"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:textColor="#101828"
+                        android:textSize="14sp"
                         tools:text="Rs 40000" />
                 </LinearLayout>
 
@@ -297,26 +300,27 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
                         <View
-                            android:layout_width="9dp"
-                            android:layout_height="9dp"
-                            android:background="@drawable/bg_category_dot"
-                            android:backgroundTint="@color/category_equipment" />
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/bg_home_status_dot"
+                            android:backgroundTint="#16A34A" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
+                            android:layout_marginStart="8dp"
                             android:text="Equipments"
-                            android:textColor="#FF18181B"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#101828"
                             android:textSize="12sp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/tvTotalEquipment"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#FF18181B"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:textColor="#101828"
+                        android:textSize="14sp"
                         tools:text="Rs 40000" />
                 </LinearLayout>
             </LinearLayout>
@@ -398,38 +402,53 @@
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
-    <!-- ─── Expense list ───────────────────────────────────────────── -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvExpenses"
+    <!-- ─── Expense list + empty state ─────────────────────────────────
+         Wrapped in a FrameLayout with weight=1 so either child (the list
+         when there are rows, the empty-state text otherwise) fills the
+         remaining vertical space. Without this, when rvExpenses is GONE
+         its weight stops applying and the Add Expense button slides up
+         next to the empty text instead of staying pinned at the bottom.
+    -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:clipToPadding="false"
-        android:paddingBottom="8dp" />
+        android:layout_marginTop="8dp">
 
-    <TextView
-        android:id="@+id/tvEmpty"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:padding="32dp"
-        android:text="No expenses logged yet."
-        android:textColor="#FF71717A"
-        android:visibility="gone" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvExpenses"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
 
-    <!-- ─── Add Expense button (full-width green pill) ─────────────── -->
+        <TextView
+            android:id="@+id/tvEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="32dp"
+            android:text="No expenses logged yet."
+            android:textColor="#FF71717A"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- ─── Add Expense button (full-width green pill) ───────────────
+         Uses the same vibrant green (#1BCA0B) as the Submit Date CTA
+         on the date filter sheet so the two primary actions on this
+         screen share the same colour token.
+    -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAddExpense"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_margin="16dp"
+        android:fontFamily="@font/inter_bold"
         android:text="Add Expense"
         android:textColor="@android:color/white"
         android:textSize="16sp"
         android:textAllCaps="false"
-        android:textStyle="bold"
-        app:backgroundTint="@color/category_equipment"
+        app:backgroundTint="#1BCA0B"
         app:cornerRadius="28dp"
         app:elevation="0dp" />
 

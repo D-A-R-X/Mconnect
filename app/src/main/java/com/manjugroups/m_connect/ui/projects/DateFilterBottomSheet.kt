@@ -67,6 +67,27 @@ class DateFilterBottomSheet : BottomSheetDialogFragment() {
         }
 
         render()
+        playEntryAnimations(view)
+    }
+
+    private fun playEntryAnimations(view: View) {
+        val calendarGrid = view.findViewById<View>(R.id.rvCalendar)
+        val submitBtn = view.findViewById<View>(R.id.btnSubmitDate)
+        
+        calendarGrid.alpha = 0f
+        calendarGrid.scaleX = 0.95f
+        calendarGrid.scaleY = 0.95f
+        calendarGrid.animate().alpha(1f).scaleX(1f).scaleY(1f)
+            .setDuration(400L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+            
+        submitBtn.alpha = 0f
+        submitBtn.translationY = 20f
+        submitBtn.animate().alpha(1f).translationY(0f)
+            .setDuration(400L)
+            .setStartDelay(200L)
+            .start()
     }
 
     private fun render() {

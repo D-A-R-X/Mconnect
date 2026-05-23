@@ -132,9 +132,7 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
             )
         }
 
-        // Surface the toggle only when the viewer can approve (client-
-        // side check matches the server-side IAM guard so we don't
-        // dangle an always-403 button).
+        // Surface the toggle only when the viewer can approve.
         val canApprove = session.hasPermission("projects.expenses.approve")
         if (canApprove) {
             btnToggle.visibility = View.VISIBLE
@@ -174,6 +172,27 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
                     }
                 }
             }
+        }
+        
+        // Staggered entry animation for details
+        playDetailAnimations(view)
+    }
+
+    private fun playDetailAnimations(view: View) {
+        val rows = listOf(
+            view.findViewById<View>(R.id.rowAmount),
+            view.findViewById<View>(R.id.rowDate),
+            view.findViewById<View>(R.id.rowPayment),
+            view.findViewById<View>(R.id.labelNotes),
+            view.findViewById<View>(R.id.tvDetailNotes)
+        )
+        rows.forEachIndexed { i, row ->
+            row?.alpha = 0f
+            row?.translationY = 16f
+            row?.animate()?.alpha(1f)?.translationY(0f)
+                ?.setDuration(300L)
+                ?.setStartDelay(100L + i * 50L)
+                ?.start()
         }
     }
 
