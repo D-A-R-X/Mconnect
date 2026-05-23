@@ -2,23 +2,14 @@ package com.manjugroups.m_connect.auth
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.util.UUID
 
 class SessionManager(context: Context) {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "mconnect_session",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
 
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)
@@ -142,6 +133,81 @@ class SessionManager(context: Context) {
     }
 
     companion object {
+        private const val TAG = "SessionManager"
+        private const val PREFS_NAME = "mconnect_session"
+
+        /**
+         * Open the encrypted prefs, recovering automatically if the keystore
+         * master key can no longer decrypt the stored blob.
+         *
+         * `EncryptedSharedPreferences.create` throws `AEADBadTagException`
+         * (wrapped in `GeneralSecurityException` / `IOException`) when the
+         * Android Keystore master key was rotated, invalidated, or the
+         * encrypted prefs file came from a backup whose key no longer
+         * matches. Without recovery the app FCs on every launch — every
+         * SplashActivity → MconnectApp.onCreate → SessionManager(…) crashes
+         * before any UI renders, the user can't even reach Login to start
+         * over.
+         *
+         * Recovery: delete the corrupt prefs file + clear the master key
+         * alias so the next open mints fresh credentials. Cost is one
+         * forced re-login; benefit is the app actually starts.
+         */
+        private fun openEncryptedPrefs(context: Context): SharedPreferences {
+            return try {
+                buildEncryptedPrefs(context)
+            } catch (first: Throwable) {
+                // AEADBadTagException + its KeyStoreException cause sit
+                // under GeneralSecurityException / IOException; catch the
+                // widest net so OEM-specific subclass leaks don't slip
+                // past us.
+                Log.w(
+                    TAG,
+                    "EncryptedSharedPreferences open failed; wiping and retrying.",
+                    first,
+                )
+                // 1. Drop the on-disk prefs file (this is the cipher blob
+                //    that no longer decrypts).
+                try {
+                    context.deleteSharedPreferences(PREFS_NAME)
+                } catch (deleteErr: Throwable) {
+                    Log.w(TAG, "deleteSharedPreferences failed", deleteErr)
+                }
+                // 2. Rebuild — MasterKey.Builder will re-create the
+                //    keystore alias if it was missing/invalid, and the
+                //    empty prefs file gets a fresh encrypted header.
+                try {
+                    buildEncryptedPrefs(context)
+                } catch (second: Throwable) {
+                    // Last-resort fallback: plaintext prefs. We surrender
+                    // the at-rest encryption to keep the app launchable.
+                    // The session token still lives behind the user's
+                    // OTP login, and any subsequent successful
+                    // MasterKey rotation will let us flip back to
+                    // encrypted on the next clean install.
+                    Log.e(
+                        TAG,
+                        "EncryptedSharedPreferences still failing — falling back to plaintext prefs.",
+                        second,
+                    )
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                }
+            }
+        }
+
+        private fun buildEncryptedPrefs(context: Context): SharedPreferences {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            return EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        }
+
         private const val KEY_TOKEN = "session_token"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_PHONE = "user_phone"

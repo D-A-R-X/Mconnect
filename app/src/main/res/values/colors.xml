@@ -76,4 +76,11 @@
     <color name="chat_subtitle_grey">#FFABABAB</color>
     <color name="chat_separator">#FFEAECF0</color>
     <color name="chat_check_blue">#FF007BFC</color>
+
+    <!-- Project Expenses category accents (mobile + web parity) -->
+    <color name="category_labour">#2563EB</color>
+    <color name="category_labour_strong">#1D4ED8</color>
+    <color name="category_materials">#F97316</color>
+    <color name="category_equipment">#16A34A</color>
+    <color name="category_other">#94A3B8</color>
 </resources>

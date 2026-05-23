@@ -598,6 +598,88 @@ interface ApiService {
         @Body body: AddTaskUpdateRequest
     ): TaskMutationResponse
 
+    // ── Project Management: project list / detail / per-project tasks ──
+
+    @GET("api/projects")
+    suspend fun getMyProjects(
+        @Header("Authorization") token: String
+    ): MyProjectsResponse
+
+    @GET("api/projects/get")
+    suspend fun getProjectDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): ProjectDetailResponse
+
+    @GET("api/projects/tasks")
+    suspend fun getProjectTasks(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String
+    ): ProjectTasksResponse
+
+    @GET("api/projects/tasks/updates")
+    suspend fun getTaskTimeline(
+        @Header("Authorization") token: String,
+        @Query("taskId") taskId: String
+    ): TaskTimelineResponse
+
+    @GET("api/projects/tasks/resources")
+    suspend fun getTaskResources(
+        @Header("Authorization") token: String,
+        @Query("taskId") taskId: String
+    ): TaskResourcesResponse
+
+    // ── Storage: generate signed upload URL (Convex storage) ──
+
+    @POST("api/storage/generate-upload-url")
+    suspend fun generateStorageUploadUrl(
+        @Header("Authorization") token: String
+    ): StorageUploadUrlResponse
+
+    // PUT the file bytes to the signed URL returned above. Convex returns
+    // a JSON body with the storageId once the upload completes.
+    @PUT
+    suspend fun uploadFileToStorage(
+        @Url url: String,
+        @Header("Content-Type") contentType: String,
+        @Body body: okhttp3.RequestBody
+    ): StorageUploadResultResponse
+
+    // ── Project Expenses ──
+
+    @GET("api/projects/expenses")
+    suspend fun listProjectExpenses(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("category") category: String? = null
+    ): ProjectExpensesResponse
+
+    @GET("api/projects/expenses/get")
+    suspend fun getProjectExpense(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): ProjectExpenseDetailResponse
+
+    @POST("api/projects/expenses/create")
+    suspend fun createProjectExpense(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectExpenseRequest
+    ): ProjectExpenseCreateResponse
+
+    @POST("api/projects/expenses/update")
+    suspend fun updateProjectExpense(
+        @Header("Authorization") token: String,
+        @Body body: UpdateProjectExpenseRequest
+    ): SimpleResponse
+
+    @POST("api/projects/expenses/mark-paid")
+    suspend fun markProjectExpensePaid(
+        @Header("Authorization") token: String,
+        @Body body: MarkExpensePaidRequest
+    ): SimpleResponse
+
     // ── Telecaller (mobile My Leads + Dialer) ──
 
     @GET("api/telecaller/leads/my")
@@ -1442,7 +1524,14 @@ data class AddTaskUpdateRequest(
     val todaysUpdate: String? = null,
     val blocker: String? = null,
     val tomorrowsPlan: String? = null,
-    val progressSnapshot: Int? = null
+    val progressSnapshot: Int? = null,
+    val images: List<TaskUpdateImage>? = null
+)
+
+data class TaskUpdateImage(
+    val storageId: String,
+    val url: String? = null,
+    val name: String? = null
 )
 
 data class TaskMutationResponse(
@@ -1450,6 +1539,207 @@ data class TaskMutationResponse(
     val updateId: String? = null,
     val task: TaskData? = null,
     val error: String? = null
+)
+
+// ── Project Management: projects list / detail / per-project tasks ─────────
+
+data class ProjectSummary(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val description: String? = null,
+    val status: String? = null,
+    val progress: Int? = null,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val budget: Double? = null,
+    val location: String? = null,
+    val managerName: String? = null,
+    val staffManagerId: String? = null,
+    val projectType: String? = null
+)
+
+data class MyProjectsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val projects: List<ProjectSummary> = emptyList(),
+    val error: String? = null
+)
+
+data class ProjectDetailResponse(
+    val success: Boolean,
+    val project: ProjectSummary? = null,
+    val isProjectManager: Boolean? = null,
+    val membershipRole: String? = null,
+    val error: String? = null
+)
+
+data class ProjectTasksResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val tasks: List<TaskData> = emptyList(),
+    val error: String? = null
+)
+
+data class TaskTimelineEntry(
+    @SerializedName("_id") val id: String,
+    val taskId: String? = null,
+    val projectId: String? = null,
+    val date: String? = null,
+    val todaysUpdate: String? = null,
+    val blocker: String? = null,
+    val tomorrowsPlan: String? = null,
+    val progressSnapshot: Int? = null,
+    val images: List<TaskUpdateImage>? = null,
+    val createdBy: String? = null,
+    val createdAt: Double? = null,
+    @SerializedName("_creationTime") val creationTime: Double? = null
+)
+
+data class TaskTimelineResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val updates: List<TaskTimelineEntry> = emptyList(),
+    val error: String? = null
+)
+
+data class TaskResourceEntry(
+    @SerializedName("_id") val id: String,
+    val taskId: String? = null,
+    val resourceType: String? = null,    // material | labour | equipment
+    val itemName: String? = null,
+    val unit: String? = null,
+    val budgetQty: Double? = null,
+    val plannedQty: Double? = null,
+    val actualQty: Double? = null,
+    val rate: Double? = null,
+    val isLumpsum: Boolean? = null,
+    val lumpsumAmount: Double? = null
+)
+
+data class TaskResourcesResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val resources: List<TaskResourceEntry> = emptyList(),
+    val error: String? = null
+)
+
+// ── Storage (Convex upload URL flow) ───────────────────────────────────────
+
+data class StorageUploadUrlResponse(
+    val success: Boolean,
+    val uploadUrl: String? = null,
+    val error: String? = null
+)
+
+data class StorageUploadResultResponse(
+    val storageId: String? = null
+)
+
+// ── Project Expenses ───────────────────────────────────────────────────────
+
+data class ExpenseReceipt(
+    val storageId: String,
+    val url: String? = null,
+    val name: String? = null
+)
+
+data class ProjectExpense(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val category: String,                // labour | materials | equipment | other
+    val amount: Double,
+    val date: String,                    // YYYY-MM-DD
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false,
+    val paidAt: Double? = null,
+    val paidByStaffId: String? = null,
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+    @SerializedName("_creationTime") val creationTime: Double? = null
+)
+
+data class ExpenseCategoryTotals(
+    val labour: Double = 0.0,
+    val materials: Double = 0.0,
+    val equipment: Double = 0.0,
+    val other: Double = 0.0
+)
+
+data class ExpenseTotals(
+    val byCategory: ExpenseCategoryTotals = ExpenseCategoryTotals(),
+    val total: Double = 0.0,
+    val paid: Double = 0.0,
+    val pending: Double = 0.0,
+    val count: Int = 0
+)
+
+data class ProjectExpensesResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val expenses: List<ProjectExpense> = emptyList(),
+    val totals: ExpenseTotals? = null,
+    val error: String? = null
+)
+
+data class ProjectExpenseDetailResponse(
+    val success: Boolean,
+    val expense: ProjectExpenseDetail? = null,
+    val error: String? = null
+)
+
+data class ProjectExpenseDetail(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val category: String,
+    val amount: Double,
+    val date: String,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false,
+    val paidAt: Double? = null,
+    val paidByStaffId: String? = null,
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+    val project: ProjectSummary? = null,
+    val createdByName: String? = null,
+    val paidByName: String? = null
+)
+
+data class CreateProjectExpenseRequest(
+    val projectId: String,
+    val category: String,
+    val amount: Double,
+    val date: String,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false
+)
+
+data class ProjectExpenseCreateResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val error: String? = null
+)
+
+data class UpdateProjectExpenseRequest(
+    val id: String,
+    val category: String? = null,
+    val amount: Double? = null,
+    val date: String? = null,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null
+)
+
+data class MarkExpensePaidRequest(
+    val id: String,
+    val paid: Boolean
 )
 
 // ── Telecaller leads (mobile) ──────────────────────────────────────────────
