@@ -94,9 +94,10 @@ class TaskTimelineBottomSheet : BottomSheetDialogFragment() {
                     return@launch
                 }
                 // Newest first — backend returns desc, but defend
-                // against future changes by sorting on creationTime.
+                // against future changes by sorting on creationTime
+                // (epoch ms from Convex's _creationTime system field).
                 val sorted = resp.updates.sortedByDescending {
-                    it.creationTime ?: it.createdAt ?: 0.0
+                    it.creationTime ?: 0.0
                 }
                 recycler.adapter = TimelineAdapter(sorted)
             } catch (e: Exception) {
