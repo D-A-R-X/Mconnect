@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One row in the Select-Project bottom sheet. Hosts the project name on
+  the left and an optional check glyph on the right (made visible by
+  the adapter for the currently-selected project).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="52dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="4dp">
+
+    <TextView
+        android:id="@+id/tvProjectPickerName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:fontFamily="@font/inter_semibold"
+        android:textColor="#101828"
+        android:textSize="15sp"
+        tools:text="Manju Emerald" />
+
+    <ImageView
+        android:id="@+id/imgProjectPickerCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="12dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_success_check"
+        android:visibility="gone"
+        app:tint="#0B61CA" />
+
+</LinearLayout>

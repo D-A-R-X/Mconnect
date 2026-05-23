@@ -9,7 +9,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -231,17 +230,30 @@ class ProjectExpensesFragment : Fragment() {
 
     private fun showProjectPicker() {
         if (projects.isEmpty()) return
-        val labels = projects.map { it.name ?: "Untitled project" }.toTypedArray()
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select project")
-            .setItems(labels) { _, index ->
-                val picked = projects[index]
-                selectedProjectId = picked.id
-                tvProjectPickerLabel.text = picked.name ?: "Untitled project"
+        // Result listener — re-registered each open so a stale closure
+        // doesn't capture a stale `projects` list across reloads.
+        parentFragmentManager.setFragmentResultListener(
+            ProjectPickerBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val pickedId = bundle.getString(ProjectPickerBottomSheet.RESULT_PROJECT_ID)
+                ?: return@setFragmentResultListener
+            val pickedName = bundle.getString(ProjectPickerBottomSheet.RESULT_PROJECT_NAME)
+                ?: "Untitled project"
+            if (pickedId != selectedProjectId) {
+                selectedProjectId = pickedId
+                tvProjectPickerLabel.text = pickedName
                 dotRed.visibility = View.VISIBLE
                 refreshExpenses()
             }
-            .show()
+        }
+        ProjectPickerBottomSheet
+            .newInstance(
+                ids = projects.map { it.id },
+                names = projects.map { it.name ?: "Untitled project" },
+                selectedId = selectedProjectId,
+            )
+            .show(parentFragmentManager, "project_picker")
     }
 
     private fun showDateFilter() {
