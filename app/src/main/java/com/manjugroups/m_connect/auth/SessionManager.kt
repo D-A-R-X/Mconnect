@@ -89,6 +89,7 @@ class SessionManager(context: Context) {
         get() = prefs.getBoolean(KEY_SHOULD_TRACK_NOW, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOULD_TRACK_NOW, value).apply()
 
+
     val isLoggedIn: Boolean
         get() = token != null
 
