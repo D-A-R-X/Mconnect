@@ -50,6 +50,13 @@ class TaskDetailFragment : Fragment() {
         view.findViewById<View>(R.id.btnUpdateTask).setOnClickListener {
             openUpdateSheet()
         }
+        // Clock-history icon in the top-right of the header → opens the
+        // Time Line sheet with every daily update on this task.
+        view.findViewById<View>(R.id.btnDetailTimeline).setOnClickListener {
+            val id = taskId ?: return@setOnClickListener
+            TaskTimelineBottomSheet.newInstance(id)
+                .show(parentFragmentManager, "task_timeline")
+        }
 
         setFragmentResultListener(TaskUpdateBottomSheet.RESULT_KEY) { _, bundle ->
             if (bundle.getBoolean(TaskUpdateBottomSheet.KEY_UPDATED)) {
@@ -140,8 +147,41 @@ class TaskDetailFragment : Fragment() {
                 append(task.projectName?.takeIf { it.isNotBlank() } ?: "Project")
                 if (!task.taskId.isNullOrBlank()) append("  •  ").append(task.taskId)
             }
-        root.findViewById<TextView>(R.id.tvDetailDescription).text =
-            task.description?.takeIf { it.isNotBlank() } ?: "No description provided."
+        // Task description + expand/collapse "View more" toggle.
+        // The TextView is capped at 3 lines by the layout; if the text
+        // actually overflows that cap, the View more button becomes
+        // visible and toggles between collapsed (3 lines + "View more")
+        // and expanded (no cap + "View less").
+        val descView = root.findViewById<TextView>(R.id.tvDetailDescription)
+        val viewMoreBtn = root.findViewById<TextView>(R.id.btnDetailViewMore)
+        descView.text = task.description?.takeIf { it.isNotBlank() }
+            ?: "No description provided."
+        descView.maxLines = 3
+        viewMoreBtn.visibility = View.GONE
+        viewMoreBtn.text = "View more ⌵"
+        // Once the TextView has laid out we can check lineCount; if it
+        // hit the cap and there's clipped content, surface the toggle.
+        descView.post {
+            val truncated = descView.layout?.let { layout ->
+                layout.lineCount >= 3 && layout.getEllipsisCount(2) > 0
+            } ?: false
+            if (truncated) {
+                viewMoreBtn.visibility = View.VISIBLE
+                var expanded = false
+                viewMoreBtn.setOnClickListener {
+                    expanded = !expanded
+                    if (expanded) {
+                        descView.maxLines = Int.MAX_VALUE
+                        descView.ellipsize = null
+                        viewMoreBtn.text = "View less ⌃"
+                    } else {
+                        descView.maxLines = 3
+                        descView.ellipsize = android.text.TextUtils.TruncateAt.END
+                        viewMoreBtn.text = "View more ⌵"
+                    }
+                }
+            }
+        }
         val progress = (task.progress ?: 0).coerceIn(0, 100)
         root.findViewById<TextView>(R.id.tvDetailProgress).text = "$progress%"
 

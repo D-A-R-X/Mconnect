@@ -1591,7 +1591,11 @@ data class TaskTimelineEntry(
     val progressSnapshot: Int? = null,
     val images: List<TaskUpdateImage>? = null,
     val createdBy: String? = null,
-    val createdAt: Double? = null,
+    // Server stores createdAt as an ISO-8601 string (`new Date().toISOString()`
+    // in taskUpdates.create). Declaring this as Double crashed Gson with
+    // `NumberFormatException: For input string: "2026-05-23T20:04:07.161Z"`
+    // when the Time Line sheet tried to load.
+    val createdAt: String? = null,
     @SerializedName("_creationTime") val creationTime: Double? = null
 )
 

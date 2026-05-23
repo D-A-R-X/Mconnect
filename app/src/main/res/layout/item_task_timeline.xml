@@ -106,14 +106,23 @@
                     android:textSize="14sp"
                     tools:text="Excavation completed for Block A foundation." />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvTimelinePhotos"
+                <!-- Photo strip — thumbnails are added programmatically.
+                     Hidden by default; the adapter sets visibility=VISIBLE
+                     when the entry has at least one image. -->
+                <HorizontalScrollView
+                    android:id="@+id/timelinePhotosScroller"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:orientation="horizontal"
-                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                    tools:listitem="@layout/item_mention_person" />
+                    android:scrollbars="none"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/timelinePhotos"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
 
                 <TextView
                     android:id="@+id/tvTimelineIssues"
