@@ -142,7 +142,18 @@ class TaskDetailFragment : Fragment() {
             }
         root.findViewById<TextView>(R.id.tvDetailDescription).text =
             task.description?.takeIf { it.isNotBlank() } ?: "No description provided."
-        root.findViewById<TextView>(R.id.tvDetailProgress).text = "${task.progress ?: 0}%"
+        val progress = (task.progress ?: 0).coerceIn(0, 100)
+        root.findViewById<TextView>(R.id.tvDetailProgress).text = "$progress%"
+
+        // Size the progress fill bar (overlay on top of the track) so the
+        // big horizontal progress strip actually shows a filled portion.
+        val fill = root.findViewById<View>(R.id.detailProgressFill)
+        val track = root.findViewById<View>(R.id.detailProgressTrack)
+        track.post {
+            val lp = fill.layoutParams
+            lp.width = (track.width * progress / 100f).toInt()
+            fill.layoutParams = lp
+        }
 
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val outFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
@@ -152,48 +163,68 @@ class TaskDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvDetailStartDate).text = fmt(task.startDate)
         root.findViewById<TextView>(R.id.tvDetailEndDate).text = fmt(task.endDate)
 
-        val statusPill = root.findViewById<TextView>(R.id.tvDetailStatus)
-        when (task.status) {
-            "in-progress" -> {
-                statusPill.text = "In Progress"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_medium)
-                statusPill.setTextColor(Color.parseColor("#B54708"))
-            }
-            "completed" -> {
-                statusPill.text = "Completed"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_low)
-                statusPill.setTextColor(Color.parseColor("#067647"))
-            }
-            "delayed" -> {
-                statusPill.text = "Delayed"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_high)
-                statusPill.setTextColor(Color.parseColor("#B42318"))
-            }
-            else -> {
-                statusPill.text = "Not Started"
-                statusPill.setBackgroundResource(R.drawable.bg_task_inner_card)
-                statusPill.setTextColor(Color.parseColor("#475467"))
+        // Status label — the redesigned layout uses tvDetailStatusLabel
+        // as a plain inline label (no pill background). Just set the text;
+        // background/colour styling lives in the XML now.
+        val statusLabel = root.findViewById<TextView>(R.id.tvDetailStatusLabel)
+        statusLabel.text = when (task.status) {
+            "in-progress" -> "In Progress"
+            "completed" -> "Completed"
+            "delayed" -> "Delayed"
+            else -> "Not Started"
+        }
+
+        // ── Resource Summary cards ──────────────────────────────────────
+        // Total Quantity + Unit come straight from the task row; the
+        // per-resource counts (labour / equipment / materials) need a
+        // second roundtrip to /api/projects/tasks/resources, fetched
+        // below.
+        val unitLabel = task.unit?.takeIf { it.isNotBlank() } ?: "-"
+        root.findViewById<TextView>(R.id.tvDetailTotalQty).text =
+            task.totalQuantity?.let { "${trimDouble(it)} ${task.unit ?: ""}".trim() } ?: "-"
+        root.findViewById<TextView>(R.id.tvDetailUnit).text = unitLabel
+        // Est. Cost isn't on TaskData (lives on the schema as estimatedCost
+        // but the Retrofit model doesn't expose it yet) — show a dash
+        // until the backend ships it on the mobile DTO.
+        root.findViewById<TextView>(R.id.tvDetailEstCost).text = "-"
+        // Seed resource fields with placeholders; will fill in below.
+        val tvLabour = root.findViewById<TextView>(R.id.tvDetailLabourCount)
+        val tvEquipment = root.findViewById<TextView>(R.id.tvDetailEquipmentQty)
+        val tvMaterials = root.findViewById<TextView>(R.id.tvDetailMaterialsQty)
+        tvLabour.text = "-"
+        tvEquipment.text = "-"
+        tvMaterials.text = "-"
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.getTaskResources(session.bearerToken, task.id)
+            }.getOrNull()?.takeIf { it.success }?.let { resp ->
+                val labourCount = resp.resources.count { it.resourceType == "labour" }
+                val equipmentQty = resp.resources
+                    .filter { it.resourceType == "equipment" }
+                    .sumOf { it.budgetQty ?: 0.0 }
+                val materialsQty = resp.resources
+                    .filter { it.resourceType == "material" }
+                    .sumOf { it.budgetQty ?: 0.0 }
+                tvLabour.text = labourCount.toString()
+                tvEquipment.text = trimDouble(equipmentQty)
+                tvMaterials.text = if (materialsQty > 0)
+                    "${trimDouble(materialsQty)} ${task.unit ?: ""}".trim()
+                else "-"
             }
         }
 
-        // Notes rows — only show those with content.
-        bindNoteRow(
-            root, R.id.rowTodaysUpdate, R.id.tvDetailTodaysUpdate, task.todaysUpdate
-        )
-        bindNoteRow(root, R.id.rowBlocker, R.id.tvDetailBlocker, task.blocker)
-        bindNoteRow(
-            root, R.id.rowTomorrowsPlan, R.id.tvDetailTomorrowsPlan, task.tomorrowsPlan
-        )
+        // Notes rows (Today's Update / Blocker / Tomorrow's Plan) were
+        // removed from the layout in the redesign — the per-day notes
+        // now live on the Time Line screen, not on the static detail view.
     }
 
-    private fun bindNoteRow(root: View, rowId: Int, textId: Int, value: String?) {
-        val row = root.findViewById<View>(rowId)
-        val text = root.findViewById<TextView>(textId)
-        if (value.isNullOrBlank()) {
-            row.visibility = View.GONE
+    /** Trims trailing ".0" so 120.00 → "120", but keeps "120.5". */
+    private fun trimDouble(value: Double): String {
+        return if (value == value.toLong().toDouble()) {
+            value.toLong().toString()
         } else {
-            row.visibility = View.VISIBLE
-            text.text = value
+            "%.2f".format(value)
         }
     }
 

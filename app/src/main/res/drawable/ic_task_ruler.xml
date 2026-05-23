@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ruler glyph for the Unit card. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M21.3,15.3l-6,6a1,1 0,0 1,-1.4 0l-11.2,-11.2a1,1 0,0 1,0 -1.4l6,-6a1,1 0,0 1,1.4 0l11.2,11.2a1,1 0,0 1,0 1.4Z"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7.5,10.5l2,2M10.5,7.5l2,2M13.5,4.5l2,2M4.5,13.5l2,2M16.5,16.5l-2,-2"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
