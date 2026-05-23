@@ -61,6 +61,28 @@ class TasksFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
 
+        // Push the blue header below the OS status bar and grow its height
+        // by the same amount so the gradient still extends edge-to-edge
+        // behind the system clock. Without this, the header started at
+        // y=0 in full-bleed mode leaving a white strip above the title.
+        val headerContainer = view.findViewById<View>(R.id.headerContainer)
+        val baseHeaderHeight = headerContainer.layoutParams.height
+        val baseHeaderTopPadding = headerContainer.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(headerContainer) { v, insets ->
+            val topInset = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars()
+            ).top
+            v.layoutParams = v.layoutParams.apply { height = baseHeaderHeight + topInset }
+            v.setPadding(
+                v.paddingLeft,
+                baseHeaderTopPadding + topInset,
+                v.paddingRight,
+                v.paddingBottom,
+            )
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(headerContainer)
+
         taskListContainer = view.findViewById(R.id.taskList)
         skeletonContainer = view.findViewById(R.id.tasksSkeletonContainer)
         emptyState = view.findViewById(R.id.emptyState)
@@ -143,7 +165,16 @@ class TasksFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            // Blue full-bleed header: gradient draws behind a transparent
+            // status bar; light icons stay readable on the blue.
+            main.setTopBarAppearance(
+                android.graphics.Color.parseColor("#0B61CA"),
+                darkStatusIcons = false,
+                fullBleed = true,
+            )
+        }
         // Coming back from TaskDetailFragment after an update — refresh.
         if (allTasks.isNotEmpty()) loadTasks()
     }

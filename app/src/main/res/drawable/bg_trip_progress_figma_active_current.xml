@@ -1,0 +1,32 @@
+<!--
+  "Current step" indicator. Used for the step the user is actively on.
+  Renders as a filled green circle (like the DONE state) with an outer
+  green ring + thin white gap separating the fill from the ring — the
+  ring is what differentiates the CURRENT step from already-completed
+  DONE steps. Matches the En Route halo in the reference design.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer ring at the container's full bounds (2dp stroke, transparent fill). -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@android:color/transparent" />
+            <stroke
+                android:width="2dp"
+                android:color="#1BCA0B" />
+        </shape>
+    </item>
+    <!-- Inner filled circle inset by 3dp so a 1dp white gap shows between
+         the ring and the fill, giving the halo its visual separation. -->
+    <item
+        android:bottom="3dp"
+        android:left="3dp"
+        android:right="3dp"
+        android:top="3dp">
+        <shape android:shape="oval">
+            <gradient
+                android:angle="270"
+                android:endColor="#3D9D02"
+                android:startColor="#1BCA0B" />
+        </shape>
+    </item>
+</layer-list>

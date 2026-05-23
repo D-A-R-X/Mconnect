@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Full-width Accept button on a Team-scope leave card. Solid green pill
+  with rounded corners; pairs with `bg_leave_action_reject`.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#1BCA0B"
+        android:endColor="#3D9D02"
+        android:type="linear" />
+    <corners android:radius="10dp" />
+</shape>

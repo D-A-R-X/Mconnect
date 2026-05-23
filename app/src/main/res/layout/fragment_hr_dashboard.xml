@@ -220,32 +220,24 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
+                <!--
+                    Clocked-in state: single full-width "Clock Out" button.
+                    The "Take a Break" / "Resume" pause-and-resume flow was
+                    intentionally removed per business decision — clock-in
+                    and clock-out are the only two actions exposed.
+                -->
                 <LinearLayout
                     android:id="@+id/clockedInButtonGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:visibility="gone">
 
                     <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/btnTakeBreak"
-                        android:layout_width="0dp"
-                        android:layout_height="48dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_attendance_btn_secondary"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="Take A Break"
-                        android:textAllCaps="false"
-                        android:textColor="#1BCA0B"
-                        android:textSize="14sp" />
-
-                    <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/btnClockOut"
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="48dp"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
                         android:background="@drawable/bg_attendance_btn_primary"
                         android:fontFamily="@font/inter_semibold"
                         android:text="Clock Out"

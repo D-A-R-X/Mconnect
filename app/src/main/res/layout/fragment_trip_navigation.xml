@@ -196,7 +196,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_regular"
                             android:includeFontPadding="false"
-                            android:text="Site/Client"
+                            android:text="Type"
                             android:textColor="#667085"
                             android:textSize="10sp" />
 
@@ -209,7 +209,7 @@
                             android:fontFamily="@font/inter_medium"
                             android:includeFontPadding="false"
                             android:maxLines="1"
-                            android:text="Manju Groups Site A"
+                            android:text="Direct CP"
                             android:textColor="#111827"
                             android:textSize="11sp" />
                     </LinearLayout>

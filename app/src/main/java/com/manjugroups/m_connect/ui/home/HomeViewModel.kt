@@ -326,20 +326,12 @@ class HomeViewModel : ViewModel() {
             )
             cachedState = updated
             _uiState.value = updated
-            // Diagnostic ping so the user can see what came back without
-            // needing adb. Only emits when the merged list is empty AND
-            // we attempted both fetches — so a healthy home stays quiet.
+            // (Diagnostic Home-empty toast removed — it was firing after
+            // legitimate flows like rejecting an SV-via-CP when the list
+            // naturally went to zero, looking like a bug to the user.
+            // The same counts are still useful for debugging, so we keep
+            // a logcat trace instead of pinging the UI.)
             if (merged.isEmpty()) {
-                // Build a precise diagnostic the user can read in-app.
-                // Each field carries a specific meaning:
-                //   legacy=N    fieldVisits scheduled for me today
-                //   places=N    assigned clientPlaces (proxies auth health)
-                //   cpFetched=N CP visits the server returned (-1 = call
-                //               never returned a body at all)
-                //   cpKept=N    visits we kept after the today-or-overdue
-                //               filter
-                //   cpError=…   present iff the CP call threw or returned
-                //               success:false
                 val parts = mutableListOf(
                     "legacy=${legacyVisits.size}",
                     "places=${places.size}",
@@ -347,8 +339,9 @@ class HomeViewModel : ViewModel() {
                     "cpKept=$cpKept",
                 )
                 if (cpError != null) parts += "cpError=$cpError"
-                _punchEvent.emit(
-                    PunchEvent.Error("Home empty: ${parts.joinToString(", ")}"),
+                android.util.Log.i(
+                    "HomeViewModel",
+                    "Home empty: ${parts.joinToString(", ")}",
                 )
             }
         } catch (e: Exception) {
@@ -418,23 +411,34 @@ class HomeViewModel : ViewModel() {
         } else {
             "direct_cp"
         }
+        // Prefer the canonical client name (manualProfile.clientName on
+        // the server, surfaced as `client.clientName`) over the typed-in
+        // dialer name (`lead.contactName`). The web Client Profile card
+        // already shows the canonical form ("Abhi") — mobile was falling
+        // back to the dialer string ("abi") because clientPlace.name was
+        // blank for fresh CPs. Same ordering applied to `leadName` so
+        // downstream surfaces that fall back to leadName stay aligned.
+        val canonicalClient = this.client?.clientName?.takeIf { it.isNotBlank() }
+        val typedContact = this.lead?.contactName?.takeIf { it.isNotBlank() }
+        val placeLabel = this.clientPlace?.name?.takeIf { it.isNotBlank() }
+        val displayName = canonicalClient
+            ?: typedContact
+            ?: placeLabel
+            ?: "CP visit"
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
             visitCategory = category,
-            placeName = this.clientPlace?.name
-                ?: this.client?.clientName
-                ?: this.lead?.contactName
-                ?: "CP visit",
+            placeName = displayName,
             placeAddress = this.clientPlace?.address
                 ?: this.clientPlace?.formattedAddress,
             placeLat = this.clientPlace?.lat,
             placeLng = this.clientPlace?.lng,
             tripType = "client_place",
             clientPlaceVisitId = cpId,
-            leadName = this.lead?.contactName ?: this.client?.clientName,
+            leadName = canonicalClient ?: typedContact,
             leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
             scheduledStartTime = this.scheduledTime,
         )

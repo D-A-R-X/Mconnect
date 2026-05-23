@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Background tint for the Expense filter chips.
+     Selected = brand blue, unselected = light grey, matching the design. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/category_labour" />
+    <item android:color="#FFF1F2F4" />
+</selector>

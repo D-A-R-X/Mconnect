@@ -218,7 +218,7 @@ class CpVisitsFragment : Fragment() {
                 // Switched from /api/sitevisits/my (legacy fieldVisits) to
                 // /api/marketing/clientPlaceVisits/my so each row carries
                 // the proposedSiteVisit / lead.followUpStatus / party
-                // data we need to label the category (SV cum CP vs
+                // data we need to label the category (SV confirmation CP vs
                 // Direct CP) on each card. The mapper below converts to
                 // the existing TodayVisit shape so downstream filter /
                 // sort / render code is unchanged.
@@ -280,23 +280,28 @@ class CpVisitsFragment : Fragment() {
         } else {
             "direct_cp"
         }
+        // Prefer the canonical client name (client.clientName from
+        // manualProfile) over the dialer-typed lead.contactName so the
+        // header reads "Abhi" — matching the web Client profile card —
+        // rather than the lower-case typed string "abi".
+        val canonicalClient = this.client?.clientName?.takeIf { it.isNotBlank() }
+        val typedContact = this.lead?.contactName?.takeIf { it.isNotBlank() }
+        val placeLabel = this.clientPlace?.name?.takeIf { it.isNotBlank() }
+        val displayName = canonicalClient ?: typedContact ?: placeLabel ?: "CP visit"
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
             visitCategory = category,
-            placeName = this.clientPlace?.name
-                ?: this.client?.clientName
-                ?: this.lead?.contactName
-                ?: "CP visit",
+            placeName = displayName,
             placeAddress = this.clientPlace?.address
                 ?: this.clientPlace?.formattedAddress,
             placeLat = this.clientPlace?.lat,
             placeLng = this.clientPlace?.lng,
             tripType = "client_place",
             clientPlaceVisitId = cpId,
-            leadName = this.lead?.contactName ?: this.client?.clientName,
+            leadName = canonicalClient ?: typedContact,
             leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
             scheduledStartTime = this.scheduledTime,
         )
@@ -373,22 +378,16 @@ class CpVisitsFragment : Fragment() {
         val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
-        // Reuse the otherwise-hidden "lead" TextView as the category
-        // badge — same trick HomeFragment uses on its row, so a row
-        // appears identically labelled across Home today's trip and
-        // the CP Visits list.
+        // Category badge now lives in the body's Type cell (tvVisitItemTitle),
+        // so the standalone tvVisitItemLead row underneath the grid is hidden.
+        // Same de-dupe rule HomeFragment follows on Today's Trip.
         val categoryLabel = when (visit.visitCategory) {
-            "sv_cum_cp" -> "SV cum CP"
+            "sv_cum_cp" -> "SV confirmation CP"
             "direct_cp" -> "Direct CP"
             "site_visit" -> "Site Visit"
-            else -> if (visit.clientPlaceVisitId != null) "CP visit" else null
+            else -> if (visit.clientPlaceVisitId != null) "CP visit" else "Visit"
         }
-        if (categoryLabel != null) {
-            lead.text = categoryLabel
-            lead.visibility = View.VISIBLE
-        } else {
-            lead.visibility = View.GONE
-        }
+        lead.visibility = View.GONE
 
         // Identity header — CP visits identify the CLIENT, not the staff member.
         // Use placeName / leadName as primary, placeAddress as the supporting line.
@@ -405,8 +404,11 @@ class CpVisitsFragment : Fragment() {
         role.ellipsize = android.text.TextUtils.TruncateAt.END
         avatar.text = clientName.firstOrNull()?.uppercase() ?: "C"
 
-        // Body — Site / Date-Time / Distance / ETA labels match the design.
-        title.text = visit.placeName ?: visit.leadName ?: "CP Visit"
+        // Body — Type / Date-Time / Distance / ETA. The client name is
+        // already in the header above, so the body's left cell carries the
+        // visit Type ("Direct CP" / "SV confirmation CP" / …) instead of
+        // repeating the client name.
+        title.text = categoryLabel
         timeLabel.text = "Date/Time"
         time.text = formatDateTime(visit) ?: "—"
         distance.text = formatDistance(visit)
@@ -633,6 +635,7 @@ class CpVisitsFragment : Fragment() {
                     clientPlaceVisitId = visit.clientPlaceVisitId,
                     cpClientMet = visit.cpVisit?.clientMet,
                     cpOutcome = visit.cpVisit?.outcome,
+                    visitCategory = visit.visitCategory,
                 )
             )
             .addToBackStack(null)

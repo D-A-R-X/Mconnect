@@ -474,8 +474,10 @@ class HomeFragment : Fragment() {
         val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
 
         val clientName = visit.placeName ?: visit.leadName ?: "Scheduled Visit"
+        // Client name lives in the header (avatar + staffName) only — the
+        // body's left cell now shows the visit Type ("Direct CP" / "SV
+        // confirmation CP" / etc.) instead of repeating the client name.
         bindTripCardHeader(avatar, staffName, staffRole, clientName)
-        title.text = clientName
         time.text = formatVisitTimeOrDate(visit)
         distance.text = if (visit.placeLat != null && visit.placeLng != null) "Open route" else "Not mapped"
 
@@ -485,17 +487,15 @@ class HomeFragment : Fragment() {
         // "sv_cum_cp" rows open into the locked Reject/Confirm sheet on
         // the trip nav; "direct_cp" rows open the full outcome flow.
         val categoryLabel = when (visit.visitCategory) {
-            "sv_cum_cp" -> "SV cum CP"
+            "sv_cum_cp" -> "SV confirmation CP"
             "direct_cp" -> "Direct CP"
             "site_visit" -> "Site Visit"
-            else -> if (isCpVisit) "CP visit" else null
+            else -> if (isCpVisit) "CP visit" else "Visit"
         }
-        if (categoryLabel != null) {
-            lead.text = categoryLabel
-            lead.visibility = View.VISIBLE
-        } else {
-            lead.visibility = View.GONE
-        }
+        // Bind category into the body's Type cell. The standalone
+        // tvVisitItemLead badge below the grid is no longer needed.
+        title.text = categoryLabel
+        lead.visibility = View.GONE
 
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
@@ -594,7 +594,9 @@ class HomeFragment : Fragment() {
         val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
 
         bindTripCardHeader(avatar, staffName, staffRole, place.name)
-        title.text = place.name
+        // Place name is already shown in the header — body Type cell calls
+        // out the row kind ("Assigned place") instead of repeating it.
+        title.text = "Assigned place"
         time.text = "Available Today"
         distance.text = if (place.lat != null && place.lng != null) "Open route" else "Not mapped"
         eta.text = "After start"
@@ -647,6 +649,7 @@ class HomeFragment : Fragment() {
             clientPlaceVisitId = visit.clientPlaceVisitId,
             cpClientMet = visit.cpVisit?.clientMet,
             cpOutcome = visit.cpVisit?.outcome,
+            visitCategory = visit.visitCategory,
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)

@@ -56,6 +56,15 @@ class HrDashboardFragment : Fragment() {
     private var pendingPunchMode: PunchMode? = null
     private var pendingPunchImageFile: File? = null
     private var pendingPunchImageUri: android.net.Uri? = null
+
+    /**
+     * Becomes true the first time the attendance card has rendered with real
+     * (non-skeleton) content. Subsequent `state.isLoading=true` emissions —
+     * e.g. the brief refresh after a punch — won't wipe the card to skeleton
+     * again. Prevents the "whole container disappears and comes back"
+     * flicker after a successful clock-in / clock-out.
+     */
+    private var hasShownAttendanceContentOnce = false
     private var isLaunchingCamera = false
     private var isTodayLoading = true
     private var isHistoryLoading = true
@@ -166,14 +175,6 @@ class HrDashboardFragment : Fragment() {
             ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
         }
 
-        // Server has no separate "break" concept — each punch-in/out pair is
-        // its own session and successive ones in a day are implicit breaks.
-        // Wire Take a Break to the same punch-out capture; the user can
-        // simply Clock In again when they return.
-        binding.btnTakeBreak.setOnClickListener {
-            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
-        }
-
         parentFragmentManager.setFragmentResultListener(
             ClockOutConfirmBottomSheet.RESULT_KEY,
             viewLifecycleOwner
@@ -191,7 +192,8 @@ class HrDashboardFragment : Fragment() {
             val mode = runCatching { PunchMode.valueOf(rawMode ?: "") }.getOrNull()
             when (mode) {
                 PunchMode.PUNCH_OUT -> {
-                    ClockOutSuccessBottomSheet().show(parentFragmentManager, "clock_out_success")
+                    ClockOutSuccessBottomSheet()
+                        .show(parentFragmentManager, "clock_out_success")
                 }
                 PunchMode.PUNCH_IN -> {
                     ClockInSuccessBottomSheet().show(parentFragmentManager, "clock_in_success")
@@ -299,8 +301,14 @@ class HrDashboardFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 flowViewModel.uiState.collect { state ->
-                    isTodayLoading = state.isLoading
+                    // Only show the full skeleton on the FIRST load. Subsequent
+                    // isLoading=true emissions (refresh after a punch, etc.)
+                    // should update content in place — otherwise the whole
+                    // attendance card vanishes briefly and the user sees a
+                    // jarring blank-and-pop after Take a Break / Resume.
+                    isTodayLoading = state.isLoading && !hasShownAttendanceContentOnce
                     updateAttendanceLoadingUi()
+                    if (!state.isLoading) hasShownAttendanceContentOnce = true
                     binding.tvTodayHours.text = state.todayHours
                     binding.tvLatestTotalHours.text = state.latestTotalHours
                     binding.tvLatestRange.text = state.latestRange
@@ -378,8 +386,6 @@ class HrDashboardFragment : Fragment() {
                         }
 
                         is AttendanceFlowEvent.SubmissionFailed -> {
-                            // Background upload/punch failed after the optimistic Success
-                            // sheet was already shown. Surface a clear retry prompt.
                             Toast.makeText(
                                 requireContext(),
                                 "${event.message} Please retry.",

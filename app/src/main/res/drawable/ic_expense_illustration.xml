@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colourful decoration for the Expenses header. Approximates the
+     mockup's clipboard + calculator + coin assembly so the corner of
+     the blue header reads as a financial-tracking illustration. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="130dp"
+    android:height="100dp"
+    android:viewportWidth="130"
+    android:viewportHeight="100">
+
+    <!-- Yellow glow circle behind the assembly -->
+    <path
+        android:fillColor="#FFD93D"
+        android:fillAlpha="0.55"
+        android:pathData="M85,40 m-26,0 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0" />
+
+    <!-- Calculator body (purple, back layer) -->
+    <path
+        android:fillColor="#FFA855F7"
+        android:pathData="M62,38 L92,38 Q95,38 95,41 L95,82 Q95,85 92,85 L62,85 Q59,85 59,82 L59,41 Q59,38 62,38 Z" />
+    <!-- Calculator screen -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64,42 L90,42 Q91,42 91,43 L91,52 Q91,53 90,53 L64,53 Q63,53 63,52 L63,43 Q63,42 64,42 Z" />
+    <!-- Calculator buttons (3x3 grid) -->
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M65,57 L70,57 L70,61 L65,61 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M73,57 L78,57 L78,61 L73,61 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M81,57 L86,57 L86,61 L81,61 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M65,64 L70,64 L70,68 L65,68 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M73,64 L78,64 L78,68 L73,68 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M81,64 L86,64 L86,68 L81,68 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M65,71 L70,71 L70,75 L65,75 Z" />
+    <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.85" android:pathData="M73,71 L78,71 L78,75 L73,75 Z" />
+    <path android:fillColor="#FF22D3EE" android:pathData="M81,71 L86,71 L86,80 L81,80 Z" />
+
+    <!-- Clipboard body (white, front layer, overlapping the calculator) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M28,30 L52,30 Q55,30 55,33 L55,82 Q55,85 52,85 L28,85 Q25,85 25,82 L25,33 Q25,30 28,30 Z" />
+    <!-- Clipboard clip (peach) -->
+    <path
+        android:fillColor="#FFFDBA74"
+        android:pathData="M33,26 L47,26 Q49,26 49,28 L49,34 Q49,36 47,36 L33,36 Q31,36 31,34 L31,28 Q31,26 33,26 Z" />
+    <!-- Clipboard chart bars in brand colors -->
+    <path android:fillColor="#FF2563EB" android:pathData="M29,75 L33,75 L33,66 L29,66 Z" />
+    <path android:fillColor="#FFF97316" android:pathData="M36,75 L40,75 L40,58 L36,58 Z" />
+    <path android:fillColor="#FF16A34A" android:pathData="M43,75 L47,75 L47,50 L43,50 Z" />
+
+    <!-- Yellow coin floating top-right -->
+    <path
+        android:fillColor="#FFD93D"
+        android:pathData="M115,28 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <!-- Coin shine -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M113,25 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+
+    <!-- Small pink coin bottom-left -->
+    <path
+        android:fillColor="#FFEC4899"
+        android:fillAlpha="0.85"
+        android:pathData="M16,70 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>

@@ -206,6 +206,7 @@ class AttendanceFlowViewModel(
         )
     }
 
+
     private fun submitPunch(
         mode: PunchMode,
         token: String,

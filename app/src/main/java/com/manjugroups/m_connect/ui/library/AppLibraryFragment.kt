@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
+import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.telecaller.DialerFragment
 import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
@@ -186,6 +187,9 @@ class AppLibraryFragment : Fragment() {
         ) { openScreen(AttendanceReviewFragment.newInstance()) }
 
         binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
+        binding.itemProjectExpenses.setOnClickListener {
+            openScreen(ProjectExpensesFragment())
+        }
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }
     }
 

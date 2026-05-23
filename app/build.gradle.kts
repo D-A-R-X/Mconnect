@@ -32,7 +32,7 @@ val googleMapsApiKey = envOrDefault(
 )
 // Point the Android client at the same Convex deployment the web admin
 // uses. The web's .env / .env.local sets
-// NEXT_PUBLIC_CONVEX_SITE_URL=https://dev-convex-http.aivida.in (the
+// NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-http.aivida.in/ (the
 // HTTP-routes / `.site` URL), which is what BASE_URL needs here. Build-
 // time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL

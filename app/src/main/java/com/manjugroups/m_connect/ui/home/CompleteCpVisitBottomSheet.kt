@@ -285,6 +285,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                // UX hardening — the form sheet was getting dismissed by a
+                // plain content scroll because the nested-scroll handoff
+                // promoted the gesture to a sheet drag. Killing drag means
+                // the sheet only closes via the Reject/Confirm/Save buttons
+                // or the system back press — never by a stray finger swipe
+                // inside the form. Programmatic dismiss() still works.
+                behavior.isDraggable = false
                 isCancelable = true
             }
         }
@@ -1562,6 +1569,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         OUTCOME_SITE_VISIT -> Outcome.SITE_VISIT
         OUTCOME_POSTPONED -> Outcome.POSTPONE
         OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
+        // Map rejected → NOT_INTERESTED for the UI enum since both
+        // are terminal-decline tabs; the actual outcome string saved
+        // server-side stays distinct ("rejected"). This only matters
+        // for the visual highlight on a resumed sheet — the
+        // server-truth value isn't overwritten.
+        OUTCOME_REJECTED -> Outcome.NOT_INTERESTED
         else -> null
     }
 
@@ -1741,9 +1754,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         prefillProjectIfPossible(proposed.projectId)
         prefillSvStaff(proposed)
 
-        // 4. Disable every input row inside the SV body so the form
-        //    reads as a read-only confirmation surface.
-        applyReadOnlyToSvBody()
+        // 4. SV form fields stay EDITABLE in locked mode — the CP visit
+        //    staff often needs to adjust telecaller-fixed details (e.g.
+        //    swap the BDO if they're not available, tweak pickup address
+        //    after talking to the client, change schedule). The locked
+        //    aspect is the *outcome path* — only Reject / Confirm exits
+        //    are allowed (no Postpone / Booking tabs). Earlier we used
+        //    applyReadOnlyToSvBody() here but that contradicted the
+        //    field-staff workflow.
 
         // 5. Swap the single Save button for the Reject / Confirm pair.
         btnSubmit?.visibility = View.GONE
@@ -1805,9 +1823,33 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun applyReadOnlyToSvBody() {
         val body = bodySiteVisit ?: return
-        // Walk the SV body and dim + disable every interactive view.
-        // We deliberately leave TextViews readable (not transparent) —
-        // the user still needs to see the values.
+        // 1. Explicitly NULL the click listeners on every interactive row.
+        //    bindSiteVisitFields wired these in onViewCreated, and the row
+        //    LinearLayouts use OutcomeFieldPillClickable which sets
+        //    clickable=true in the style — so just toggling isClickable
+        //    off later was racing the style. Clearing the listener is the
+        //    only bulletproof block.
+        val rowIds = intArrayOf(
+            R.id.rowSvProject,
+            R.id.rowSvDate,
+            R.id.rowSvTime,
+            R.id.rowSvIncharge,
+            R.id.rowSvHod,
+            R.id.rowSvAvp,
+            R.id.rowSvGm,
+            R.id.rowSvSm,
+        )
+        for (id in rowIds) {
+            body.findViewById<View>(id)?.apply {
+                setOnClickListener(null)
+                isClickable = false
+                isFocusable = false
+                alpha = 0.7f
+            }
+        }
+
+        // 2. Walk the body to disable every EditText so the address /
+        //    visitor-count inputs can't be typed into either.
         fun walk(v: View) {
             if (v is EditText) {
                 v.isFocusable = false
@@ -1815,21 +1857,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 v.isCursorVisible = false
                 v.isEnabled = false
                 v.alpha = 0.7f
+                v.setOnClickListener(null)
             } else if (v is android.view.ViewGroup) {
-                v.isClickable = false
                 for (i in 0 until v.childCount) walk(v.getChildAt(i))
-            } else {
-                v.isClickable = false
-                v.isFocusable = false
             }
         }
         walk(body)
-        // Buttons (Own / Cab travel pills) are TextView siblings — kill
-        // their click listeners too.
-        btnSvTravelOwn?.isClickable = false
-        btnSvTravelCab?.isClickable = false
-        btnSvTravelOwn?.alpha = 0.7f
-        btnSvTravelCab?.alpha = 0.7f
+
+        // 3. Pickup From segmented control — kill the travel-mode toggles.
+        btnSvTravelOwn?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+        btnSvTravelCab?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+
     }
 
     private fun onLockedConfirmTap() {
@@ -1842,58 +1890,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun onLockedRejectTap() {
-        // Rejection records the field-staff "client said no" decision
-        // on the CP visit. We piggyback on the Not Interested flow's
-        // mutation contract — markClientMet=true (the staff did meet
-        // the client) + outcome=not_interested — so the back office
-        // sees a clean terminal status.
+        // Hand off to the Rejection Case sub-sheet so the field staff
+        // can capture a free-text reason ("client backed out due to
+        // budget", "site location mismatch", etc.). That sheet fires
+        // the same markClientMet + setCpVisitOutcome(not_interested)
+        // chain we used to invoke directly here, but with the reason
+        // shipped as the outcome notes so back-office surfaces have
+        // context. On success it re-emits this sheet's RESULT_KEY so
+        // the upstream TripNavigationFragment flow continues as
+        // before — no caller change needed.
         clearError()
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        btnCpLockedConfirm?.isClickable = false
-        btnCpLockedReject?.isClickable = false
-        btnCpLockedReject?.text = "Rejecting…"
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
-                )
-                if (!metResp.success) {
-                    finishLockedReject(metResp.error ?: "Failed to record client met")
-                    return@launch
-                }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
-                    SetOutcomeRequest(
-                        id = cpVisitId,
-                        outcome = OUTCOME_NOT_INTERESTED,
-                        notes = "Rejected by client at CP visit",
-                    ),
-                )
-                if (!outcomeResp.success) {
-                    finishLockedReject(outcomeResp.error ?: "Failed to record rejection")
-                    return@launch
-                }
+
+        // Listen on the reason sheet's RESULT_KEY (a distinct key from
+        // this sheet's own RESULT_KEY so re-broadcasting can't loop).
+        // When the reason sheet succeeds we forward the result upstream
+        // on our own key so the TripNavigationFragment listener — which
+        // expects CompleteCpVisitBottomSheet.RESULT_KEY — fires
+        // exactly as it always did, and then dismiss this sheet too.
+        parentFragmentManager.setFragmentResultListener(
+            RejectReasonBottomSheet.RESULT_KEY,
+            this,
+        ) { _, bundle ->
+            val outcome = bundle.getString(RejectReasonBottomSheet.KEY_OUTCOME)
+            if (outcome == OUTCOME_REJECTED) {
                 setFragmentResult(
                     RESULT_KEY,
                     bundleOf(
                         KEY_CLIENT_MET to true,
-                        KEY_OUTCOME to OUTCOME_NOT_INTERESTED,
+                        KEY_OUTCOME to OUTCOME_REJECTED,
                     ),
                 )
                 dismissAllowingStateLoss()
-            } catch (e: Exception) {
-                finishLockedReject(e.message ?: "Network error")
             }
         }
-    }
 
-    private fun finishLockedReject(error: String) {
-        btnCpLockedConfirm?.isClickable = true
-        btnCpLockedReject?.isClickable = true
-        btnCpLockedReject?.text = "Reject It"
-        showError(error)
+        RejectReasonBottomSheet
+            .newInstance(cpVisitId)
+            .show(parentFragmentManager, "cp_reject_reason")
     }
 
     companion object {
@@ -1914,6 +1949,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
+        // SV-cum-CP rejection (distinct from not_interested). Set by
+        // the RejectReasonBottomSheet sub-flow with the captured reason
+        // shipped as notes; Convex outcomeValidator was extended to
+        // accept this value.
+        private const val OUTCOME_REJECTED = "rejected"
 
         fun newInstance(
             cpVisitId: String,

@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  KOS-XX: Mobile Task Manager. Mirrors app/task-manager/page.tsx on web.
+  Powered by GET /api/dailyTasks/listForTaskManager which returns:
+    • own tasks (always)
+    • plus the team's pending / in-progress tasks for managers
+    • or all tasks for super-admins
+
+  Each row renders the daily-task shape (title + taskName + assignedTo +
+  deadline + status + label) and tap-throughs to the task's actionUrl —
+  could be a lead detail page (for handoff tasks) or a site-visit detail
+  page (for SV tasks).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="?attr/colorSurfacePrimary">
+
+        <ImageView
+            android:id="@+id/btnTaskManagerBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="14dp"
+            android:contentDescription="Back"
+            android:padding="6dp"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Task Manager"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="17sp" />
+
+        <TextView
+            android:id="@+id/tvTaskManagerScopeChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp"
+            android:background="@drawable/bg_chip_inactive"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="My tasks"
+            android:textColor="?attr/colorForegroundSecondary"
+            android:textSize="11sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?attr/colorBorder" />
+
+    <!-- Status filter pills (All / Pending / In Progress / Completed) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pillTaskAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip_active"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="6dp"
+                android:text="All"
+                android:textColor="?attr/colorForegroundInverse"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/pillTaskPending"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:fontFamily="@font/inter_medium"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="6dp"
+                android:text="Pending"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/pillTaskInProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:fontFamily="@font/inter_medium"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="6dp"
+                android:text="In progress"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/pillTaskCompleted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:fontFamily="@font/inter_medium"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="6dp"
+                android:text="Completed"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:id="@+id/taskManagerSkeleton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="86dp"
+            android:background="@drawable/bg_leave_skeleton_block" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="86dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_leave_skeleton_block" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="86dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_leave_skeleton_block" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/taskManagerEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Inbox zero"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvTaskManagerEmptyHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:text="No tasks match this filter."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/taskManagerRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ScrollView
+            android:id="@+id/taskManagerScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/taskManagerList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp" />
+        </ScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

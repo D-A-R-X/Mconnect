@@ -84,12 +84,22 @@ class ApplyLeaveFragment : Fragment() {
                 if (types.isNotEmpty()) {
                     leaveTypes = types
                 }
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                // Coroutine cancelled by view-lifecycle teardown. Rethrow
+                // so structured concurrency unwinds correctly — swallowing
+                // it here previously made the coroutine resume past the
+                // catch and touch `binding` after _binding was already
+                // null on onDestroyView.
+                throw ce
             } catch (_: Exception) {
                 // Keep defaults when policy isn't available.
             }
 
             selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
-            binding.tvLeaveCategoryValue.text = prettyType(selectedLeaveType)
+            // Belt-and-suspenders: if for any reason the view was torn
+            // down between the await and here (race, slow device), use
+            // _binding? so the assignment no-ops instead of NPE-ing.
+            _binding?.tvLeaveCategoryValue?.text = prettyType(selectedLeaveType)
         }
     }
 
