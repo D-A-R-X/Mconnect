@@ -85,7 +85,7 @@
                     android:id="@+id/tvDetailPriority"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_home_status_dot"
+                    android:background="@drawable/bg_task_priority_pill"
                     android:backgroundTint="#F04438"
                     android:fontFamily="@font/inter_bold"
                     android:paddingHorizontal="14dp"
