@@ -9,14 +9,11 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.button.MaterialButton
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.MarkExpensePaidRequest
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -87,7 +84,6 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
         val tvPayment = view.findViewById<TextView>(R.id.tvDetailPaymentMethod)
         val tvNotes = view.findViewById<TextView>(R.id.tvDetailNotes)
         val iconBg = view.findViewById<View>(R.id.headerIconBg)
-        val btnToggle = view.findViewById<MaterialButton>(R.id.btnTogglePaid)
 
         tvCategory.text = expense.category.replaceFirstChar { it.uppercase() }
         val color = when (expense.category) {
@@ -135,48 +131,6 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
             tvPaidPill.setTextColor(Color.parseColor("#B54708"))
         }
 
-        // Surface the toggle only when the viewer can approve.
-        val canApprove = session.hasPermission("projects.expenses.approve")
-        if (canApprove) {
-            btnToggle.visibility = View.VISIBLE
-            btnToggle.text = if (expense.paid) "Mark unpaid" else "Mark paid"
-            btnToggle.setOnClickListener {
-                btnToggle.isEnabled = false
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        val target = !expense.paid
-                        val r = api.markProjectExpensePaid(
-                            session.bearerToken,
-                            MarkExpensePaidRequest(id = expense.id, paid = target),
-                        )
-                        if (r.success) {
-                            Toast.makeText(
-                                requireContext(),
-                                if (target) "Marked paid" else "Marked unpaid",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            setFragmentResult(RESULT_KEY, Bundle.EMPTY)
-                            dismissAllowingStateLoss()
-                        } else {
-                            Toast.makeText(
-                                requireContext(),
-                                r.error ?: "Failed to update",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            btnToggle.isEnabled = true
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            requireContext(),
-                            e.message ?: "Network error",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                        btnToggle.isEnabled = true
-                    }
-                }
-            }
-        }
-        
         // Staggered entry animation for details
         playDetailAnimations(view)
     }

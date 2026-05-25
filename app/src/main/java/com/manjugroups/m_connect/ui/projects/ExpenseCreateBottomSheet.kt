@@ -1,14 +1,18 @@
 package com.manjugroups.m_connect.ui.projects
 
+import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Toast
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
@@ -59,6 +63,34 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         "cheque" to "Cheque",
         "card" to "Card",
     )
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        // Default BottomSheetDialog starts at STATE_HALF_EXPANDED, which
+        // leaves the Save It button below the fold once the keyboard
+        // opens. Force STATE_EXPANDED + skipCollapsed so the sheet takes
+        // the full available height and the scroll view inside can scroll
+        // up under the keyboard.
+        val dialog = BottomSheetDialog(requireContext(), theme)
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog)
+                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+            }
+        }
+        return dialog
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Resize the dialog window when the IME shows so the Save It CTA
+        // stays above the keyboard instead of being clipped off-screen.
+        dialog?.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,

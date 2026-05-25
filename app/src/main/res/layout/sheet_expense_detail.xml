@@ -217,23 +217,5 @@
             android:textSize="14sp"
             tools:text="Monthly Food Allowance Charges for Labours" />
 
-        <!-- Mark paid / Mark unpaid — gated by IAM; hidden by default. -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnTogglePaid"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="24dp"
-            android:fontFamily="@font/inter_bold"
-            android:text="Mark paid"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="14sp"
-            android:visibility="gone"
-            app:backgroundTint="#1BCA0B"
-            app:cornerRadius="26dp"
-            app:elevation="0dp"
-            tools:text="Mark paid"
-            tools:visibility="visible" />
-
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
