@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.projects
 
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -47,9 +48,8 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        view.findViewById<MaterialButton>(R.id.btnClose).setOnClickListener {
-            dismissAllowingStateLoss()
-        }
+        // No Close button — the sheet dismisses on drag-down / tap-outside,
+        // same pattern as the other project-flow bottom sheets.
 
         if (expenseId.isBlank()) {
             Toast.makeText(requireContext(), "Missing expense id", Toast.LENGTH_SHORT).show()
@@ -120,16 +120,19 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
             tvNotes.text = expense.notes
         }
 
+        // Paid / Pending pill — soft-tinted background + matching dark
+        // text. Matches the Figma overview mock and is consistent with
+        // the row-level pill on the Expenses list.
         if (expense.paid) {
             tvPaidPill.text = "Paid"
-            tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                ContextCompat.getColor(ctx, R.color.category_equipment),
-            )
+            tvPaidPill.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#ECFDF3"))
+            tvPaidPill.setTextColor(Color.parseColor("#16A34A"))
         } else {
             tvPaidPill.text = "Pending"
-            tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                ContextCompat.getColor(ctx, R.color.category_materials),
-            )
+            tvPaidPill.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#FEF0C7"))
+            tvPaidPill.setTextColor(Color.parseColor("#B54708"))
         }
 
         // Surface the toggle only when the viewer can approve.

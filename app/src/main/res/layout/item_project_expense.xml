@@ -104,13 +104,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:paddingHorizontal="10dp"
+                    android:background="@drawable/bg_task_priority_pill"
+                    android:backgroundTint="#ECFDF3"
+                    android:fontFamily="@font/inter_semibold"
+                    android:paddingHorizontal="12dp"
                     android:paddingVertical="3dp"
                     android:textColor="#16A34A"
                     android:textSize="11sp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:background="@drawable/bg_home_today_visit_count_badge"
-                    android:backgroundTint="#ECFDF3"
                     tools:text="Paid" />
             </LinearLayout>
         </LinearLayout>

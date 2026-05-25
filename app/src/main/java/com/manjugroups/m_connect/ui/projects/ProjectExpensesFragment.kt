@@ -389,18 +389,22 @@ class ProjectExpensesFragment : Fragment() {
                     else -> ContextCompat.getColor(ctx, R.color.category_other)
                 }
                 iconBg.backgroundTintList = ColorStateList.valueOf(color)
+                // Paid / Pending pill — soft-tinted background + matching
+                // dark text. Previously we were tinting with the SOLID
+                // category color (#16A34A) which collided with the same
+                // text colour set in XML, making the label invisible on
+                // the row. Switched to the Figma's light/dark colour pair.
+                tvPaidPill.visibility = View.VISIBLE
                 if (item.paid) {
                     tvPaidPill.text = "Paid"
-                    tvPaidPill.visibility = View.VISIBLE
-                    tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(ctx, R.color.category_equipment),
-                    )
+                    tvPaidPill.backgroundTintList =
+                        ColorStateList.valueOf(android.graphics.Color.parseColor("#ECFDF3"))
+                    tvPaidPill.setTextColor(android.graphics.Color.parseColor("#16A34A"))
                 } else {
                     tvPaidPill.text = "Pending"
-                    tvPaidPill.visibility = View.VISIBLE
-                    tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(ctx, R.color.category_materials),
-                    )
+                    tvPaidPill.backgroundTintList =
+                        ColorStateList.valueOf(android.graphics.Color.parseColor("#FEF0C7"))
+                    tvPaidPill.setTextColor(android.graphics.Color.parseColor("#B54708"))
                 }
                 // Whole-row click → Expense Detail bottom sheet.
                 itemView.setOnClickListener {
