@@ -1,25 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Expense Creation bottom sheet — opened by the Add Expense CTA on the
+  Expenses screen. Mirrors the Figma "Expense Creation" mock:
+    - Rounded top corners + drag handle (bg_auth_sheet, same as the
+      other project-flow sheets).
+    - Centered title + subtitle.
+    - Five labeled inputs, each in an outlined 12dp-radius pill with
+      a tinted leading icon:
+        Expense Category *  — dropdown (Labour / Materials / Equipment / Other)
+        Date                — opens DateFilterBottomSheet
+        Money *             — numeric input
+        Notes (Optional)    — multi-line free text
+        Payment Method *    — dropdown (Cash / Bank Transfer / UPI / Cheque / Card)
+    - Full-width green "Save It" pill at the bottom.
+-->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?attr/colorSurfacePrimary">
+    android:background="@drawable/bg_auth_sheet">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingHorizontal="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="24dp">
 
+        <!-- Drag handle -->
         <View
-            android:layout_width="32dp"
+            android:layout_width="40dp"
             android:layout_height="4dp"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="14dp"
             android:background="@drawable/bg_chat_sheet_handle" />
 
+        <!-- Title + subtitle (centered) -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -33,71 +52,50 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="24dp"
+            android:layout_marginTop="2dp"
             android:fontFamily="@font/inter_medium"
             android:text="In this you can able to create expenses"
             android:textColor="#667085"
             android:textSize="13sp" />
 
-        <!-- Category -->
+        <!-- ─── Expense Category (dropdown) ─────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
             android:fontFamily="@font/inter_medium"
             android:text="Expense Category *"
             android:textColor="#667085"
             android:textSize="12sp" />
 
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/categoryChips"
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:layout_marginTop="6dp"
+            app:boxCornerRadiusBottomEnd="12dp"
+            app:boxCornerRadiusBottomStart="12dp"
+            app:boxCornerRadiusTopEnd="12dp"
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxStrokeColor="#D0D5DD"
+            app:hintEnabled="false"
+            app:startIconDrawable="@drawable/ic_expense_category"
+            app:startIconTint="#7A5AF8">
 
-            <com.google.android.material.chip.Chip
-                android:id="@+id/createChipLabour"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
+            <AutoCompleteTextView
+                android:id="@+id/etCategory"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Labour"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp" />
+                android:clickable="true"
+                android:focusable="false"
+                android:fontFamily="@font/inter_medium"
+                android:hint="Enter Expense"
+                android:inputType="none"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.chip.Chip
-                android:id="@+id/createChipMaterials"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Materials"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/createChipEquipment"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Equipments"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/createChipOther"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Other"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp" />
-        </com.google.android.material.chip.ChipGroup>
-
-        <!-- Date -->
+        <!-- ─── Date ─────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -111,7 +109,7 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -134,7 +132,7 @@
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Money -->
+        <!-- ─── Money ────────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -148,7 +146,7 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -169,7 +167,7 @@
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Notes -->
+        <!-- ─── Notes (optional) ─────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -183,7 +181,7 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -198,14 +196,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
+                android:gravity="top"
                 android:hint="Enter Notes"
-                android:inputType="textMultiLine"
-                android:maxLines="3"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                android:maxLines="4"
                 android:textColor="#101828"
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Payment Method -->
+        <!-- ─── Payment Method (dropdown) ────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -219,14 +219,14 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
             app:boxCornerRadiusTopStart="12dp"
             app:boxStrokeColor="#D0D5DD"
             app:hintEnabled="false"
-            app:startIconDrawable="@drawable/ic_retake_refresh"
+            app:startIconDrawable="@drawable/ic_credit_card"
             app:startIconTint="#16A34A">
 
             <AutoCompleteTextView
@@ -242,12 +242,12 @@
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Submit -->
+        <!-- Save It — vibrant-green pill matching the Add Expense CTA -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="32dp"
+            android:layout_marginTop="28dp"
             android:backgroundTint="#1BCA0B"
             android:fontFamily="@font/inter_bold"
             android:text="Save It"
