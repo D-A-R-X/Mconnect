@@ -387,22 +387,22 @@ class HrDashboardFragment : Fragment() {
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
-                    // Three-state button logic to match the first-in / last-out
-                    // attendance rule:
+                    // Three-state button logic now respects the "day stays
+                    // editable until midnight" rule the user asked for:
                     //
-                    //   1. Not punched in yet today → show "Clock In Now"
-                    //   2. Currently clocked in (open session)
-                    //                              → show "Clock Out" (enabled)
-                    //   3. Already clocked out today (no open session, but
-                    //      firstPunchIn exists)    → show "Clock Out"
-                    //                                 DISABLED + grey
+                    //   1. Not punched in yet today → "Clock In Now"
+                    //   2. Currently clocked in (open session) → "Clock Out"
+                    //   3. Already clocked out today but day not finalized
+                    //      → "Clock In" (re-opens a session on the same
+                    //      attendance row; first-punch-in stays canonical,
+                    //      and the last touch becomes the effective
+                    //      punch-out at midnight or next manual close).
                     //
-                    // The point of #3 is that the first/last-punch-of-the-day
-                    // rule means we should never let the user start a fresh
-                    // "Clock In" until the day rolls over. If we flipped back
-                    // to Clock In as soon as the open session closed, a second
-                    // press would create a new session and the day's "first
-                    // punch in" would be lost.
+                    // This handles two real cases: a user who punched out
+                    // for a break and wants to resume, and a user who
+                    // accidentally tapped Clock Out and just wants to keep
+                    // their day going. The old behaviour greyed out the
+                    // button and forced them to wait for midnight.
                     val hasClockedOutToday =
                         !state.isClockedIn && !state.firstPunchInIso.isNullOrBlank()
 
@@ -419,20 +419,15 @@ class HrDashboardFragment : Fragment() {
                         binding.tvAttendanceHeaderSubtitle.text =
                             "Have a productive day ahead"
                     } else if (hasClockedOutToday) {
-                        // Day is done — keep the same button visible but make
-                        // it unmistakably unclickable so the user knows
-                        // they're locked out until midnight rolls over.
-                        binding.clockInButtonGroup.visibility = View.GONE
-                        binding.clockedInButtonGroup.visibility = View.VISIBLE
-                        binding.btnClockOut.isEnabled = false
-                        binding.btnClockOut.text = "Clock Out"
-                        binding.btnClockOut.setBackgroundResource(
-                            R.drawable.bg_attendance_btn_disabled
-                        )
+                        // Day already has a first-punch-in but the open
+                        // session was closed. Surface Clock In so the user
+                        // can resume — they're not locked out until 12.
+                        binding.clockInButtonGroup.visibility = View.VISIBLE
+                        binding.clockedInButtonGroup.visibility = View.GONE
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "You're Clocked Out"
+                        binding.tvAttendanceHeaderTitle.text = "You're On a Break"
                         binding.tvAttendanceHeaderSubtitle.text =
-                            "Next clock-in opens at midnight"
+                            "Tap Clock In to resume — the day closes at midnight"
                     } else {
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
