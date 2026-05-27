@@ -178,9 +178,13 @@ class AttendanceHistoryFragment : Fragment() {
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
             val resolvedOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+            // Fall through on "has a punch-in" rather than hasOpenSession
+            // so legacy CSV / manual rows (sessions[] empty, firstPunchIn
+            // written at the top level) also read "Not Punched Out"
+            // instead of a bare "--".
             val outLabel = when {
                 resolvedOut != null -> formatIsoTime(resolvedOut)
-                record.hasOpenSession == true -> "Not Punched Out"
+                firstIn != null -> "Not Punched Out"
                 else -> "--"
             }
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
