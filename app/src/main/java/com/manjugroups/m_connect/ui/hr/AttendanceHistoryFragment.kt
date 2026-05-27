@@ -189,7 +189,7 @@ class AttendanceHistoryFragment : Fragment() {
             val outLabel = when {
                 resolvedOut != null -> formatIsoTime(resolvedOut)
                 record.hasOpenSession == true -> "---"
-                firstIn != null && record.status == "pending" -> "Not Punched Out"
+                firstIn != null -> "Not Punched Out"
                 else -> "--"
             }
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
