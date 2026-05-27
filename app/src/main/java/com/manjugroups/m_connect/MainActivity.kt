@@ -229,12 +229,24 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!session.isLoggedIn) return
+        // Re-assert the background permissions gate every time we come
+        // forward. Dialog is no-op when both checks already pass and
+        // self-dismisses when the user returns from Settings having
+        // toggled the missing one ON. Scoped to staff who actually need
+        // background tracking — office staff aren't force-prompted.
+        maybeShowBackgroundPermissionsGate()
         val now = System.currentTimeMillis()
         if (now - lastTrackingResumeSyncMs < TRACKING_RESUME_SYNC_THROTTLE_MS) return
         lastTrackingResumeSyncMs = now
         lifecycleScope.launch {
             runCatching { syncTrackingBootstrap() }
         }
+    }
+
+    private fun maybeShowBackgroundPermissionsGate() {
+        if (!session.geoTrackingEnabled) return
+        com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+            .showIfNeeded(supportFragmentManager, this)
     }
 
     fun openTab(index: Int) {
@@ -427,6 +439,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             GeoTrackService.stop(this)
         }
+
+        // First-time users only learn they're tracked after the bootstrap
+        // flips geoTrackingEnabled on. Re-evaluate the gate here so the
+        // dialog appears immediately on the first login, not only after
+        // the next foreground cycle.
+        maybeShowBackgroundPermissionsGate()
     }
 
     private fun hasPermission(permission: String): Boolean {
