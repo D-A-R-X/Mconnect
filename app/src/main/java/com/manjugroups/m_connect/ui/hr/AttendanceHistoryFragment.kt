@@ -178,12 +178,18 @@ class AttendanceHistoryFragment : Fragment() {
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
             val resolvedOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
-            // Fall through on "has a punch-in" rather than hasOpenSession
-            // so legacy CSV / manual rows (sessions[] empty, firstPunchIn
-            // written at the top level) also read "Not Punched Out"
-            // instead of a bare "--".
+            // Three-state label for the "Clock in & Out" column:
+            //   - resolvedOut set (backend exposes it only when the day
+            //     is finalized OR the staff is currently clocked out
+            //     with ≥ 2 events) → render the time.
+            //   - currently clocked in (hasOpenSession) → "---" so the
+            //     card doesn't claim a punch-out while the day is still
+            //     in progress.
+            //   - no out, no open session, but punch-in exists (legacy
+            //     CSV / manual / single-touch) → "Not Punched Out".
             val outLabel = when {
                 resolvedOut != null -> formatIsoTime(resolvedOut)
+                record.hasOpenSession == true -> "---"
                 firstIn != null -> "Not Punched Out"
                 else -> "--"
             }
