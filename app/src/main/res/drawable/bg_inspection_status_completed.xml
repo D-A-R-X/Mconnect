@@ -1,0 +1,6 @@
+<!-- "Completed" status pill — soft green bg, dark green text. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#D1FAE5" />
+    <corners android:radius="999dp" />
+</shape>

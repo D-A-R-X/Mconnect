@@ -82,5 +82,6 @@
     <color name="category_labour_strong">#1D4ED8</color>
     <color name="category_materials">#F97316</color>
     <color name="category_equipment">#16A34A</color>
-    <color name="category_other">#94A3B8</color>
+    <!-- Distinct purple so "Other" doesn't blend with the donut empty-state ring. -->
+    <color name="category_other">#A855F7</color>
 </resources>

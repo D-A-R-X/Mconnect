@@ -1,0 +1,33 @@
+<!-- "Land" pill-tab icon for the App Library filter strip. Monochrome
+     folded-map silhouette so the tab can be tinted blue when active and
+     grey when inactive — same pattern as ic_apps_pill_v_settings.
+     Derived from the same artwork as ic_apps_cat_land, just stripped of
+     the pink background and rendered as solid fill for the small size. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <!-- Outer map outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M2.5,5.83 L2.5,15.83 C2.5,17.5 3.75,18.33 5.0,17.5 L7.5,16.25 C8.0,15.92 8.83,15.92 9.33,16.17 L13.75,18.33 C14.25,18.58 15.0,18.5 15.5,18.25 L17.5,17.08 C18.08,16.75 18.33,16.0 18.33,15.42 L18.33,5.42 C18.33,3.75 17.08,2.92 15.83,3.75 L13.75,5.0 C13.25,5.33 12.42,5.33 11.92,5.08 L7.5,2.92 C7.0,2.67 6.25,2.75 5.75,3.0 L3.75,4.17 C3.17,4.5 2.5,5.25 2.5,5.83 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <!-- Left fold crease. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7.5,3.33 L7.5,16.25"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.5" />
+    <!-- Right fold crease. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M13.75,5.42 L13.75,18.33"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.5" />
+</vector>

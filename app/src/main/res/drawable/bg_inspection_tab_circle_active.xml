@@ -1,0 +1,11 @@
+<!-- Blue gradient circle that sits behind the active tab's icon in the
+     Site Inspection sheet (matches the original "active" treatment that
+     used to be baked into ic_inspection_tab_basic). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:angle="270"
+        android:startColor="#0B61CA"
+        android:endColor="#02499D"
+        android:type="linear" />
+</shape>

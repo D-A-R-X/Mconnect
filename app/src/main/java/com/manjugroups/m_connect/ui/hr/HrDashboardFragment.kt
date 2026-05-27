@@ -23,6 +23,10 @@ import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.gms.location.LocationServices
@@ -207,10 +211,75 @@ class HrDashboardFragment : Fragment() {
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
 
+        // Pull-to-refresh: same two loads as the initial open. There's no
+        // single completion signal across both calls, so dismiss after a
+        // short delay — feels instant on cached data and honest on slow
+        // networks.
+        binding.hrRefresh.setupPullToRefresh {
+            flowViewModel.loadTodayAttendance(session.bearerToken)
+            loadRecentHistoryCards()
+            binding.hrRefresh.postDelayed({ binding.hrRefresh.dismissRefresh() }, 800)
+        }
+
         // Header pieces start hidden — content pieces are wired to enter once their
         // skeleton drops in updateAttendanceLoadingUi.
         primeHeaderForEntryAnimation()
         binding.attendanceHeader.post { playHeaderEntryAnimation() }
+
+        setupAttendanceScrollAnimation()
+    }
+
+    /**
+     * Collapsing-header effect — same pattern as App Library:
+     *  - subtitle + illustration fade out as the user scrolls down
+     *  - the header shrinks from 172dp → 120dp (just enough to keep
+     *    the title at marginTop=71dp + ~30dp content + ~16dp padding
+     *    visible without the title clipping or crossing the status
+     *    bar)
+     *  - content cards scroll up underneath the sticky header.
+     * Effect saturates within ~140dp of scroll.
+     */
+    /**
+     * "Panel slides up over fixed header" scroll effect.
+     * The blue attendance header stays fixed at full size; the scroll
+     * panel translates UP over it as the user scrolls. The header's
+     * rounded bottom corners flatten in step with the slide.
+     */
+    private fun setupAttendanceScrollAnimation() {
+        val density = binding.root.resources.displayMetrics.density
+        val maxBottomRadiusPx = 24f * density
+        val headerBg = binding.attendanceHeader.applyShrinkableBlueHeaderBackground()
+        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+
+        val panel = binding.hrRefresh
+        // Solid page-bg fill so the panel actually OBSCURES the blue
+        // header on scroll instead of letting it show through any
+        // transparent gap.
+        panel.setBackgroundColor(android.graphics.Color.parseColor("#F1F3F8"))
+        binding.attendanceHeader.post {
+            val b = _binding ?: return@post
+            val overlayDistancePx = b.attendanceHeader.height.toFloat()
+            // Extend panel past the column bottom by headerHeight so its
+            // visual bottom stays at the screen edge once translated up.
+            //
+            // bottomMargin alone is not enough inside a weighted
+            // LinearLayout — we must also grow the panel's measured
+            // height. Otherwise translating the panel up exposes an
+            // `overlayDistancePx`-tall grey strip at the bottom of the
+            // screen above the floating tab bar.
+            (panel.layoutParams as ViewGroup.MarginLayoutParams).apply {
+                height = panel.height + overlayDistancePx.toInt()
+                bottomMargin = -overlayDistancePx.toInt()
+                panel.layoutParams = this
+            }
+            b.hrScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                if (_binding == null) return@setOnScrollChangeListener
+                val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
+                panel.translationY = translateY
+                val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
+                headerBg.setBottomCornerRadius((1f - progress) * maxBottomRadiusPx)
+            }
+        }
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
@@ -318,14 +387,59 @@ class HrDashboardFragment : Fragment() {
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
+                    // Three-state button logic to match the first-in / last-out
+                    // attendance rule:
+                    //
+                    //   1. Not punched in yet today → show "Clock In Now"
+                    //   2. Currently clocked in (open session)
+                    //                              → show "Clock Out" (enabled)
+                    //   3. Already clocked out today (no open session, but
+                    //      firstPunchIn exists)    → show "Clock Out"
+                    //                                 DISABLED + grey
+                    //
+                    // The point of #3 is that the first/last-punch-of-the-day
+                    // rule means we should never let the user start a fresh
+                    // "Clock In" until the day rolls over. If we flipped back
+                    // to Clock In as soon as the open session closed, a second
+                    // press would create a new session and the day's "first
+                    // punch in" would be lost.
+                    val hasClockedOutToday =
+                        !state.isClockedIn && !state.firstPunchInIso.isNullOrBlank()
+
                     if (state.isClockedIn) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
+                        binding.btnClockOut.isEnabled = !state.isSubmitting
+                        binding.btnClockOut.text = "Clock Out"
+                        binding.btnClockOut.setBackgroundResource(
+                            R.drawable.bg_attendance_btn_primary
+                        )
                         startLiveTodayTicker(state.firstPunchInIso)
+                        binding.tvAttendanceHeaderTitle.text = "You're Clocked In"
+                        binding.tvAttendanceHeaderSubtitle.text =
+                            "Have a productive day ahead"
+                    } else if (hasClockedOutToday) {
+                        // Day is done — keep the same button visible but make
+                        // it unmistakably unclickable so the user knows
+                        // they're locked out until midnight rolls over.
+                        binding.clockInButtonGroup.visibility = View.GONE
+                        binding.clockedInButtonGroup.visibility = View.VISIBLE
+                        binding.btnClockOut.isEnabled = false
+                        binding.btnClockOut.text = "Clock Out"
+                        binding.btnClockOut.setBackgroundResource(
+                            R.drawable.bg_attendance_btn_disabled
+                        )
+                        stopLiveTodayTicker()
+                        binding.tvAttendanceHeaderTitle.text = "You're Clocked Out"
+                        binding.tvAttendanceHeaderSubtitle.text =
+                            "Next clock-in opens at midnight"
                     } else {
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
                         stopLiveTodayTicker()
+                        binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
+                        binding.tvAttendanceHeaderSubtitle.text =
+                            "Don’t miss your clock in schedule"
                     }
                 }
             }

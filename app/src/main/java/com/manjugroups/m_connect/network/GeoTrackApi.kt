@@ -842,6 +842,13 @@ data class TodayVisit(
     //   "site_visit" → direct site visit (no CP intermediary)
     //   null         → unknown
     val visitCategory: String? = null,
+    // Convex auto-populates `_creationTime` on every doc; we surface it
+    // so Today's Trip can sort newest-first regardless of source (legacy
+    // fieldVisits route vs CP-merge path). For CP-merge rows where the
+    // legacy field is absent, toTodayVisitOrNull seeds this from the
+    // CpVisitDetail's stored `createdAt` (same numeric value).
+    @com.google.gson.annotations.SerializedName("_creationTime")
+    val creationTime: Double? = null,
 )
 
 data class CpVisitState(

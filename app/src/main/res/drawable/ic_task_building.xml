@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Project / building glyph for the Task Overview title row. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,22h16M6,22V4a1,1 0,0 1,1 -1h6a1,1 0,0 1,1 1v18M14,9h5a1,1 0,0 1,1 1v12"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M9,7h0M9,11h0M9,15h0M17,13h0M17,17h0"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

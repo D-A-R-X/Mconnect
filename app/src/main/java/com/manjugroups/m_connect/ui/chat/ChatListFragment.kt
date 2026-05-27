@@ -34,6 +34,8 @@ import com.manjugroups.m_connect.network.CreateGroupConversationRequest
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -106,6 +108,9 @@ class ChatListFragment : Fragment() {
         }
 
         renderFilterState()
+        // Pull-to-refresh — re-runs loadData() which the existing polling
+        // loop also calls every 5s. dismissRefresh is wired below.
+        binding.chatRefresh.setupPullToRefresh { loadData() }
         loadData()
     }
 
@@ -398,6 +403,9 @@ class ChatListFragment : Fragment() {
                     )
                 }
             }
+            // Drop the pull-refresh spinner regardless of outcome, then
+            // unblock the in-flight guard.
+            if (_binding != null) binding.chatRefresh.dismissRefresh()
             isLoadingChats = false
         }
     }

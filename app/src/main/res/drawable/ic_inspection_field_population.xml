@@ -1,0 +1,15 @@
+<!-- Populations — two-user profile glyph. Converted from profile-2user.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.63,9.06 C7.55,9.05 7.45,9.05 7.36,9.06 C5.38,8.99 3.8,7.37 3.8,5.37 C3.8,3.32 5.45,1.67 7.5,1.67 C9.54,1.67 11.2,3.32 11.2,5.37 C11.19,7.37 9.62,8.99 7.63,9.06 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M13.68,3.33 C15.29,3.33 16.59,4.64 16.59,6.25 C16.59,7.83 15.34,9.11 13.78,9.17 C13.72,9.16 13.64,9.16 13.57,9.17" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M3.47,12.13 C1.45,13.48 1.45,15.68 3.47,17.03 C5.76,18.56 9.52,18.56 11.81,17.03 C13.82,15.68 13.82,13.48 11.81,12.13 C9.52,10.61 5.77,10.61 3.47,12.13 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M15.28,16.67 C15.88,16.54 16.45,16.3 16.92,15.94 C18.22,14.97 18.22,13.36 16.92,12.38 C16.46,12.03 15.9,11.8 15.31,11.67" />
+</vector>

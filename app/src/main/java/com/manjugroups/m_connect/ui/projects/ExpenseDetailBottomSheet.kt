@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.projects
 
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,14 +9,11 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.button.MaterialButton
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.MarkExpensePaidRequest
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -47,9 +45,8 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        view.findViewById<MaterialButton>(R.id.btnClose).setOnClickListener {
-            dismissAllowingStateLoss()
-        }
+        // No Close button — the sheet dismisses on drag-down / tap-outside,
+        // same pattern as the other project-flow bottom sheets.
 
         if (expenseId.isBlank()) {
             Toast.makeText(requireContext(), "Missing expense id", Toast.LENGTH_SHORT).show()
@@ -87,7 +84,6 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
         val tvPayment = view.findViewById<TextView>(R.id.tvDetailPaymentMethod)
         val tvNotes = view.findViewById<TextView>(R.id.tvDetailNotes)
         val iconBg = view.findViewById<View>(R.id.headerIconBg)
-        val btnToggle = view.findViewById<MaterialButton>(R.id.btnTogglePaid)
 
         tvCategory.text = expense.category.replaceFirstChar { it.uppercase() }
         val color = when (expense.category) {
@@ -120,60 +116,40 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
             tvNotes.text = expense.notes
         }
 
+        // Paid / Pending pill — soft-tinted background + matching dark
+        // text. Matches the Figma overview mock and is consistent with
+        // the row-level pill on the Expenses list.
         if (expense.paid) {
             tvPaidPill.text = "Paid"
-            tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                ContextCompat.getColor(ctx, R.color.category_equipment),
-            )
+            tvPaidPill.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#ECFDF3"))
+            tvPaidPill.setTextColor(Color.parseColor("#16A34A"))
         } else {
             tvPaidPill.text = "Pending"
-            tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                ContextCompat.getColor(ctx, R.color.category_materials),
-            )
+            tvPaidPill.backgroundTintList =
+                ColorStateList.valueOf(Color.parseColor("#FEF0C7"))
+            tvPaidPill.setTextColor(Color.parseColor("#B54708"))
         }
 
-        // Surface the toggle only when the viewer can approve (client-
-        // side check matches the server-side IAM guard so we don't
-        // dangle an always-403 button).
-        val canApprove = session.hasPermission("projects.expenses.approve")
-        if (canApprove) {
-            btnToggle.visibility = View.VISIBLE
-            btnToggle.text = if (expense.paid) "Mark unpaid" else "Mark paid"
-            btnToggle.setOnClickListener {
-                btnToggle.isEnabled = false
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        val target = !expense.paid
-                        val r = api.markProjectExpensePaid(
-                            session.bearerToken,
-                            MarkExpensePaidRequest(id = expense.id, paid = target),
-                        )
-                        if (r.success) {
-                            Toast.makeText(
-                                requireContext(),
-                                if (target) "Marked paid" else "Marked unpaid",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            setFragmentResult(RESULT_KEY, Bundle.EMPTY)
-                            dismissAllowingStateLoss()
-                        } else {
-                            Toast.makeText(
-                                requireContext(),
-                                r.error ?: "Failed to update",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            btnToggle.isEnabled = true
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            requireContext(),
-                            e.message ?: "Network error",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                        btnToggle.isEnabled = true
-                    }
-                }
-            }
+        // Staggered entry animation for details
+        playDetailAnimations(view)
+    }
+
+    private fun playDetailAnimations(view: View) {
+        val rows = listOf(
+            view.findViewById<View>(R.id.rowAmount),
+            view.findViewById<View>(R.id.rowDate),
+            view.findViewById<View>(R.id.rowPayment),
+            view.findViewById<View>(R.id.labelNotes),
+            view.findViewById<View>(R.id.tvDetailNotes)
+        )
+        rows.forEachIndexed { i, row ->
+            row?.alpha = 0f
+            row?.translationY = 16f
+            row?.animate()?.alpha(1f)?.translationY(0f)
+                ?.setDuration(300L)
+                ?.setStartDelay(100L + i * 50L)
+                ?.start()
         }
     }
 

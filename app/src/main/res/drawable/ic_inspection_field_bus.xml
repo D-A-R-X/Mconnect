@@ -1,0 +1,17 @@
+<!-- Bus Stop Distance — bus silhouette. Converted from bus.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M14.08,18.33 H5.92 C4.5,18.33 3.33,17.18 3.33,15.75 V4.25 C3.33,2.83 4.49,1.67 5.92,1.67 H14.08 C15.5,1.67 16.67,2.83 16.67,4.25 V15.75 C16.67,17.18 15.51,18.33 14.08,18.33 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M15.42,10.83 H4.58 C3.89,10.83 3.33,10.28 3.33,9.58 V7.92 C3.33,7.23 3.89,6.67 4.58,6.67 H15.42 C16.11,6.67 16.67,7.23 16.67,7.92 V9.58 C16.67,10.28 16.11,10.83 15.42,10.83 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="2.5" android:strokeLineCap="round"
+        android:pathData="M7.08,14.75 H7.09" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="2.5" android:strokeLineCap="round"
+        android:pathData="M12.92,14.75 H12.92" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M7.92,4.17 H12.08" />
+</vector>

@@ -203,13 +203,19 @@
         android:layout_marginTop="16dp"
         android:layout_weight="1">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvChatList"
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/chatRefresh"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:overScrollMode="never"
-            android:paddingBottom="96dp" />
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvChatList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:paddingBottom="96dp" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <LinearLayout
             android:id="@+id/emptyState"

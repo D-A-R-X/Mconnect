@@ -1,0 +1,9 @@
+<!-- Disabled state for the Clock Out button — shown after the user has
+     already clocked out today (so the button doesn't flip back to
+     "Clock In" mid-day and break the first-in/last-out logic). Same
+     shape as bg_attendance_btn_primary, just a muted grey fill. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#D1D5DB" />
+    <corners android:radius="999dp" />
+</shape>

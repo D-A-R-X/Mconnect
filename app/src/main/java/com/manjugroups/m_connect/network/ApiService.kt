@@ -19,8 +19,20 @@ interface ApiService {
     @POST("api/auth/verify-otp")
     suspend fun verifyOtp(@Body body: VerifyOtpRequest): VerifyOtpResponse
 
+    @POST("api/auth/login-with-employee-id")
+    suspend fun loginWithEmployeeId(@Body body: EmployeePasswordLoginRequest): EmployeePasswordLoginResponse
+
+    @POST("api/auth/change-own-password")
+    suspend fun changeOwnPassword(
+        @Header("Authorization") token: String,
+        @Body body: ChangeOwnPasswordRequest
+    ): SimpleResponse
+
     @GET("api/auth/validate-session")
     suspend fun validateSession(@Header("Authorization") token: String): ValidateSessionResponse
+
+    @GET
+    suspend fun lookupPincode(@Url url: String): List<PincodeLookupEnvelope>
 
     @POST("api/auth/logout")
     suspend fun logout(@Header("Authorization") token: String): LogoutResponse
@@ -749,6 +761,24 @@ interface ApiService {
         @Query("phone") phone: String,
     ): TelecallerLeadSearchResponse
 
+    // ── Land Procurement: Inspection ────────────────────────────────────
+    @GET("api/land/inspections/my")
+    suspend fun listMyInspections(
+        @Header("Authorization") token: String,
+    ): InspectionListResponse
+
+    @GET("api/land/inspections/get")
+    suspend fun getInspectionForProperty(
+        @Header("Authorization") token: String,
+        @Query("propertyId") propertyId: String,
+    ): InspectionGetResponse
+
+    @POST("api/land/inspections/save")
+    suspend fun saveInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionSaveRequest,
+    ): InspectionSaveResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -774,14 +804,45 @@ data class SendOtpRequest(val phone: String)
 data class SendOtpResponse(val success: Boolean, val message: String?)
 data class VerifyOtpRequest(val phone: String, val otp: String)
 data class VerifyOtpResponse(val success: Boolean, val token: String?, val user: UserInfo?, val error: String?)
+data class EmployeePasswordLoginRequest(val employeeId: String, val password: String)
+data class EmployeePasswordLoginResponse(
+    val success: Boolean,
+    val token: String? = null,
+    val user: UserInfo? = null,
+    val mustChangePassword: Boolean = false,
+    val error: String? = null
+)
+data class ChangeOwnPasswordRequest(
+    val currentPassword: String? = null,
+    val newPassword: String
+)
 data class UserInfo(
     @SerializedName("_id") val staffId: String? = null,
+    val employeeId: String? = null,
     val name: String? = null,
     val role: String? = null,
     val phone: String? = null,
-    val geoTrackingEnabled: Boolean = false
+    val email: String? = null,
+    val designation: String? = null,
+    val department: String? = null,
+    val isAdmin: Boolean = false,
+    val roleLevel: Int? = null,
+    val status: String? = null,
+    val geoTrackingEnabled: Boolean = false,
+    val mustChangePassword: Boolean = false
 )
 data class ValidateSessionResponse(val success: Boolean, val user: UserInfo?)
+data class PincodeLookupEnvelope(
+    @SerializedName("Status") val status: String? = null,
+    @SerializedName("PostOffice") val postOffice: List<PincodePostOffice>? = null
+)
+data class PincodePostOffice(
+    @SerializedName("Name") val name: String? = null,
+    @SerializedName("Block") val block: String? = null,
+    @SerializedName("Division") val division: String? = null,
+    @SerializedName("District") val district: String? = null,
+    @SerializedName("State") val state: String? = null
+)
 data class LogoutResponse(val success: Boolean, val message: String?)
 
 // Staff models
@@ -1465,6 +1526,11 @@ data class TaskData(
     val achievedQuantity: Double? = null,
     val totalQuantity: Double? = null,
     val unit: String? = null,
+    // Estimated / actual cost in INR. `tasks.create` stores both as
+    // optional numbers on the schema; the Task Overview surfaces
+    // estimatedCost in the Est. Cost card.
+    val estimatedCost: Double? = null,
+    val actualCost: Double? = null,
     val todaysUpdate: String? = null,
     val blocker: String? = null,
     val tomorrowsPlan: String? = null,
@@ -1591,7 +1657,11 @@ data class TaskTimelineEntry(
     val progressSnapshot: Int? = null,
     val images: List<TaskUpdateImage>? = null,
     val createdBy: String? = null,
-    val createdAt: Double? = null,
+    // Server stores createdAt as an ISO-8601 string (`new Date().toISOString()`
+    // in taskUpdates.create). Declaring this as Double crashed Gson with
+    // `NumberFormatException: For input string: "2026-05-23T20:04:07.161Z"`
+    // when the Time Line sheet tried to load.
+    val createdAt: String? = null,
     @SerializedName("_creationTime") val creationTime: Double? = null
 )
 
@@ -1932,5 +2002,115 @@ data class CreateBookingRequest(
 data class CreateBookingResponse(
     val success: Boolean,
     val id: String? = null,
+    val error: String? = null,
+)
+
+// ── Land Procurement: Inspection (mobile) ──────────────────────────────────
+// Convex `landProperties` row enriched on the server with a derived inspector
+// status (`not_started` / `in_progress` / `completed`) and the calling
+// inspector's per-staff report id when one exists.
+data class InspectionListItem(
+    @SerializedName("_id") val propertyId: String,
+    val referenceNo: String? = null,
+    val totalArea: Double? = null,
+    val areaUnit: String? = null,
+    val inspectionDate: String? = null,
+    val village: String? = null,
+    val taluk: String? = null,
+    val district: String? = null,
+    val locality: String? = null,
+    val city: String? = null,
+    val fullAddress: String? = null,
+    val pincode: String? = null,
+    val referrerContact: String? = null,
+    val surveyNo: String? = null,
+    val propertyType: String? = null,
+    val derivedInspectionStatus: String? = null,
+    val reportId: String? = null,
+)
+
+data class InspectionListResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val items: List<InspectionListItem> = emptyList(),
+    val error: String? = null,
+)
+
+// Returned by `/api/land/inspections/get`. `report` is `{}` for properties
+// where the inspector hasn't saved anything yet — Gson maps that to all
+// fields being null.
+data class InspectionReportData(
+    val inspectionDate: String? = null,
+    val customerName: String? = null,
+    val conductNo: String? = null,
+    val surveyNo: String? = null,
+    val siteLocation: String? = null,
+    val exactLocation: String? = null,
+    val landmark: String? = null,
+    val latLong: String? = null,
+    val population: String? = null,
+    val accessibilityWidth: String? = null,
+    val accessibilityWidthUnit: String? = null,
+    val electricity: String? = null,
+    val eConnectionToLand: String? = null,
+    val telecom: String? = null,
+    val railwayStationDistance: String? = null,
+    val busStopDistance: String? = null,
+    val roadType: List<String>? = null,
+    val presentDemand: List<String>? = null,
+    val futureDemand: List<String>? = null,
+    val targetClients: List<String>? = null,
+    val landlordPrice: Double? = null,
+    val landlordPriceUnit: String? = null,
+    val recommendationPrice: Double? = null,
+    val recommendationPriceUnit: String? = null,
+    val priceCanSell: Double? = null,
+    val priceCanSellUnit: String? = null,
+    val conclusion: String? = null,
+)
+
+data class InspectionGetResponse(
+    val success: Boolean,
+    val property: InspectionListItem? = null,
+    val report: InspectionReportData? = null,
+    val error: String? = null,
+)
+
+// Send only the keys the user actually touched — nulls are dropped on the
+// server side, so partial saves don't wipe earlier values from the web.
+data class InspectionSaveRequest(
+    val propertyId: String,
+    val inspectionDate: String? = null,
+    val customerName: String? = null,
+    val conductNo: String? = null,
+    val surveyNo: String? = null,
+    val siteLocation: String? = null,
+    val exactLocation: String? = null,
+    val landmark: String? = null,
+    val latLong: String? = null,
+    val population: String? = null,
+    val accessibilityWidth: String? = null,
+    val accessibilityWidthUnit: String? = null,
+    val electricity: String? = null,
+    val eConnectionToLand: String? = null,
+    val telecom: String? = null,
+    val railwayStationDistance: String? = null,
+    val busStopDistance: String? = null,
+    val roadType: List<String>? = null,
+    val presentDemand: List<String>? = null,
+    val futureDemand: List<String>? = null,
+    val targetClients: List<String>? = null,
+    val landlordPrice: Double? = null,
+    val landlordPriceUnit: String? = null,
+    val recommendationPrice: Double? = null,
+    val recommendationPriceUnit: String? = null,
+    val priceCanSell: Double? = null,
+    val priceCanSellUnit: String? = null,
+    val conclusion: String? = null,
+)
+
+data class InspectionSaveResponse(
+    val success: Boolean,
+    val reportId: String? = null,
     val error: String? = null,
 )

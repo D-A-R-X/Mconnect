@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import android.app.Dialog
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -67,6 +69,13 @@ class CpVisitsFragment : Fragment() {
         setupSearch(view)
         setupFilterPills(view)
         observeAttendanceState()
+
+        // Pull-to-refresh: re-runs the list load. The spinner is dismissed
+        // inside loadVisits when the response (or error) lands.
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.cpvRefresh
+        ).setupPullToRefresh { loadVisits() }
+
         loadVisits()
         attendanceVm.loadTodayAttendance(session.bearerToken)
 
@@ -239,6 +248,10 @@ class CpVisitsFragment : Fragment() {
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
+            } finally {
+                root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                    R.id.cpvRefresh
+                )?.dismissRefresh()
             }
         }
     }

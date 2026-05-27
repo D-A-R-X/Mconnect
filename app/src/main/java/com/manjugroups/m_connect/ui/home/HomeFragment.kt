@@ -24,6 +24,10 @@ import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -59,11 +63,83 @@ class HomeFragment : Fragment() {
         applyStatusBarInset()
         setupHeader()
         setupActions()
+        setupPullToRefresh()
+        setupHomeScrollAnimation()
         collectState()
         collectEvents()
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
         startBannerAnimation()
+    }
+
+    private fun setupPullToRefresh() {
+        // Fire the same loads the screen does on first open so a pull
+        // refreshes attendance, today's visits and notifications in
+        // one gesture. The spinner is dismissed in collectState() when
+        // the next "loaded" state lands.
+        binding.homeRefresh.setupPullToRefresh {
+            viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+            loadUnreadNotifications()
+        }
+    }
+
+    /**
+     * Collapsing-header effect — same pattern as App Library / Attendance:
+     *  - the "Plan, Visit & Achieve" banner (cardWorkSummary) fades and
+     *    its layout height shrinks to 0 so the header collapses to just
+     *    the profile row (avatar + name + bell) when scrolled.
+     *  - the profile row stays at full opacity and full Y position so it
+     *    never crosses into the status bar.
+     * Effect saturates within ~140dp of scroll.
+     */
+    /**
+     * "Panel slides up over fixed header" scroll effect.
+     * Home's blue header (with profile row + banner) stays anchored at
+     * full size and full opacity; the SwipeRefresh panel translates up
+     * over it as the user scrolls, eventually fully overlaying the
+     * blue. Header's bottom corners straighten 24dp → 0dp in step with
+     * the slide.
+     */
+    private fun setupHomeScrollAnimation() {
+        val density = binding.root.resources.displayMetrics.density
+        val maxBottomRadiusPx = 24f * density
+        val headerBg = binding.homeHeaderContainer
+            .applyShrinkableBlueHeaderBackground()
+        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+
+        val panel = binding.homeRefresh
+        // Without a solid background the SwipeRefreshLayout is transparent;
+        // when translated up, the blue header showed through the gaps
+        // between the white today's-trip card and the page edges. A solid
+        // page-bg fill makes the panel act as the cover that fully hides
+        // the header on scroll.
+        panel.setBackgroundColor(android.graphics.Color.parseColor("#F1F3F8"))
+        binding.homeHeaderContainer.post {
+            val b = _binding ?: return@post
+            val overlayDistancePx = b.homeHeaderContainer.height.toFloat()
+            // Extend panel past the column bottom by headerHeight so its
+            // visual bottom stays at the screen edge once translated up.
+            //
+            // bottomMargin alone is not enough inside a weighted
+            // LinearLayout — we must also grow the panel's measured
+            // height. Otherwise translating the panel up exposes an
+            // `overlayDistancePx`-tall grey strip at the bottom of the
+            // screen above the floating tab bar.
+            (panel.layoutParams as ViewGroup.MarginLayoutParams).apply {
+                height = panel.height + overlayDistancePx.toInt()
+                bottomMargin = -overlayDistancePx.toInt()
+                panel.layoutParams = this
+            }
+            b.homeContent.setOnScrollChangeListener(
+                androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
+                    if (_binding == null) return@OnScrollChangeListener
+                    val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
+                    panel.translationY = translateY
+                    val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
+                    headerBg.setBottomCornerRadius((1f - progress) * maxBottomRadiusPx)
+                }
+            )
+        }
     }
 
     private fun applyStatusBarInset() {
@@ -107,7 +183,7 @@ class HomeFragment : Fragment() {
         loadHeaderDesignation()
         // Replay the stagger when returning to the Home tab (either from a child
         // fragment via back, or after pop-back from another tab via show/hide).
-        if (_binding != null && binding.homeContent.visibility == View.VISIBLE) {
+        if (_binding != null && binding.homeStickyColumn.visibility == View.VISIBLE) {
             binding.homeContent.post { playHomeEntryAnimation() }
         }
         startBannerAnimation()
@@ -118,7 +194,7 @@ class HomeFragment : Fragment() {
         if (hidden) {
             stopBannerFloatingAnimation()
         } else if (_binding != null &&
-            binding.homeContent.visibility == View.VISIBLE) {
+            binding.homeStickyColumn.visibility == View.VISIBLE) {
             binding.homeContent.post { playHomeEntryAnimation() }
         }
     }
@@ -324,13 +400,25 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-                            binding.homeContent.visibility = View.GONE
+                            // Don't paint over the skeleton while a pull-refresh
+                            // is in flight — the swipe spinner already signals
+                            // "loading" so the full-screen skeleton would
+                            // double up. The skeleton is only useful for the
+                            // initial open.
+                            if (!binding.homeRefresh.isRefreshing) {
+                                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                                // The sticky header + scroll content are now siblings
+                                // under homeStickyColumn — hide the WHOLE column so the
+                                // skeleton overlay doesn't paint over a half-loaded
+                                // header.
+                                binding.homeStickyColumn.visibility = View.GONE
+                            }
                         }
 
                         is HomeUiState.Loaded -> {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                            binding.homeContent.visibility = View.VISIBLE
+                            binding.homeRefresh.dismissRefresh()
+                            binding.homeStickyColumn.visibility = View.VISIBLE
                             renderSummary()
                             if (!viewModel.isVisitsLoading.value) {
                                 renderVisitCard(state)
@@ -343,7 +431,8 @@ class HomeFragment : Fragment() {
 
                         is HomeUiState.Error -> {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                            binding.homeContent.visibility = View.VISIBLE
+                            binding.homeRefresh.dismissRefresh()
+                            binding.homeStickyColumn.visibility = View.VISIBLE
                             binding.tvSummarySubtitle.text = "Today task & presence activity"
                             binding.tvVisitCountBadge.visibility = View.GONE
                             binding.visitListContent.visibility = View.GONE

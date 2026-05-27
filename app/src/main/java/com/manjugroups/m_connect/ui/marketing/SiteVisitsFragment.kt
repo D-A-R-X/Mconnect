@@ -19,6 +19,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -74,6 +76,11 @@ class SiteVisitsFragment : Fragment() {
 
         setupSearch(view)
         setupFilterPills(view)
+
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.svRefresh
+        ).setupPullToRefresh { loadVisits() }
+
         loadVisits()
 
         primeEntryAnimation(view)
@@ -213,6 +220,10 @@ class SiteVisitsFragment : Fragment() {
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
+            } finally {
+                root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                    R.id.svRefresh
+                )?.dismissRefresh()
             }
         }
     }

@@ -1,0 +1,16 @@
+<!-- Market tab — bar chart glyph. Inactive grey outline (gets tinted to
+     active blue when selected via imageTint). Converted from chart.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M2.5,18.33 H17.5" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.67,6.98 H3.33 C2.88,6.98 2.5,7.36 2.5,7.82 V15 C2.5,15.46 2.88,15.83 3.33,15.83 H4.67 C5.12,15.83 5.5,15.46 5.5,15 V7.82 C5.5,7.36 5.12,6.98 4.67,6.98 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M10.67,4.33 H9.33 C8.88,4.33 8.5,4.7 8.5,5.16 V15 C8.5,15.46 8.88,15.83 9.33,15.83 H10.67 C11.13,15.83 11.5,15.46 11.5,15 V5.16 C11.5,4.7 11.13,4.33 10.67,4.33 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M16.67,1.67 H15.33 C14.88,1.67 14.5,2.04 14.5,2.5 V15 C14.5,15.46 14.88,15.83 15.33,15.83 H16.67 C17.13,15.83 17.5,15.46 17.5,15 V2.5 C17.5,2.04 17.13,1.67 16.67,1.67 Z" />
+</vector>

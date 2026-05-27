@@ -1,0 +1,17 @@
+<!-- Hospital — house silhouette with cross + door. Converted from hospital.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M1.67,18.33 H18.33" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M14.17,1.67 H5.83 C3.33,1.67 2.5,3.16 2.5,5 V18.33 H17.5 V5 C17.5,3.16 16.67,1.67 14.17,1.67 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M11.72,12.5 H8.28 C7.85,12.5 7.49,12.85 7.49,13.28 V18.33 H12.49 V13.28 C12.5,12.85 12.15,12.5 11.72,12.5 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M10,5 V9.17" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M7.92,7.08 H12.08" />
+</vector>

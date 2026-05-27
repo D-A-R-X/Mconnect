@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.animation.ObjectAnimator
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -106,6 +108,13 @@ class LeavesFragment : Fragment() {
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+
+        // Pull-to-refresh re-runs viewModel.load() so balance + history
+        // come back fresh. The spinner is dismissed in collectState() the
+        // moment the next non-loading state lands.
+        binding.leavesRefresh.setupPullToRefresh {
+            viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+        }
     }
 
     private fun setupFilterTabs() {
@@ -158,6 +167,9 @@ class LeavesFragment : Fragment() {
             filterHistoryLeaves(state.myLeaves)
         }
         val isLoading = state.isLoading
+        // Clear the pull-refresh spinner as soon as a non-loading state
+        // arrives — regardless of whether it's success or error.
+        if (!isLoading) binding.leavesRefresh.dismissRefresh()
 
         val hasAllocation = state.casualTotal > 0 || state.sickTotal > 0 || state.earnedTotal > 0
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE

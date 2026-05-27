@@ -50,6 +50,13 @@ class TaskDetailFragment : Fragment() {
         view.findViewById<View>(R.id.btnUpdateTask).setOnClickListener {
             openUpdateSheet()
         }
+        // Clock-history icon in the top-right of the header → opens the
+        // Time Line sheet with every daily update on this task.
+        view.findViewById<View>(R.id.btnDetailTimeline).setOnClickListener {
+            val id = taskId ?: return@setOnClickListener
+            TaskTimelineBottomSheet.newInstance(id)
+                .show(parentFragmentManager, "task_timeline")
+        }
 
         setFragmentResultListener(TaskUpdateBottomSheet.RESULT_KEY) { _, bundle ->
             if (bundle.getBoolean(TaskUpdateBottomSheet.KEY_UPDATED)) {
@@ -135,14 +142,50 @@ class TaskDetailFragment : Fragment() {
 
     private fun bind(root: View, task: TaskData) {
         root.findViewById<TextView>(R.id.tvDetailName).text = task.name ?: "Untitled task"
+        // Work-category card uses tvDetailProject as its value slot — show
+        // workCategory if the task has one, else fall back to the project
+        // name. Either way, append the human-readable TSK-id for context.
         root.findViewById<TextView>(R.id.tvDetailProject).text =
             buildString {
-                append(task.projectName?.takeIf { it.isNotBlank() } ?: "Project")
+                val primary = task.workCategory?.takeIf { it.isNotBlank() }
+                    ?: task.projectName?.takeIf { it.isNotBlank() }
+                    ?: "Project"
+                append(primary)
                 if (!task.taskId.isNullOrBlank()) append("  •  ").append(task.taskId)
             }
-        root.findViewById<TextView>(R.id.tvDetailDescription).text =
-            task.description?.takeIf { it.isNotBlank() } ?: "No description provided."
-        root.findViewById<TextView>(R.id.tvDetailProgress).text = "${task.progress ?: 0}%"
+
+        // Task description — show the full text. The previous 3-line cap
+        // + "View more" toggle hid important task details (Section / Unit
+        // / Qty / etc.) behind a button some users never tapped, and the
+        // ellipsis-detection sometimes failed to surface the toggle at
+        // all so the user could only ever see the first 3 lines. The
+        // description card already lives inside the scrollable detail
+        // view, so unbounded height is fine here.
+        val descView = root.findViewById<TextView>(R.id.tvDetailDescription)
+        val viewMoreBtn = root.findViewById<TextView>(R.id.btnDetailViewMore)
+        descView.text = task.description?.takeIf { it.isNotBlank() }
+            ?: "No description provided."
+        descView.maxLines = Int.MAX_VALUE
+        descView.ellipsize = null
+        viewMoreBtn.visibility = View.GONE
+
+        // Assigned-to pill. Layout reserves detailAttendeesContainer but
+        // nothing was populating it, so the "Assigned To" column appeared
+        // empty even when the task had an assignee. Render one small chip
+        // with the assignee's initial avatar + name.
+        renderAssignedTo(root, task)
+        val progress = (task.progress ?: 0).coerceIn(0, 100)
+        root.findViewById<TextView>(R.id.tvDetailProgress).text = "$progress%"
+
+        // Size the progress fill bar (overlay on top of the track) so the
+        // big horizontal progress strip actually shows a filled portion.
+        val fill = root.findViewById<View>(R.id.detailProgressFill)
+        val track = root.findViewById<View>(R.id.detailProgressTrack)
+        track.post {
+            val lp = fill.layoutParams
+            lp.width = (track.width * progress / 100f).toInt()
+            fill.layoutParams = lp
+        }
 
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val outFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
@@ -152,49 +195,148 @@ class TaskDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvDetailStartDate).text = fmt(task.startDate)
         root.findViewById<TextView>(R.id.tvDetailEndDate).text = fmt(task.endDate)
 
-        val statusPill = root.findViewById<TextView>(R.id.tvDetailStatus)
-        when (task.status) {
-            "in-progress" -> {
-                statusPill.text = "In Progress"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_medium)
-                statusPill.setTextColor(Color.parseColor("#B54708"))
-            }
-            "completed" -> {
-                statusPill.text = "Completed"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_low)
-                statusPill.setTextColor(Color.parseColor("#067647"))
-            }
-            "delayed" -> {
-                statusPill.text = "Delayed"
-                statusPill.setBackgroundResource(R.drawable.bg_task_priority_high)
-                statusPill.setTextColor(Color.parseColor("#B42318"))
-            }
-            else -> {
-                statusPill.text = "Not Started"
-                statusPill.setBackgroundResource(R.drawable.bg_task_inner_card)
-                statusPill.setTextColor(Color.parseColor("#475467"))
+        // Status label — the redesigned layout uses tvDetailStatusLabel
+        // as a plain inline label (no pill background). Just set the text;
+        // background/colour styling lives in the XML now.
+        val statusLabel = root.findViewById<TextView>(R.id.tvDetailStatusLabel)
+        statusLabel.text = when (task.status) {
+            "in-progress" -> "In Progress"
+            "completed" -> "Completed"
+            "delayed" -> "Delayed"
+            else -> "Not Started"
+        }
+
+        // ── Resource Summary cards ──────────────────────────────────────
+        // Total Quantity + Unit come straight from the task row; the
+        // per-resource counts (labour / equipment / materials) need a
+        // second roundtrip to /api/projects/tasks/resources, fetched
+        // below.
+        val unitLabel = task.unit?.takeIf { it.isNotBlank() } ?: "-"
+        root.findViewById<TextView>(R.id.tvDetailTotalQty).text =
+            task.totalQuantity?.let { "${trimDouble(it)} ${task.unit ?: ""}".trim() } ?: "-"
+        root.findViewById<TextView>(R.id.tvDetailUnit).text = unitLabel
+        // Est. Cost — now exposed on TaskData. Show "₹ <amount>" when set,
+        // dash when the task has no estimated cost yet.
+        root.findViewById<TextView>(R.id.tvDetailEstCost).text =
+            task.estimatedCost?.takeIf { it > 0 }?.let { "₹ ${formatRupees(it)}" } ?: "-"
+        // Seed resource fields with placeholders; will fill in below.
+        val tvLabour = root.findViewById<TextView>(R.id.tvDetailLabourCount)
+        val tvEquipment = root.findViewById<TextView>(R.id.tvDetailEquipmentQty)
+        val tvMaterials = root.findViewById<TextView>(R.id.tvDetailMaterialsQty)
+        tvLabour.text = "-"
+        tvEquipment.text = "-"
+        tvMaterials.text = "-"
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.getTaskResources(session.bearerToken, task.id)
+            }.getOrNull()?.takeIf { it.success }?.let { resp ->
+                // Labour is a head-count, the others are quantities. Both
+                // equipment and material qtys come from `actualQty` —
+                // the web's task-resources panel sends user-entered Qty
+                // into actualQty (budgetQty / plannedQty default to 0
+                // there), so summing budgetQty as we used to always
+                // returned 0 and the Materials Qty card showed a dash
+                // even when web clearly had a 20-Boxes steel row.
+                val labour = resp.resources.filter { it.resourceType == "labour" }
+                val equipment = resp.resources.filter { it.resourceType == "equipment" }
+                val materials = resp.resources.filter { it.resourceType == "material" }
+
+                val equipmentQty = equipment.sumOf { it.actualQty ?: 0.0 }
+                val materialsQty = materials.sumOf { it.actualQty ?: 0.0 }
+
+                // Material / equipment can each have their own unit (e.g.
+                // steel in "Boxes", cement in "kg"). Show the per-resource
+                // unit when one is set and consistent across rows; fall
+                // back to the task unit otherwise.
+                val materialUnit = materials.mapNotNull {
+                    it.unit?.takeIf { u -> u.isNotBlank() }
+                }.distinct().singleOrNull()
+                val equipmentUnit = equipment.mapNotNull {
+                    it.unit?.takeIf { u -> u.isNotBlank() }
+                }.distinct().singleOrNull()
+
+                tvLabour.text = labour.size.toString()
+                tvEquipment.text = if (equipmentQty > 0)
+                    "${trimDouble(equipmentQty)} ${equipmentUnit ?: task.unit ?: ""}".trim()
+                else equipment.size.toString()
+                tvMaterials.text = if (materialsQty > 0)
+                    "${trimDouble(materialsQty)} ${materialUnit ?: task.unit ?: ""}".trim()
+                else if (materials.isNotEmpty()) materials.size.toString()
+                else "-"
             }
         }
 
-        // Notes rows — only show those with content.
-        bindNoteRow(
-            root, R.id.rowTodaysUpdate, R.id.tvDetailTodaysUpdate, task.todaysUpdate
-        )
-        bindNoteRow(root, R.id.rowBlocker, R.id.tvDetailBlocker, task.blocker)
-        bindNoteRow(
-            root, R.id.rowTomorrowsPlan, R.id.tvDetailTomorrowsPlan, task.tomorrowsPlan
-        )
+        // Notes rows (Today's Update / Blocker / Tomorrow's Plan) were
+        // removed from the layout in the redesign — the per-day notes
+        // now live on the Time Line screen, not on the static detail view.
     }
 
-    private fun bindNoteRow(root: View, rowId: Int, textId: Int, value: String?) {
-        val row = root.findViewById<View>(rowId)
-        val text = root.findViewById<TextView>(textId)
-        if (value.isNullOrBlank()) {
-            row.visibility = View.GONE
+    /** Trims trailing ".0" so 120.00 → "120", but keeps "120.5". */
+    private fun trimDouble(value: Double): String {
+        return if (value == value.toLong().toDouble()) {
+            value.toLong().toString()
         } else {
-            row.visibility = View.VISIBLE
-            text.text = value
+            "%.2f".format(value)
         }
+    }
+
+    /** Format as Indian-style number string for the Est. Cost card. */
+    private fun formatRupees(value: Double): String {
+        val nf = java.text.NumberFormat.getInstance(java.util.Locale("en", "IN"))
+        nf.maximumFractionDigits = if (value == value.toLong().toDouble()) 0 else 2
+        return nf.format(value)
+    }
+
+    /**
+     * Populate the Assigned To column. Layout reserves
+     * `detailAttendeesContainer` but nothing was filling it, so even
+     * tasks with a clear assignee rendered as an empty column. Render
+     * a small initial-avatar + name chip so the user can see at a
+     * glance who owns the task.
+     */
+    private fun renderAssignedTo(root: View, task: TaskData) {
+        val container = root.findViewById<android.widget.LinearLayout>(
+            R.id.detailAttendeesContainer
+        ) ?: return
+        container.removeAllViews()
+        val name = task.assignedToName?.trim().orEmpty()
+        if (name.isBlank()) {
+            val empty = TextView(container.context).apply {
+                text = "Unassigned"
+                setTextColor(Color.parseColor("#667085"))
+                textSize = 13f
+            }
+            container.addView(empty)
+            return
+        }
+        val avatar = TextView(container.context).apply {
+            text = name.first().uppercaseChar().toString()
+            // Same brand-blue text colour the Home avatar uses, since the
+            // shared drawable is a light grey circle (not a coloured one).
+            setTextColor(Color.parseColor("#0B61CA"))
+            textSize = 11f
+            gravity = android.view.Gravity.CENTER
+            setBackgroundResource(R.drawable.bg_home_new_avatar_circle)
+            val sz = (24 * resources.displayMetrics.density).toInt()
+            layoutParams = android.widget.LinearLayout.LayoutParams(sz, sz)
+        }
+        val label = TextView(container.context).apply {
+            text = name
+            setTextColor(Color.parseColor("#101828"))
+            textSize = 13f
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = (8 * resources.displayMetrics.density).toInt() }
+            layoutParams = lp
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                container.context, R.font.inter_medium
+            )
+        }
+        container.gravity = android.view.Gravity.CENTER_VERTICAL
+        container.addView(avatar)
+        container.addView(label)
     }
 
     private fun openUpdateSheet() {

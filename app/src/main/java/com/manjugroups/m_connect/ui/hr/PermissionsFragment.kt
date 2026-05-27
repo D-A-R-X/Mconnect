@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.animation.ObjectAnimator
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -108,6 +110,10 @@ class PermissionsFragment : Fragment() {
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+
+        binding.permissionsRefresh.setupPullToRefresh {
+            viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+        }
     }
 
     private fun setupFilterTabs() {
@@ -160,6 +166,7 @@ class PermissionsFragment : Fragment() {
             filterHistoryPermissions(state.myPermissions)
         }
         val isLoading = state.isLoading
+        if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE

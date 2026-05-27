@@ -1,0 +1,18 @@
+<!-- Access Width — circle, square, with diagonal route. Converted from
+     route-square.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M4.56,7.5 C6.17,7.5 7.47,6.19 7.47,4.58 C7.47,2.97 6.17,1.67 4.56,1.67 C2.95,1.67 1.64,2.97 1.64,4.58 C1.64,6.19 2.95,7.5 4.56,7.5 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M14.14,12.5 H16.64 C17.56,12.5 18.31,13.25 18.31,14.17 V16.67 C18.31,17.58 17.56,18.33 16.64,18.33 H14.14 C13.23,18.33 12.48,17.58 12.48,16.67 V14.17 C12.48,13.25 13.23,12.5 14.14,12.5 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M10,4.17 H12.23 C13.77,4.17 14.49,6.07 13.33,7.09 L6.67,12.92 C5.52,13.92 6.23,15.83 7.77,15.83 H10" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M4.57,4.58 H4.58" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M15.41,15.42 H15.41" />
+</vector>

@@ -43,6 +43,12 @@ val defaultBaseUrl = ensureTrailingSlash(
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
 )
+val defaultAppUrl = ensureTrailingSlash(
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
+)
+val appUrl = ensureTrailingSlash(
+    envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
+)
 
 android {
     namespace = "com.manjugroups.m_connect"
@@ -62,6 +68,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
+        buildConfigField("String", "APP_URL", "\"${appUrl}\"")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${envOrEmpty("FIREBASE_APPLICATION_ID")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${envOrEmpty("FIREBASE_PROJECT_ID")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${envOrEmpty("FIREBASE_API_KEY")}\"")

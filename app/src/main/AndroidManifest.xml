@@ -56,8 +56,18 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".auth.EmployeePasswordLoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".auth.OtpActivity"
             android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <activity
+            android:name=".auth.ForcePasswordChangeActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".MainActivity"

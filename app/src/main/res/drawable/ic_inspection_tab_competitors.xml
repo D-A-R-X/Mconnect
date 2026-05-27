@@ -1,0 +1,20 @@
+<!-- Competitors tab — trend-up bar chart in a rounded box. Inactive grey.
+     Converted from status-up.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.5,18.33 H12.5 C16.67,18.33 18.33,16.67 18.33,12.5 V7.5 C18.33,3.33 16.67,1.67 12.5,1.67 H7.5 C3.33,1.67 1.67,3.33 1.67,7.5 V12.5 C1.67,16.67 3.33,18.33 7.5,18.33 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M5.73,15.13 V13.4" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M10,15.13 V11.68" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M14.27,15.13 V9.94" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M14.27,4.88 L13.88,5.33 C11.76,7.81 8.91,9.57 5.73,10.36" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#6A6D78" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M11.83,4.88 H14.27 V7.31" />
+</vector>

@@ -23,6 +23,14 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_USER_PHONE, null)
         set(value) = prefs.edit().putString(KEY_USER_PHONE, value).apply()
 
+    var employeeId: String?
+        get() = prefs.getString(KEY_EMPLOYEE_ID, null)
+        set(value) = prefs.edit().putString(KEY_EMPLOYEE_ID, value).apply()
+
+    var mustChangePassword: Boolean
+        get() = prefs.getBoolean(KEY_MUST_CHANGE_PASSWORD, false)
+        set(value) = prefs.edit().putBoolean(KEY_MUST_CHANGE_PASSWORD, value).apply()
+
     var userPhotoUrl: String?
         get() = prefs.getString(KEY_USER_PHOTO_URL, null)
         set(value) = prefs.edit().putString(KEY_USER_PHOTO_URL, value).apply()
@@ -106,6 +114,7 @@ class SessionManager(context: Context) {
         this.token = token
         this.userName = name
         this.userPhone = phone
+        this.mustChangePassword = false
         this.boundBaseUrl = com.manjugroups.m_connect.BuildConfig.BASE_URL
     }
 
@@ -212,6 +221,8 @@ class SessionManager(context: Context) {
         private const val KEY_TOKEN = "session_token"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_PHONE = "user_phone"
+        private const val KEY_EMPLOYEE_ID = "employee_id"
+        private const val KEY_MUST_CHANGE_PASSWORD = "must_change_password"
         private const val KEY_IAM_PERMISSIONS = "iam_permissions"
         private const val KEY_IS_ADMIN = "is_admin"
         private const val KEY_PUSH_TOKEN = "push_token"

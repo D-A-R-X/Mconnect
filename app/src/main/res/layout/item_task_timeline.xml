@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tvTimelineDate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_bold"
+        android:textColor="#0B61CA"
+        android:textSize="15sp"
+        tools:text="27 Apr 2025" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <!-- Left Line Decor -->
+        <FrameLayout
+            android:layout_width="24dp"
+            android:layout_height="match_parent">
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:background="#D1E9FF" />
+
+            <View
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_home_status_dot"
+                android:backgroundTint="#0B61CA" />
+        </FrameLayout>
+
+        <!-- Timeline Card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:layout_marginBottom="8dp"
+            app:cardBackgroundColor="#FFFFFF"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvTimelineAuthor"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_bold"
+                        android:textColor="#101828"
+                        android:textSize="14sp"
+                        tools:text="Site Incharge" />
+
+                    <TextView
+                        android:id="@+id/tvTimelineTime"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:textColor="#98A2B3"
+                        android:textSize="12sp"
+                        tools:text="04:30 PM" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvTimelineProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:textColor="#667085"
+                    android:textSize="12sp"
+                    tools:text="Progress: 80%" />
+
+                <TextView
+                    android:id="@+id/tvTimelineNotes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:lineSpacingMultiplier="1.2"
+                    android:textColor="#344054"
+                    android:textSize="14sp"
+                    tools:text="Excavation completed for Block A foundation." />
+
+                <!-- Photo strip — thumbnails are added programmatically.
+                     Hidden by default; the adapter sets visibility=VISIBLE
+                     when the entry has at least one image. -->
+                <HorizontalScrollView
+                    android:id="@+id/timelinePhotosScroller"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:scrollbars="none"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/timelinePhotos"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/tvTimelineIssues"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:textColor="#667085"
+                    android:textSize="13sp"
+                    tools:text="No issues" />
+
+                <TextView
+                    android:id="@+id/tvTimelineTomorrow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:textColor="#667085"
+                    android:textSize="13sp"
+                    tools:text="PCC work to be started." />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+    </LinearLayout>
+</LinearLayout>

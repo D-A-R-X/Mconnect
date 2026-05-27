@@ -9,7 +9,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -25,6 +24,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectExpense
 import com.manjugroups.m_connect.network.ProjectSummary
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -81,10 +82,7 @@ class ProjectExpensesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        // Push the blue header below the OS status bar. Without this, the
-        // title + subtitle + illustration are drawn behind the notification
-        // icons because the activity runs in full-bleed mode and the header
-        // only has paddingTop=12dp.
+        // Push the blue header below the OS status bar.
         val expenseHeader = view.findViewById<View>(R.id.expenseHeader)
         val baseHeaderTopPadding = expenseHeader.paddingTop
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(expenseHeader) { v, insets ->
@@ -137,7 +135,11 @@ class ProjectExpensesFragment : Fragment() {
                 R.id.chipOther -> "other"
                 else -> null
             }
-            refreshExpenses()
+            // Smooth fade transition for the list
+            rvExpenses.animate().alpha(0f).setDuration(150L).withEndAction {
+                refreshExpenses()
+                rvExpenses.animate().alpha(1f).setDuration(150L).start()
+            }.start()
         }
 
         btnAddExpense.setOnClickListener {
@@ -162,6 +164,31 @@ class ProjectExpensesFragment : Fragment() {
         ) { _, _ -> refreshExpenses() }
 
         loadProjects()
+
+        // Pull-to-refresh re-fetches the expense list for the currently
+        // selected project. Wired here in onViewCreated so it works as
+        // soon as the screen attaches. refreshExpenses() itself clears
+        // the spinner once the response lands (see its end-of-fetch
+        // block in the function body).
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.expensesRefresh
+        ).setupPullToRefresh { refreshExpenses() }
+
+        // Initial entry animations
+        playEntryAnimations(view)
+    }
+
+    private fun playEntryAnimations(view: View) {
+        val totalsCard = view.findViewById<View>(R.id.cardTotals)
+        val chips = view.findViewById<View>(R.id.categoryPills).parent as View
+        
+        totalsCard.alpha = 0f
+        totalsCard.translationY = 40f
+        totalsCard.animate().alpha(1f).translationY(0f).setDuration(400L).setStartDelay(100L).start()
+        
+        chips.alpha = 0f
+        chips.translationY = 20f
+        chips.animate().alpha(1f).translationY(0f).setDuration(400L).setStartDelay(200L).start()
     }
 
     override fun onResume() {
@@ -212,34 +239,91 @@ class ProjectExpensesFragment : Fragment() {
         }
     }
 
+    /**
+     * Opens the project list as an inline dropdown anchored to the picker
+     * pill (rather than a bottom sheet sliding up from the screen edge).
+     * The picker view is flipped to `isActivated = true` while the popup
+     * is showing so its state-list background paints a gold focus ring
+     * around the pill — matches the reference design.
+     */
     private fun showProjectPicker() {
         if (projects.isEmpty()) return
-        val labels = projects.map { it.name ?: "Untitled project" }.toTypedArray()
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select project")
-            .setItems(labels) { _, index ->
-                val picked = projects[index]
+        val ctx = context ?: return
+        val items = projects.map { it.name ?: "Untitled project" }
+
+        val popup = androidx.appcompat.widget.ListPopupWindow(ctx).apply {
+            anchorView = btnProjectPicker
+            // Match the anchor's width so the dropdown reads as an extension
+            // of the picker pill, not a separate floating menu.
+            width = btnProjectPicker.width
+            setBackgroundDrawable(
+                androidx.core.content.ContextCompat.getDrawable(
+                    ctx,
+                    R.drawable.bg_expense_picker_popup,
+                )
+            )
+            // 6dp gap between the pill and the popup so the focus ring is
+            // visible all the way around the pill.
+            verticalOffset = (6 * ctx.resources.displayMetrics.density).toInt()
+            isModal = true
+        }
+
+        val adapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = items.size
+            override fun getItem(position: Int): Any = items[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getView(
+                position: Int,
+                convertView: View?,
+                parent: ViewGroup?,
+            ): View {
+                val row = convertView
+                    ?: LayoutInflater.from(ctx).inflate(
+                        R.layout.item_expense_project_dropdown,
+                        parent,
+                        false,
+                    )
+                row.findViewById<TextView>(R.id.tvDropdownName).text = items[position]
+                row.findViewById<View>(R.id.imgDropdownCheck).visibility =
+                    if (projects[position].id == selectedProjectId) View.VISIBLE else View.GONE
+                return row
+            }
+        }
+        popup.setAdapter(adapter)
+
+        popup.setOnItemClickListener { _, _, position, _ ->
+            val picked = projects.getOrNull(position)
+            popup.dismiss()
+            if (picked != null && picked.id != selectedProjectId) {
                 selectedProjectId = picked.id
                 tvProjectPickerLabel.text = picked.name ?: "Untitled project"
                 dotRed.visibility = View.VISIBLE
                 refreshExpenses()
             }
-            .show()
+        }
+        popup.setOnDismissListener { btnProjectPicker.isActivated = false }
+        btnProjectPicker.isActivated = true
+        popup.show()
     }
 
     private fun showDateFilter() {
-        val picker = MaterialDatePicker.Builder.dateRangePicker()
-            .setTitleText("Filter expenses")
-            .build()
-        picker.addOnPositiveButtonClickListener { pair ->
-            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-            fromDate = fmt.format(Date(pair.first))
-            toDate = fmt.format(Date(pair.second))
-            tvDateRange.text = "$fromDate → $toDate"
+        DateFilterBottomSheet.newInstance().show(parentFragmentManager, "date_filter")
+        parentFragmentManager.setFragmentResultListener(DateFilterBottomSheet.REQUEST_KEY, viewLifecycleOwner) { _, bundle ->
+            fromDate = bundle.getString(DateFilterBottomSheet.RESULT_FROM)
+            toDate = bundle.getString(DateFilterBottomSheet.RESULT_TO)
+            
+            // Format for display
+            val display = runCatching {
+                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val formatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
+                val start = formatter.format(parser.parse(fromDate!!)!!)
+                val end = formatter.format(parser.parse(toDate!!)!!)
+                "$start - $end"
+            }.getOrDefault("$fromDate - $toDate")
+            
+            tvDateRange.text = display
             refreshExpenses()
         }
-        picker.show(parentFragmentManager, "expense_date_filter")
     }
 
     private fun refreshExpenses() {
@@ -288,6 +372,13 @@ class ProjectExpensesFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG)
                     .show()
+            } finally {
+                // Clear the pull-to-refresh spinner whether the load
+                // succeeded or failed — leaving it spinning forever after
+                // an error is worse than dropping it cleanly.
+                view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                    R.id.expensesRefresh
+                )?.dismissRefresh()
             }
         }
     }
@@ -355,18 +446,22 @@ class ProjectExpensesFragment : Fragment() {
                     else -> ContextCompat.getColor(ctx, R.color.category_other)
                 }
                 iconBg.backgroundTintList = ColorStateList.valueOf(color)
+                // Paid / Pending pill — soft-tinted background + matching
+                // dark text. Previously we were tinting with the SOLID
+                // category color (#16A34A) which collided with the same
+                // text colour set in XML, making the label invisible on
+                // the row. Switched to the Figma's light/dark colour pair.
+                tvPaidPill.visibility = View.VISIBLE
                 if (item.paid) {
                     tvPaidPill.text = "Paid"
-                    tvPaidPill.visibility = View.VISIBLE
-                    tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(ctx, R.color.category_equipment),
-                    )
+                    tvPaidPill.backgroundTintList =
+                        ColorStateList.valueOf(android.graphics.Color.parseColor("#ECFDF3"))
+                    tvPaidPill.setTextColor(android.graphics.Color.parseColor("#16A34A"))
                 } else {
                     tvPaidPill.text = "Pending"
-                    tvPaidPill.visibility = View.VISIBLE
-                    tvPaidPill.backgroundTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(ctx, R.color.category_materials),
-                    )
+                    tvPaidPill.backgroundTintList =
+                        ColorStateList.valueOf(android.graphics.Color.parseColor("#FEF0C7"))
+                    tvPaidPill.setTextColor(android.graphics.Color.parseColor("#B54708"))
                 }
                 // Whole-row click → Expense Detail bottom sheet.
                 itemView.setOnClickListener {

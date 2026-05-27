@@ -5,21 +5,19 @@
     android:layout_height="match_parent"
     android:background="#F1F3F8">
 
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/homeContent"
+    <!-- Vertical stack: sticky blue header on top, refreshable scroll
+         content below. The header sits OUTSIDE the NestedScrollView so
+         it stays pinned while the user scrolls the today's-trip card. -->
+    <LinearLayout
+        android:id="@+id/homeStickyColumn"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipChildren="false"
         android:clipToPadding="false"
-        android:fillViewport="true"
-        android:paddingBottom="96dp"
+        android:orientation="vertical"
         android:visibility="gone">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <!-- BLUE HEADER SECTION -->
+            <!-- BLUE HEADER SECTION (STICKY) -->
             <LinearLayout
                 android:id="@+id/homeHeaderContainer"
                 android:layout_width="match_parent"
@@ -276,17 +274,45 @@
 
             </LinearLayout>
 
-            <!-- WHITE CONTENT AREA — sits cleanly below the blue header with a small
-                 grey gap so the two rounded cards don't intersect. -->
+    <!-- Refreshable scrolling content area — sits BELOW the sticky blue
+         header. The today's-trip / activity cards scroll inside this
+         while the header above stays pinned. -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/homeRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/homeContent"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:paddingBottom="96dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+            <!-- Section container — NO white sheet wrap. The previous
+                 rounded-top white sheet was sitting flush against the
+                 blue header's rounded bottom corners, with the two
+                 interlocking curves cancelling each other out so the
+                 seam looked flat. Dropping the sheet bg (transparent)
+                 + bumping marginTop to 24dp lets the blue header's
+                 rounded shoulders read cleanly against the grey panel
+                 above the cards, matching App Library / Inspection. -->
             <LinearLayout
                 android:id="@+id/whiteContentArea"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_auth_sheet"
+                android:layout_marginTop="24dp"
+                android:background="@android:color/transparent"
                 android:orientation="vertical"
                 android:paddingHorizontal="16dp"
-                android:paddingTop="20dp"
+                android:paddingTop="0dp"
                 android:paddingBottom="20dp">
 
                 <LinearLayout
@@ -466,6 +492,8 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/skeletonContainer"

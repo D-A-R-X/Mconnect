@@ -1,0 +1,21 @@
+<!-- Simple right-pointing arrow used inside the round "open" buttons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20"
+    android:tint="#0B61CA">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,10 H15"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,5 L15,10 L10,15"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+</vector>

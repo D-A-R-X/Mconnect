@@ -1,18 +1,19 @@
 package com.manjugroups.m_connect.ui.projects
 
-import android.app.DatePickerDialog
+import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Toast
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.manjugroups.m_connect.R
@@ -25,22 +26,36 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Bottom sheet for logging a new project expense — the "Expense
- * Creation" screen in the mobile mockup. Picks category via chip
- * group, date via DatePicker, amount/notes via plain inputs. Posts
- * to `/api/projects/expenses/create` and emits a result so the
- * caller can refresh the list.
+ * Bottom sheet for logging a new project expense — the "Expense Creation"
+ * sheet from the mobile Figma. Five labeled inputs:
+ *   - Expense Category (dropdown: Labour / Materials / Equipment / Other)
+ *   - Date (opens DateFilterBottomSheet)
+ *   - Money (numeric amount)
+ *   - Notes (optional multi-line text)
+ *   - Payment Method (dropdown: Cash / Bank Transfer / UPI / Cheque / Card)
  *
- * Reuses for editing later — wire pre-fill via [newInstance] args.
+ * Posts to `/api/projects/expenses/create` and emits a result so the
+ * Expenses list can refresh.
  */
 class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
 
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
-    private val projectId: String by lazy { requireArguments().getString(ARG_PROJECT_ID).orEmpty() }
-    private val initialCategory: String? by lazy { arguments?.getString(ARG_INITIAL_CATEGORY) }
+    private val projectId: String by lazy {
+        requireArguments().getString(ARG_PROJECT_ID).orEmpty()
+    }
+    private val initialCategory: String? by lazy {
+        arguments?.getString(ARG_INITIAL_CATEGORY)
+    }
 
+    /** Server slug -> display label, in the same order the picker shows. */
+    private val categories = listOf(
+        "labour" to "Labour",
+        "materials" to "Materials",
+        "equipment" to "Equipments",
+        "other" to "Other",
+    )
     private val paymentMethods = listOf(
         "cash" to "Cash",
         "bank_transfer" to "Bank Transfer",
@@ -48,6 +63,34 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         "cheque" to "Cheque",
         "card" to "Card",
     )
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        // Default BottomSheetDialog starts at STATE_HALF_EXPANDED, which
+        // leaves the Save It button below the fold once the keyboard
+        // opens. Force STATE_EXPANDED + skipCollapsed so the sheet takes
+        // the full available height and the scroll view inside can scroll
+        // up under the keyboard.
+        val dialog = BottomSheetDialog(requireContext(), theme)
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog)
+                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+            }
+        }
+        return dialog
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Resize the dialog window when the IME shows so the Save It CTA
+        // stays above the keyboard instead of being clipped off-screen.
+        dialog?.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -59,36 +102,51 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        val categoryChips = view.findViewById<ChipGroup>(R.id.categoryChips)
+        val etCategory = view.findViewById<AutoCompleteTextView>(R.id.etCategory)
         val etDate = view.findViewById<TextInputEditText>(R.id.etDate)
         val etAmount = view.findViewById<TextInputEditText>(R.id.etAmount)
         val etPaymentMethod = view.findViewById<AutoCompleteTextView>(R.id.etPaymentMethod)
         val etNotes = view.findViewById<TextInputEditText>(R.id.etNotes)
         val btnSave = view.findViewById<MaterialButton>(R.id.btnSave)
-        val btnCancel = view.findViewById<MaterialButton>(R.id.btnCancel)
 
-        // Seed today's date so the picker has a sensible default.
+        // ── Category dropdown ───────────────────────────────────────────
+        etCategory.setAdapter(
+            ArrayAdapter(
+                requireContext(),
+                android.R.layout.simple_list_item_1,
+                categories.map { it.second },
+            ),
+        )
+        var pickedCategory: String =
+            initialCategory?.takeIf { initial -> categories.any { it.first == initial } }
+                ?: "labour"
+        etCategory.setText(
+            categories.firstOrNull { it.first == pickedCategory }?.second.orEmpty(),
+            /* filter = */ false,
+        )
+        etCategory.setOnClickListener { etCategory.showDropDown() }
+        etCategory.setOnItemClickListener { _, _, position, _ ->
+            pickedCategory = categories.getOrNull(position)?.first ?: pickedCategory
+        }
+
+        // ── Date — defaults to today, taps open the DateFilter sheet ────
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         var pickedDateIso = fmt.format(Calendar.getInstance().time)
         etDate.setText(pickedDateIso)
         etDate.setOnClickListener {
-            val cal = Calendar.getInstance().apply {
-                runCatching { time = fmt.parse(pickedDateIso)!! }
+            DateFilterBottomSheet.newInstance()
+                .show(parentFragmentManager, "date_filter")
+            parentFragmentManager.setFragmentResultListener(
+                DateFilterBottomSheet.REQUEST_KEY,
+                viewLifecycleOwner,
+            ) { _, bundle ->
+                pickedDateIso = bundle.getString(DateFilterBottomSheet.RESULT_FROM)
+                    ?: pickedDateIso
+                etDate.setText(pickedDateIso)
             }
-            DatePickerDialog(
-                requireContext(),
-                { _, y, m, d ->
-                    cal.set(y, m, d)
-                    pickedDateIso = fmt.format(cal.time)
-                    etDate.setText(pickedDateIso)
-                },
-                cal.get(Calendar.YEAR),
-                cal.get(Calendar.MONTH),
-                cal.get(Calendar.DAY_OF_MONTH),
-            ).show()
         }
 
-        // Payment method dropdown.
+        // ── Payment method dropdown ─────────────────────────────────────
         etPaymentMethod.setAdapter(
             ArrayAdapter(
                 requireContext(),
@@ -102,35 +160,23 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
             pickedPaymentMethod = paymentMethods.getOrNull(position)?.first
         }
 
-        // Pre-select category from args.
-        val chipLabour = view.findViewById<Chip>(R.id.createChipLabour)
-        val chipMaterials = view.findViewById<Chip>(R.id.createChipMaterials)
-        val chipEquipment = view.findViewById<Chip>(R.id.createChipEquipment)
-        val chipOther = view.findViewById<Chip>(R.id.createChipOther)
-        when (initialCategory) {
-            "labour" -> chipLabour.isChecked = true
-            "materials" -> chipMaterials.isChecked = true
-            "equipment" -> chipEquipment.isChecked = true
-            "other" -> chipOther.isChecked = true
-            else -> chipLabour.isChecked = true
-        }
-
-        btnCancel.setOnClickListener { dismissAllowingStateLoss() }
-
+        // ── Submit ──────────────────────────────────────────────────────
         btnSave.setOnClickListener {
-            val category = when (categoryChips.checkedChipId) {
-                R.id.createChipMaterials -> "materials"
-                R.id.createChipEquipment -> "equipment"
-                R.id.createChipOther -> "other"
-                else -> "labour"
-            }
             val amount = etAmount.text?.toString()?.toDoubleOrNull()
             if (amount == null || amount <= 0) {
-                Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "Enter a valid amount",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 return@setOnClickListener
             }
             if (projectId.isBlank()) {
-                Toast.makeText(requireContext(), "Missing project context", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "Missing project context",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 return@setOnClickListener
             }
             btnSave.isEnabled = false
@@ -140,12 +186,14 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                         session.bearerToken,
                         CreateProjectExpenseRequest(
                             projectId = projectId,
-                            category = category,
+                            category = pickedCategory,
                             amount = amount,
                             date = pickedDateIso,
                             paymentMethod = pickedPaymentMethod,
                             notes = etNotes.text?.toString()?.takeIf { it.isNotBlank() },
-                            paid = false, // approver-only; backend rejects paid=true without approve perm
+                            // approver-only; backend rejects paid=true
+                            // without the projects.expenses.approve key.
+                            paid = false,
                         ),
                     )
                     if (resp.success) {
@@ -173,6 +221,30 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                     btnSave.isEnabled = true
                 }
             }
+        }
+
+        playEntryAnimations(view)
+    }
+
+    private fun playEntryAnimations(view: View) {
+        // Walk up from each input's EditText to its TextInputLayout
+        // parent (the .parent.parent hop) and stagger a slide-up fade.
+        val formItems = listOfNotNull(
+            view.findViewById<View>(R.id.etCategory)?.parent?.parent as? View,
+            view.findViewById<View>(R.id.etDate)?.parent?.parent as? View,
+            view.findViewById<View>(R.id.etAmount)?.parent?.parent as? View,
+            view.findViewById<View>(R.id.etNotes)?.parent?.parent as? View,
+            view.findViewById<View>(R.id.etPaymentMethod)?.parent?.parent as? View,
+            view.findViewById<View>(R.id.btnSave),
+        )
+        formItems.forEachIndexed { i, item ->
+            item.alpha = 0f
+            item.translationY = 20f
+            item.animate().alpha(1f).translationY(0f)
+                .setDuration(350L)
+                .setStartDelay(100L + i * 50L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
         }
     }
 

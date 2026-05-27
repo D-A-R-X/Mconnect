@@ -1,0 +1,19 @@
+<!-- Mall — paired buildings glyph. Converted from buildings-2.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M5.58,15 H3.46 C2.27,15 1.67,14.4 1.67,13.21 V3.46 C1.67,2.27 2.27,1.67 3.46,1.67 H7.04 C8.23,1.67 8.83,2.27 8.83,3.46 V5" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M14.47,7.02 V16.32 C14.47,17.66 13.81,18.33 12.47,18.33 H7.6 C6.26,18.33 5.58,17.66 5.58,16.32 V7.02 C5.58,5.67 6.26,5 7.6,5 H12.47 C13.81,5 14.47,5.67 14.47,7.02 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M11.17,5 V3.46 C11.17,2.27 11.77,1.67 12.96,1.67 H16.54 C17.73,1.67 18.33,2.27 18.33,3.46 V13.21 C18.33,14.4 17.73,15 16.54,15 H14.48" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M8.33,9.17 H11.67" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M8.33,11.67 H11.67" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M10,18.33 V15.83" />
+</vector>

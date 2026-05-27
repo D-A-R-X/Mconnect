@@ -1,0 +1,6 @@
+<!-- 36dp light-blue circle for the "open detail" arrow button on each
+     inspection card. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#E0EBFB" />
+</shape>

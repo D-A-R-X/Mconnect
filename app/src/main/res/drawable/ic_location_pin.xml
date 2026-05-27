@@ -1,0 +1,24 @@
+<!-- Small green location-pin glyph used inside the place pill on the
+     Inspection cards. Converted from Downloads/location.svg.
+     The SVG uses a #1BCA0B → #3D9D02 gradient stroke; Android vector
+     drawables can't gradient-stroke, so the stroke is set to the start
+     of that gradient — at this 12dp display size the difference is
+     invisible. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="11"
+    android:viewportHeight="11">
+    <!-- Inner circle. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5.5,6.155 C6.29,6.155 6.93,5.515 6.93,4.725 C6.93,3.936 6.29,3.295 5.5,3.295 C4.71,3.295 4.07,3.936 4.07,4.725 C4.07,5.515 4.71,6.155 5.5,6.155 Z"
+        android:strokeColor="#1BCA0B"
+        android:strokeWidth="1.5" />
+    <!-- Outer teardrop / pin outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M1.659,3.891 C2.562,-0.078 8.442,-0.073 9.341,3.896 C9.868,6.224 8.42,8.195 7.15,9.414 C6.229,10.303 4.771,10.303 3.845,9.414 C2.58,8.195 1.132,6.22 1.659,3.891 Z"
+        android:strokeColor="#1BCA0B"
+        android:strokeWidth="1.5" />
+</vector>

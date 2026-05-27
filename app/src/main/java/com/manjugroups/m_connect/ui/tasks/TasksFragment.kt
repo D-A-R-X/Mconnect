@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -84,20 +85,30 @@ class TasksFragment : Fragment() {
         androidx.core.view.ViewCompat.requestApplyInsets(headerContainer)
 
         taskListContainer = view.findViewById(R.id.taskList)
-        skeletonContainer = view.findViewById(R.id.tasksSkeletonContainer)
         emptyState = view.findViewById(R.id.emptyState)
         tabAll = view.findViewById(R.id.tabAll)
         tabInProgress = view.findViewById(R.id.tabInProgress)
         tabCompleted = view.findViewById(R.id.tabCompleted)
-        tvSummaryTotal = view.findViewById(R.id.tvSummaryTotal)
-        tvSummaryInProgress = view.findViewById(R.id.tvSummaryInProgress)
-        tvSummaryCompleted = view.findViewById(R.id.tvSummaryCompleted)
-        tvOverallProgress = view.findViewById(R.id.tvOverallProgress)
 
-        tabAll?.setOnClickListener { setFilter(Filter.ALL) }
-        tabInProgress?.setOnClickListener { setFilter(Filter.IN_PROGRESS) }
-        tabCompleted?.setOnClickListener { setFilter(Filter.COMPLETED) }
-        applyTabStyles()
+        // Pull-to-refresh — same load path as initial open + tab returns.
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.tasksRefresh
+        ).setupPullToRefresh { loadTasks() }
+        // The redesigned layout dropped the skeleton + summary header — left
+        // the fields nullable so existing call-sites (`?.text`, `?: return`)
+        // silently no-op. Re-introduce the views if the summary returns.
+
+        val chips = view.findViewById<com.google.android.material.chip.ChipGroup>(R.id.categoryPills)
+        chips.setOnCheckedStateChangeListener { _, checkedIds ->
+            val checkedId = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
+            filter = when (checkedId) {
+                R.id.tabInProgress -> Filter.IN_PROGRESS
+                R.id.tabPending -> Filter.ALL // Assuming Pending maps to All or similar in this context
+                R.id.tabCompleted -> Filter.COMPLETED
+                else -> Filter.ALL
+            }
+            renderTasks()
+        }
 
         loadTasks()
     }
@@ -127,7 +138,13 @@ class TasksFragment : Fragment() {
     }
 
     fun loadTasks() {
-        startSkeleton()
+        // Skip the skeleton when a pull-refresh is already on screen —
+        // the swipe spinner is enough of a loading signal.
+        val tasksRefresh = view?.findViewById<
+            androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        >(R.id.tasksRefresh)
+        val isPullRefresh = tasksRefresh?.isRefreshing == true
+        if (!isPullRefresh) startSkeleton()
         emptyState?.visibility = View.GONE
         taskListContainer?.removeAllViews()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -147,6 +164,7 @@ class TasksFragment : Fragment() {
                 renderTasks()
             } finally {
                 stopSkeleton()
+                tasksRefresh?.isRefreshing = false
             }
         }
     }
@@ -228,35 +246,54 @@ class TasksFragment : Fragment() {
             row.findViewById<TextView>(R.id.tvTaskName).text = task.name ?: "Untitled task"
             row.findViewById<TextView>(R.id.tvTaskProject).text =
                 task.projectName?.takeIf { it.isNotBlank() } ?: task.workCategory ?: "Project"
-            row.findViewById<TextView>(R.id.tvTaskProgress).text = "${task.progress ?: 0}%"
+            val progress = (task.progress ?: 0).coerceIn(0, 100)
+            row.findViewById<TextView>(R.id.tvTaskProgress).text = "$progress%"
+
+            // Size the progress fill bar after the track lays out, since
+            // we need the track's measured width to compute the fill width.
+            val progressFill = row.findViewById<View>(R.id.progressFill)
+            val progressTrack = row.findViewById<View>(R.id.progressTrack)
+            progressTrack.post {
+                val totalWidth = progressTrack.width
+                val lp = progressFill.layoutParams
+                lp.width = (totalWidth * progress / 100f).toInt()
+                progressFill.layoutParams = lp
+            }
 
             val dueText = task.endDate?.let {
                 runCatching { parseFmt.parse(it) }.getOrNull()?.let { d -> dateFmt.format(d) }
             } ?: task.endDate ?: "-"
-            row.findViewById<TextView>(R.id.tvTaskDueDate).text = "Due $dueText"
+            row.findViewById<TextView>(R.id.tvTaskDueDate).text = dueText
+
+            // Status pill — colour matches Figma:
+            //   in-progress → blue (#175CD3 on #EFF8FF)
+            //   completed   → green (#16A34A on #ECFDF3)
+            //   delayed     → red   (#B42318 on #FEF3F2)
+            //   pending/other → amber (#B54708 on #FFFAEB)
+            val statusPill = row.findViewById<TextView>(R.id.tvTaskStatus)
+            val (statusLabel, statusBg, statusText) = when (task.status) {
+                "completed" -> Triple("Completed", "#ECFDF3", "#16A34A")
+                "in-progress" -> Triple("In Progress", "#EFF8FF", "#175CD3")
+                "delayed" -> Triple("Delayed", "#FEF3F2", "#B42318")
+                else -> Triple(
+                    task.status?.replaceFirstChar { it.uppercase() } ?: "Pending",
+                    "#FFFAEB",
+                    "#B54708",
+                )
+            }
+            statusPill.text = statusLabel
+            statusPill.backgroundTintList =
+                android.content.res.ColorStateList.valueOf(Color.parseColor(statusBg))
+            statusPill.setTextColor(Color.parseColor(statusText))
 
             val priority = row.findViewById<TextView>(R.id.tvTaskPriority)
-            when (task.priority) {
-                "high" -> {
-                    priority.text = "High"
-                    priority.setBackgroundResource(R.drawable.bg_task_priority_high)
-                    priority.setTextColor(Color.parseColor("#B42318"))
-                    priority.visibility = View.VISIBLE
-                }
-                "medium" -> {
-                    priority.text = "Medium"
-                    priority.setBackgroundResource(R.drawable.bg_task_priority_medium)
-                    priority.setTextColor(Color.parseColor("#B54708"))
-                    priority.visibility = View.VISIBLE
-                }
-                "low" -> {
-                    priority.text = "Low"
-                    priority.setBackgroundResource(R.drawable.bg_task_priority_low)
-                    priority.setTextColor(Color.parseColor("#067647"))
-                    priority.visibility = View.VISIBLE
-                }
-                else -> priority.visibility = View.GONE
+            priority.text = task.priority?.replaceFirstChar { it.uppercase() } ?: "Medium"
+            val priorityColor = when (task.priority) {
+                "high" -> "#F04438"
+                "low" -> "#16A34A"
+                else -> "#F97316" // Medium/Orange
             }
+            priority.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(priorityColor))
 
             row.setOnClickListener { openDetail(task) }
             container.addView(row)

@@ -1,0 +1,17 @@
+<!-- Simple trash glyph used on the Area-tab delete buttons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M3.33,5 H16.67" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M8.33,2.5 H11.67" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M5,5 L5.83,15.42 C5.95,17.04 6.05,18.33 8.93,18.33 H11.07 C13.95,18.33 14.05,17.04 14.17,15.42 L15,5" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round"
+        android:pathData="M8.42,12.92 H11.58" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round"
+        android:pathData="M7.92,9.58 H12.08" />
+</vector>

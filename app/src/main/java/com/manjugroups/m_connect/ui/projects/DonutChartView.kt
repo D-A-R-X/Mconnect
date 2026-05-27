@@ -58,10 +58,10 @@ class DonutChartView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val side = min(width, height).toFloat()
-        // Thickness ~14% of the diameter so the donut reads at small
-        // sizes. Stroke is centred on the path so we inset by half-
-        // stroke.
-        val stroke = side * 0.14f
+        // Thickness ~18% of the diameter — matches the chunkier donut in
+        // the reference design. At 14% the ring read as a "thin halo"
+        // rather than a proper donut chart.
+        val stroke = side * 0.18f
         arcPaint.strokeWidth = stroke
         ringPaint.strokeWidth = stroke
         val inset = stroke / 2f

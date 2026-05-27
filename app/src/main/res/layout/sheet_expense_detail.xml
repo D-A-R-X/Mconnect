@@ -1,34 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Expense Details bottom sheet — opened when an expense row is tapped
+  on the Expenses screen. Mirrors the Figma "Expense Overview" mock:
+    - Rounded top corners + drag handle (bg_auth_sheet, same as other
+      project-flow sheets).
+    - "Expense Details" header.
+    - Category circle (color from category) + category name + soft-bg
+      Paid / Pending pill.
+    - Stacked label-value rows for Amount / Date / Payment Method —
+      no divider lines, generous spacing so the design breathes.
+    - Notes section.
+    - Optional "Mark paid / Mark unpaid" button (only when the viewer
+      holds projects.expenses.approve).
+    - No Close button — standard bottom-sheet dismiss via drag-down
+      or tap-outside, matching the rest of the app's sheets.
+-->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?attr/colorSurfacePrimary">
+    android:background="@drawable/bg_auth_sheet">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingHorizontal="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="24dp">
 
-        <!-- Header: "Expense Details" -->
+        <!-- Drag handle -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:background="@drawable/bg_chat_sheet_handle" />
+
+        <!-- Sheet title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
             android:text="Expense Details"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:textColor="#101828"
+            android:textSize="22sp" />
 
-        <!-- Icon + Category + Paid badge -->
+        <!-- Icon + Category + Paid pill row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <FrameLayout
                 android:layout_width="56dp"
@@ -45,175 +71,151 @@
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_wallet"
                     android:contentDescription="@null"
+                    android:src="@drawable/ic_wallet"
                     app:tint="@android:color/white" />
             </FrameLayout>
 
             <LinearLayout
                 android:layout_width="0dp"
-                android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tvDetailCategory"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="?attr/colorForegroundPrimary"
+                    android:fontFamily="@font/inter_bold"
+                    android:textColor="#101828"
                     android:textSize="20sp"
-                    android:textStyle="bold"
                     tools:text="Labour" />
 
+                <!-- Paid / Pending pill — soft-tinted background, true
+                     stadium shape via bg_task_priority_pill. Kotlin
+                     swaps backgroundTint + textColor for the
+                     paid/pending state. -->
                 <TextView
                     android:id="@+id/tvDetailPaidPill"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="2dp"
-                    android:textColor="@android:color/white"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_task_priority_pill"
+                    android:backgroundTint="#ECFDF3"
+                    android:fontFamily="@font/inter_semibold"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="3dp"
+                    android:textColor="#16A34A"
                     android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/bg_pill_paid"
                     tools:text="Paid" />
             </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnTogglePaid"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="0dp"
-                android:visibility="gone"
-                android:paddingHorizontal="12dp"
-                android:textSize="12sp"
-                tools:text="Mark paid"
-                tools:visibility="visible" />
         </LinearLayout>
 
-        <!-- Stacked detail rows -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:background="?attr/colorBorderLight" />
+        <!-- ─── Stacked detail rows (no dividers; 18dp vertical gap) ─── -->
 
-        <!-- Amount row -->
         <LinearLayout
+            android:id="@+id/rowAmount"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:layout_marginTop="28dp"
             android:gravity="center_vertical"
-            android:paddingVertical="14dp">
+            android:orientation="horizontal">
+
             <TextView
                 android:layout_width="0dp"
-                android:layout_weight="1"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
                 android:text="Amount"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:textColor="#101828"
+                android:textSize="15sp" />
+
             <TextView
                 android:id="@+id/tvDetailAmount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="?attr/colorForegroundPrimary"
+                android:fontFamily="@font/inter_bold"
+                android:textColor="#101828"
                 android:textSize="16sp"
-                android:textStyle="bold"
                 tools:text="Rs 40000" />
         </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="?attr/colorBorderLight" />
-
-        <!-- Date row -->
         <LinearLayout
+            android:id="@+id/rowDate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:layout_marginTop="20dp"
             android:gravity="center_vertical"
-            android:paddingVertical="14dp">
+            android:orientation="horizontal">
+
             <TextView
                 android:layout_width="0dp"
-                android:layout_weight="1"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
                 android:text="Date"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:textColor="#101828"
+                android:textSize="15sp" />
+
             <TextView
                 android:id="@+id/tvDetailDate"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="?attr/colorForegroundPrimary"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#475467"
                 android:textSize="14sp"
                 tools:text="Oct 15, 2023" />
         </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="?attr/colorBorderLight" />
-
-        <!-- Payment method row -->
         <LinearLayout
+            android:id="@+id/rowPayment"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:layout_marginTop="20dp"
             android:gravity="center_vertical"
-            android:paddingVertical="14dp">
+            android:orientation="horizontal">
+
             <TextView
                 android:layout_width="0dp"
-                android:layout_weight="1"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_semibold"
                 android:text="Payment Method"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:textColor="#101828"
+                android:textSize="15sp" />
+
             <TextView
                 android:id="@+id/tvDetailPaymentMethod"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="?attr/colorForegroundPrimary"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#475467"
                 android:textSize="14sp"
                 tools:text="Bank Transfer" />
         </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="?attr/colorBorderLight" />
-
-        <!-- Notes section -->
+        <!-- Notes — header above a wrapped paragraph -->
         <TextView
+            android:id="@+id/labelNotes"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingTop="14dp"
-            android:paddingBottom="6dp"
+            android:layout_marginTop="24dp"
+            android:fontFamily="@font/inter_semibold"
             android:text="Notes"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:textColor="#101828"
+            android:textSize="15sp" />
 
         <TextView
             android:id="@+id/tvDetailNotes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="?attr/colorForegroundSecondary"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/inter_regular"
+            android:lineSpacingMultiplier="1.3"
+            android:textColor="#475467"
             android:textSize="14sp"
             tools:text="Monthly Food Allowance Charges for Labours" />
 
-        <!-- Footer: Close -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnClose"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Close" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

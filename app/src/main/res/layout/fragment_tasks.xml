@@ -1,448 +1,220 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#F1F3F8"
+    android:orientation="vertical">
 
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/contentScroll"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:fillViewport="true"
-        android:overScrollMode="ifContentScrolls"
-        app:layout_constraintBottom_toTopOf="@id/btnAddTask"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+    <!-- Blue Header with Illustration -->
+    <FrameLayout
+        android:id="@+id/headerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:background="#0B61CA">
+
+        <ImageView
+            android:layout_width="120dp"
+            android:layout_height="100dp"
+            android:layout_gravity="end|top"
+            android:layout_marginTop="32dp"
+            android:layout_marginEnd="12dp"
+            android:src="@drawable/ic_task_illustration"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp">
 
-            <!-- Purple header with title -->
-            <FrameLayout
-                android:id="@+id/headerContainer"
-                android:layout_width="match_parent"
-                android:layout_height="170dp"
-                android:background="@drawable/bg_attendance_header_gradient"
-                android:paddingStart="20dp"
-                android:paddingTop="20dp"
-                android:paddingEnd="20dp">
+            <ImageView
+                android:id="@+id/btnTasksBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="20dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:padding="4dp"
+                android:src="@drawable/ic_arrow_left"
+                app:tint="#FFFFFF" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/btnTasksBack"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:clickable="true"
-                        android:contentDescription="Back"
-                        android:focusable="true"
-                        android:src="@drawable/ic_arrow_left"
-                        app:tint="@android:color/white" />
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_bold"
-                        android:text="My Tasks"
-                        android:textColor="@android:color/white"
-                        android:textSize="18sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="48dp"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_bold"
-                        android:text="Stay on top of your work"
-                        android:textColor="@android:color/white"
-                        android:textSize="22sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:text="Tasks assigned to you across projects"
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </FrameLayout>
-
-            <!-- Work summary card -->
-            <LinearLayout
-                android:id="@+id/workSummaryCard"
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
-                android:layout_marginTop="-22dp"
-                android:background="@drawable/bg_task_card"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="Work Summary"
-                        android:textColor="#101828"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:id="@+id/tvOverallProgress"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="0%"
-                        android:textColor="#7A5AF8"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="72dp"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:gravity="center"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/tvSummaryTotal"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0"
-                            android:textColor="#101828"
-                            android:textSize="22sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Total"
-                            android:textColor="#475467"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:gravity="center"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/tvSummaryInProgress"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0"
-                            android:textColor="#B54708"
-                            android:textSize="22sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="In Progress"
-                            android:textColor="#475467"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:gravity="center"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/tvSummaryCompleted"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:text="0"
-                            android:textColor="#039855"
-                            android:textSize="22sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Completed"
-                            android:textColor="#475467"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- Filter pills -->
-            <LinearLayout
-                android:id="@+id/filterRow"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_marginHorizontal="12dp"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/bg_task_status_pill_track"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="4dp">
+                android:fontFamily="@font/inter_bold"
+                android:text="My Tasks"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp" />
 
-                <TextView
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Manage and track all tasks"
+                android:textColor="#D9D6FE"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Content Area overlapping header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="-20dp"
+        android:background="@drawable/bg_auth_sheet"
+        android:orientation="vertical">
+
+        <!-- Search Bar -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="20dp">
+
+            <EditText
+                android:id="@+id/etSearchTasks"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_search_bar"
+                android:drawableStart="@drawable/ic_chat_search"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_medium"
+                android:hint="Search Tasks"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:paddingHorizontal="16dp"
+                android:textColor="#101828"
+                android:textColorHint="#98A2B3"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Filter Pills -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/categoryPills"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="20dp"
+                app:chipSpacingHorizontal="8dp"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.chip.Chip
                     android:id="@+id/tabAll"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_task_status_pill_active"
-                    android:fontFamily="@font/inter_semibold"
-                    android:gravity="center"
-                    android:text="All"
-                    android:textColor="@android:color/white"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/tabInProgress"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/inter_medium"
-                    android:gravity="center"
-                    android:text="In Progress"
-                    android:textColor="#475467"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/tabCompleted"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/inter_medium"
-                    android:gravity="center"
-                    android:text="Completed"
-                    android:textColor="#475467"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <!-- Task list section -->
-            <LinearLayout
-                android:id="@+id/taskListCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="12dp"
-                android:background="@drawable/bg_task_card"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/tvSectionTitle"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="Your Tasks"
-                    android:textColor="#101828"
-                    android:textSize="14sp" />
+                    android:checked="true"
+                    android:text="All"
+                    android:textColor="@color/chip_filter_text"
+                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipStrokeWidth="0dp"
+                    app:checkedIconVisible="false" />
 
-                <TextView
-                    android:id="@+id/tvSectionSubtitle"
-                    android:layout_width="match_parent"
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/tabInProgress"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:fontFamily="@font/inter_regular"
-                    android:text="Tap a task to view details and update progress"
-                    android:textColor="#667085"
-                    android:textSize="11sp" />
+                    android:text="In progress"
+                    android:textColor="@color/chip_filter_text"
+                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipStrokeWidth="0dp"
+                    app:checkedIconVisible="false" />
 
-                <LinearLayout
-                    android:id="@+id/tasksSkeletonContainer"
-                    android:layout_width="match_parent"
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/tabPending"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                    android:text="Pending"
+                    android:textColor="@color/chip_filter_text"
+                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipStrokeWidth="0dp"
+                    app:checkedIconVisible="false" />
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="10dp"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/tabCompleted"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Completed"
+                    android:textColor="@color/chip_filter_text"
+                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipStrokeWidth="0dp"
+                    app:checkedIconVisible="false" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
 
-                        <View
-                            android:layout_width="180dp"
-                            android:layout_height="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/tasksRefresh"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-                        <View
-                            android:layout_width="120dp"
-                            android:layout_height="10dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="6dp"
-                            android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="10dp"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <View
-                            android:layout_width="220dp"
-                            android:layout_height="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-
-                        <View
-                            android:layout_width="100dp"
-                            android:layout_height="10dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="6dp"
-                            android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_task_inner_card"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <View
-                            android:layout_width="160dp"
-                            android:layout_height="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-
-                        <View
-                            android:layout_width="140dp"
-                            android:layout_height="10dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="6dp"
-                            android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_leave_skeleton_block" />
-                    </LinearLayout>
-                </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
                 <LinearLayout
                     android:id="@+id/taskList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="vertical" />
+                    android:orientation="vertical"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="24dp" />
 
                 <LinearLayout
                     android:id="@+id/emptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
                     android:gravity="center_horizontal"
                     android:orientation="vertical"
-                    android:paddingTop="24dp"
-                    android:paddingBottom="20dp"
+                    android:paddingTop="60dp"
                     android:visibility="gone">
 
                     <ImageView
-                        android:layout_width="74dp"
-                        android:layout_height="74dp"
-                        android:contentDescription="No tasks"
-                        android:src="@drawable/ic_leave_empty_js1pm" />
+                        android:layout_width="160dp"
+                        android:layout_height="160dp"
+                        android:src="@drawable/ic_home_empty_trips"
+                        android:alpha="0.6" />
 
                     <TextView
-                        android:id="@+id/tvEmptyTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="No Tasks Yet!"
+                        android:layout_marginTop="16dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="No Tasks Available"
                         android:textColor="#101828"
-                        android:textSize="22sp" />
+                        android:textSize="20sp" />
 
                     <TextView
-                        android:id="@+id/tvEmptyHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:fontFamily="@font/inter_regular"
+                        android:fontFamily="@font/inter_medium"
                         android:gravity="center"
-                        android:text="Tasks assigned to you will show up here. Sit tight!"
+                        android:paddingHorizontal="40dp"
+                        android:text="It looks like you don't have any tasks scheduled at the moment."
                         android:textColor="#667085"
-                        android:textSize="11sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
-
-    <FrameLayout
-        android:id="@+id/btnAddTask"
-        android:layout_width="0dp"
-        android:layout_height="46dp"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="12dp"
-        android:background="@drawable/bg_welcome_button"
-        android:clickable="true"
-        android:focusable="true"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:fontFamily="@font/inter_semibold"
-            android:text="+ Add Task"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
-    </FrameLayout>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+        </androidx.core.widget.NestedScrollView>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
+</LinearLayout>
