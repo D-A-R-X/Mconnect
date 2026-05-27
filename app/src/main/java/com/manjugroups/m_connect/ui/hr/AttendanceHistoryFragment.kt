@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.os.Bundle
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -41,6 +42,10 @@ class AttendanceHistoryFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+
+        // Pull-to-refresh re-runs loadData(); spinner is cleared in
+        // loadData()'s end-of-fetch block.
+        binding.attendanceRefresh.setupPullToRefresh { loadData() }
 
         // Default range = current calendar month
         val cal = Calendar.getInstance()
@@ -94,8 +99,13 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun loadData() {
-        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-        binding.attendanceScroll.visibility = View.GONE
+        // Skip the full-screen skeleton during a pull-refresh — the swipe
+        // spinner already signals "loading".
+        val isPullRefresh = binding.attendanceRefresh.isRefreshing
+        if (!isPullRefresh) {
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            binding.attendanceScroll.visibility = View.GONE
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyAttendance(
@@ -106,8 +116,24 @@ class AttendanceHistoryFragment : Fragment() {
                 if (resp.success) {
                     val records = resp.records
 
+                    // Present-day count rules — keep in line with what
+                    // the user can read off the HR Overview table:
+                    //   • Explicit absent / week-off / holiday → never
+                    //     count (this was the 20 May "Approved (absent)"
+                    //     bug that inflated the count by one).
+                    //   • Explicit present / half-day → count.
+                    //   • Otherwise: any day with real duration counts,
+                    //     even while still status="pending". 24 May had
+                    //     4h 51m and 23 May had 0h 32m of actual work
+                    //     and were getting hidden from the count just
+                    //     because the row hadn't been HR-approved yet.
                     val daysPresent = records.count { r ->
-                        r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
+                        val av = r.approvedAttendance?.lowercase()
+                        when (av) {
+                            "absent", "weekoff", "holiday" -> false
+                            "present", "half-day" -> true
+                            else -> (r.totalMinutes ?: 0) > 0
+                        }
                     }
                     val totalMinutes = records.sumOf { it.totalMinutes ?: 0 }
                     val totalHours = totalMinutes / 60
@@ -120,6 +146,7 @@ class AttendanceHistoryFragment : Fragment() {
             } catch (_: Exception) { }
             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
             binding.attendanceScroll.visibility = View.VISIBLE
+            binding.attendanceRefresh.isRefreshing = false
         }
     }
 
@@ -143,13 +170,30 @@ class AttendanceHistoryFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
                 String.format(Locale.getDefault(), "%02d:%02d:00 hrs", hours, minutes)
 
+            // Punch-out value mirrors the web table: prefer the
+            // server-derived `punchOutTime` (the backend fills this from
+            // the last touch for any record with ≥ 2 punch events), then
+            // fall back to "Not Punched Out" when there's still an open
+            // session (single-touch day), then "--" for truly empty rows.
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
-            val lastOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
-            val outLabel = if (record.hasOpenSession == true) "--"
-                else (lastOut?.let(::formatIsoTime) ?: "--")
+            val resolvedOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+            val outLabel = when {
+                resolvedOut != null -> formatIsoTime(resolvedOut)
+                record.hasOpenSession == true -> "Not Punched Out"
+                else -> "--"
+            }
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
-                "$inLabel - $outLabel"
+                "$inLabel · $outLabel"
+
+            // Open the punch-event log sheet on tap — mirrors the web
+            // popup that lists every individual IN/OUT event with its
+            // source chip and time.
+            card.setOnClickListener {
+                AttendancePunchLogSheet
+                    .newInstance(record)
+                    .show(parentFragmentManager, "attendance_punch_log")
+            }
 
             binding.attendanceList.addView(card)
         }

@@ -45,7 +45,7 @@ class LoginActivity : AppCompatActivity() {
         session = SessionManager(this)
 
         if (session.isLoggedIn) {
-            goToMain()
+            goToNext()
             return
         }
 
@@ -65,7 +65,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         binding.btnEmployeeOption.setOnClickListener {
-            Toast.makeText(this, getString(R.string.employee_id_coming_soon), Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, EmployeePasswordLoginActivity::class.java))
         }
 
         binding.btnSendOtp.setOnClickListener {
@@ -131,8 +131,13 @@ class LoginActivity : AppCompatActivity() {
         binding.btnSendOtp.isClickable = true
     }
 
-    private fun goToMain() {
-        startActivity(Intent(this, MainActivity::class.java))
+    private fun goToNext() {
+        val next = if (session.mustChangePassword) {
+            Intent(this, ForcePasswordChangeActivity::class.java)
+        } else {
+            Intent(this, MainActivity::class.java)
+        }
+        startActivity(next)
         finish()
     }
 

@@ -1,24 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Sticky-header pattern matching App Library:
+   • Outer LinearLayout = vertical column with the blue header on top and
+     the refreshable scroll view (containing everything else) below.
+   • attendanceHeader sits OUTSIDE the NestedScrollView so it stays
+     pinned while the user scrolls. The header collapses from the
+     bottom as the user scrolls, with subtitle + illustration fading.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8"
-    android:fillViewport="true"
-    android:overScrollMode="never">
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
+        android:id="@+id/attendanceHeader"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingBottom="96dp">
-
-        <FrameLayout
-            android:id="@+id/attendanceHeader"
-            android:layout_width="match_parent"
-            android:layout_height="172dp"
-            android:background="@drawable/bg_attendance_header_gradient"
-            android:clipChildren="false">
+        android:layout_height="172dp"
+        android:background="@drawable/bg_attendance_header_gradient"
+        android:clipChildren="false">
 
             <LinearLayout
                 android:id="@+id/attendanceHeaderTextGroup"
@@ -60,12 +63,36 @@
                 android:layout_marginEnd="31dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_attendance_header_illustration" />
-        </FrameLayout>
+    </FrameLayout>
 
+    <!-- Refreshable scrolling content area — sits below the sticky header. -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/hrRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/hrScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="96dp">
+
+        <!-- 24dp top gap = the blue header's 24dp rounded bottom corners
+             show through cleanly against the grey panel bg before being
+             cut off by the white summary card below. Matches the
+             Home dashboard's rounded-corner reveal. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="24dp"
             android:orientation="vertical">
 
             <LinearLayout
@@ -675,4 +702,6 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

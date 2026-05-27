@@ -1,0 +1,37 @@
+<!-- Basic tab glyph — monochrome bookmark.
+     The blue gradient circle used to be baked into this icon, but with
+     5 tabs that need active/inactive state switching the circle now
+     lives in a separate drawable (`bg_inspection_tab_circle_active`)
+     so a single imageTint can flip white⇄grey across all tabs. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M26.05,17.2 L25.23,20.68 C24.53,23.69 23.15,24.91 20.55,24.66 C20.13,24.63 19.68,24.55 19.2,24.43 L17.8,24.1 C14.33,23.28 13.25,21.56 14.07,18.08 L14.88,14.58 C15.05,13.88 15.25,13.26 15.5,12.75 C16.48,10.73 18.13,10.19 20.92,10.85 L22.31,11.18 C25.8,11.99 26.87,13.72 26.05,17.2 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M20.55,24.66 C20.03,25.01 19.38,25.3 18.59,25.56 L17.28,25.99 C13.97,27.06 12.23,26.17 11.15,22.86 L10.08,19.57 C9.02,16.26 9.9,14.51 13.21,13.44 L14.53,13.01 C14.87,12.9 15.19,12.81 15.5,12.75 C15.25,13.26 15.05,13.88 14.88,14.58 L14.07,18.08 C13.25,21.56 14.33,23.28 17.8,24.1 L19.2,24.43 C19.68,24.55 20.13,24.63 20.55,24.66 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M18.53,15.61 L22.58,16.63"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M17.72,18.83 L20.13,19.45"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+</vector>

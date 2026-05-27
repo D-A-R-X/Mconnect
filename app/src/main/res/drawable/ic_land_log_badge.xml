@@ -1,0 +1,69 @@
+<!-- Round blue-gradient badge with a white scanner / inspect glyph inside,
+     used as the leading icon on each "land log" row in the Inspection
+     list. Converted from Downloads/0.svg (48×48 viewport). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Gradient-filled circular background.
+         Same brand gradient as the home banner (#0B61CA → #02499D). -->
+    <path android:pathData="M24,0 a24,24 0 1,1 0,48 a24,24 0 1,1 0,-48 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt"
+            name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="0"
+                android:endX="24"
+                android:endY="48"
+                android:type="linear">
+                <item android:offset="0" android:color="#0B61CA" />
+                <item android:offset="1" android:color="#02499D" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Left building outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M24.5,34 H16.08 C14.92,34 13.97,33.07 13.97,31.93 V17.09 C13.97,14.47 15.92,13.28 18.31,14.45 L22.75,16.63 C23.71,17.1 24.5,18.35 24.5,19.41 V34 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <!-- Right building outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M33.97,27.06 V30.84 C33.97,33 32.97,34 30.81,34 H24.5 V22.42 L24.97,22.52 L29.47,23.53 L31.5,23.98 C32.82,24.27 33.9,24.95 33.96,26.87 C33.97,26.93 33.97,26.99 33.97,27.06 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <!-- Left-building window slits. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M17.5,21 H20.97"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.5" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M17.5,25 H20.97"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.5" />
+    <!-- Antenna / scanner-head detail on the right building. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M29.47,23.53 V26.75 C29.47,27.99 28.46,29 27.22,29 C25.98,29 24.97,27.99 24.97,26.75 V22.52 L29.47,23.53 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M33.96,26.87 C33.9,28.05 32.92,29 31.72,29 C30.48,29 29.47,27.99 29.47,26.75 V23.53 L31.5,23.98 C32.82,24.27 33.9,24.95 33.96,26.87 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+</vector>

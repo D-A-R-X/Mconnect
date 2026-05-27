@@ -1,0 +1,6 @@
+<!-- "Not Started" status pill — soft red bg, dark red text. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FEE2E2" />
+    <corners android:radius="999dp" />
+</shape>

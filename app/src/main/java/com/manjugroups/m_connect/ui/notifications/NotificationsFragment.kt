@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.notifications
 
 import android.os.Bundle
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -48,6 +50,8 @@ class NotificationsFragment : Fragment() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.btnMarkAllRead.setOnClickListener { markAllRead() }
 
+        binding.notificationsRefresh.setupPullToRefresh { loadNotifications() }
+
         loadNotifications()
     }
 
@@ -80,6 +84,7 @@ class NotificationsFragment : Fragment() {
 
     private fun renderNotifications(notifications: List<NotificationData>) {
         SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        binding.notificationsRefresh.dismissRefresh()
         binding.notificationList.removeAllViews()
 
         val unreadCount = notifications.count { !it.read }

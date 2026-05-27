@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Horizontal demand chip used by Present/Future Demand rows (Villa,
+  Plot, Apartments). Fragment flips the background + checkbox glyph on
+  click. Width/height are overridden in the parent so the chip can
+  share weighted space across the row.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="50dp"
+    android:background="@drawable/bg_inspection_field"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="12dp">
+
+    <ImageView
+        android:id="@+id/demandChipCheck"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_checkbox_unchecked" />
+
+    <TextView
+        android:id="@+id/demandChipLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="#101828"
+        android:textSize="13sp"
+        tools:text="Villa" />
+</LinearLayout>

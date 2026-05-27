@@ -1,0 +1,9 @@
+<!-- Search-bar pill on the Inspection page.
+     Per design spec: 10dp radius, white fill, no border. The drop
+     shadow from the spec (X0 Y0 blur1 spread0 black 40%) is applied via
+     android:elevation on the host view, not on this drawable. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <corners android:radius="10dp" />
+</shape>

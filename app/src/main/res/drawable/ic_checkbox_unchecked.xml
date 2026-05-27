@@ -1,0 +1,13 @@
+<!-- Empty grey square used as the unchecked-state glyph for road-type
+     rows. The checked-state uses ic_check_circle as a quick reuse. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M3,3 H17 V17 H3 Z"
+        android:strokeColor="#D1D5DB"
+        android:strokeWidth="1.5" />
+</vector>

@@ -1,0 +1,13 @@
+<!-- Rounded-top panel that overlaps the bottom edge of the blue
+     Inspection header. Fill matches the page background (#F1F3F8) so
+     the panel reads as a smooth curve cut INTO the blue header rather
+     than as a separate card on a different surface. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F1F3F8" />
+    <corners
+        android:bottomLeftRadius="0dp"
+        android:bottomRightRadius="0dp"
+        android:topLeftRadius="24dp"
+        android:topRightRadius="24dp" />
+</shape>

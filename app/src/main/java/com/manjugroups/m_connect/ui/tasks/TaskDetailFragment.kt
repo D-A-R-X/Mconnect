@@ -142,46 +142,38 @@ class TaskDetailFragment : Fragment() {
 
     private fun bind(root: View, task: TaskData) {
         root.findViewById<TextView>(R.id.tvDetailName).text = task.name ?: "Untitled task"
+        // Work-category card uses tvDetailProject as its value slot — show
+        // workCategory if the task has one, else fall back to the project
+        // name. Either way, append the human-readable TSK-id for context.
         root.findViewById<TextView>(R.id.tvDetailProject).text =
             buildString {
-                append(task.projectName?.takeIf { it.isNotBlank() } ?: "Project")
+                val primary = task.workCategory?.takeIf { it.isNotBlank() }
+                    ?: task.projectName?.takeIf { it.isNotBlank() }
+                    ?: "Project"
+                append(primary)
                 if (!task.taskId.isNullOrBlank()) append("  •  ").append(task.taskId)
             }
-        // Task description + expand/collapse "View more" toggle.
-        // The TextView is capped at 3 lines by the layout; if the text
-        // actually overflows that cap, the View more button becomes
-        // visible and toggles between collapsed (3 lines + "View more")
-        // and expanded (no cap + "View less").
+
+        // Task description — show the full text. The previous 3-line cap
+        // + "View more" toggle hid important task details (Section / Unit
+        // / Qty / etc.) behind a button some users never tapped, and the
+        // ellipsis-detection sometimes failed to surface the toggle at
+        // all so the user could only ever see the first 3 lines. The
+        // description card already lives inside the scrollable detail
+        // view, so unbounded height is fine here.
         val descView = root.findViewById<TextView>(R.id.tvDetailDescription)
         val viewMoreBtn = root.findViewById<TextView>(R.id.btnDetailViewMore)
         descView.text = task.description?.takeIf { it.isNotBlank() }
             ?: "No description provided."
-        descView.maxLines = 3
+        descView.maxLines = Int.MAX_VALUE
+        descView.ellipsize = null
         viewMoreBtn.visibility = View.GONE
-        viewMoreBtn.text = "View more ⌵"
-        // Once the TextView has laid out we can check lineCount; if it
-        // hit the cap and there's clipped content, surface the toggle.
-        descView.post {
-            val truncated = descView.layout?.let { layout ->
-                layout.lineCount >= 3 && layout.getEllipsisCount(2) > 0
-            } ?: false
-            if (truncated) {
-                viewMoreBtn.visibility = View.VISIBLE
-                var expanded = false
-                viewMoreBtn.setOnClickListener {
-                    expanded = !expanded
-                    if (expanded) {
-                        descView.maxLines = Int.MAX_VALUE
-                        descView.ellipsize = null
-                        viewMoreBtn.text = "View less ⌃"
-                    } else {
-                        descView.maxLines = 3
-                        descView.ellipsize = android.text.TextUtils.TruncateAt.END
-                        viewMoreBtn.text = "View more ⌵"
-                    }
-                }
-            }
-        }
+
+        // Assigned-to pill. Layout reserves detailAttendeesContainer but
+        // nothing was populating it, so the "Assigned To" column appeared
+        // empty even when the task had an assignee. Render one small chip
+        // with the assignee's initial avatar + name.
+        renderAssignedTo(root, task)
         val progress = (task.progress ?: 0).coerceIn(0, 100)
         root.findViewById<TextView>(R.id.tvDetailProgress).text = "$progress%"
 
@@ -223,10 +215,10 @@ class TaskDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvDetailTotalQty).text =
             task.totalQuantity?.let { "${trimDouble(it)} ${task.unit ?: ""}".trim() } ?: "-"
         root.findViewById<TextView>(R.id.tvDetailUnit).text = unitLabel
-        // Est. Cost isn't on TaskData (lives on the schema as estimatedCost
-        // but the Retrofit model doesn't expose it yet) — show a dash
-        // until the backend ships it on the mobile DTO.
-        root.findViewById<TextView>(R.id.tvDetailEstCost).text = "-"
+        // Est. Cost — now exposed on TaskData. Show "₹ <amount>" when set,
+        // dash when the task has no estimated cost yet.
+        root.findViewById<TextView>(R.id.tvDetailEstCost).text =
+            task.estimatedCost?.takeIf { it > 0 }?.let { "₹ ${formatRupees(it)}" } ?: "-"
         // Seed resource fields with placeholders; will fill in below.
         val tvLabour = root.findViewById<TextView>(R.id.tvDetailLabourCount)
         val tvEquipment = root.findViewById<TextView>(R.id.tvDetailEquipmentQty)
@@ -239,17 +231,38 @@ class TaskDetailFragment : Fragment() {
             runCatching {
                 api.getTaskResources(session.bearerToken, task.id)
             }.getOrNull()?.takeIf { it.success }?.let { resp ->
-                val labourCount = resp.resources.count { it.resourceType == "labour" }
-                val equipmentQty = resp.resources
-                    .filter { it.resourceType == "equipment" }
-                    .sumOf { it.budgetQty ?: 0.0 }
-                val materialsQty = resp.resources
-                    .filter { it.resourceType == "material" }
-                    .sumOf { it.budgetQty ?: 0.0 }
-                tvLabour.text = labourCount.toString()
-                tvEquipment.text = trimDouble(equipmentQty)
+                // Labour is a head-count, the others are quantities. Both
+                // equipment and material qtys come from `actualQty` —
+                // the web's task-resources panel sends user-entered Qty
+                // into actualQty (budgetQty / plannedQty default to 0
+                // there), so summing budgetQty as we used to always
+                // returned 0 and the Materials Qty card showed a dash
+                // even when web clearly had a 20-Boxes steel row.
+                val labour = resp.resources.filter { it.resourceType == "labour" }
+                val equipment = resp.resources.filter { it.resourceType == "equipment" }
+                val materials = resp.resources.filter { it.resourceType == "material" }
+
+                val equipmentQty = equipment.sumOf { it.actualQty ?: 0.0 }
+                val materialsQty = materials.sumOf { it.actualQty ?: 0.0 }
+
+                // Material / equipment can each have their own unit (e.g.
+                // steel in "Boxes", cement in "kg"). Show the per-resource
+                // unit when one is set and consistent across rows; fall
+                // back to the task unit otherwise.
+                val materialUnit = materials.mapNotNull {
+                    it.unit?.takeIf { u -> u.isNotBlank() }
+                }.distinct().singleOrNull()
+                val equipmentUnit = equipment.mapNotNull {
+                    it.unit?.takeIf { u -> u.isNotBlank() }
+                }.distinct().singleOrNull()
+
+                tvLabour.text = labour.size.toString()
+                tvEquipment.text = if (equipmentQty > 0)
+                    "${trimDouble(equipmentQty)} ${equipmentUnit ?: task.unit ?: ""}".trim()
+                else equipment.size.toString()
                 tvMaterials.text = if (materialsQty > 0)
-                    "${trimDouble(materialsQty)} ${task.unit ?: ""}".trim()
+                    "${trimDouble(materialsQty)} ${materialUnit ?: task.unit ?: ""}".trim()
+                else if (materials.isNotEmpty()) materials.size.toString()
                 else "-"
             }
         }
@@ -266,6 +279,64 @@ class TaskDetailFragment : Fragment() {
         } else {
             "%.2f".format(value)
         }
+    }
+
+    /** Format as Indian-style number string for the Est. Cost card. */
+    private fun formatRupees(value: Double): String {
+        val nf = java.text.NumberFormat.getInstance(java.util.Locale("en", "IN"))
+        nf.maximumFractionDigits = if (value == value.toLong().toDouble()) 0 else 2
+        return nf.format(value)
+    }
+
+    /**
+     * Populate the Assigned To column. Layout reserves
+     * `detailAttendeesContainer` but nothing was filling it, so even
+     * tasks with a clear assignee rendered as an empty column. Render
+     * a small initial-avatar + name chip so the user can see at a
+     * glance who owns the task.
+     */
+    private fun renderAssignedTo(root: View, task: TaskData) {
+        val container = root.findViewById<android.widget.LinearLayout>(
+            R.id.detailAttendeesContainer
+        ) ?: return
+        container.removeAllViews()
+        val name = task.assignedToName?.trim().orEmpty()
+        if (name.isBlank()) {
+            val empty = TextView(container.context).apply {
+                text = "Unassigned"
+                setTextColor(Color.parseColor("#667085"))
+                textSize = 13f
+            }
+            container.addView(empty)
+            return
+        }
+        val avatar = TextView(container.context).apply {
+            text = name.first().uppercaseChar().toString()
+            // Same brand-blue text colour the Home avatar uses, since the
+            // shared drawable is a light grey circle (not a coloured one).
+            setTextColor(Color.parseColor("#0B61CA"))
+            textSize = 11f
+            gravity = android.view.Gravity.CENTER
+            setBackgroundResource(R.drawable.bg_home_new_avatar_circle)
+            val sz = (24 * resources.displayMetrics.density).toInt()
+            layoutParams = android.widget.LinearLayout.LayoutParams(sz, sz)
+        }
+        val label = TextView(container.context).apply {
+            text = name
+            setTextColor(Color.parseColor("#101828"))
+            textSize = 13f
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = (8 * resources.displayMetrics.density).toInt() }
+            layoutParams = lp
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                container.context, R.font.inter_medium
+            )
+        }
+        container.gravity = android.view.Gravity.CENTER_VERTICAL
+        container.addView(avatar)
+        container.addView(label)
     }
 
     private fun openUpdateSheet() {

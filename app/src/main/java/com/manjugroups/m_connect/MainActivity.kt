@@ -20,6 +20,7 @@ import androidx.core.view.updatePadding
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.auth.ForcePasswordChangeActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.auth.WelcomeActivity
@@ -85,6 +86,11 @@ class MainActivity : AppCompatActivity() {
         session = SessionManager(this)
         if (!session.isLoggedIn) {
             startActivity(Intent(this, WelcomeActivity::class.java))
+            finish()
+            return
+        }
+        if (session.mustChangePassword) {
+            startActivity(Intent(this, ForcePasswordChangeActivity::class.java))
             finish()
             return
         }

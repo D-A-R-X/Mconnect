@@ -1,27 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Outer vertical LinearLayout = sticky blue header on top, refreshable
+  scrolling content area below. The header sits OUTSIDE the
+  NestedScrollView so "App Library" + illustration + filter pill strip
+  stay pinned at the top while the user scrolls the section cards.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#F1F3F8"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
 
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/scrollLibrary"
+    <!-- STICKY blue header: title + illustration + filter pill strip stay
+         pinned at the top of the screen during scroll. Pulled OUT of the
+         NestedScrollView so vertical scrolling on the section cards
+         below doesn't move it. -->
+    <FrameLayout
+        android:id="@+id/libraryHeaderFrame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true"
-        android:overScrollMode="never">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="120dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="212dp"
-                android:background="@drawable/bg_attendance_header_gradient">
+        android:layout_height="160dp"
+        android:background="@drawable/bg_attendance_header_gradient">
 
                 <LinearLayout
                     android:id="@+id/libraryHeaderContent"
@@ -42,6 +43,7 @@
                         android:textSize="24sp" />
 
                     <TextView
+                        android:id="@+id/tvLibrarySubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
@@ -64,6 +66,7 @@
                     android:src="@drawable/ic_apps_header_illustration" />
 
                 <LinearLayout
+                    android:id="@+id/libraryPillStrip"
                     android:layout_width="match_parent"
                     android:layout_height="79dp"
                     android:layout_gravity="bottom"
@@ -255,6 +258,54 @@
                         android:layout_height="29dp"
                         android:background="#F3F3F5" />
 
+                    <!-- LAND pill — same shape as the other tabs; tinted via
+                         imageTintList so the active state picks up brand blue. -->
+                    <LinearLayout
+                        android:id="@+id/pillLand"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillLandIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_land"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillLandText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="Land"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillLandIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
                     <LinearLayout
                         android:id="@+id/pillSettings"
                         android:layout_width="0dp"
@@ -296,7 +347,35 @@
                             android:visibility="invisible" />
                     </LinearLayout>
                 </LinearLayout>
-            </FrameLayout>
+    </FrameLayout>
+
+    <!-- Scrollable content area: pull-to-refresh wraps the section cards
+         only. The sticky header above is excluded so the user can pull
+         from anywhere in the cards to refresh without hitting the
+         header. -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/libraryRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scrollLibrary"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <!-- paddingBottom = visible height of the floating tab bar
+                 (~96dp: 66dp pill + 10dp top margin + ~20dp gesture inset).
+                 The panel itself is extended past the column bottom by
+                 headerHeight at runtime, so the last card lands right
+                 above the tab bar with no grey strip below. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="96dp">
 
             <LinearLayout
                 android:id="@+id/sectionsContainer"
@@ -1004,6 +1083,101 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- ============= LAND PROCUREMENT CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardLand"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_land" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Land Procurement"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Land • Inspection"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/itemLandInspection"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_inspection" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Inspection"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
                 <!-- ============= CONFIGURATION CARD ============= -->
                 <LinearLayout
                     android:id="@+id/cardConfig"
@@ -1101,4 +1275,5 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-</FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Single row in the project picker dropdown popup. Project name fills
+  the row; a green check appears on the right when this row matches
+  the currently selected project.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp">
+
+    <TextView
+        android:id="@+id/tvDropdownName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_medium"
+        android:singleLine="true"
+        android:textColor="#101828"
+        android:textSize="14sp" />
+
+    <ImageView
+        android:id="@+id/imgDropdownCheck"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginStart="12dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_check_circle"
+        android:visibility="gone"
+        app:tint="#0B61CA"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
+</LinearLayout>

@@ -1,0 +1,14 @@
+<!-- Competitor — user-tag glyph (speech-bubble frame with a user
+     silhouette inside). Converted from Downloads/user-tag.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M15,15.72 H14.37 C13.7,15.72 13.07,15.97 12.6,16.44 L11.18,17.85 C10.53,18.49 9.47,18.49 8.82,17.85 L7.39,16.44 C6.93,15.97 6.28,15.72 5.63,15.72 H5 C3.62,15.72 2.5,14.61 2.5,13.24 V4.15 C2.5,2.78 3.62,1.67 5,1.67 H15 C16.38,1.67 17.5,2.78 17.5,4.15 V13.24 C17.5,14.6 16.38,15.72 15,15.72 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M10,8.33 C11.07,8.33 11.94,7.46 11.94,6.39 C11.94,5.32 11.07,4.45 10,4.45 C8.93,4.45 8.06,5.32 8.06,6.39 C8.06,7.46 8.93,8.33 10,8.33 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M13.33,13.05 C13.33,11.55 11.84,10.33 10,10.33 C8.16,10.33 6.67,11.55 6.67,13.05" />
+</vector>

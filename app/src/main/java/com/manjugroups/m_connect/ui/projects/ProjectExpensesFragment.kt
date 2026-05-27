@@ -24,6 +24,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectExpense
 import com.manjugroups.m_connect.network.ProjectSummary
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -162,7 +164,16 @@ class ProjectExpensesFragment : Fragment() {
         ) { _, _ -> refreshExpenses() }
 
         loadProjects()
-        
+
+        // Pull-to-refresh re-fetches the expense list for the currently
+        // selected project. Wired here in onViewCreated so it works as
+        // soon as the screen attaches. refreshExpenses() itself clears
+        // the spinner once the response lands (see its end-of-fetch
+        // block in the function body).
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.expensesRefresh
+        ).setupPullToRefresh { refreshExpenses() }
+
         // Initial entry animations
         playEntryAnimations(view)
     }
@@ -228,32 +239,71 @@ class ProjectExpensesFragment : Fragment() {
         }
     }
 
+    /**
+     * Opens the project list as an inline dropdown anchored to the picker
+     * pill (rather than a bottom sheet sliding up from the screen edge).
+     * The picker view is flipped to `isActivated = true` while the popup
+     * is showing so its state-list background paints a gold focus ring
+     * around the pill — matches the reference design.
+     */
     private fun showProjectPicker() {
         if (projects.isEmpty()) return
-        // Result listener — re-registered each open so a stale closure
-        // doesn't capture a stale `projects` list across reloads.
-        parentFragmentManager.setFragmentResultListener(
-            ProjectPickerBottomSheet.RESULT_KEY,
-            viewLifecycleOwner,
-        ) { _, bundle ->
-            val pickedId = bundle.getString(ProjectPickerBottomSheet.RESULT_PROJECT_ID)
-                ?: return@setFragmentResultListener
-            val pickedName = bundle.getString(ProjectPickerBottomSheet.RESULT_PROJECT_NAME)
-                ?: "Untitled project"
-            if (pickedId != selectedProjectId) {
-                selectedProjectId = pickedId
-                tvProjectPickerLabel.text = pickedName
+        val ctx = context ?: return
+        val items = projects.map { it.name ?: "Untitled project" }
+
+        val popup = androidx.appcompat.widget.ListPopupWindow(ctx).apply {
+            anchorView = btnProjectPicker
+            // Match the anchor's width so the dropdown reads as an extension
+            // of the picker pill, not a separate floating menu.
+            width = btnProjectPicker.width
+            setBackgroundDrawable(
+                androidx.core.content.ContextCompat.getDrawable(
+                    ctx,
+                    R.drawable.bg_expense_picker_popup,
+                )
+            )
+            // 6dp gap between the pill and the popup so the focus ring is
+            // visible all the way around the pill.
+            verticalOffset = (6 * ctx.resources.displayMetrics.density).toInt()
+            isModal = true
+        }
+
+        val adapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = items.size
+            override fun getItem(position: Int): Any = items[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getView(
+                position: Int,
+                convertView: View?,
+                parent: ViewGroup?,
+            ): View {
+                val row = convertView
+                    ?: LayoutInflater.from(ctx).inflate(
+                        R.layout.item_expense_project_dropdown,
+                        parent,
+                        false,
+                    )
+                row.findViewById<TextView>(R.id.tvDropdownName).text = items[position]
+                row.findViewById<View>(R.id.imgDropdownCheck).visibility =
+                    if (projects[position].id == selectedProjectId) View.VISIBLE else View.GONE
+                return row
+            }
+        }
+        popup.setAdapter(adapter)
+
+        popup.setOnItemClickListener { _, _, position, _ ->
+            val picked = projects.getOrNull(position)
+            popup.dismiss()
+            if (picked != null && picked.id != selectedProjectId) {
+                selectedProjectId = picked.id
+                tvProjectPickerLabel.text = picked.name ?: "Untitled project"
                 dotRed.visibility = View.VISIBLE
                 refreshExpenses()
             }
         }
-        ProjectPickerBottomSheet
-            .newInstance(
-                ids = projects.map { it.id },
-                names = projects.map { it.name ?: "Untitled project" },
-                selectedId = selectedProjectId,
-            )
-            .show(parentFragmentManager, "project_picker")
+        popup.setOnDismissListener { btnProjectPicker.isActivated = false }
+        btnProjectPicker.isActivated = true
+        popup.show()
     }
 
     private fun showDateFilter() {
@@ -322,6 +372,13 @@ class ProjectExpensesFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG)
                     .show()
+            } finally {
+                // Clear the pull-to-refresh spinner whether the load
+                // succeeded or failed — leaving it spinning forever after
+                // an error is worse than dropping it cleanly.
+                view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                    R.id.expensesRefresh
+                )?.dismissRefresh()
             }
         }
     }

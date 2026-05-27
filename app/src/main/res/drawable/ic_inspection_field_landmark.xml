@@ -1,0 +1,17 @@
+<!-- Land Mark — routing glyph (two pins connected). Converted from routing.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5"
+        android:pathData="M1.72,3.83 C2.39,0.95 6.73,0.95 7.39,3.83 C7.78,5.52 6.71,6.96 5.77,7.85 C5.09,8.5 4.02,8.49 3.33,7.85 C2.41,6.96 1.33,5.52 1.72,3.83 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5"
+        android:pathData="M12.56,13.83 C13.23,10.95 17.59,10.95 18.26,13.83 C18.65,15.52 17.58,16.96 16.63,17.85 C15.95,18.5 14.87,18.49 14.18,17.85 C13.24,16.96 12.17,15.52 12.56,13.83 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M10,4.17 H12.23 C13.77,4.17 14.49,6.07 13.33,7.09 L6.67,12.92 C5.52,13.92 6.23,15.83 7.77,15.83 H10" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M4.57,4.58 H4.58" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M15.41,14.58 H15.41" />
+</vector>

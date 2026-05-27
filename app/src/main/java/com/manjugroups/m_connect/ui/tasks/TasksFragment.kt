@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -88,6 +89,11 @@ class TasksFragment : Fragment() {
         tabAll = view.findViewById(R.id.tabAll)
         tabInProgress = view.findViewById(R.id.tabInProgress)
         tabCompleted = view.findViewById(R.id.tabCompleted)
+
+        // Pull-to-refresh — same load path as initial open + tab returns.
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+            R.id.tasksRefresh
+        ).setupPullToRefresh { loadTasks() }
         // The redesigned layout dropped the skeleton + summary header — left
         // the fields nullable so existing call-sites (`?.text`, `?: return`)
         // silently no-op. Re-introduce the views if the summary returns.
@@ -132,7 +138,13 @@ class TasksFragment : Fragment() {
     }
 
     fun loadTasks() {
-        startSkeleton()
+        // Skip the skeleton when a pull-refresh is already on screen —
+        // the swipe spinner is enough of a loading signal.
+        val tasksRefresh = view?.findViewById<
+            androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        >(R.id.tasksRefresh)
+        val isPullRefresh = tasksRefresh?.isRefreshing == true
+        if (!isPullRefresh) startSkeleton()
         emptyState?.visibility = View.GONE
         taskListContainer?.removeAllViews()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -152,6 +164,7 @@ class TasksFragment : Fragment() {
                 renderTasks()
             } finally {
                 stopSkeleton()
+                tasksRefresh?.isRefreshing = false
             }
         }
     }

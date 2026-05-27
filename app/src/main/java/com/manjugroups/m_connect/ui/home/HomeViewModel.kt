@@ -318,11 +318,22 @@ class HomeViewModel : ViewModel() {
                 Log.w(TAG, "CP visit merge failed: ${e.message}")
             }
 
+            // Sort newest-first so a freshly-fixed SV-cum-CP lands at
+            // the top of Today's Trip instead of getting pushed below
+            // older legacy fieldVisits rows. Falls back to scheduled
+            // start time and then id for stability when creationTime
+            // is missing on either side (shouldn't happen post-fix but
+            // keeps the comparator total).
+            val sortedMerged = merged.sortedWith(
+                compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                    .thenByDescending { it.scheduledStartTime ?: "" }
+                    .thenBy { it.id }
+            )
             val current = cachedState ?: return
             val updated = current.copy(
-                todayVisits = merged,
+                todayVisits = sortedMerged,
                 assignedPlaces = places,
-                activeVisitId = merged.firstOrNull { it.status == "in-progress" }?.id,
+                activeVisitId = sortedMerged.firstOrNull { it.status == "in-progress" }?.id,
             )
             cachedState = updated
             _uiState.value = updated
@@ -441,6 +452,12 @@ class HomeViewModel : ViewModel() {
             leadName = canonicalClient ?: typedContact,
             leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
             scheduledStartTime = this.scheduledTime,
+            // CpVisitDetail.createdAt is the same monotonic ms value
+            // Convex uses for `_creationTime` (the createCpVisitRows
+            // mutation seeds it from Date.now() at insert). Forwarding
+            // it lets the Home sort treat legacy and CP-merge rows the
+            // same way — newest first.
+            creationTime = this.createdAt?.toDouble(),
         )
     }
 

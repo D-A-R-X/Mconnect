@@ -1,0 +1,9 @@
+<!-- Form-field input pill — white fill, 10dp radius, thin grey border. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <stroke
+        android:width="1dp"
+        android:color="#E5E7EB" />
+    <corners android:radius="10dp" />
+</shape>

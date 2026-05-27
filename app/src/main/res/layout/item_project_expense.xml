@@ -17,11 +17,11 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
-    android:layout_marginVertical="8dp"
+    android:layout_marginVertical="6dp"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardCornerRadius="16dp"
+    app:cardCornerRadius="14dp"
     app:cardElevation="1dp"
     app:cardBackgroundColor="#FFFFFF">
 
@@ -29,7 +29,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="14dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -38,19 +38,19 @@
             android:gravity="center_vertical">
 
             <FrameLayout
-                android:layout_width="48dp"
-                android:layout_height="48dp">
+                android:layout_width="44dp"
+                android:layout_height="44dp">
 
                 <View
                     android:id="@+id/iconBg"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@drawable/bg_home_new_avatar_circle"
+                    android:background="@drawable/bg_expense_item_icon"
                     android:backgroundTint="#2563EB" />
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_wallet"
                     android:contentDescription="@null"
@@ -118,13 +118,13 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:background="#F2F4F7" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal"
             android:gravity="center">
 

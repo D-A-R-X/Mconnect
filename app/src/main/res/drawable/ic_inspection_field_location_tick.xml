@@ -1,0 +1,12 @@
+<!-- Site Location — teardrop pin with checkmark. Converted from
+     location-tick.svg. Reused as the Area tab icon too. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M3.02,7.08 C4.66,-0.14 15.35,-0.13 16.98,7.08 C17.94,11.32 15.31,14.9 13,17.12 C11.33,18.73 8.68,18.73 6.99,17.12 C4.69,14.9 2.06,11.31 3.02,7.08 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.71,9.58 L8.96,10.83 L12.29,7.5" />
+</vector>

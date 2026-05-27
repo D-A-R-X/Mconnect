@@ -251,6 +251,8 @@ class OtpActivity : AppCompatActivity() {
                 phone = response.user?.phone ?: phone
             )
             session.staffId = response.user?.staffId
+            session.employeeId = response.user?.employeeId
+            session.mustChangePassword = false
             session.geoTrackingEnabled = false
             session.geoConsentGiven = false
             session.geoConsentDeclined = false
