@@ -30,6 +30,7 @@
             tools:text="Land Owner Name" />
 
         <TextView
+            android:id="@+id/fieldRequiredStar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="2dp"

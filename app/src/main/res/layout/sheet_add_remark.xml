@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Add / Edit Remarks bottom sheet for a verification query. Grabber handle,
+  title + subtitle, a required Remarks field (icon + multiline input), and a
+  full-width green Submit CTA.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_query_sheet_top"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="24dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="18dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
+    <TextView
+        android:id="@+id/tvRemarkSheetTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:includeFontPadding="false"
+        android:text="Add Remarks"
+        android:textColor="#101828"
+        android:textSize="18sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:text="Information about This Queries"
+        android:textColor="#6B7280"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Remarks"
+            android:textColor="#101828"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="*"
+            android:textColor="#E11D48"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_inspection_field"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="14dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_query_document" />
+
+        <EditText
+            android:id="@+id/inputRemark"
+            android:layout_width="0dp"
+            android:layout_height="110dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top|start"
+            android:hint="Enter Details"
+            android:importantForAutofill="no"
+            android:inputType="textMultiLine|textCapSentences"
+            android:paddingHorizontal="0dp"
+            android:paddingVertical="0dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp"
+            tools:ignore="Autofill" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/btnRemarkSubmit"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="22dp"
+        android:background="@drawable/bg_inspection_next_button"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="Submit"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
+</LinearLayout>

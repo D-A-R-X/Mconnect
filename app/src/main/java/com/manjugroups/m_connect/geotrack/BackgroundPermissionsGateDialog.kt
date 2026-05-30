@@ -59,6 +59,17 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         savedInstanceState: Bundle?,
     ): View = inflater.inflate(R.layout.dialog_background_permissions_gate, container, false)
 
+    override fun onStart() {
+        super.onStart()
+        // A DialogFragment window defaults to WRAP_CONTENT width, which lets
+        // our wrapping body text collapse the dialog to the width of its
+        // longest word (the "narrow strip" bug where buttons render as blank
+        // pills). Pin the window to most of the screen width so match_parent
+        // children lay out correctly.
+        val width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
+        dialog?.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 

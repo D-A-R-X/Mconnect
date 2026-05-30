@@ -18,7 +18,9 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLandInspectionBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.InspectionAcceptRequest
 import com.manjugroups.m_connect.network.InspectionListItem
+import com.manjugroups.m_connect.network.InspectionRescheduleRequest
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -68,7 +70,19 @@ class LandInspectionFragment : Fragment() {
         val rawInspectionDate: String?,  // yyyy-MM-dd for date filter compare
         val place: String,
         val status: Status,
-    )
+        val acceptanceStatus: String?,   // pending / accepted / date_change_* / null
+    ) {
+        // The form is openable when the inspector has accepted, OR there's
+        // no acceptance workflow on the record (legacy null), OR work already
+        // exists (in_progress / completed). Only a brand-new, not-yet-accepted
+        // assignment is gated behind the Accept / Reschedule controls — that's
+        // the "after accepting he can fill the form" rule, without locking the
+        // inspector out of reports they've already started.
+        val canOpenForm: Boolean
+            get() = acceptanceStatus == "accepted" ||
+                acceptanceStatus.isNullOrBlank() ||
+                status != Status.NOT_STARTED
+    }
 
     private var allItems: List<InspectionRow> = emptyList()
     private var activeFilter: Status? = null   // null = "All"
@@ -177,6 +191,95 @@ class LandInspectionFragment : Fragment() {
     }
 
     /**
+     * Accept the inspection task. On success the server flips
+     * inspectionAcceptanceStatus to "accepted"; we reload so the card
+     * swaps its Accept/Reschedule controls for the open-form arrow.
+     */
+    private fun acceptInspection(propertyId: String) {
+        if (!session.isLoggedIn) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.acceptInspection(
+                    session.bearerToken, InspectionAcceptRequest(propertyId),
+                )
+                if (resp.success) {
+                    android.widget.Toast.makeText(
+                        requireContext(), "Inspection accepted",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                    loadInspections()
+                } else {
+                    showError(resp.error ?: "Failed to accept inspection")
+                }
+            } catch (err: Exception) {
+                showError(err.message ?: "Network error")
+            }
+        }
+    }
+
+    /**
+     * Reschedule flow: pick a new date, then send a date-change request to the
+     * server (the web property page surfaces it for VP review).
+     *
+     * Business rule: a reschedule may only move the inspection within 3 days
+     * of the originally scheduled date, so the picker is clamped to
+     * [scheduledDate, scheduledDate + 3 days]. When no date is on record we
+     * fall back to [today, today + 3].
+     */
+    private fun openRescheduleDatePicker(propertyId: String, scheduledIso: String?) {
+        val anchor = Calendar.getInstance()
+        scheduledIso?.let { iso ->
+            runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }
+                .getOrNull()?.let { anchor.time = it }
+        }
+        // Normalise to start-of-day so day-level min/max comparisons are exact.
+        anchor.set(Calendar.HOUR_OF_DAY, 0)
+        anchor.set(Calendar.MINUTE, 0)
+        anchor.set(Calendar.SECOND, 0)
+        anchor.set(Calendar.MILLISECOND, 0)
+
+        val maxCal = (anchor.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 3) }
+
+        DatePickerDialog(
+            requireContext(),
+            { _, year, month, day ->
+                val date = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
+                requestReschedule(propertyId, date)
+            },
+            anchor.get(Calendar.YEAR),
+            anchor.get(Calendar.MONTH),
+            anchor.get(Calendar.DAY_OF_MONTH),
+        ).apply {
+            datePicker.minDate = anchor.timeInMillis
+            datePicker.maxDate = maxCal.timeInMillis
+        }.show()
+    }
+
+    private fun requestReschedule(propertyId: String, date: String) {
+        if (!session.isLoggedIn) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.rescheduleInspection(
+                    session.bearerToken,
+                    InspectionRescheduleRequest(propertyId = propertyId, requestedDate = date),
+                )
+                if (resp.success) {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Date change requested for ${formatInspectionDate(date)}",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                    loadInspections()
+                } else {
+                    showError(resp.error ?: "Failed to request reschedule")
+                }
+            } catch (err: Exception) {
+                showError(err.message ?: "Network error")
+            }
+        }
+    }
+
+    /**
      * Open a system DatePickerDialog defaulting to either the currently
      * filtered date or today. The picked date narrows the visible list
      * to properties whose `inspectionDate` matches exactly (yyyy-MM-dd
@@ -207,10 +310,23 @@ class LandInspectionFragment : Fragment() {
         val active = dateFilter
         if (active == null) {
             binding.inspectionDateFilterChip.visibility = View.GONE
+            // Reset the calendar button to its plain (inactive) state.
+            binding.btnInspectionDateFilter.setBackgroundResource(R.drawable.bg_inspection_search)
+            binding.ivDateFilterDefault.visibility = View.VISIBLE
+            binding.dateFilterActive.visibility = View.GONE
             return
         }
         binding.inspectionDateFilterChip.visibility = View.VISIBLE
         binding.tvInspectionDateFilterLabel.text = "Date · ${formatInspectionDate(active)}"
+        // Light up the calendar button with the selected day + month.
+        binding.btnInspectionDateFilter.setBackgroundResource(R.drawable.bg_inspection_date_active)
+        binding.ivDateFilterDefault.visibility = View.GONE
+        binding.dateFilterActive.visibility = View.VISIBLE
+        runCatching {
+            val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(active)!!
+            binding.tvDateFilterDay.text = SimpleDateFormat("d", Locale.ENGLISH).format(parsed)
+            binding.tvDateFilterMonth.text = SimpleDateFormat("MMM", Locale.ENGLISH).format(parsed)
+        }
     }
 
     private fun InspectionListItem.toRow(): InspectionRow {
@@ -232,6 +348,7 @@ class LandInspectionFragment : Fragment() {
             rawInspectionDate = inspectionDate?.takeIf { it.isNotBlank() },
             place = place,
             status = Status.fromKey(derivedInspectionStatus),
+            acceptanceStatus = inspectionAcceptanceStatus,
         )
     }
 
@@ -315,14 +432,14 @@ class LandInspectionFragment : Fragment() {
         binding.inspectionHeader.post {
             val b = _binding ?: return@post
             val overlayDistancePx = b.inspectionHeader.height.toFloat()
-            // Extend the panel past the column bottom by headerHeight so
-            // its visible bottom keeps reaching the screen edge once
-            // translated up — removes the grey strip that was visible
-            // below the last card at end-of-scroll.
-            (b.inspectionRefresh.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                bottomMargin = -overlayDistancePx.toInt()
-                b.inspectionRefresh.layoutParams = this
-            }
+            // NOTE: we used to override the panel's height + bottomMargin
+            // here to keep its bottom edge glued to the screen during the
+            // translate-up. That grew the inner NestedScrollView taller
+            // than the visible viewport, so any list whose content fit
+            // inside the inflated panel never scrolled. The root
+            // background already matches the panel colour (#F1F3F8), so
+            // letting the panel sit at its weighted height has no visible
+            // downside — and restores normal scrolling on short lists.
             b.inspectionScroll.setOnScrollChangeListener(
                 androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
                     val view = _binding ?: return@OnScrollChangeListener
@@ -393,13 +510,70 @@ class LandInspectionFragment : Fragment() {
             val statusPill = card.findViewById<TextView>(R.id.tvLandLogStatus)
             statusPill.text = item.status.label
             applyStatusStyle(statusPill, item.status)
-            // Tapping a card opens the Site Inspection form sheet,
-            // carrying the row's property id so the sheet can prefill from
-            // any existing report and write back to the right record.
-            card.setOnClickListener {
-                SiteInspectionBottomSheet
-                    .newInstance(item.propertyId, item.title)
-                    .show(parentFragmentManager, "site_inspection")
+
+            val acceptBtn = card.findViewById<View>(R.id.btnInspectionAccept)
+            val acceptLabel = card.findViewById<TextView>(R.id.tvInspectionAcceptLabel)
+            val rescheduleBtn = card.findViewById<View>(R.id.btnInspectionReschedule)
+            val arrowBtn = card.findViewById<View>(R.id.btnInspectionArrow)
+
+            when {
+                item.acceptanceStatus == "date_change_requested" -> {
+                    // A reschedule has been requested → show a locked
+                    // "Re-scheduled" pill until a VP approves/rejects on web.
+                    // Not clickable; on the next refresh (approval flips the
+                    // status back to pending) this reverts to Accept. The
+                    // reschedule icon stays so the inspector can amend the
+                    // requested date.
+                    arrowBtn.visibility = View.GONE
+                    rescheduleBtn.visibility = View.VISIBLE
+                    acceptBtn.visibility = View.VISIBLE
+                    acceptLabel.text = "Re-scheduled"
+                    acceptBtn.alpha = 0.6f
+                    acceptBtn.isClickable = false
+                    acceptBtn.setOnClickListener(null)
+                    rescheduleBtn.setOnClickListener { openRescheduleDatePicker(item.propertyId, item.rawInspectionDate) }
+                    card.setOnClickListener {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Date change requested — awaiting approval.",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+                item.canOpenForm -> {
+                    // Openable → show the arrow; both the card and the arrow
+                    // open the Site Inspection sheet, which prefills from any
+                    // existing report.
+                    acceptBtn.visibility = View.GONE
+                    rescheduleBtn.visibility = View.GONE
+                    arrowBtn.visibility = View.VISIBLE
+                    val openForm = View.OnClickListener {
+                        SiteInspectionBottomSheet
+                            .newInstance(item.propertyId, item.title)
+                            .show(parentFragmentManager, "site_inspection")
+                    }
+                    card.setOnClickListener(openForm)
+                    arrowBtn.setOnClickListener(openForm)
+                }
+                else -> {
+                    // Pending acceptance → gate the form behind Accept; offer a
+                    // Reschedule date-change request instead.
+                    acceptBtn.visibility = View.VISIBLE
+                    rescheduleBtn.visibility = View.VISIBLE
+                    arrowBtn.visibility = View.GONE
+                    acceptLabel.text = "Accept"
+                    acceptBtn.alpha = 1f
+                    acceptBtn.isClickable = true
+                    acceptBtn.setOnClickListener { acceptInspection(item.propertyId) }
+                    rescheduleBtn.setOnClickListener { openRescheduleDatePicker(item.propertyId, item.rawInspectionDate) }
+                    card.setOnClickListener {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Accept the inspection before filling the form.",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
             }
             list.addView(card)
         }

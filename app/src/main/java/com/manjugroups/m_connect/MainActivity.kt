@@ -21,6 +21,8 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.auth.ForcePasswordChangeActivity
+import com.manjugroups.m_connect.auth.LoginActivity
+import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.auth.WelcomeActivity
@@ -85,7 +87,12 @@ class MainActivity : AppCompatActivity() {
 
         session = SessionManager(this)
         if (!session.isLoggedIn) {
-            startActivity(Intent(this, WelcomeActivity::class.java))
+            // Existing/onboarded users go to Login; only a genuine first run
+            // (onboarding never completed) sees the Welcome carousel.
+            val onboarded = OnboardingPrefs(this).onboardingCompleted
+            startActivity(
+                Intent(this, if (onboarded) LoginActivity::class.java else WelcomeActivity::class.java)
+            )
             finish()
             return
         }

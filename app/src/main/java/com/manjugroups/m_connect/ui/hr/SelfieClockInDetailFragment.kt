@@ -243,7 +243,8 @@ class SelfieClockInDetailFragment : Fragment() {
 
                         is AttendanceFlowEvent.Success -> {
                             if (event.mode == mode) {
-                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                                // No success toast — the success sheet already
+                                // confirms the punch.
                                 parentFragmentManager.setFragmentResult(
                                     RESULT_KEY_PUNCH_COMPLETED,
                                     bundleOf(KEY_MODE to mode.name),

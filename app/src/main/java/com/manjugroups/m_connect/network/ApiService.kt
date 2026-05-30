@@ -779,6 +779,29 @@ interface ApiService {
         @Body body: InspectionSaveRequest,
     ): InspectionSaveResponse
 
+    @POST("api/land/inspections/accept")
+    suspend fun acceptInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionAcceptRequest,
+    ): InspectionActionResponse
+
+    @POST("api/land/inspections/reschedule")
+    suspend fun rescheduleInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionRescheduleRequest,
+    ): InspectionActionResponse
+
+    @GET("api/land/queries/my")
+    suspend fun listMyQueries(
+        @Header("Authorization") token: String,
+    ): QueryListResponse
+
+    @POST("api/land/queries/update")
+    suspend fun updateQuery(
+        @Header("Authorization") token: String,
+        @Body body: QueryUpdateRequest,
+    ): InspectionActionResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
@@ -2026,7 +2049,16 @@ data class InspectionListItem(
     val surveyNo: String? = null,
     val propertyType: String? = null,
     val derivedInspectionStatus: String? = null,
+    // pending / accepted / date_change_requested / date_change_approved /
+    // date_change_rejected (null on legacy rows). Gates the inspection form:
+    // only "accepted" lets the inspector fill it in.
+    val inspectionAcceptanceStatus: String? = null,
     val reportId: String? = null,
+    // VP final review of the submitted inspection. "approved" → form
+    // locks to view-only on mobile (the inspector can still see what was
+    // submitted but can no longer edit). "hold" / "rejected" keep the
+    // form editable so the inspector can address feedback.
+    val vpInspectionStatus: String? = null,
 )
 
 data class InspectionListResponse(
@@ -2039,6 +2071,39 @@ data class InspectionListResponse(
 // Returned by `/api/land/inspections/get`. `report` is `{}` for properties
 // where the inspector hasn't saved anything yet — Gson maps that to all
 // fields being null.
+// One Area-tab nearby place: school / college / hospital / mall. Both keys
+// are required strings on the server (v.string()), so default to "" rather
+// than null when building a save payload.
+data class InspectionAreaEntry(
+    val name: String = "",
+    val distance: String = "",
+)
+
+// One competitor project. Mirrors the web's landCompetitors row so a phone
+// submission shows up on the web competitor list unchanged. approvalType is
+// the server union ("cmda"/"dtcp"/"panchayat") or null; price units are sent
+// lowercased to match the web's stored values.
+data class InspectionCompetitor(
+    val promoterName: String? = null,
+    val projectName: String? = null,
+    val location: String? = null,
+    val latLong: String? = null,
+    val extentUnits: String? = null,
+    val approvalType: String? = null,
+    val amenities: String? = null,
+    val amenitiesList: List<String>? = null,
+    val currentStage: String? = null,
+    val distanceFromProject: String? = null,
+    val distanceFromBusStand: String? = null,
+    val distanceFromRailway: String? = null,
+    val distanceFromPublic: String? = null,
+    val distanceFromPrivate: String? = null,
+    val actualPrice: Double? = null,
+    val actualPriceUnit: String? = null,
+    val finalPrice: Double? = null,
+    val finalPriceUnit: String? = null,
+)
+
 data class InspectionReportData(
     val inspectionDate: String? = null,
     val customerName: String? = null,
@@ -2057,6 +2122,16 @@ data class InspectionReportData(
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,
     val roadType: List<String>? = null,
+    val schoolExists: Boolean? = null,
+    val schoolEntries: List<InspectionAreaEntry>? = null,
+    val collegeExists: Boolean? = null,
+    val collegeEntries: List<InspectionAreaEntry>? = null,
+    val hospitalExists: Boolean? = null,
+    val hospitalEntries: List<InspectionAreaEntry>? = null,
+    val mallExists: Boolean? = null,
+    val mallEntries: List<InspectionAreaEntry>? = null,
+    val marketExists: Boolean? = null,
+    val marketEntries: List<InspectionAreaEntry>? = null,
     val presentDemand: List<String>? = null,
     val futureDemand: List<String>? = null,
     val targetClients: List<String>? = null,
@@ -2073,6 +2148,7 @@ data class InspectionGetResponse(
     val success: Boolean,
     val property: InspectionListItem? = null,
     val report: InspectionReportData? = null,
+    val competitors: List<InspectionCompetitor>? = null,
     val error: String? = null,
 )
 
@@ -2097,6 +2173,16 @@ data class InspectionSaveRequest(
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,
     val roadType: List<String>? = null,
+    val schoolExists: Boolean? = null,
+    val schoolEntries: List<InspectionAreaEntry>? = null,
+    val collegeExists: Boolean? = null,
+    val collegeEntries: List<InspectionAreaEntry>? = null,
+    val hospitalExists: Boolean? = null,
+    val hospitalEntries: List<InspectionAreaEntry>? = null,
+    val mallExists: Boolean? = null,
+    val mallEntries: List<InspectionAreaEntry>? = null,
+    val marketExists: Boolean? = null,
+    val marketEntries: List<InspectionAreaEntry>? = null,
     val presentDemand: List<String>? = null,
     val futureDemand: List<String>? = null,
     val targetClients: List<String>? = null,
@@ -2107,10 +2193,53 @@ data class InspectionSaveRequest(
     val priceCanSell: Double? = null,
     val priceCanSellUnit: String? = null,
     val conclusion: String? = null,
+    val competitors: List<InspectionCompetitor>? = null,
 )
 
 data class InspectionSaveResponse(
     val success: Boolean,
     val reportId: String? = null,
     val error: String? = null,
+)
+
+data class InspectionAcceptRequest(
+    val propertyId: String,
+)
+
+data class InspectionRescheduleRequest(
+    val propertyId: String,
+    val requestedDate: String,
+    val remarks: String? = null,
+)
+
+data class InspectionActionResponse(
+    val success: Boolean,
+    val error: String? = null,
+)
+
+// One legal-clearance verification query, flattened from a property's
+// landLegalClearance.verificationQueries (the web "Verification & Queries"
+// section). propertyId + queryIndex identify the row for updates.
+data class QueryListItem(
+    val propertyId: String,
+    val referenceNo: String? = null,
+    val queryIndex: Int = 0,
+    val query: String? = null,
+    val remarks: String? = null,
+    val resolved: Boolean = false,
+    val createdOn: String? = null,
+)
+
+data class QueryListResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val items: List<QueryListItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class QueryUpdateRequest(
+    val propertyId: String,
+    val queryIndex: Int,
+    val remarks: String? = null,
+    val resolved: Boolean? = null,
 )

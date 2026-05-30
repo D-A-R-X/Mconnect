@@ -51,6 +51,26 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- View-only banner — shown when VP has approved this inspection.
+         Hidden by default; SiteInspectionBottomSheet.applyViewOnlyMode
+         flips it visible and walks the form to disable every input. -->
+    <TextView
+        android:id="@+id/tvInspectionApprovedBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_query_status_pending"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
+        android:text="Approved by VP — View only"
+        android:textColor="#0B61CA"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <!-- 5-tab strip: Basic (active) / Area / Market / Conclusions / Competitors. -->
     <LinearLayout
         android:layout_width="match_parent"

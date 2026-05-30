@@ -98,11 +98,19 @@
 
                         <TextView
                             android:id="@+id/pillAllAppsText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="All Apps"
                             android:textColor="#0B61CA"
                             android:textSize="10sp" />
@@ -143,11 +151,19 @@
 
                         <TextView
                             android:id="@+id/pillHrText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="HR"
                             android:textColor="#6A6D78"
                             android:textSize="10sp" />
@@ -189,11 +205,19 @@
 
                         <TextView
                             android:id="@+id/pillMarketingText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="Marketing"
                             android:textColor="#6A6D78"
                             android:textSize="10sp" />
@@ -235,11 +259,19 @@
 
                         <TextView
                             android:id="@+id/pillProjectText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="Project"
                             android:textColor="#6A6D78"
                             android:textSize="10sp" />
@@ -283,11 +315,19 @@
 
                         <TextView
                             android:id="@+id/pillLandText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="Land"
                             android:textColor="#6A6D78"
                             android:textSize="10sp" />
@@ -329,11 +369,19 @@
 
                         <TextView
                             android:id="@+id/pillSettingsText"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
                             android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
                             android:text="Settings"
                             android:textColor="#6A6D78"
                             android:textSize="10sp" />
@@ -1166,6 +1214,47 @@
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
                                 android:text="Inspection"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#F2F4F7" />
+
+                        <LinearLayout
+                            android:id="@+id/itemLandQueries"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_queries" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Queries"
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 

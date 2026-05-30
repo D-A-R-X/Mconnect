@@ -163,7 +163,30 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Reschedule (calendar-edit) — shown before the inspector
+                 accepts; opens a date picker to request a new date. -->
             <FrameLayout
+                android:id="@+id/btnInspectionReschedule"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_inspection_arrow_circle"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Reschedule"
+                    android:src="@drawable/ic_calendar_edit" />
+            </FrameLayout>
+
+            <!-- Open form arrow — shown once the inspector has accepted. -->
+            <FrameLayout
+                android:id="@+id/btnInspectionArrow"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="@drawable/bg_inspection_arrow_circle">
@@ -176,6 +199,41 @@
                     android:src="@drawable/ic_arrow_right_sm"
                     app:tint="#0B61CA" />
             </FrameLayout>
+        </LinearLayout>
+
+        <!-- Accept CTA — shown only while acceptance is pending. Tapping it
+             unlocks the inspection form (and the arrow replaces this row). -->
+        <LinearLayout
+            android:id="@+id/btnInspectionAccept"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="4dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_inspection_next_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/ivInspectionAcceptIcon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_check_white" />
+
+            <TextView
+                android:id="@+id/tvInspectionAcceptLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Accept"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>
 </androidx.cardview.widget.CardView>

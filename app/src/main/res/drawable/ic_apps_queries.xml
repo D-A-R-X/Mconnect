@@ -1,0 +1,38 @@
+<!-- Queries item icon: pink circle background with a message bubble + "?"
+     glyph. Converted from Downloads/message-question.svg (16×16), centered
+     in a 32×32 viewport (group translated +8,+8) to match ic_apps_inspection. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Pink rounded background (perfect circle, r=16 on 32×32). -->
+    <path
+        android:fillColor="#FFE8FC"
+        android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+    <group
+        android:translateX="8"
+        android:translateY="8">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M11.3333 12.2868H8.66666L5.69999 14.2601C5.25999 14.5535 4.66666 14.2402 4.66666 13.7068V12.2868C2.66666 12.2868 1.33333 10.9535 1.33333 8.95349V4.95345C1.33333 2.95345 2.66666 1.62012 4.66666 1.62012H11.3333C13.3333 1.62012 14.6667 2.95345 14.6667 4.95345V8.95349C14.6667 10.9535 13.3333 12.2868 11.3333 12.2868Z"
+            android:strokeColor="#E401B3"
+            android:strokeWidth="1.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M8.00001 7.57324V7.43327C8.00001 6.97993 8.28002 6.73992 8.56002 6.54659C8.83336 6.35992 9.10665 6.11993 9.10665 5.67993C9.10665 5.0666 8.61334 4.57324 8.00001 4.57324C7.38667 4.57324 6.89336 5.0666 6.89336 5.67993"
+            android:strokeColor="#E401B3"
+            android:strokeWidth="1.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M7.99701 9.16683H8.00301"
+            android:strokeColor="#E401B3"
+            android:strokeWidth="1.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

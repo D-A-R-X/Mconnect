@@ -216,6 +216,7 @@
             android:textSize="12sp" />
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilPaymentMethod"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -226,8 +227,8 @@
             app:boxCornerRadiusTopStart="12dp"
             app:boxStrokeColor="#D0D5DD"
             app:hintEnabled="false"
-            app:startIconDrawable="@drawable/ic_credit_card"
-            app:startIconTint="#16A34A">
+            app:startIconDrawable="@drawable/ic_pm_cash"
+            app:startIconTint="@null">
 
             <AutoCompleteTextView
                 android:id="@+id/etPaymentMethod"
@@ -241,6 +242,65 @@
                 android:textColor="#101828"
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- ─── Photos (receipts) ────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Photos"
+                android:textColor="#667085"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvPhotoCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="0 Photos"
+                android:textColor="#0B61CA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/llPhotos"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <!-- Add-photo tile (dashed). Thumbnails are inserted before it. -->
+                <FrameLayout
+                    android:id="@+id/btnAddPhoto"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/bg_photo_add_dashed"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="+"
+                        android:textColor="#667085"
+                        android:textSize="30sp" />
+                </FrameLayout>
+            </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- Save It — vibrant-green pill matching the Add Expense CTA -->
         <com.google.android.material.button.MaterialButton
