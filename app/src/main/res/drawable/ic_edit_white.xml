@@ -1,0 +1,19 @@
+<!-- Small white "edit" (pen-in-box) glyph for the Add/Edit Remark button. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M7.33 2.67H6C3.33 2.67 2.67 3.33 2.67 6V10C2.67 12.67 3.33 13.33 6 13.33H10C12.67 13.33 13.33 12.67 13.33 10V8.67"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M11.05 3.07L5.9 8.22C5.7 8.42 5.5 8.81 5.46 9.09L5.28 10.35C5.21 10.81 5.53 11.13 5.99 11.06L7.25 10.88C7.53 10.84 7.92 10.64 8.12 10.44L13.27 5.29C14.05 4.51 14.42 3.6 13.27 2.45C12.12 1.3 11.83 2.29 11.05 3.07Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

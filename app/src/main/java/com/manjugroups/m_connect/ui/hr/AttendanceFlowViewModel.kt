@@ -94,12 +94,13 @@ class AttendanceFlowViewModel(
                 val lastPunchOut = dayResp?.lastPunchOut ?: attendance?.lastPunchOut
                 val hasOpenSession = attendance?.hasOpenSession == true ||
                     dayResp?.hasOpenSession == true
-                // UI clock-out button must only enable when an open session
-                // actually exists on the server. `shouldTreatAsClockedIn` is the
-                // looser geo-tracking semantic (stays true after punch-out so
-                // trip tracking continues) — using it here would let users tap
-                // "Clock Out" after they've already punched out, which the
-                // server rejects with "No active punch-in found for today".
+                // `isClockedIn` reflects whether an open session exists right
+                // now — it drives the live "today" ticker and the clocked-in
+                // header. It is NOT used to gate the Clock Out button anymore:
+                // per the one-time-Clock-In rule the button stays "Clock Out"
+                // all day, and the server now accepts a Clock Out with no open
+                // session by re-stamping the day's last punch-out (the last
+                // tap wins, locked at midnight) instead of rejecting it.
                 val isClockedInForUi = hasOpenSession
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
 

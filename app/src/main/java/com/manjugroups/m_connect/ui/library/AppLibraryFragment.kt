@@ -261,20 +261,28 @@ class AppLibraryFragment : Fragment() {
 
         binding.libraryHeaderFrame.post {
             val overlayDistancePx = binding.libraryHeaderFrame.height.toFloat()
-            // Extend the panel past the column bottom by headerHeight so
-            // once the panel is fully translated up its visual bottom
-            // still reaches the screen bottom — eliminates the grey
-            // strip that used to be visible between the last card and
-            // the floating tab bar.
+            // Grow the panel to the FULL content-area height (= the
+            // column's height) so that when it's translated up by
+            // overlayDistancePx its bottom edge still reaches the screen
+            // bottom — no grey strip / "empty window" left behind the
+            // last card.
             //
-            // Note: in a LinearLayout-with-weight, setting bottomMargin
-            // alone does NOT grow the panel's drawing area — it only
-            // re-balances the column. We also have to override the
-            // measured `height` so the SwipeRefresh actually paints
-            // those extra pixels. Without this the panel translates up
-            // and leaves `overlayDistancePx`-tall grey strip below.
-            (panel.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                height = panel.height + overlayDistancePx.toInt()
+            // We read the height from the PARENT column (deterministic V)
+            // rather than `panel.height + overlay` — the latter
+            // double-counted and over-grew the panel, which shrank the
+            // scroll viewport so far the header could never be fully
+            // covered on shorter pages. bottomMargin = -overlay keeps the
+            // column arithmetic balanced (header H + panel V - H = V).
+            val parentHeight = (panel.parent as? View)?.height ?: 0
+            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+                // weight MUST be cleared — otherwise the LinearLayout
+                // recomputes the height from the weight and ignores the
+                // explicit value below, leaving the panel at V-H (the
+                // short window that produced the grey gap).
+                if (parentHeight > 0) {
+                    weight = 0f
+                    height = parentHeight
+                }
                 bottomMargin = -overlayDistancePx.toInt()
                 panel.layoutParams = this
             }
@@ -334,6 +342,9 @@ class AppLibraryFragment : Fragment() {
         // pending a real backend endpoint.
         binding.itemLandInspection.setOnClickListener {
             openScreen(com.manjugroups.m_connect.ui.library.land.LandInspectionFragment())
+        }
+        binding.itemLandQueries.setOnClickListener {
+            openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment())
         }
     }
 

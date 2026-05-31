@@ -38,7 +38,7 @@ val googleMapsApiKey = envOrDefault(
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL
 // without touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://dev-convex-http.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://convex-http.aivida.in/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Floating summary card. Previously had rounded TOP corners (30dp) and
+     flat bottom, which made it sit flush against the blue header's
+     rounded bottom corners and visually flatten the seam. Now all four
+     corners are rounded (16dp) so the card reads as a standalone
+     floating panel below the blue header — and the header's rounded
+     shoulders stay clearly visible against the grey panel above. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="#FEFEFE" />
-    <corners
-        android:topLeftRadius="30dp"
-        android:topRightRadius="30dp"
-        android:bottomLeftRadius="0dp"
-        android:bottomRightRadius="0dp" />
+    <corners android:radius="16dp" />
 </shape>

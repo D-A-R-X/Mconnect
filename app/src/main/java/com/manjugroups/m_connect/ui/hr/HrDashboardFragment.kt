@@ -259,16 +259,27 @@ class HrDashboardFragment : Fragment() {
         binding.attendanceHeader.post {
             val b = _binding ?: return@post
             val overlayDistancePx = b.attendanceHeader.height.toFloat()
-            // Extend panel past the column bottom by headerHeight so its
-            // visual bottom stays at the screen edge once translated up.
+            // Grow the panel to the FULL content-area height (= the
+            // column's height) so that when it's translated up by
+            // overlayDistancePx its bottom edge still reaches the screen
+            // bottom — no grey strip / empty window left behind the last
+            // card.
             //
-            // bottomMargin alone is not enough inside a weighted
-            // LinearLayout — we must also grow the panel's measured
-            // height. Otherwise translating the panel up exposes an
-            // `overlayDistancePx`-tall grey strip at the bottom of the
-            // screen above the floating tab bar.
-            (panel.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                height = panel.height + overlayDistancePx.toInt()
+            // Read the height from the PARENT column (deterministic V),
+            // NOT `panel.height + overlay` (that double-counted and
+            // over-grew the panel, shrinking the scroll viewport so far
+            // the blue header could never be fully covered). bottomMargin
+            // = -overlay keeps the column arithmetic balanced.
+            val parentHeight = (panel.parent as? View)?.height ?: 0
+            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+                // weight MUST be cleared — otherwise the LinearLayout
+                // recomputes the height from the weight and ignores the
+                // explicit value below, leaving the panel at V-H (the
+                // short window that produced the grey gap).
+                if (parentHeight > 0) {
+                    weight = 0f
+                    height = parentHeight
+                }
                 bottomMargin = -overlayDistancePx.toInt()
                 panel.layoutParams = this
             }
@@ -387,22 +398,22 @@ class HrDashboardFragment : Fragment() {
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
-                    // Three-state button logic to match the first-in / last-out
-                    // attendance rule:
+                    // Three-state button logic now respects the "day stays
+                    // editable until midnight" rule the user asked for:
                     //
-                    //   1. Not punched in yet today → show "Clock In Now"
-                    //   2. Currently clocked in (open session)
-                    //                              → show "Clock Out" (enabled)
-                    //   3. Already clocked out today (no open session, but
-                    //      firstPunchIn exists)    → show "Clock Out"
-                    //                                 DISABLED + grey
+                    //   1. Not punched in yet today → "Clock In Now"
+                    //   2. Currently clocked in (open session) → "Clock Out"
+                    //   3. Already clocked out today but day not finalized
+                    //      → "Clock In" (re-opens a session on the same
+                    //      attendance row; first-punch-in stays canonical,
+                    //      and the last touch becomes the effective
+                    //      punch-out at midnight or next manual close).
                     //
-                    // The point of #3 is that the first/last-punch-of-the-day
-                    // rule means we should never let the user start a fresh
-                    // "Clock In" until the day rolls over. If we flipped back
-                    // to Clock In as soon as the open session closed, a second
-                    // press would create a new session and the day's "first
-                    // punch in" would be lost.
+                    // This handles two real cases: a user who punched out
+                    // for a break and wants to resume, and a user who
+                    // accidentally tapped Clock Out and just wants to keep
+                    // their day going. The old behaviour greyed out the
+                    // button and forced them to wait for midnight.
                     val hasClockedOutToday =
                         !state.isClockedIn && !state.firstPunchInIso.isNullOrBlank()
 
@@ -419,20 +430,23 @@ class HrDashboardFragment : Fragment() {
                         binding.tvAttendanceHeaderSubtitle.text =
                             "Have a productive day ahead"
                     } else if (hasClockedOutToday) {
-                        // Day is done — keep the same button visible but make
-                        // it unmistakably unclickable so the user knows
-                        // they're locked out until midnight rolls over.
+                        // One-time Clock In rule: once the staff has punched in
+                        // today the button never reverts to "Clock In". It
+                        // stays "Clock Out" until the day ends. Clock Out is
+                        // unlimited — each tap re-stamps the day's punch-out, so
+                        // the last tap becomes the effective punch-out (locked
+                        // by the midnight finalize).
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
-                        binding.btnClockOut.isEnabled = false
+                        binding.btnClockOut.isEnabled = !state.isSubmitting
                         binding.btnClockOut.text = "Clock Out"
                         binding.btnClockOut.setBackgroundResource(
-                            R.drawable.bg_attendance_btn_disabled
+                            R.drawable.bg_attendance_btn_primary
                         )
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "You're Clocked Out"
+                        binding.tvAttendanceHeaderTitle.text = "Clocked Out"
                         binding.tvAttendanceHeaderSubtitle.text =
-                            "Next clock-in opens at midnight"
+                            "Tap Clock Out again to update — final time locks at midnight"
                     } else {
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE

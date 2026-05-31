@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Query card (Land Procurement > Queries). Pixel-aligned with the
+  Documents-Needed design: doc badge on the left, status pill + title +
+  detail/date rows in the middle, blue-circle arrow on the right. No
+  remarks footer — the arrow opens the Documents Needed bottom sheet
+  whose Completed button marks the query resolved.
+-->
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cardQueryLog"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="#FFFFFF"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="1.5dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="top"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="18dp">
+
+        <!-- Document badge — top-aligned so it pairs with the status
+             pill instead of riding low against the title block. Small
+             negative margin pulls the icon up by a hair so its center
+             lines up with the PENDING pill's center (matches design). -->
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="-4dp"
+            android:background="@drawable/bg_inspection_arrow_circle">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_query_document" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvQueryStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_query_status_pending"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.05"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="5dp"
+                android:textColor="#0B61CA"
+                android:textSize="11sp"
+                tools:text="PENDING" />
+
+            <TextView
+                android:id="@+id/tvQueryTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#101828"
+                android:textSize="16sp"
+                tools:text="Sale Deed, Patta" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_query_message" />
+
+                <TextView
+                    android:id="@+id/tvQueryDetail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:textColor="#9AA3B2"
+                    android:textSize="13sp"
+                    tools:text="Need the Xerox Copy" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_query_calendar" />
+
+                <TextView
+                    android:id="@+id/tvQueryDate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:textColor="#9AA3B2"
+                    android:textSize="13sp"
+                    tools:text="12 May 2025" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_inspection_arrow_circle">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="Open"
+                android:src="@drawable/ic_arrow_right_sm"
+                app:tint="#0B61CA" />
+        </FrameLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

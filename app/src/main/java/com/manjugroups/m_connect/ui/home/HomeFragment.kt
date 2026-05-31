@@ -117,16 +117,27 @@ class HomeFragment : Fragment() {
         binding.homeHeaderContainer.post {
             val b = _binding ?: return@post
             val overlayDistancePx = b.homeHeaderContainer.height.toFloat()
-            // Extend panel past the column bottom by headerHeight so its
-            // visual bottom stays at the screen edge once translated up.
+            // Grow the panel to the FULL content-area height (= the
+            // column's height) so that when it's translated up by
+            // overlayDistancePx its bottom edge still reaches the screen
+            // bottom — no grey strip / empty window left behind the last
+            // card.
             //
-            // bottomMargin alone is not enough inside a weighted
-            // LinearLayout — we must also grow the panel's measured
-            // height. Otherwise translating the panel up exposes an
-            // `overlayDistancePx`-tall grey strip at the bottom of the
-            // screen above the floating tab bar.
-            (panel.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                height = panel.height + overlayDistancePx.toInt()
+            // Read the height from the PARENT column (deterministic V),
+            // NOT `panel.height + overlay` (that double-counted and
+            // over-grew the panel, shrinking the scroll viewport so far
+            // the blue header could never be fully covered). bottomMargin
+            // = -overlay keeps the column arithmetic balanced.
+            val parentHeight = (panel.parent as? View)?.height ?: 0
+            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+                // weight MUST be cleared — otherwise the LinearLayout
+                // recomputes the height from the weight and ignores the
+                // explicit value below, leaving the panel at V-H (the
+                // short window that produced the grey gap).
+                if (parentHeight > 0) {
+                    weight = 0f
+                    height = parentHeight
+                }
                 bottomMargin = -overlayDistancePx.toInt()
                 panel.layoutParams = this
             }
@@ -494,11 +505,11 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.punchEvent.collect { event ->
-                    val message = when (event) {
-                        is PunchEvent.Success -> event.message
-                        is PunchEvent.Error -> event.message
+                    // Success is already confirmed by the "Clockout/Clock-in
+                    // Successful" sheet — only surface errors as a toast.
+                    if (event is PunchEvent.Error) {
+                        Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
                     }
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
                 }
             }
         }

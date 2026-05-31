@@ -17,8 +17,9 @@ import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.LoginActivity
+import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.databinding.FragmentProfileBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.SetProfilePhotoRequest
@@ -359,7 +360,11 @@ class ProfileFragment : Fragment() {
             }
 
             session.clearSession()
-            startActivity(Intent(requireContext(), WelcomeActivity::class.java).apply {
+            // An existing user who signs out must land on Login, never the
+            // first-run onboarding carousel. Mark onboarding done as a safety
+            // net (in case the flag was never set) and route to Login.
+            OnboardingPrefs(requireContext()).onboardingCompleted = true
+            startActivity(Intent(requireContext(), LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
             requireActivity().finish()

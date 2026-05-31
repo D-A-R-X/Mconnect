@@ -17,8 +17,13 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.InspectionAreaEntry
+import com.manjugroups.m_connect.network.InspectionCompetitor
 import com.manjugroups.m_connect.network.InspectionReportData
 import com.manjugroups.m_connect.network.InspectionSaveRequest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -50,6 +55,15 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
     private lateinit var session: SessionManager
     private val api by lazy { ApiService.create() }
     private var isSaving: Boolean = false
+    /**
+     * Once VP has approved this inspection, the sheet flips to view-only
+     * and the onPause auto-save is suppressed so a tab-switch while
+     * scrolling can never overwrite an approved record with the same
+     * field values (no-op in effect, but safer to skip entirely).
+     */
+    private var isViewOnly: Boolean = false
+    /** Held so onPause / tab-switch auto-save can read the current fields. */
+    private var rootView: View? = null
 
     // Road-type multi-select state.
     private val selectedRoadTypes = mutableSetOf<String>()
@@ -87,6 +101,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        rootView = view
         session = SessionManager(requireContext())
         bindBasicDetailsFields(view)
         bindAccessibilityFields(view)
@@ -99,9 +114,32 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         val nextBtn = view.findViewById<TextView>(R.id.btnInspectionNext)
         nextBtn.setOnClickListener {
             if (activeTab != Tab.COMPETITORS) {
-                // "Next" steps the tab forward without touching the API.
+                // Gate each tab on its own required fields before advancing.
+                val err = when (activeTab) {
+                    Tab.BASIC -> validateBasicTab(view)
+                    Tab.CONCLUSIONS -> validateConclusion(view)
+                    else -> null
+                }
+                if (err != null) {
+                    toastValidation(err)
+                    return@setOnClickListener
+                }
                 advanceToNextTab(view)
             } else {
+                // Final gate before saving — the user can jump tabs, so re-check
+                // Basic + Conclusion so only a complete inspection syncs to web.
+                val basicErr = validateBasicTab(view)
+                if (basicErr != null) {
+                    view.findViewById<View>(R.id.tabBasic).performClick()
+                    toastValidation(basicErr)
+                    return@setOnClickListener
+                }
+                val conclusionErr = validateConclusion(view)
+                if (conclusionErr != null) {
+                    view.findViewById<View>(R.id.tabConclusions).performClick()
+                    toastValidation(conclusionErr)
+                    return@setOnClickListener
+                }
                 submitInspection(view)
             }
         }
@@ -135,6 +173,13 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.getInspectionForProperty(session.bearerToken, pid)
                 if (resp.success) {
                     resp.report?.let { applyPrefill(root, it) }
+                    resp.competitors?.let { prefillCompetitors(root, it) }
+                    // Once VP has approved the inspection, the inspector
+                    // can review what was submitted but can no longer edit
+                    // any field — switch the whole sheet to view-only.
+                    if (resp.property?.vpInspectionStatus == "approved") {
+                        applyViewOnlyMode(root)
+                    }
                 }
             } catch (_: Exception) {
                 // Silent — first-time inspections legitimately have no report
@@ -143,6 +188,169 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             }
         }
     }
+
+    /**
+     * Lock the inspection form to view-only. Called after the VP has
+     * approved the inspection — the inspector can scroll through every
+     * tab to verify what was submitted, but every input is disabled
+     * (EditText, dropdowns, checkbox-style chips, add-competitor button,
+     * etc.) and the bottom CTA is hidden. A small banner above the tab
+     * strip explains the state so it never reads as a "form bug".
+     */
+    private fun applyViewOnlyMode(root: View) {
+        // Surface the explainer banner so the user understands why the
+        // fields look greyed.
+        root.findViewById<TextView>(R.id.tvInspectionApprovedBanner)?.visibility = View.VISIBLE
+        // Hide the pinned Next / Submit CTA — no edits will be accepted
+        // from this state.
+        root.findViewById<View>(R.id.btnInspectionNext)?.visibility = View.GONE
+        // Recursively disable every input. Tab strip itself stays
+        // clickable so the user can still switch between Basic / Area /
+        // Market / Conclusions / Competitors to review.
+        disableAllInputs(root)
+        // Flip the view-only flag so auto-save / submit paths short-circuit.
+        isViewOnly = true
+    }
+
+    private fun disableAllInputs(view: View) {
+        // The 5-tab strip carries clickable=true on each tab; keep those
+        // alive so the user can navigate while reviewing. We identify
+        // tab buttons by their IDs and short-circuit on them.
+        val tabIds = setOf(
+            R.id.tabBasic, R.id.tabArea, R.id.tabMarket,
+            R.id.tabConclusions, R.id.tabCompetitors,
+        )
+        if (view.id in tabIds) return
+
+        when (view) {
+            is EditText -> {
+                view.isEnabled = false
+                view.isFocusable = false
+                view.isFocusableInTouchMode = false
+                view.isCursorVisible = false
+            }
+            is android.widget.CheckBox,
+            is android.widget.RadioButton -> {
+                view.isEnabled = false
+                view.isClickable = false
+            }
+        }
+        // Any clickable TextView (dropdowns, chip-style toggles, the
+        // "Add Competitor" button, road-type squares, etc.) loses its
+        // tap response. We don't touch focusable/cursorVisible on these
+        // because they're not text-entry widgets.
+        if (view is TextView && view !is EditText && view.isClickable) {
+            view.isClickable = false
+            view.isFocusable = false
+        }
+        // Generic clickable containers — competitor card rows, the
+        // landmark map-link row, etc.
+        if (view !is ViewGroup && view.isClickable && view !is TextView) {
+            view.isClickable = false
+        }
+        if (view is ViewGroup) {
+            // Block clicks on clickable layouts too (the "Add Area" tile,
+            // map-link tile, etc.). We deliberately don't disable the
+            // whole ViewGroup since that would also block child taps —
+            // but we already short-circuited on tab IDs above, so the
+            // remaining clickable groups should not respond.
+            if (view.isClickable) {
+                view.isClickable = false
+            }
+            for (i in 0 until view.childCount) {
+                disableAllInputs(view.getChildAt(i))
+            }
+        }
+    }
+
+    // Persist progress whenever the sheet is paused/dismissed (accidental
+    // quit, back press, app backgrounded, page change) so nothing is lost.
+    override fun onPause() {
+        super.onPause()
+        autoSaveDraft()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        rootView = null
+    }
+
+    /**
+     * Fire-and-forget save of whatever has been entered so far. Runs on a
+     * lifecycle-independent scope so it still completes while the sheet is
+     * being torn down, and writes to the same per-staff report the web
+     * inspection page reads — so the draft survives crashes/quits AND shows
+     * up filled on web. No-ops when nothing has been entered yet.
+     */
+    private fun autoSaveDraft() {
+        val root = rootView ?: return
+        val pid = propertyId ?: return
+        if (!session.isLoggedIn) return
+        // VP-approved inspections are immutable from mobile — skip the
+        // pause-time auto-save entirely so we don't bounce a payload that
+        // mirrors what's already on file (and never accidentally end up
+        // re-opening the workflow if the backend ever tightens up).
+        if (isViewOnly) return
+        val payload = collectPayload(root, pid)
+        if (!payloadHasData(payload)) return
+        val token = session.bearerToken
+        draftScope.launch { runCatching { api.saveInspection(token, payload) } }
+    }
+
+    private fun payloadHasData(p: InspectionSaveRequest): Boolean {
+        val anyText = listOf(
+            p.customerName, p.surveyNo, p.siteLocation, p.exactLocation, p.landmark,
+            p.latLong, p.population, p.accessibilityWidth, p.electricity,
+            p.eConnectionToLand, p.telecom, p.railwayStationDistance, p.busStopDistance,
+        ).any { !it.isNullOrBlank() }
+        return anyText ||
+            !p.conclusion.isNullOrBlank() ||
+            !p.roadType.isNullOrEmpty() ||
+            !p.schoolEntries.isNullOrEmpty() ||
+            !p.collegeEntries.isNullOrEmpty() ||
+            !p.hospitalEntries.isNullOrEmpty() ||
+            !p.mallEntries.isNullOrEmpty() ||
+            !p.marketEntries.isNullOrEmpty() ||
+            !p.competitors.isNullOrEmpty() ||
+            !p.presentDemand.isNullOrEmpty() ||
+            !p.futureDemand.isNullOrEmpty() ||
+            !p.targetClients.isNullOrEmpty() ||
+            p.landlordPrice != null ||
+            p.recommendationPrice != null ||
+            p.priceCanSell != null
+    }
+
+    private fun toastValidation(message: String) {
+        android.widget.Toast.makeText(
+            requireContext(), message, android.widget.Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    /**
+     * Required Basic-tab fields, mirroring the web inspection validation so a
+     * mobile submission that passes here also satisfies the web. Returns the
+     * first missing field's message, or null when everything required is set.
+     */
+    private fun validateBasicTab(root: View): String? {
+        val checks = listOf(
+            fieldText(root, R.id.fieldOwner) to "Land Owner Name",
+            fieldText(root, R.id.fieldSiteLocation) to "Site Location",
+            fieldText(root, R.id.fieldExactLocation) to "Exact Location",
+            fieldText(root, R.id.fieldLandmark) to "Land Mark",
+            fieldText(root, R.id.fieldMapLink) to "Google Map Link",
+            fieldText(root, R.id.fieldPopulation) to "Populations",
+            fieldText(root, R.id.fieldAccessWidth) to "Access Width",
+            fieldText(root, R.id.fieldElectricity) to "Electricity Cable above land",
+            fieldText(root, R.id.fieldEConnection) to "E-Connection to land",
+            fieldText(root, R.id.fieldTelecom) to "Telecom",
+        )
+        checks.firstOrNull { it.first.isBlank() }?.let { return "${it.second} is required" }
+        if (selectedRoadTypes.isEmpty()) return "Road Type is required"
+        return null
+    }
+
+    private fun validateConclusion(root: View): String? =
+        if (conclusionText(root).isBlank()) "Recommendation / Conclusion is required" else null
 
     private fun submitInspection(root: View) {
         val pid = propertyId
@@ -192,6 +400,12 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         val landlord = parseDouble(fieldText(root, R.id.fieldLandlordPrice))
         val recommend = parseDouble(fieldText(root, R.id.fieldRecommendPrice))
         val canSell = parseDouble(fieldText(root, R.id.fieldSellPrice))
+        val schools = collectAreaEntries(root, R.id.schoolEntries)
+        val colleges = collectAreaEntries(root, R.id.collegeEntries)
+        val hospitals = collectAreaEntries(root, R.id.hospitalEntries)
+        val malls = collectAreaEntries(root, R.id.mallEntries)
+        val markets = collectAreaEntries(root, R.id.marketEntries)
+        val competitors = collectCompetitors(root)
         return InspectionSaveRequest(
             propertyId = pid,
             customerName = nullIfBlank(fieldText(root, R.id.fieldOwner)),
@@ -206,10 +420,24 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             electricity = nullIfBlank(fieldText(root, R.id.fieldElectricity)),
             eConnectionToLand = nullIfBlank(fieldText(root, R.id.fieldEConnection))
                 ?.lowercase()?.takeIf { it == "yes" || it == "no" },
-            telecom = nullIfBlank(fieldText(root, R.id.fieldTelecom)),
+            telecom = nullIfBlank(fieldText(root, R.id.fieldTelecom))
+                ?.lowercase()?.takeIf { it == "yes" || it == "no" },
             railwayStationDistance = nullIfBlank(fieldText(root, R.id.fieldRailway)),
             busStopDistance = nullIfBlank(fieldText(root, R.id.fieldBus)),
             roadType = selectedRoadTypes.toList().takeIf { it.isNotEmpty() },
+            // Area-tab nearby places. Only send entries (+ matching Exists flag)
+            // when the user added at least one row, so an empty category doesn't
+            // wipe values entered on web. The web reads these as {name,distance}.
+            schoolEntries = schools,
+            schoolExists = if (schools != null) true else null,
+            collegeEntries = colleges,
+            collegeExists = if (colleges != null) true else null,
+            hospitalEntries = hospitals,
+            hospitalExists = if (hospitals != null) true else null,
+            mallEntries = malls,
+            mallExists = if (malls != null) true else null,
+            marketEntries = markets,
+            marketExists = if (markets != null) true else null,
             presentDemand = presentDemand?.let { listOf(it) },
             futureDemand = futureDemand?.let { listOf(it) },
             targetClients = selectedTargets.toList().takeIf { it.isNotEmpty() },
@@ -219,8 +447,131 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             recommendationPriceUnit = nullIfBlank(trailingText(root, R.id.fieldRecommendPrice)),
             priceCanSell = canSell,
             priceCanSellUnit = nullIfBlank(trailingText(root, R.id.fieldSellPrice)),
+            conclusion = nullIfBlank(conclusionText(root)),
+            competitors = competitors,
         )
     }
+
+    /**
+     * Read every competitor card in the Competitors tab into the
+     * landCompetitors shape the web list renders. Approval type and price
+     * units are lowercased to match the web's stored values. Cards with no
+     * data entered are skipped; returns null when there are none so a partial
+     * save never wipes competitors entered on web (replaceCompetitors also
+     * no-ops on an empty list).
+     */
+    private fun collectCompetitors(root: View): List<InspectionCompetitor>? {
+        val container = root.findViewById<LinearLayout>(R.id.competitorEntries) ?: return null
+        val competitors = mutableListOf<InspectionCompetitor>()
+        for (i in 0 until container.childCount) {
+            val card = container.getChildAt(i)
+            val promoter = editText(card, R.id.inputPromoterName)
+            val project = editText(card, R.id.inputProjectName)
+            val location = editText(card, R.id.inputCompetitorLocation)
+            val mapLink = editText(card, R.id.inputCompetitorMapLink)
+            val extent = editText(card, R.id.inputExtent)
+            val stage = editText(card, R.id.inputCurrentStage)
+            val mainAmenity = editText(card, R.id.inputAmenitiesMain)
+            val amenityRows = collectAmenityRows(card)
+            val distProject = editText(card, R.id.inputDistanceProject)
+            val distBus = editText(card, R.id.inputDistanceBus)
+            val distRailway = editText(card, R.id.inputDistanceRailway)
+            val distPublic = editText(card, R.id.inputDistancePublic)
+            val distPrivate = editText(card, R.id.inputDistancePrivate)
+            val actual = parseDouble(editText(card, R.id.inputActualPrice))
+            val final = parseDouble(editText(card, R.id.inputFinalPrice))
+            val approval = approvalSlug(labelText(card, R.id.dropdownApprovalLabel))
+            val actualUnit = unitSlug(labelText(card, R.id.actualPriceUnitLabel))
+            val finalUnit = unitSlug(labelText(card, R.id.finalPriceUnitLabel))
+
+            val amenities = mainAmenity.ifEmpty { amenityRows.joinToString(", ") }
+            val anyData = listOf(
+                promoter, project, location, mapLink, extent, stage, amenities,
+                distProject, distBus, distRailway, distPublic, distPrivate,
+            ).any { it.isNotEmpty() } ||
+                amenityRows.isNotEmpty() || actual != null || final != null ||
+                approval != null
+
+            if (!anyData) continue
+            competitors.add(
+                InspectionCompetitor(
+                    promoterName = nullIfBlank(promoter),
+                    projectName = nullIfBlank(project),
+                    location = nullIfBlank(location),
+                    latLong = nullIfBlank(mapLink),
+                    extentUnits = nullIfBlank(extent),
+                    approvalType = approval,
+                    amenities = nullIfBlank(amenities),
+                    amenitiesList = amenityRows.takeIf { it.isNotEmpty() },
+                    currentStage = nullIfBlank(stage),
+                    distanceFromProject = nullIfBlank(distProject),
+                    distanceFromBusStand = nullIfBlank(distBus),
+                    distanceFromRailway = nullIfBlank(distRailway),
+                    distanceFromPublic = nullIfBlank(distPublic),
+                    distanceFromPrivate = nullIfBlank(distPrivate),
+                    actualPrice = actual,
+                    actualPriceUnit = actual?.let { actualUnit },
+                    finalPrice = final,
+                    finalPriceUnit = final?.let { finalUnit },
+                ),
+            )
+        }
+        return competitors.takeIf { it.isNotEmpty() }
+    }
+
+    private fun collectAmenityRows(card: View): List<String> {
+        val list = card.findViewById<LinearLayout>(R.id.amenitiesList) ?: return emptyList()
+        val out = mutableListOf<String>()
+        for (i in 0 until list.childCount) {
+            val v = list.getChildAt(i).findViewById<EditText>(R.id.inputAmenityName)
+                ?.text?.toString().orEmpty().trim()
+            if (v.isNotEmpty()) out.add(v)
+        }
+        return out
+    }
+
+    private fun editText(card: View, id: Int): String =
+        card.findViewById<EditText>(id)?.text?.toString().orEmpty().trim()
+
+    private fun labelText(card: View, id: Int): String =
+        card.findViewById<TextView>(id)?.text?.toString().orEmpty().trim()
+
+    // "None" / blank → null; CMDA/DTCP/Panchayat → server union slug.
+    private fun approvalSlug(label: String): String? = when (label.lowercase()) {
+        "cmda" -> "cmda"
+        "dtcp" -> "dtcp"
+        "panchayat" -> "panchayat"
+        else -> null
+    }
+
+    private fun unitSlug(label: String): String? =
+        label.lowercase().takeIf { it.isNotEmpty() }
+
+    /**
+     * Read every populated row out of an Area-tab category container
+     * (school / college / hospital / mall) into the {name, distance} shape
+     * the server and web expect. Rows where both fields are empty are
+     * skipped. Returns null when nothing is filled so the partial-save
+     * "don't overwrite with blanks" rule holds.
+     */
+    private fun collectAreaEntries(root: View, containerId: Int): List<InspectionAreaEntry>? {
+        val container = root.findViewById<LinearLayout>(containerId) ?: return null
+        val entries = mutableListOf<InspectionAreaEntry>()
+        for (i in 0 until container.childCount) {
+            val row = container.getChildAt(i)
+            val name = row.findViewById<EditText>(R.id.areaEntryName)
+                ?.text?.toString().orEmpty().trim()
+            val distance = row.findViewById<EditText>(R.id.areaEntryDistance)
+                ?.text?.toString().orEmpty().trim()
+            if (name.isNotEmpty() || distance.isNotEmpty()) {
+                entries.add(InspectionAreaEntry(name = name, distance = distance))
+            }
+        }
+        return entries.takeIf { it.isNotEmpty() }
+    }
+
+    private fun conclusionText(root: View): String =
+        root.findViewById<EditText>(R.id.inputConclusion)?.text?.toString().orEmpty().trim()
 
     /**
      * Push values fetched from the server back into the form widgets so an
@@ -241,7 +592,9 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         report.eConnectionToLand?.let {
             setFieldText(root, R.id.fieldEConnection, it.replaceFirstChar { c -> c.uppercase() })
         }
-        report.telecom?.let { setFieldText(root, R.id.fieldTelecom, it) }
+        report.telecom?.let {
+            setFieldText(root, R.id.fieldTelecom, it.replaceFirstChar { c -> c.uppercase() })
+        }
         report.railwayStationDistance?.let { setFieldText(root, R.id.fieldRailway, it) }
         report.busStopDistance?.let { setFieldText(root, R.id.fieldBus, it) }
         report.landlordPrice?.let { setFieldText(root, R.id.fieldLandlordPrice, formatPrice(it)) }
@@ -270,6 +623,45 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             selectedRoadTypes.addAll(saved)
             applyRoadTypeSelection(root)
         }
+        report.conclusion?.let {
+            root.findViewById<EditText>(R.id.inputConclusion)?.setText(it)
+        }
+        report.schoolEntries?.let {
+            prefillAreaEntries(root, R.id.schoolEntries,
+                R.drawable.ic_inspection_field_school, "Enter School Name", it)
+        }
+        report.collegeEntries?.let {
+            prefillAreaEntries(root, R.id.collegeEntries,
+                R.drawable.ic_inspection_field_college, "Enter College Name", it)
+        }
+        report.hospitalEntries?.let {
+            prefillAreaEntries(root, R.id.hospitalEntries,
+                R.drawable.ic_inspection_field_hospital, "Enter Hospital Name", it)
+        }
+        report.mallEntries?.let {
+            prefillAreaEntries(root, R.id.mallEntries,
+                R.drawable.ic_inspection_field_mall, "Enter Mall Name", it)
+        }
+        report.marketEntries?.let {
+            prefillAreaEntries(root, R.id.marketEntries,
+                R.drawable.ic_inspection_field_market, "Enter Market Name", it)
+        }
+    }
+
+    /**
+     * Replace a category's rows with the saved entries so a returning
+     * inspector (or a web-side edit) shows up filled instead of empty.
+     */
+    private fun prefillAreaEntries(
+        root: View,
+        containerId: Int,
+        iconRes: Int,
+        nameHint: String,
+        saved: List<InspectionAreaEntry>,
+    ) {
+        val container = root.findViewById<LinearLayout>(containerId) ?: return
+        container.removeAllViews()
+        saved.forEach { addAreaEntry(container, iconRes, nameHint, it.name, it.distance) }
     }
 
     private fun applyDemandSelection(root: View, isPresent: Boolean, picked: String) {
@@ -365,6 +757,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             label = "Survey No",
             hint = "Enter Details",
             iconRes = R.drawable.ic_inspection_field_survey,
+            required = false,
         )
         bindField(
             root.findViewById(R.id.fieldSiteLocation),
@@ -408,23 +801,26 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             trailing = "Feet",
             trailingDropdownOptions = listOf("Feet", "Meter"),
         )
-        bindField(
+        bindDropdownField(
             root.findViewById(R.id.fieldElectricity),
             label = "Electricity Cable above land",
-            hint = "Yes",
+            hint = "Select",
             iconRes = R.drawable.ic_inspection_field_electricity,
+            options = listOf("LT", "HT", "NIL"),
         )
-        bindField(
+        bindDropdownField(
             root.findViewById(R.id.fieldEConnection),
             label = "E-Connection to land",
-            hint = "Yes",
+            hint = "Select",
             iconRes = R.drawable.ic_inspection_field_electricity,
+            options = listOf("Yes", "No"),
         )
-        bindField(
+        bindDropdownField(
             root.findViewById(R.id.fieldTelecom),
             label = "Telecom",
-            hint = "Yes",
+            hint = "Select",
             iconRes = R.drawable.ic_inspection_field_telecom,
+            options = listOf("Yes", "No"),
         )
         bindField(
             root.findViewById(R.id.fieldRailway),
@@ -432,6 +828,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             hint = "Enter Details",
             iconRes = R.drawable.ic_inspection_field_railway,
             trailing = "K/m",
+            required = false,
         )
         bindField(
             root.findViewById(R.id.fieldBus),
@@ -439,6 +836,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             hint = "Enter Details",
             iconRes = R.drawable.ic_inspection_field_bus,
             trailing = "K/m",
+            required = false,
         )
     }
 
@@ -455,8 +853,11 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         iconRes: Int,
         trailing: String? = null,
         trailingDropdownOptions: List<String>? = null,
+        required: Boolean = true,
     ) {
         fieldRoot.findViewById<TextView>(R.id.fieldLabel).text = label
+        fieldRoot.findViewById<TextView>(R.id.fieldRequiredStar).visibility =
+            if (required) View.VISIBLE else View.GONE
         fieldRoot.findViewById<EditText>(R.id.fieldInput).hint = hint
         fieldRoot.findViewById<ImageView>(R.id.fieldIcon).setImageResource(iconRes)
         val container = fieldRoot.findViewById<View>(R.id.fieldTrailingContainer)
@@ -480,6 +881,47 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             container.setOnClickListener(null)
             container.isClickable = false
         }
+    }
+
+    /**
+     * Binds a whole-field value dropdown (e.g. E-Connection / Telecom = Yes/No).
+     * The input becomes a read-only display (no keyboard, no caret); tapping
+     * anywhere on the field opens a popup of [options] whose pick fills the
+     * field. A trailing chevron signals it's a selector.
+     */
+    private fun bindDropdownField(
+        fieldRoot: View,
+        label: String,
+        hint: String,
+        iconRes: Int,
+        options: List<String>,
+        required: Boolean = true,
+    ) {
+        fieldRoot.findViewById<TextView>(R.id.fieldLabel).text = label
+        fieldRoot.findViewById<TextView>(R.id.fieldRequiredStar).visibility =
+            if (required) View.VISIBLE else View.GONE
+        fieldRoot.findViewById<ImageView>(R.id.fieldIcon).setImageResource(iconRes)
+        val input = fieldRoot.findViewById<EditText>(R.id.fieldInput)
+        input.hint = hint
+        // Read-only selector: suppress the keyboard/caret and let taps bubble
+        // to the open handler instead of starting text entry.
+        input.inputType = android.text.InputType.TYPE_NULL
+        input.isFocusable = false
+        input.isFocusableInTouchMode = false
+        input.isCursorVisible = false
+        input.keyListener = null
+
+        val container = fieldRoot.findViewById<View>(R.id.fieldTrailingContainer)
+        fieldRoot.findViewById<TextView>(R.id.fieldTrailingText).visibility = View.GONE
+        fieldRoot.findViewById<View>(R.id.fieldTrailingChevron).visibility = View.VISIBLE
+        container.visibility = View.VISIBLE
+
+        val open = View.OnClickListener {
+            showTrailingDropdown(fieldRoot, options) { picked -> input.setText(picked) }
+        }
+        input.setOnClickListener(open)
+        container.setOnClickListener(open)
+        fieldRoot.setOnClickListener(open)
     }
 
     /**
@@ -580,6 +1022,8 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         val compInd = root.findViewById<View>(R.id.tabCompetitorsIndicator)
 
         fun switchTo(tab: Tab) {
+            // Persist what's filled before navigating away from the tab.
+            autoSaveDraft()
             activeTab = tab
             basic.visibility = if (tab == Tab.BASIC) View.VISIBLE else View.GONE
             area.visibility = if (tab == Tab.AREA) View.VISIBLE else View.GONE
@@ -654,7 +1098,10 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun inflateCompetitorEntry(container: LinearLayout) {
+    private fun inflateCompetitorEntry(
+        container: LinearLayout,
+        prefill: InspectionCompetitor? = null,
+    ) {
         val ctx = requireContext()
         val entry = LayoutInflater.from(ctx)
             .inflate(R.layout.component_competitor_entry, container, false)
@@ -667,9 +1114,12 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             renumberCompetitors(container)
         }
 
-        // Approval Type dropdown (None / CMDA / DTCP / Panchayat).
+        // Approval Type dropdown (None / CMDA / DTCP / Panchayat). Default to
+        // "None" so an untouched card collects as no approval rather than the
+        // layout's placeholder.
         val approvalRow = entry.findViewById<View>(R.id.dropdownApproval)
         val approvalLabel = entry.findViewById<TextView>(R.id.dropdownApprovalLabel)
+        approvalLabel.text = approvalDisplay(prefill?.approvalType)
         approvalRow.setOnClickListener {
             showTrailingDropdown(
                 anchor = approvalRow,
@@ -681,6 +1131,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         val unitOptions = listOf("Acre", "Ground", "Sqft", "Cent")
         val actualUnit = entry.findViewById<View>(R.id.actualPriceUnit)
         val actualUnitLabel = entry.findViewById<TextView>(R.id.actualPriceUnitLabel)
+        prefill?.actualPriceUnit?.let { actualUnitLabel.text = unitDisplay(it) }
         actualUnit.setOnClickListener {
             showTrailingDropdown(actualUnit, unitOptions) { picked ->
                 actualUnitLabel.text = picked
@@ -688,6 +1139,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         }
         val finalUnit = entry.findViewById<View>(R.id.finalPriceUnit)
         val finalUnitLabel = entry.findViewById<TextView>(R.id.finalPriceUnitLabel)
+        prefill?.finalPriceUnit?.let { finalUnitLabel.text = unitDisplay(it) }
         finalUnit.setOnClickListener {
             showTrailingDropdown(finalUnit, unitOptions) { picked ->
                 finalUnitLabel.text = picked
@@ -698,13 +1150,70 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         // with its own delete button.
         val amenitiesList = entry.findViewById<LinearLayout>(R.id.amenitiesList)
         entry.findViewById<View>(R.id.btnAddAmenity).setOnClickListener {
-            val amenity = LayoutInflater.from(ctx)
-                .inflate(R.layout.component_competitor_amenity, amenitiesList, false)
-            amenity.findViewById<View>(R.id.btnAmenityDelete).setOnClickListener {
-                amenitiesList.removeView(amenity)
-            }
-            amenitiesList.addView(amenity)
+            addAmenityRow(amenitiesList)
         }
+
+        if (prefill != null) {
+            setEntryText(entry, R.id.inputPromoterName, prefill.promoterName)
+            setEntryText(entry, R.id.inputProjectName, prefill.projectName)
+            setEntryText(entry, R.id.inputCompetitorLocation, prefill.location)
+            setEntryText(entry, R.id.inputCompetitorMapLink, prefill.latLong)
+            setEntryText(entry, R.id.inputExtent, prefill.extentUnits)
+            setEntryText(entry, R.id.inputCurrentStage, prefill.currentStage)
+            setEntryText(entry, R.id.inputDistanceProject, prefill.distanceFromProject)
+            setEntryText(entry, R.id.inputDistanceBus, prefill.distanceFromBusStand)
+            setEntryText(entry, R.id.inputDistanceRailway, prefill.distanceFromRailway)
+            setEntryText(entry, R.id.inputDistancePublic, prefill.distanceFromPublic)
+            setEntryText(entry, R.id.inputDistancePrivate, prefill.distanceFromPrivate)
+            setEntryText(entry, R.id.inputActualPrice, prefill.actualPrice?.let { formatPrice(it) })
+            setEntryText(entry, R.id.inputFinalPrice, prefill.finalPrice?.let { formatPrice(it) })
+            // Prefer the structured amenity list; fall back to the freeform
+            // field so neither shape is lost or duplicated.
+            val savedAmenities = prefill.amenitiesList
+            if (!savedAmenities.isNullOrEmpty()) {
+                savedAmenities.forEach { addAmenityRow(amenitiesList, it) }
+            } else {
+                setEntryText(entry, R.id.inputAmenitiesMain, prefill.amenities)
+            }
+        }
+    }
+
+    private fun addAmenityRow(amenitiesList: LinearLayout, value: String? = null) {
+        val amenity = LayoutInflater.from(requireContext())
+            .inflate(R.layout.component_competitor_amenity, amenitiesList, false)
+        if (!value.isNullOrEmpty()) {
+            amenity.findViewById<EditText>(R.id.inputAmenityName).setText(value)
+        }
+        amenity.findViewById<View>(R.id.btnAmenityDelete).setOnClickListener {
+            amenitiesList.removeView(amenity)
+        }
+        amenitiesList.addView(amenity)
+    }
+
+    private fun setEntryText(card: View, id: Int, value: String?) {
+        if (value.isNullOrEmpty()) return
+        card.findViewById<EditText>(id)?.setText(value)
+    }
+
+    private fun approvalDisplay(slug: String?): String = when (slug?.lowercase()) {
+        "cmda" -> "CMDA"
+        "dtcp" -> "DTCP"
+        "panchayat" -> "Panchayat"
+        else -> "None"
+    }
+
+    private fun unitDisplay(slug: String): String =
+        slug.trim().replaceFirstChar { it.uppercase() }
+
+    /**
+     * Rebuild the Competitors tab from the saved set so a returning inspector
+     * (or web edit) sees their competitors instead of an empty tab.
+     */
+    private fun prefillCompetitors(root: View, competitors: List<InspectionCompetitor>) {
+        if (competitors.isEmpty()) return
+        val container = root.findViewById<LinearLayout>(R.id.competitorEntries) ?: return
+        container.removeAllViews()
+        competitors.forEach { inflateCompetitorEntry(container, it) }
     }
 
     /**
@@ -877,21 +1386,44 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
     ) {
         val createRow = root.findViewById<View>(createRowId)
         val entries = root.findViewById<LinearLayout>(entriesContainerId)
-        createRow.setOnClickListener {
-            val entry = LayoutInflater.from(requireContext())
-                .inflate(R.layout.component_area_entry, entries, false)
-            entry.findViewById<ImageView>(R.id.areaEntryNameIcon).setImageResource(iconRes)
-            entry.findViewById<EditText>(R.id.areaEntryName).hint = nameHint
-            entry.findViewById<View>(R.id.areaEntryDelete).setOnClickListener {
-                entries.removeView(entry)
-            }
-            entries.addView(entry)
+        createRow.setOnClickListener { addAreaEntry(entries, iconRes, nameHint) }
+    }
+
+    /**
+     * Inflate one Area-tab entry into [entries], optionally pre-filled with a
+     * saved name/distance. Shared by the "Create X" button (blank row) and
+     * prefill (saved rows) so both paths wire the delete button identically.
+     */
+    private fun addAreaEntry(
+        entries: LinearLayout,
+        iconRes: Int,
+        nameHint: String,
+        name: String? = null,
+        distance: String? = null,
+    ) {
+        val entry = LayoutInflater.from(requireContext())
+            .inflate(R.layout.component_area_entry, entries, false)
+        entry.findViewById<ImageView>(R.id.areaEntryNameIcon).setImageResource(iconRes)
+        val nameField = entry.findViewById<EditText>(R.id.areaEntryName)
+        nameField.hint = nameHint
+        if (!name.isNullOrEmpty()) nameField.setText(name)
+        if (!distance.isNullOrEmpty()) {
+            entry.findViewById<EditText>(R.id.areaEntryDistance).setText(distance)
         }
+        entry.findViewById<View>(R.id.areaEntryDelete).setOnClickListener {
+            entries.removeView(entry)
+        }
+        entries.addView(entry)
     }
 
     companion object {
         private const val ARG_PROPERTY_ID = "property_id"
         private const val ARG_DISPLAY_TITLE = "display_title"
+
+        // Lifecycle-independent so a draft save fired from onPause/dismiss
+        // completes even as the sheet is destroyed. Not cancelled — these are
+        // short one-shot saves that must finish.
+        private val draftScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         fun newInstance(propertyId: String, displayTitle: String? = null): SiteInspectionBottomSheet =
             SiteInspectionBottomSheet().apply {

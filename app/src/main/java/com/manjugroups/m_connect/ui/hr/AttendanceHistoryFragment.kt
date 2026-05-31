@@ -178,9 +178,18 @@ class AttendanceHistoryFragment : Fragment() {
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
             val resolvedOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+            // Three-state label for the "Clock in & Out" column:
+            //   - resolvedOut set → render the time.
+            //   - currently clocked in (hasOpenSession) → "---".
+            //   - PENDING row with a punch-in but no out → "Not Punched
+            //     Out". Once HR finalises (status flips off pending),
+            //     drop to "--" — calling a closed Present row
+            //     "Not Punched Out" is self-contradictory.
+            //   - otherwise → "--".
             val outLabel = when {
                 resolvedOut != null -> formatIsoTime(resolvedOut)
-                record.hasOpenSession == true -> "Not Punched Out"
+                record.hasOpenSession == true -> "---"
+                firstIn != null -> "Not Punched Out"
                 else -> "--"
             }
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
