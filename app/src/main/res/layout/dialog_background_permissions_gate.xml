@@ -158,4 +158,27 @@
         android:text="Both must be enabled before you can continue."
         android:textColor="#92400E"
         android:textSize="12sp" />
+
+    <!-- Manual Continue / Re-check button — covers OEMs where returning
+         from Settings doesn't reliably trigger the auto-check (some
+         Samsung/Xiaomi/OnePlus skins). Tapping re-runs the gate; if
+         everything is granted the dialog dismisses, otherwise a toast
+         tells the user exactly which row still needs attention. -->
+    <TextView
+        android:id="@+id/btnGateContinue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_inspection_chip_active"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="12dp"
+        android:text="Continue"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
 </LinearLayout>
