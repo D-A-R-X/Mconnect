@@ -7,12 +7,15 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
@@ -79,6 +82,23 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         view.findViewById<View>(R.id.btnFixBatteryOpt).setOnClickListener {
             openBatteryOptimizationSettings()
         }
+        // Manual Continue button — re-runs the gate check on demand. On
+        // some OEM skins (Samsung One UI, Xiaomi MIUI, etc.) the
+        // PowerManager.isIgnoringBatteryOptimizations flag updates
+        // asynchronously after the user enables "Unrestricted", and
+        // onResume can fire before the propagation lands. Giving the
+        // user an explicit "Continue" gives them a recovery path
+        // instead of being trapped behind a dialog that never closes.
+        view.findViewById<View>(R.id.btnGateContinue).setOnClickListener {
+            val ctx = requireContext()
+            if (allGranted(ctx)) {
+                dismissAllowingStateLoss()
+            } else {
+                val msg = missingReasonMessage(ctx)
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                view.let { refreshStatus(it) }
+            }
+        }
         refreshStatus(view)
     }
 
@@ -88,12 +108,38 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         // If both checks pass (user toggled them ON in Settings and
         // returned), auto-close so they don't have to hunt for a Done
         // button that doesn't exist.
-        view?.let {
-            if (allGranted(requireContext())) {
-                dismissAllowingStateLoss()
-            } else {
-                refreshStatus(it)
-            }
+        recheckAndMaybeDismiss()
+        // OEM skins sometimes propagate the battery-optimization flag a
+        // few hundred ms after the Settings activity is dismissed. Schedule
+        // two additional re-checks so the dialog still self-closes even
+        // when the system state lags behind the user.
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed({ recheckAndMaybeDismiss() }, 500)
+        handler.postDelayed({ recheckAndMaybeDismiss() }, 1500)
+    }
+
+    private fun recheckAndMaybeDismiss() {
+        if (!isAdded || isDetached) return
+        val ctx = context ?: return
+        val root = view ?: return
+        if (allGranted(ctx)) {
+            dismissAllowingStateLoss()
+        } else {
+            refreshStatus(root)
+        }
+    }
+
+    private fun missingReasonMessage(ctx: android.content.Context): String {
+        val bgOk = hasBackgroundLocation(ctx)
+        val batOk = hasBatteryOptIgnored(ctx)
+        return when {
+            !bgOk && !batOk ->
+                "Enable background location (Allow all the time) and unrestricted battery use to continue."
+            !bgOk ->
+                "Set Location to Allow all the time, then tap Continue."
+            !batOk ->
+                "Set Battery to Unrestricted, then tap Continue. If you already did, force-close Settings and try again."
+            else -> "All set — closing."
         }
     }
 
