@@ -568,7 +568,18 @@ class CpVisitsFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor("#B54708"))
 
                 actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_action_ready)
-                actionLabel.text = "Complete Trip"
+                // Match the Trip Details screen's CTA: when this is a
+                // telecaller-fixed SV-via-CP visit (visitCategory =
+                // sv_cum_cp) the next action is to fill the SV form,
+                // not "complete" a regular CP. TripNavigationFragment
+                // already does this label flip on its own button —
+                // mirror it here so the user sees the same affordance
+                // on the list card.
+                actionLabel.text = if (visit.visitCategory == "sv_cum_cp") {
+                    "Complete SV details"
+                } else {
+                    "Complete Trip"
+                }
                 actionLabel.setTextColor(Color.WHITE)
                 actionIcon.setImageResource(R.drawable.ic_home_trip_play)
                 actionIcon.visibility = View.VISIBLE
@@ -581,7 +592,15 @@ class CpVisitsFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor("#B54708"))
 
                 actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_action_progress)
-                actionLabel.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                // Same SV-via-CP rename as the needsCpDetails branch —
+                // covers the case where the card lands on a generic
+                // "arrived" state without the outcome-blank gate firing.
+                val arrivedLabel = if (visit.visitCategory == "sv_cum_cp") {
+                    "Complete SV details"
+                } else {
+                    "Complete Trip"
+                }
+                actionLabel.text = if (status == "arrived") arrivedLabel else "Enroute"
                 actionLabel.setTextColor(Color.parseColor("#B54708"))
                 actionIcon.visibility = View.GONE
             }
