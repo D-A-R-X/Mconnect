@@ -1340,16 +1340,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val cpId = cpVisitId ?: return
         arrivalConfirmedForProgress = true
         applyStatusPill("Reaching")
+        // Treat the row as SV-fix when EITHER signal fires:
+        //   - cpIsSvFixed (set by the async reconcile when it completes)
+        //   - visitCategory == "sv_cum_cp" (handed down synchronously
+        //     from the caller — Home or CP list — which already
+        //     classified this row via the same payload signals)
+        // The visitCategory check fixes the visible flicker where users
+        // tap Complete-Outcome before reconcile finishes, briefly see
+        // the Booking tab body, then watch it snap to locked SV. With
+        // the synchronous hint the very first paint is already locked.
+        val visitCategory = arguments?.getString(ARG_VISIT_CATEGORY)
+        val svFix = cpIsSvFixed || visitCategory == "sv_cum_cp"
         CompleteCpVisitBottomSheet
             .newInstance(
                 cpVisitId = cpId,
                 cpClientMet = cpClientMet,
                 cpOutcome = cpOutcome,
-                // Pre-pass the SV-fix verdict so the sheet can switch
-                // straight to its locked Site Visit mode in onViewCreated
-                // — no flash of the default Booking tab while the
-                // sheet's own async detect runs.
-                isSvFixedHint = cpIsSvFixed,
+                isSvFixedHint = svFix,
             )
             .show(parentFragmentManager, "cp_visit_complete")
     }

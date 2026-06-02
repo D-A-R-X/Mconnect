@@ -1839,29 +1839,31 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // We previously called /api/marketing/clientPlaceVisits/get
-                // here, but the server side never wired up that HTTP route.
-                // Use the existing /my list endpoint and find the visit by
-                // id — the list is paginated to the latest 200 CP visits
-                // for the bearer, which always includes the one we're
-                // actively completing.
-                val resp = geoApi.getMyMarketingCpVisits(
+                // Single-visit get — replaces the historical hack of
+                // pulling the full 200-row /my list just to find one row.
+                // Cuts latency on sheet open from ~1-2s on a slow link
+                // down to one round-trip (~100ms) AND removes the visible
+                // glitch where the Booking tab body painted for one frame
+                // before async detect resolved and snapped the UI to
+                // locked SV. The /api/marketing/clientPlaceVisits/get
+                // route was wired in a later patch — keeping the helper
+                // shape identical so the rest of this method is unchanged.
+                val detailResp = geoApi.getCpVisitDetail(
                     session.bearerToken,
-                    fromDate = null,
-                    toDate = null,
+                    cpVisitId,
                 )
-                if (!resp.success) {
+                if (!detailResp.success) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: list call failed: ${resp.error ?: "(no error)"}",
+                        "detect: get call failed: ${detailResp.error ?: "(no error)"}",
                     )
                     return@launch
                 }
-                val visit = resp.visits.firstOrNull { it.id == cpVisitId }
+                val visit = detailResp.visit
                 if (visit == null) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: cpVisitId=$cpVisitId not in list of ${resp.visits.size} visits",
+                        "detect: cpVisitId=$cpVisitId not returned by get",
                     )
                     return@launch
                 }
