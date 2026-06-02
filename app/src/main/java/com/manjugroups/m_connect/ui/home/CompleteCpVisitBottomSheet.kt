@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
@@ -102,6 +103,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var cpLockedFooter: View? = null
     private var btnCpLockedReject: TextView? = null
     private var btnCpLockedConfirm: TextView? = null
+
+    /**
+     * "Pure SV" outcome mode. When [ARG_SITE_VISIT_ID] is set the sheet
+     * is being invoked from the Trip Details screen of a real siteVisits
+     * row (not a CP visit). In this mode:
+     *   - The Site Visit top tab is disabled and faded (this row IS
+     *     already an SV — re-converting would be nonsensical).
+     *   - Booking / Postpone / Not Interested all persist via the
+     *     /api/marketing/siteVisits/... endpoints instead of the CP
+     *     path.
+     *   - markClientMet is skipped (no CP visit to mark).
+     */
+    private val isSiteVisitMode: Boolean
+        get() {
+            val raw = arguments?.getString(ARG_SITE_VISIT_ID)
+            return !raw.isNullOrBlank()
+        }
+
+    private val argSiteVisitId: String?
+        get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
 
     // ---- Sub-tab views --------------------------------------------------
     private var subTabsScroll: HorizontalScrollView? = null
@@ -365,6 +386,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Check whether the CP visit was pre-fixed by the telecaller. If
         // so, lock the sheet to Site Visit and surface Reject / Confirm.
         detectAndApplyLockedSvMode()
+
+        // Pure-SV outcome mode (no CP behind it). Disables the Site
+        // Visit top tab and pre-selects Booking — only the Booking /
+        // Postpone / Not Interested paths persist, and they route to
+        // the siteVisits endpoints instead of the CP path.
+        if (isSiteVisitMode) applySiteVisitOutcomeMode()
+    }
+
+    private fun applySiteVisitOutcomeMode() {
+        // The Site Visit tab itself makes no sense on a row that IS
+        // already a site visit — fade + disable it.
+        tabSiteVisit.cell?.isClickable = false
+        tabSiteVisit.cell?.alpha = 0.35f
+
+        // Default to Booking on entry — the most common SV outcome and
+        // the one the user is most likely to tap from "Complete Outcome".
+        // The user can still flip to Postpone / Not Interested from the
+        // top tabs.
+        activeOutcome = Outcome.BOOKING
+        renderState()
     }
 
     // ---- View binding helpers ------------------------------------------
@@ -1374,6 +1415,41 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit?.text = "Saving…"
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // SV mode: write directly to the siteVisits row via the
+                // dedicated endpoint. No markClientMet (there's no CP
+                // visit to mark), no CP setOutcome. The SV path accepts
+                // the same outcome strings (postponed / not_interested)
+                // and stores notes/reasons on the row.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCtaSave("Missing site visit id")
+                            return@launch
+                        }
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = svId,
+                            outcome = outcomeEnum,
+                            postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
+                                postponedReasonsFromForm() else null,
+                            notInterestedReasons = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
+                                notInterestedReasonsFromForm() else null,
+                            notes = notes,
+                        ),
+                    )
+                    if (!resp.success) {
+                        finishCtaSave(resp.error ?: "Failed to save outcome")
+                        return@launch
+                    }
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to outcomeEnum),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
                     MarkClientMetRequest(id = cpVisitId, clientMet = true),
@@ -1408,6 +1484,50 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * Best-effort extraction of structured postpone reasons from the
+     * Postpone tab's form. The current CP path doesn't actually pass
+     * these to the server (sends notes only), so for SV mode we
+     * synthesise a single-element array from the captured fields when
+     * present. The SV backend requires a non-empty array for
+     * outcome=postponed.
+     */
+    private fun postponedReasonsFromForm(): List<String> {
+        val budget = etPostBudget?.text?.toString()?.trim().orEmpty()
+        val timing = etPostTiming?.text?.toString()?.trim().orEmpty()
+        val project = etPostProject?.text?.toString()?.trim().orEmpty()
+        val other = etPostOther?.text?.toString()?.trim().orEmpty()
+        val labels = listOf(
+            "Budget" to budget,
+            "Timing" to timing,
+            "Project" to project,
+            "Other" to other,
+        ).filter { it.second.isNotBlank() }.map { it.first }
+        // Backend rejects an empty array — fall back to "other" so the
+        // mutation still lands even when the user hits Save without
+        // ticking specific reasons.
+        return labels.ifEmpty { listOf("other") }
+    }
+
+    /**
+     * Same pattern for the Not Interested tab. The CP path also sends
+     * just notes, so SV mode collapses to a generic "other" reason
+     * when no structured fields are present.
+     */
+    private fun notInterestedReasonsFromForm(): List<String> {
+        val budget = etNiBudget?.text?.toString()?.trim().orEmpty()
+        val timing = etNiTiming?.text?.toString()?.trim().orEmpty()
+        val project = etNiProject?.text?.toString()?.trim().orEmpty()
+        val other = etNiOther?.text?.toString()?.trim().orEmpty()
+        val labels = listOf(
+            "Budget" to budget,
+            "Timing" to timing,
+            "Project" to project,
+            "Other" to other,
+        ).filter { it.second.isNotBlank() }.map { it.first }
+        return labels.ifEmpty { listOf("other") }
+    }
+
     private fun finishCtaSave(error: String) {
         btnSubmit?.isClickable = true
         btnSubmit?.text = "Save"
@@ -1416,15 +1536,52 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     // ---- Persistence ------------------------------------------------
     private fun persistBooking() {
-        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
-            ?: return showError("Missing CP visit id")
         val met = true
-
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // SV-mode booking — write the booking outcome directly to
+                // the siteVisits row. The mobile booking form's plot /
+                // project pickers are still mocked, so we record the
+                // outcome as `converted_to_booking` + serialised notes
+                // and let the office finalise the actual booking via the
+                // web flow (the SV row carries the full captured notes
+                // payload for them to act on). Future iteration can
+                // wire a real plot picker + hit convertSiteVisitToBooking
+                // directly to drop a `bookings` row in one shot.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCta(error = "Missing site visit id")
+                            return@launch
+                        }
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = svId,
+                            outcome = OUTCOME_SV_CONVERTED_TO_BOOKING,
+                            notes = serializeBookingForm(),
+                        ),
+                    )
+                    if (!resp.success) {
+                        finishCta(error = resp.error ?: "Failed to save booking")
+                        return@launch
+                    }
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+                    ?: run {
+                        finishCta(error = "Missing CP visit id")
+                        return@launch
+                    }
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
                     MarkClientMetRequest(id = cpVisitId, clientMet = met),
@@ -1980,6 +2137,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // fixed SV. Lets us avoid the brief Booking-tab flash while the
         // sheet's own detect call resolves.
         private const val ARG_IS_SV_FIXED_HINT = "arg_is_sv_fixed_hint"
+        // Pure-SV outcome mode — set by [forSiteVisit] when the sheet
+        // is opened from the SV Trip Details "Complete Outcome" CTA.
+        // Mutually exclusive with the CP path; presence of this arg
+        // flips isSiteVisitMode true.
+        private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -1990,6 +2152,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // shipped as notes; Convex outcomeValidator was extended to
         // accept this value.
         private const val OUTCOME_REJECTED = "rejected"
+
+        // siteVisits.setOutcome accepts a subset of CP outcome strings.
+        // Booking outcome translates to the SV's "converted_to_booking"
+        // value — the actual booking row creation is deferred to the
+        // office side until the mobile plot picker is real.
+        private const val OUTCOME_SV_CONVERTED_TO_BOOKING = "converted_to_booking"
 
         fun newInstance(
             cpVisitId: String,
@@ -2003,6 +2171,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
                     if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
+                }
+            }
+
+        /**
+         * Factory for the pure-SV outcome flow. The sheet renders the
+         * same Booking / Postpone / Not Interested tabs but locks the
+         * Site Visit tab (this row IS already a site visit), and all
+         * persistence routes to /api/marketing/siteVisits/... endpoints.
+         */
+        fun forSiteVisit(siteVisitId: String): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_SITE_VISIT_ID, siteVisitId)
                 }
             }
     }
