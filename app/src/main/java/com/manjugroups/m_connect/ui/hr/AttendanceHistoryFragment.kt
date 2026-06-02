@@ -8,6 +8,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.graphics.Color
+import android.widget.ImageView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -17,6 +20,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -204,8 +208,90 @@ class AttendanceHistoryFragment : Fragment() {
                     .show(parentFragmentManager, "attendance_punch_log")
             }
 
+            // Withdraw button — only on pending submissions (mirror of
+            // the leaves trash-icon UX). HR-finalised rows
+            // (approved/rejected/auto-approved) keep the button hidden
+            // because the server-side mutation rejects them anyway.
+            val deleteBtn = card.findViewById<ImageView>(R.id.btnHistoryItemDelete)
+            val isPending = record.status?.equals("pending", ignoreCase = true) == true
+            if (isPending) {
+                deleteBtn.visibility = View.VISIBLE
+                deleteBtn.setOnClickListener {
+                    confirmAndCancelAttendance(record)
+                }
+            } else {
+                deleteBtn.visibility = View.GONE
+                deleteBtn.setOnClickListener(null)
+            }
+
             binding.attendanceList.addView(card)
         }
+    }
+
+    /**
+     * Two-step confirm → cancel flow. Mirrors the leaves cancel UX in
+     * LeavesFragment so the user gets the same affordance on both
+     * surfaces. On success we reload — the row disappears (delete) or
+     * flips status per backend semantics.
+     */
+    private fun confirmAndCancelAttendance(record: AttendanceRecord) {
+        val date = record.date ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle("Withdraw attendance?")
+            .setMessage(
+                "This will remove your submitted attendance for $date. " +
+                    "You can punch in again after.",
+            )
+            .setPositiveButton("Withdraw") { _, _ -> cancelAttendance(date) }
+            .setNegativeButton("Keep", null)
+            .show()
+    }
+
+    private fun cancelAttendance(date: String) {
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.cancelMyAttendance(token, AttendanceCancelRequest(date))
+                if (resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Attendance withdrawn",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadData()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Failed to withdraw attendance",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                val serverMessage = extractHttpErrorMessage(e)
+                Toast.makeText(
+                    requireContext(),
+                    serverMessage ?: e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Pull the {error: "..."} field out of a Retrofit HttpException's
+     * response body so the toast shows the actual server message
+     * ("Cannot delete approved attendance…") instead of "HTTP 500".
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun formatIsoTime(iso: String): String {

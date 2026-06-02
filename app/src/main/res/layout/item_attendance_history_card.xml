@@ -24,12 +24,32 @@
 
         <TextView
             android:id="@+id/tvHistoryItemDate"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
+            android:layout_weight="1"
             android:fontFamily="@font/inter_semibold"
             android:textColor="#101828"
             android:textSize="13sp" />
+
+        <!--
+          Withdraw button — shown only on rows that the calling staffer
+          submitted but HR hasn't reviewed yet (status=pending). The
+          fragment toggles visibility; default GONE so closed / approved
+          rows don't carry the affordance.
+        -->
+        <ImageView
+            android:id="@+id/btnHistoryItemDelete"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Withdraw attendance"
+            android:focusable="true"
+            android:padding="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_attendance_delete"
+            android:visibility="gone" />
     </LinearLayout>
 
     <LinearLayout

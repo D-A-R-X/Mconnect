@@ -82,6 +82,17 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    /**
+     * Withdraw a pending attendance submission for a specific date.
+     * Mirrors /api/hr/leaves/cancel — same delete affordance on the
+     * mobile attendance history page. Server rejects non-pending dates.
+     */
+    @POST("api/hr/attendance/cancel")
+    suspend fun cancelMyAttendance(
+        @Header("Authorization") token: String,
+        @Body body: AttendanceCancelRequest,
+    ): SimpleResponse
+
     // Attendance — manager approval queue (mirrors leaves/permissions approval).
     @GET("api/hr/attendance/pending-approvals")
     suspend fun getPendingAttendanceApprovals(
@@ -896,6 +907,9 @@ data class StaffData(
 // Attendance models
 data class AttendanceTodayResponse(val success: Boolean, val attendance: AttendanceData?)
 data class MyAttendanceResponse(val success: Boolean, val total: Int?, val records: List<AttendanceRecord> = emptyList())
+
+/** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
+data class AttendanceCancelRequest(val date: String)
 data class AttendanceRecord(
     val date: String?,
     val status: String?,
