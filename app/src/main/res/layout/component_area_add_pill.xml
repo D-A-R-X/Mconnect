@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inline "+ Add" pill rendered at the bottom of each Area-tab entries
+  container after at least one entry exists. Mirrors the web's per-
+  section Add button — taps inflate another component_area_entry into
+  the container above. The top-of-section "Create X" pill still works
+  as before; this exists purely for discoverability ("oh, I can add
+  more!") once the first row is in place.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="10dp"
+    android:background="@drawable/bg_inspection_reschedule_button"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="8dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:includeFontPadding="false"
+        android:text="+"
+        android:textColor="#16A34A"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/tvAreaAddLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:fontFamily="@font/inter_bold"
+        android:includeFontPadding="false"
+        android:textColor="#16A34A"
+        android:textSize="13sp"
+        tools:ignore="HardcodedText"
+        xmlns:tools="http://schemas.android.com/tools"
+        tools:text="Add another School" />
+</LinearLayout>

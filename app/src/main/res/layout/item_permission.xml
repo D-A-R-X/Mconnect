@@ -22,12 +22,27 @@
 
         <TextView
             android:id="@+id/tvPermDate"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
+            android:layout_weight="1"
             android:fontFamily="@font/inter_semibold"
             android:textColor="#101828"
             android:textSize="14sp" />
+
+        <!-- Cancel-while-in-review affordance. Visibility is flipped on
+             at runtime ONLY for the user's own pending requests on the
+             My Permissions view; hidden everywhere else (approved /
+             rejected / Team view / approver-mode). -->
+        <ImageView
+            android:id="@+id/ivPermCancel"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Cancel request"
+            android:padding="2dp"
+            android:src="@drawable/ic_trash"
+            android:visibility="gone" />
     </LinearLayout>
 
     <LinearLayout

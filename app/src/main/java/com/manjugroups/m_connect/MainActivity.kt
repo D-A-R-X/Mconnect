@@ -67,6 +67,13 @@ class MainActivity : AppCompatActivity() {
     private var cachedTopInset = 0
     private var statusBarFullBleed = false
     private var lastTrackingResumeSyncMs = 0L
+    // Periodic IAM polling job — runs while the activity is in the
+    // foreground so a permission flip on the web reaches gated UI
+    // (App Library tiles, HR review buttons, etc.) within ~20s even
+    // when the user is just staring at the screen. Cancelled in
+    // onPause so we don't hammer the API in the background.
+    private var iamPollJob: kotlinx.coroutines.Job? = null
+    private val IAM_POLL_INTERVAL_MS = 20_000L
 
     private data class TabConfig(
         val tab: FrameLayout,
@@ -242,11 +249,46 @@ class MainActivity : AppCompatActivity() {
         // toggled the missing one ON. Scoped to staff who actually need
         // background tracking — office staff aren't force-prompted.
         maybeShowBackgroundPermissionsGate()
+        // Kick a periodic IAM poll while the app is in the foreground.
+        // Forces a refresh every IAM_POLL_INTERVAL_MS (currently 20s)
+        // regardless of throttle, so a permission change on the web
+        // lands within one interval even if the user is sitting on the
+        // App Library staring at the tiles. Job is cancelled in
+        // onPause; only one job runs at a time.
+        startIamPolling()
         val now = System.currentTimeMillis()
         if (now - lastTrackingResumeSyncMs < TRACKING_RESUME_SYNC_THROTTLE_MS) return
         lastTrackingResumeSyncMs = now
         lifecycleScope.launch {
             runCatching { syncTrackingBootstrap() }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Stop polling while the app isn't visible — no point burning
+        // network + battery for UI nobody can see. onResume restarts.
+        iamPollJob?.cancel()
+        iamPollJob = null
+    }
+
+    private fun startIamPolling() {
+        if (iamPollJob?.isActive == true) return
+        iamPollJob = lifecycleScope.launch {
+            // First refresh fires immediately so the foreground
+            // transition itself feels responsive; then drops into a
+            // steady IAM_POLL_INTERVAL_MS cadence. Each tick uses
+            // `force = true` so it bypasses the bus's 5s throttle —
+            // the throttle is there to protect against burst
+            // refreshes, not against scheduled polling.
+            while (true) {
+                runCatching {
+                    com.manjugroups.m_connect.auth.IamUpdateBus.refresh(
+                        session, force = true,
+                    )
+                }
+                kotlinx.coroutines.delay(IAM_POLL_INTERVAL_MS)
+            }
         }
     }
 
@@ -382,8 +424,14 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             api.getMyIamPermissions(session.bearerToken)
         }.onSuccess { iam ->
-            session.iamPermissions = iam.permissions.toSet()
+            val fresh = iam.permissions.toSet()
+            session.iamPermissions = fresh
             session.isAdmin = iam.isAdmin
+            // Wake any IAM-gated subscriber that mounted AFTER this
+            // initial fetch (e.g. AppLibraryFragment opened seconds
+            // later). Without this, the bus's first emit only fires
+            // on the next throttled poll, which can be 30s+ away.
+            com.manjugroups.m_connect.auth.IamUpdateBus.notifyFetched(fresh)
         }
 
         runCatching {

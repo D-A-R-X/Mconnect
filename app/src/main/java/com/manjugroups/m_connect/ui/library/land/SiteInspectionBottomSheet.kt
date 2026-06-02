@@ -559,6 +559,10 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         val entries = mutableListOf<InspectionAreaEntry>()
         for (i in 0 until container.childCount) {
             val row = container.getChildAt(i)
+            // Skip the inline "+ Add another" pill — it lives inside the
+            // entries container alongside real rows so the affordance
+            // floats with the list, but it carries no name/distance.
+            if (row.getTag(R.id.areaEntryAddPillTag) == true) continue
             val name = row.findViewById<EditText>(R.id.areaEntryName)
                 ?.text?.toString().orEmpty().trim()
             val distance = row.findViewById<EditText>(R.id.areaEntryDistance)
@@ -628,40 +632,43 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         }
         report.schoolEntries?.let {
             prefillAreaEntries(root, R.id.schoolEntries,
-                R.drawable.ic_inspection_field_school, "Enter School Name", it)
+                R.drawable.ic_inspection_field_school, "Enter School Name", "School", it)
         }
         report.collegeEntries?.let {
             prefillAreaEntries(root, R.id.collegeEntries,
-                R.drawable.ic_inspection_field_college, "Enter College Name", it)
+                R.drawable.ic_inspection_field_college, "Enter College Name", "College", it)
         }
         report.hospitalEntries?.let {
             prefillAreaEntries(root, R.id.hospitalEntries,
-                R.drawable.ic_inspection_field_hospital, "Enter Hospital Name", it)
+                R.drawable.ic_inspection_field_hospital, "Enter Hospital Name", "Hospital", it)
         }
         report.mallEntries?.let {
             prefillAreaEntries(root, R.id.mallEntries,
-                R.drawable.ic_inspection_field_mall, "Enter Mall Name", it)
+                R.drawable.ic_inspection_field_mall, "Enter Mall Name", "Mall", it)
         }
         report.marketEntries?.let {
             prefillAreaEntries(root, R.id.marketEntries,
-                R.drawable.ic_inspection_field_market, "Enter Market Name", it)
+                R.drawable.ic_inspection_field_market, "Enter Market Name", "Market", it)
         }
     }
 
     /**
      * Replace a category's rows with the saved entries so a returning
      * inspector (or a web-side edit) shows up filled instead of empty.
+     * `categoryLabel` is forwarded so the "+ Add another X" pill at the
+     * bottom of the prefilled list matches its category.
      */
     private fun prefillAreaEntries(
         root: View,
         containerId: Int,
         iconRes: Int,
         nameHint: String,
+        categoryLabel: String,
         saved: List<InspectionAreaEntry>,
     ) {
         val container = root.findViewById<LinearLayout>(containerId) ?: return
         container.removeAllViews()
-        saved.forEach { addAreaEntry(container, iconRes, nameHint, it.name, it.distance) }
+        saved.forEach { addAreaEntry(container, iconRes, nameHint, categoryLabel, it.name, it.distance) }
     }
 
     private fun applyDemandSelection(root: View, isPresent: Boolean, picked: String) {
@@ -1353,27 +1360,33 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
      * the entry from its parent container. The icon shown inside the
      * entry's name field matches the category (school cap, college
      * courthouse, ...).
+     *
+     * Mirrors the web's per-section UX: arbitrary number of entries per
+     * category. The top-of-section "Create X" pill adds the first one;
+     * once at least one entry exists, an inline "+ Add another …" pill
+     * shows at the bottom of the entries list so the affordance is
+     * obvious without having to scroll back to the top to tap Create.
      */
     private fun bindAreaTab(root: View) {
         bindAreaCategory(
             root, R.id.createSchool, R.id.schoolEntries,
-            R.drawable.ic_inspection_field_school, "Enter School Name",
+            R.drawable.ic_inspection_field_school, "Enter School Name", "School",
         )
         bindAreaCategory(
             root, R.id.createCollege, R.id.collegeEntries,
-            R.drawable.ic_inspection_field_college, "Enter College Name",
+            R.drawable.ic_inspection_field_college, "Enter College Name", "College",
         )
         bindAreaCategory(
             root, R.id.createHospital, R.id.hospitalEntries,
-            R.drawable.ic_inspection_field_hospital, "Enter Hospital Name",
+            R.drawable.ic_inspection_field_hospital, "Enter Hospital Name", "Hospital",
         )
         bindAreaCategory(
             root, R.id.createMall, R.id.mallEntries,
-            R.drawable.ic_inspection_field_mall, "Enter Mall Name",
+            R.drawable.ic_inspection_field_mall, "Enter Mall Name", "Mall",
         )
         bindAreaCategory(
             root, R.id.createMarket, R.id.marketEntries,
-            R.drawable.ic_inspection_field_market, "Enter Market Name",
+            R.drawable.ic_inspection_field_market, "Enter Market Name", "Market",
         )
     }
 
@@ -1383,21 +1396,29 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         entriesContainerId: Int,
         iconRes: Int,
         nameHint: String,
+        categoryLabel: String,
     ) {
         val createRow = root.findViewById<View>(createRowId)
         val entries = root.findViewById<LinearLayout>(entriesContainerId)
-        createRow.setOnClickListener { addAreaEntry(entries, iconRes, nameHint) }
+        createRow.setOnClickListener { addAreaEntry(entries, iconRes, nameHint, categoryLabel) }
     }
 
     /**
      * Inflate one Area-tab entry into [entries], optionally pre-filled with a
      * saved name/distance. Shared by the "Create X" button (blank row) and
      * prefill (saved rows) so both paths wire the delete button identically.
+     *
+     * `categoryLabel` is used for the inline "+ Add another <label>" pill
+     * that gets appended after the last entry (e.g. "Add another School").
+     * Pass null when category context isn't available (legacy call sites);
+     * the pill is skipped in that case and the user falls back to the
+     * top-of-section "Create X" button.
      */
     private fun addAreaEntry(
         entries: LinearLayout,
         iconRes: Int,
         nameHint: String,
+        categoryLabel: String? = null,
         name: String? = null,
         distance: String? = null,
     ) {
@@ -1412,8 +1433,48 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         }
         entry.findViewById<View>(R.id.areaEntryDelete).setOnClickListener {
             entries.removeView(entry)
+            // After delete, re-pin the "+ Add" pill to the bottom (or
+            // hide it if zero entries remain). Without this the pill
+            // could end up above a phantom gap or stay around with no
+            // entries above it.
+            refreshAreaAddPill(entries, iconRes, nameHint, categoryLabel)
         }
-        entries.addView(entry)
+        // Insert the entry before any existing "+ Add" pill so the pill
+        // always stays at the bottom of the container.
+        val pillIdx = (0 until entries.childCount).indexOfFirst { i ->
+            entries.getChildAt(i).getTag(R.id.areaEntryAddPillTag) == true
+        }
+        if (pillIdx >= 0) entries.addView(entry, pillIdx) else entries.addView(entry)
+        refreshAreaAddPill(entries, iconRes, nameHint, categoryLabel)
+    }
+
+    /**
+     * Ensure exactly one "+ Add another <label>" pill sits at the bottom
+     * of [entries] when there is at least one entry; remove it otherwise.
+     * Idempotent — safe to call from any mutation site (add, delete,
+     * prefill). The pill itself is tagged with `areaEntryAddPillTag` so
+     * we can distinguish it from real entries on subsequent inserts.
+     */
+    private fun refreshAreaAddPill(
+        entries: LinearLayout,
+        iconRes: Int,
+        nameHint: String,
+        categoryLabel: String?,
+    ) {
+        // Strip any existing pill so we can reposition it cleanly.
+        for (i in entries.childCount - 1 downTo 0) {
+            if (entries.getChildAt(i).getTag(R.id.areaEntryAddPillTag) == true) {
+                entries.removeViewAt(i)
+            }
+        }
+        if (categoryLabel == null) return
+        if (entries.childCount == 0) return
+        val pill = LayoutInflater.from(requireContext())
+            .inflate(R.layout.component_area_add_pill, entries, false)
+        pill.setTag(R.id.areaEntryAddPillTag, true)
+        pill.findViewById<TextView>(R.id.tvAreaAddLabel).text = "Add another $categoryLabel"
+        pill.setOnClickListener { addAreaEntry(entries, iconRes, nameHint, categoryLabel) }
+        entries.addView(pill)
     }
 
     companion object {

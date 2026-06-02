@@ -1,0 +1,12 @@
+<!-- Outlined Reschedule button: white fill, green stroke, rounded
+     corners. Paired with the solid-green Accept button (bg_inspection_
+     next_button) on the inspection card's bottom row. Matches the
+     reference design — green border #16A34A, ~12dp radius, 1.5dp stroke. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <stroke
+        android:width="1.5dp"
+        android:color="#16A34A" />
+    <corners android:radius="12dp" />
+</shape>

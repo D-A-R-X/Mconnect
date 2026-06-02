@@ -17,12 +17,13 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.datepicker.MaterialDatePicker
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.AddTaskUpdateRequest
 import com.manjugroups.m_connect.network.ApiService
@@ -217,29 +218,26 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
     private fun showDatePicker() {
         // Use the already-picked date as the initial selection so re-opening
         // the picker doesn't reset to today.
-        val initial = runCatching {
-            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            parser.parse(pickedDateIso)?.time
-        }.getOrNull() ?: MaterialDatePicker.todayInUtcMilliseconds()
-        val picker = MaterialDatePicker.Builder.datePicker()
-            .setTitleText("Select date")
-            .setSelection(initial)
-            .build()
-        picker.addOnPositiveButtonClickListener { utcMillis ->
-            // MaterialDatePicker returns UTC midnight; format in UTC so
-            // the date doesn't shift a day in negative timezones.
-            val utcFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            val utcDisplay = SimpleDateFormat("MMM d, yyyy", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            pickedDateIso = utcFmt.format(Date(utcMillis))
-            tvUpdateDate?.text = utcDisplay.format(Date(utcMillis))
+        val initial = pickedDateIso.ifBlank {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         }
-        picker.show(parentFragmentManager, "task_update_date")
+        setFragmentResultListener(RESULT_KEY_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            pickedDateIso = date
+            val display = runCatching {
+                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val fmt = SimpleDateFormat("MMM d, yyyy", Locale.US)
+                parser.parse(date)?.let { fmt.format(it) }
+            }.getOrNull() ?: date
+            tvUpdateDate?.text = display
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Select date",
+            subtitle = "Update date for this task",
+            initialFrom = initial,
+            initialTo = initial,
+            resultKey = RESULT_KEY_DATE,
+        ).show(parentFragmentManager, "task_update_date")
     }
 
     private fun refreshPhotoStrip() {
@@ -472,6 +470,7 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
     companion object {
         const val RESULT_KEY = "task_update_result"
         const val KEY_UPDATED = "updated"
+        private const val RESULT_KEY_DATE = "task_update_date_calendar"
         private const val ARG_TASK_ID = "arg_task_id"
         private const val ARG_STATUS = "arg_status"
         private const val ARG_PROGRESS = "arg_progress"

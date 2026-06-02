@@ -163,28 +163,10 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Reschedule (calendar-edit) — shown before the inspector
-                 accepts; opens a date picker to request a new date. -->
-            <FrameLayout
-                android:id="@+id/btnInspectionReschedule"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_inspection_arrow_circle"
-                android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone"
-                tools:visibility="visible">
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="Reschedule"
-                    android:src="@drawable/ic_calendar_edit" />
-            </FrameLayout>
-
-            <!-- Open form arrow — shown once the inspector has accepted. -->
+            <!-- Open form arrow — shown once the inspector has accepted.
+                 Reschedule is no longer a tiny circle next to the chevron;
+                 it now lives as a labeled outlined button at the bottom of
+                 the card alongside Accept (see the action row below). -->
             <FrameLayout
                 android:id="@+id/btnInspectionArrow"
                 android:layout_width="36dp"
@@ -201,39 +183,81 @@
             </FrameLayout>
         </LinearLayout>
 
-        <!-- Accept CTA — shown only while acceptance is pending. Tapping it
-             unlocks the inspection form (and the arrow replaces this row). -->
+        <!-- Action row: Reschedule (outlined, white) + Accept (solid green)
+             side-by-side. Both visible while acceptance is pending; the
+             Reschedule button alone shows the "Re-scheduled" locked state
+             after a date change is requested. Equal weights match the
+             reference design pixel-for-pixel. -->
         <LinearLayout
-            android:id="@+id/btnInspectionAccept"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="wrap_content"
             android:layout_marginHorizontal="4dp"
             android:layout_marginTop="14dp"
-            android:background="@drawable/bg_inspection_next_button"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:visibility="gone"
-            tools:visibility="visible">
+            android:orientation="horizontal">
 
-            <ImageView
-                android:id="@+id/ivInspectionAcceptIcon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:layout_marginEnd="8dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_check_white" />
+            <LinearLayout
+                android:id="@+id/btnInspectionReschedule"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_inspection_reschedule_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible">
 
-            <TextView
-                android:id="@+id/tvInspectionAcceptLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_bold"
-                android:includeFontPadding="false"
-                android:text="Accept"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp" />
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="Reschedule"
+                    android:src="@drawable/ic_calendar_edit"
+                    app:tint="#16A34A" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Reschedule"
+                    android:textColor="#16A34A"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnInspectionAccept"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_inspection_next_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <ImageView
+                    android:id="@+id/ivInspectionAcceptIcon"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_check_white" />
+
+                <TextView
+                    android:id="@+id/tvInspectionAcceptLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Accept"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </androidx.cardview.widget.CardView>

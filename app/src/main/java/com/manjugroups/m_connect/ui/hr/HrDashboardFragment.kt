@@ -248,49 +248,31 @@ class HrDashboardFragment : Fragment() {
     private fun setupAttendanceScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
         val maxBottomRadiusPx = 24f * density
+        val maxPanelRadiusPx = 24f * density
+
+        // Blue header — rounded BOTTOM corners.
         val headerBg = binding.attendanceHeader.applyShrinkableBlueHeaderBackground()
         headerBg.setBottomCornerRadius(maxBottomRadiusPx)
 
-        val panel = binding.hrRefresh
-        // Solid page-bg fill so the panel actually OBSCURES the blue
-        // header on scroll instead of letting it show through any
-        // transparent gap.
-        panel.setBackgroundColor(android.graphics.Color.parseColor("#F1F3F8"))
-        binding.attendanceHeader.post {
-            val b = _binding ?: return@post
-            val overlayDistancePx = b.attendanceHeader.height.toFloat()
-            // Grow the panel to the FULL content-area height (= the
-            // column's height) so that when it's translated up by
-            // overlayDistancePx its bottom edge still reaches the screen
-            // bottom — no grey strip / empty window left behind the last
-            // card.
-            //
-            // Read the height from the PARENT column (deterministic V),
-            // NOT `panel.height + overlay` (that double-counted and
-            // over-grew the panel, shrinking the scroll viewport so far
-            // the blue header could never be fully covered). bottomMargin
-            // = -overlay keeps the column arithmetic balanced.
-            val parentHeight = (panel.parent as? View)?.height ?: 0
-            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
-                // weight MUST be cleared — otherwise the LinearLayout
-                // recomputes the height from the weight and ignores the
-                // explicit value below, leaving the panel at V-H (the
-                // short window that produced the grey gap).
-                if (parentHeight > 0) {
-                    weight = 0f
-                    height = parentHeight
-                }
-                bottomMargin = -overlayDistancePx.toInt()
-                panel.layoutParams = this
-            }
-            b.hrScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                if (_binding == null) return@setOnScrollChangeListener
-                val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
-                panel.translationY = translateY
-                val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
-                headerBg.setBottomCornerRadius((1f - progress) * maxBottomRadiusPx)
-            }
+        // White card — rounded TOP corners + white bg applied to
+        // `hrWhitePanel`, which lives INSIDE the NestedScrollView. The
+        // white card IS the scrolling content, so it moves up at
+        // exactly 1× rate (no parallax, no shrinking, no separate
+        // translation). The ancestors set clipChildren=false in XML so
+        // the rounded top edge can draw OUTSIDE the panel and over the
+        // blue header — that's how the white visually "overlays" the
+        // blue as it scrolls up.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(android.graphics.Color.WHITE)
+            cornerRadii = floatArrayOf(
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-left
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-right
+                0f, 0f,                              // bottom-right
+                0f, 0f,                              // bottom-left
+            )
         }
+        binding.hrWhitePanel.background = whiteCardBg
     }
 
     override fun onHiddenChanged(hidden: Boolean) {

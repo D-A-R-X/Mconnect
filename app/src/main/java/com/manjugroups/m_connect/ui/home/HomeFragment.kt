@@ -102,55 +102,32 @@ class HomeFragment : Fragment() {
      */
     private fun setupHomeScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
-        val maxBottomRadiusPx = 24f * density
+        val maxCornerRadiusPx = 24f * density
         val headerBg = binding.homeHeaderContainer
             .applyShrinkableBlueHeaderBackground()
-        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+        headerBg.setBottomCornerRadius(maxCornerRadiusPx)
 
-        val panel = binding.homeRefresh
-        // Without a solid background the SwipeRefreshLayout is transparent;
-        // when translated up, the blue header showed through the gaps
-        // between the white today's-trip card and the page edges. A solid
-        // page-bg fill makes the panel act as the cover that fully hides
-        // the header on scroll.
-        panel.setBackgroundColor(android.graphics.Color.parseColor("#F1F3F8"))
-        binding.homeHeaderContainer.post {
-            val b = _binding ?: return@post
-            val overlayDistancePx = b.homeHeaderContainer.height.toFloat()
-            // Grow the panel to the FULL content-area height (= the
-            // column's height) so that when it's translated up by
-            // overlayDistancePx its bottom edge still reaches the screen
-            // bottom — no grey strip / empty window left behind the last
-            // card.
-            //
-            // Read the height from the PARENT column (deterministic V),
-            // NOT `panel.height + overlay` (that double-counted and
-            // over-grew the panel, shrinking the scroll viewport so far
-            // the blue header could never be fully covered). bottomMargin
-            // = -overlay keeps the column arithmetic balanced.
-            val parentHeight = (panel.parent as? View)?.height ?: 0
-            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
-                // weight MUST be cleared — otherwise the LinearLayout
-                // recomputes the height from the weight and ignores the
-                // explicit value below, leaving the panel at V-H (the
-                // short window that produced the grey gap).
-                if (parentHeight > 0) {
-                    weight = 0f
-                    height = parentHeight
-                }
-                bottomMargin = -overlayDistancePx.toInt()
-                panel.layoutParams = this
-            }
-            b.homeContent.setOnScrollChangeListener(
-                androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
-                    if (_binding == null) return@OnScrollChangeListener
-                    val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
-                    panel.translationY = translateY
-                    val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
-                    headerBg.setBottomCornerRadius((1f - progress) * maxBottomRadiusPx)
-                }
+        // The white card with rounded TOP corners is the
+        // `whiteContentArea` — which lives INSIDE the NestedScrollView,
+        // so it scrolls up at exactly 1× rate as the user scrolls (no
+        // parallax, no shrinking — single scroll source). The panel
+        // (SwipeRefreshLayout) itself is transparent.
+        //
+        // The ancestors all set clipChildren=false in XML so the
+        // rounded top edge can draw OUTSIDE the panel's bounds, into
+        // the blue header's area — that's how the white visually
+        // "overlays" the blue as it scrolls up.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(android.graphics.Color.WHITE)
+            cornerRadii = floatArrayOf(
+                maxCornerRadiusPx, maxCornerRadiusPx, // top-left
+                maxCornerRadiusPx, maxCornerRadiusPx, // top-right
+                0f, 0f,                                // bottom-right
+                0f, 0f,                                // bottom-left
             )
         }
+        binding.whiteContentArea.background = whiteCardBg
     }
 
     private fun applyStatusBarInset() {

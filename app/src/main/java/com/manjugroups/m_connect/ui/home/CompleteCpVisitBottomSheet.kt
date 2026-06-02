@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.home
 
-import android.app.DatePickerDialog
 import android.app.Dialog
 import android.graphics.Color
 import android.os.Bundle
@@ -17,6 +16,7 @@ import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -29,6 +29,7 @@ import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
@@ -738,29 +739,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickPostponeDateTime() {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(
-            requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                android.app.TimePickerDialog(
-                    requireContext(),
-                    { _, hour, minute ->
-                        cal.set(Calendar.HOUR_OF_DAY, hour)
-                        cal.set(Calendar.MINUTE, minute)
-                        tvPostDateTime?.text = SimpleDateFormat(
-                            "dd/MM/yyyy hh:mm a", Locale.US
-                        ).format(cal.time)
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    false,
-                ).show()
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val today = ymd.format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_POSTPONE_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            val pickedCal = Calendar.getInstance().apply {
+                time = runCatching { ymd.parse(date) }.getOrNull() ?: return@setFragmentResultListener
+            }
+            android.app.TimePickerDialog(
+                requireContext(),
+                { _, hour, minute ->
+                    pickedCal.set(Calendar.HOUR_OF_DAY, hour)
+                    pickedCal.set(Calendar.MINUTE, minute)
+                    tvPostDateTime?.text = SimpleDateFormat(
+                        "dd/MM/yyyy hh:mm a", Locale.US
+                    ).format(pickedCal.time)
+                },
+                pickedCal.get(Calendar.HOUR_OF_DAY),
+                pickedCal.get(Calendar.MINUTE),
+                false,
+            ).show()
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Postpone Date",
+            subtitle = "Select Date",
+            initialFrom = today,
+            initialTo = today,
+            minDate = today,
+            resultKey = RESULT_KEY_POSTPONE_DATE,
+        ).show(parentFragmentManager, "cp_visit_postpone_calendar")
     }
 
     private fun refreshBookingRadios() {
@@ -997,17 +1004,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy") {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(
-            requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                target?.text = SimpleDateFormat(format, Locale.US).format(cal.time)
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val today = ymd.format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_GENERIC_DATE) { _, bundle ->
+            val iso = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            val parsed = runCatching { ymd.parse(iso) }.getOrNull() ?: return@setFragmentResultListener
+            target?.text = SimpleDateFormat(format, Locale.US).format(parsed)
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Select Date",
+            subtitle = "Pick a date",
+            initialFrom = today,
+            initialTo = today,
+            resultKey = RESULT_KEY_GENERIC_DATE,
+        ).show(parentFragmentManager, "cp_visit_generic_calendar")
     }
 
     private fun pickTime(target: TextView?) {
@@ -1936,6 +1946,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
+        private const val RESULT_KEY_POSTPONE_DATE = "cp_visit_postpone_date"
+        private const val RESULT_KEY_GENERIC_DATE = "cp_visit_generic_date"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"

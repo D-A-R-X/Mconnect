@@ -77,9 +77,16 @@ class SiteVisitsFragment : Fragment() {
         setupSearch(view)
         setupFilterPills(view)
 
+        // NOTE: this fragment INFLATES fragment_cp_visits.xml (see
+        // onCreateView), so the swipe-refresh container id is
+        // `cpvRefresh` — not `svRefresh` (that id lives in the unused
+        // fragment_site_visits_list.xml). Calling findViewById with
+        // the wrong id returned null and the chained
+        // setupPullToRefresh{} NPE'd → crash on first open of the
+        // Site Visits screen.
         view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
-            R.id.svRefresh
-        ).setupPullToRefresh { loadVisits() }
+            R.id.cpvRefresh
+        )?.setupPullToRefresh { loadVisits() }
 
         loadVisits()
 
@@ -221,8 +228,11 @@ class SiteVisitsFragment : Fragment() {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
             } finally {
+                // Same id correction as the setup site — fragment_cp_visits's
+                // refresh container is `cpvRefresh`, not `svRefresh`. Without
+                // this the spinner spun forever after a load completed.
                 root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
-                    R.id.svRefresh
+                    R.id.cpvRefresh
                 )?.dismissRefresh()
             }
         }
