@@ -2,9 +2,63 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="16dp"
     android:height="16dp"
-    android:viewportWidth="16"
-    android:viewportHeight="16">
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Circular loader ticks representing rotation/loading -->
+    <!-- Top tick -->
     <path
-        android:fillColor="#7A5AF8"
-        android:pathData="M8,0a8,8 0 1,0 0,16a8,8 0 1,0 0,-16z" />
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 12,3 L 12,6"
+        android:alpha="0.25" />
+    <!-- Top-Right tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 18.36,5.64 L 16.24,7.76"
+        android:alpha="0.35" />
+    <!-- Right tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 21,12 L 18,12"
+        android:alpha="0.45" />
+    <!-- Bottom-Right tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 18.36,18.36 L 16.24,16.24"
+        android:alpha="0.55" />
+    <!-- Bottom tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 12,21 L 12,18"
+        android:alpha="0.65" />
+    <!-- Bottom-Left tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 5.64,18.36 L 7.76,16.24"
+        android:alpha="0.75" />
+    <!-- Left tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 3,12 L 6,12"
+        android:alpha="0.9" />
+    <!-- Top-Left tick -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M 5.64,5.64 L 7.76,7.76"
+        android:alpha="1.0" />
 </vector>
