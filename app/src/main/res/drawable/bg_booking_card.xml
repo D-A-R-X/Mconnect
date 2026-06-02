@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  White card background for a single booking row on the Bookings list.
+  Matches the surface used by CP visit cards and other marketing list
+  rows — 16dp radius, subtle 1dp neutral border.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="16dp" />
+    <solid android:color="#FFFFFF" />
+    <stroke android:width="1dp" android:color="#EEF0F5" />
+</shape>

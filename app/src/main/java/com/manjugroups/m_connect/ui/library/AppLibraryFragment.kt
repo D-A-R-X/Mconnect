@@ -27,6 +27,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment
@@ -363,10 +364,17 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemMarketingInventory,
             allowed = session.hasPermission("projects.view"),
         ) { openScreen(InventoryProjectsListFragment()) }
+        // Booking tile now opens the list screen (the "+" inside the list
+        // routes to the create form). Permission to merely view the list is
+        // marketing.bookings.view; the create button inside the list is
+        // gated separately on marketing.bookings.create. Showing the tile
+        // if the user has EITHER permission preserves access for creators
+        // even when their org hasn't granted the view scope.
         bindIamEntry(
             row = binding.itemMarketingNewBooking,
-            allowed = session.hasPermission("marketing.bookings.create"),
-        ) { openScreen(BookingCreateFragment.newEmpty()) }
+            allowed = session.hasPermission("marketing.bookings.view") ||
+                session.hasPermission("marketing.bookings.create"),
+        ) { openScreen(BookingsFragment.newInstance()) }
 
         // Managers only — surfaced when the backend grants attendance.approve.
         // Show the matching divider so the row joins the HR card cleanly when

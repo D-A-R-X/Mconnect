@@ -755,6 +755,16 @@ interface ApiService {
         @Body body: CreateBookingRequest,
     ): CreateBookingResponse
 
+    // GET /api/marketing/bookings/my — bookings the caller is involved in.
+    // `status` is one of draft|pending_confirmation|confirmed|cancelled or
+    // null for "All". Backend gates on marketing.bookings.view and returns
+    // an empty list (200) when the user lacks permission.
+    @GET("api/marketing/bookings/my")
+    suspend fun listMyBookings(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = null,
+    ): BookingsListResponse
+
     @GET("api/telecaller/leads/search-by-phone")
     suspend fun searchTelecallerLeadsByPhone(
         @Header("Authorization") token: String,
@@ -2025,6 +2035,42 @@ data class CreateBookingRequest(
 data class CreateBookingResponse(
     val success: Boolean,
     val id: String? = null,
+    val error: String? = null,
+)
+
+// ── Marketing: Bookings list (mobile) ──────────────────────────────────────
+// Server enriches each row with projectName + plotNumber so the list card
+// can render without secondary lookups.
+data class Booking(
+    @SerializedName("_id") val id: String,
+    @SerializedName("_creationTime") val creationTime: Double? = null,
+    val bookingRefNo: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val email: String? = null,
+    val bookingDate: String? = null,                // yyyy-MM-dd
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val agreedAmount: Double? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val plotNumber: String? = null,                  // server-enriched fallback
+    /** draft | pending_confirmation | confirmed | cancelled */
+    val status: String? = null,
+    val approvalStage: String? = null,
+    val sourceType: String? = null,                  // cp_visit | site_visit | walk_in
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+)
+
+data class BookingsListResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val bookings: List<Booking> = emptyList(),
     val error: String? = null,
 )
 

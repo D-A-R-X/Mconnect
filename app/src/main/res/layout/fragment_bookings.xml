@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bookings list — mirrors fragment_cp_visits' structure (top bar with
+  back + title + add, search row, filter pill row, content + empty
+  state). Reuses the cpv_* drawables intentionally because the design
+  language is shared across marketing list screens.
+
+  Status filter values, in order:
+    All / Draft / Pending / Confirmed / Cancelled
+  matches the web /marketing/bookings page filter set. The "Pending"
+  pill maps to status="pending_confirmation" on the API.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F1F3F8"
+    android:orientation="vertical">
+
+    <!-- TOP BAR -->
+    <FrameLayout
+        android:id="@+id/bkTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#FFFFFF">
+
+        <ImageView
+            android:id="@+id/btnBookingsBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="#0B61CA" />
+
+        <TextView
+            android:id="@+id/tvBookingsTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.01"
+            android:text="Booking"
+            android:textColor="#101828"
+            android:textSize="17sp" />
+
+        <ImageView
+            android:id="@+id/btnCreateBooking"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Create booking"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_cpv_plus"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#EEF0F5" />
+
+    <!-- SEARCH BAR -->
+    <FrameLayout
+        android:id="@+id/bkSearchContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp">
+
+        <EditText
+            android:id="@+id/etBookingsSearch"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_cpv_search_bar"
+            android:fontFamily="@font/inter_regular"
+            android:hint="Search Bookings"
+            android:imeOptions="actionSearch"
+            android:includeFontPadding="false"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="44dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cpv_search" />
+    </FrameLayout>
+
+    <!-- FILTER PILLS -->
+    <HorizontalScrollView
+        android:id="@+id/bkFilterScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:overScrollMode="never"
+        android:paddingHorizontal="16dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/bkFilterRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pillBkAll"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="All"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillBkDraft"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_active"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Draft"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillBkPending"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Pending"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillBkConfirmed"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Confirmed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillBkCancelled"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Cancelled"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- CONTENT -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/bkRefresh"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/bkScroll"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:overScrollMode="never">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <LinearLayout
+                        android:id="@+id/bookingsList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingTop="16dp"
+                        android:paddingBottom="32dp" />
+
+                    <LinearLayout
+                        android:id="@+id/bkEmptyState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="32dp"
+                        android:paddingTop="64dp"
+                        android:paddingBottom="32dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/ivBkEmptyIllustration"
+                            android:layout_width="182dp"
+                            android:layout_height="142dp"
+                            android:alpha="0.56"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_bookings_empty" />
+
+                        <TextView
+                            android:id="@+id/tvBkEmptyTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="No Booking Yet"
+                            android:textColor="#101828"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/tvBkEmptySubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:lineSpacingExtra="2dp"
+                            android:text="Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place."
+                            android:textColor="#667085"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </FrameLayout>
+            </androidx.core.widget.NestedScrollView>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <LinearLayout
+            android:id="@+id/bkSkeletonContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:visibility="gone">
+
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_list_item" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

@@ -999,7 +999,7 @@
                                 android:layout_weight="1"
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
-                                android:text="New Booking"
+                                android:text="Booking"
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 
