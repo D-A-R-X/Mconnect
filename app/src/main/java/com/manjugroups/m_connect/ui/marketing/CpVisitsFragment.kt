@@ -51,6 +51,11 @@ class CpVisitsFragment : Fragment() {
     private var currentFilter: Filter = Filter.SCHEDULED
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
+    // True once the user has punched in at least once today — sticky for the
+    // rest of the day even after subsequent clock-outs. Mid-day clock-outs
+    // (the user steps away, locks the punch-out time at midnight) must NOT
+    // re-gate the CP cards to "Need to Clock In", so we read this field
+    // from AttendanceFlowState rather than the right-now `isClockedIn` one.
     private var isClockedIn: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -109,7 +114,13 @@ class CpVisitsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 attendanceVm.uiState.collect { state ->
-                    val newValue = state.isClockedIn
+                    // Use hasClockedInToday, not isClockedIn. The latter
+                    // flips to false the moment a user taps Clock Out, but
+                    // the one-time-Clock-In rule means trips/CP visits
+                    // should stay unlocked until the day ends. After the
+                    // midnight finalize the next morning's load resets
+                    // both flags via loadTodayAttendance().
+                    val newValue = state.hasClockedInToday
                     if (newValue != isClockedIn) {
                         isClockedIn = newValue
                         renderList()

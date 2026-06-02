@@ -38,7 +38,16 @@ import java.util.TimeZone
 data class AttendanceFlowState(
     val isLoading: Boolean = false,
     val isSubmitting: Boolean = false,
+    /** True only while an open session exists right now. Drives the live
+     *  ticker and the blue "You're Clocked In" / "Clocked Out" header on
+     *  the Attendance tab. Flips back to false after every clock-out. */
     val isClockedIn: Boolean = false,
+    /** True for the rest of the day once the user has punched in at least
+     *  once (whether the current session is open or already closed). Used
+     *  by feature surfaces — CP cards, trip start, GeoTrack — that must
+     *  not block work just because the user happens to be mid-break after
+     *  a clock-out. Mirrors `AttendanceTrackingGate.isClockedInForToday`. */
+    val hasClockedInToday: Boolean = false,
     val todayMinutes: Int = 0,
     val todayHours: String = "00:00 Hrs",
     val latestTotalHours: String = "00:00:00 hrs",
@@ -102,6 +111,8 @@ class AttendanceFlowViewModel(
                 // session by re-stamping the day's last punch-out (the last
                 // tap wins, locked at midnight) instead of rejecting it.
                 val isClockedInForUi = hasOpenSession
+                val hasClockedInTodayForUi =
+                    AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
@@ -113,6 +124,7 @@ class AttendanceFlowViewModel(
                     isLoading = false,
                     isSubmitting = false,
                     isClockedIn = isClockedInForUi,
+                    hasClockedInToday = hasClockedInTodayForUi,
                     todayMinutes = totalMinutes,
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
@@ -243,6 +255,11 @@ class AttendanceFlowViewModel(
             it.copy(
                 isSubmitting = true,
                 isClockedIn = mode == PunchMode.PUNCH_IN,
+                // Once the user has punched in today, hasClockedInToday is
+                // sticky — clock-outs do NOT reset it. A fresh PUNCH_IN of
+                // course flips it on. This matches the one-time-Clock-In
+                // rule used everywhere outside the live ticker.
+                hasClockedInToday = it.hasClockedInToday || mode == PunchMode.PUNCH_IN,
             )
         }
 
@@ -352,6 +369,7 @@ class AttendanceFlowViewModel(
             it.copy(
                 isSubmitting = false,
                 isClockedIn = previous.isClockedIn,
+                hasClockedInToday = previous.hasClockedInToday,
             )
         }
     }
