@@ -1322,11 +1322,24 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             veg?.setBackgroundResource(R.drawable.bg_outcome_segment_inactive)
             veg?.setTextColor(Color.parseColor("#475467"))
         }
-        // Relation dropdown opens a simple picker.
+        // Relation dropdown opens a simple picker. "Self" sits at the
+        // top because it's the most-used value — the first visitor row
+        // is auto-filled with the lead's name + Self, and we want the
+        // option present in the picker too so the user can re-select
+        // it on subsequent cards or after editing.
         card.findViewWithTag<View>("relationRow")?.setOnClickListener {
             picker(
                 "Relation",
-                listOf("Spouse", "Parent", "Sibling", "Child", "Friend", "Colleague", "Other"),
+                listOf(
+                    "Self",
+                    "Spouse",
+                    "Parent",
+                    "Sibling",
+                    "Child",
+                    "Friend",
+                    "Colleague",
+                    "Other",
+                ),
             ) { card.findViewWithTag<TextView>("relation")?.text = it }
         }
     }
