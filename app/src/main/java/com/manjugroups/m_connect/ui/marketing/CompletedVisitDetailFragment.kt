@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -39,6 +40,12 @@ class CompletedVisitDetailFragment : Fragment() {
     private lateinit var session: SessionManager
     private var pendingEntryAnimation = true
     private var visitId: String? = null
+    // Cached "this CP visit is the telecaller-fixed SV-via-CP variant"
+    // flag, set true if the enriched detail load surfaces any of the
+    // signals CompleteCpVisitBottomSheet's detectAndApplyLockedSvMode
+    // uses. Lets the "Record Outcome" tap pre-pass the hint so the
+    // sheet skips the Booking-tab flash before locking to SV mode.
+    private var isSvFixedHint: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -123,17 +130,49 @@ class CompletedVisitDetailFragment : Fragment() {
             placeAddress ?: "Address not mapped"
 
         // ---- Status summary ----
+        // When the trip ended without an outcome (sheet dismissed, app
+        // crash, OS kill), the visit is in limbo: status=completed on the
+        // server but no decision was recorded. Surface this clearly and
+        // hand the user a "Record Outcome" CTA that reopens the bottom
+        // sheet — anything else strands the visit forever.
+        val outcomePending = outcome.isNullOrBlank()
         val statusSummary = when {
+            outcomePending -> "Outcome pending"
             clientMet == true -> "Client met"
             clientMet == false -> "Client not seen"
             else -> "Visit completed"
         }
         root.findViewById<TextView>(R.id.tvCvdStatusSummary).text = statusSummary
 
-        val statusSub = clientMetAt?.let {
-            "Outcome recorded on ${formatEpochMillis(it)}"
-        } ?: "Outcome captured for this client visit"
+        val statusSub = when {
+            outcomePending ->
+                "Trip was completed but no outcome was recorded. Tap below to finish."
+            clientMetAt != null -> "Outcome recorded on ${formatEpochMillis(clientMetAt)}"
+            else -> "Outcome captured for this client visit"
+        }
         root.findViewById<TextView>(R.id.tvCvdStatusSubtitle).text = statusSub
+
+        // Status pill flips amber when outcome is pending so the
+        // top-of-screen badge matches the CP-list card colouring.
+        val statusPill = root.findViewById<TextView>(R.id.tvCvdStatusLabel)
+        if (outcomePending) {
+            statusPill.text = "Pending"
+            statusPill.setTextColor(Color.parseColor("#B54708"))
+            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
+        } else {
+            statusPill.text = "Completed"
+            statusPill.setTextColor(Color.parseColor("#169B2F"))
+            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_ready)
+        }
+
+        val recordBtn = root.findViewById<TextView>(R.id.btnCvdRecordOutcome)
+        if (outcomePending) {
+            recordBtn.visibility = View.VISIBLE
+            recordBtn.setOnClickListener { openOutcomeSheet() }
+        } else {
+            recordBtn.visibility = View.GONE
+            recordBtn.setOnClickListener(null)
+        }
 
         // ---- Visit info grid ----
         root.findViewById<TextView>(R.id.tvCvdDate).text =
@@ -316,7 +355,46 @@ class CompletedVisitDetailFragment : Fragment() {
         }
     }
 
+    /**
+     * Reopens [CompleteCpVisitBottomSheet] so the user can finish the
+     * outcome step they skipped/lost. Uses the same args path the
+     * trip-complete swipe used; the sheet's own detect helper figures
+     * out SV-via-CP locking from the server-side row.
+     */
+    private fun openOutcomeSheet() {
+        val cpId = visitId?.takeIf { it.isNotBlank() } ?: return
+        CompleteCpVisitBottomSheet.newInstance(
+            cpVisitId = cpId,
+            cpClientMet = null,
+            cpOutcome = null,
+            isSvFixedHint = isSvFixedHint,
+        ).show(parentFragmentManager, "CompleteCpVisitBottomSheet")
+    }
+
     private fun bindEnriched(root: View, visit: CpVisitDetail) {
+        // Capture SV-via-CP signals for the Record-Outcome reopen path.
+        // Mirrors the detection logic in CompleteCpVisitBottomSheet.
+        val proposed = visit.proposedSiteVisit
+        val proposedMeaningful = proposed != null && (
+            !proposed.projectId.isNullOrBlank() ||
+                !proposed.scheduledDate.isNullOrBlank() ||
+                !proposed.scheduledTime.isNullOrBlank() ||
+                !proposed.inchargeStaffId.isNullOrBlank() ||
+                !proposed.hodStaffId.isNullOrBlank() ||
+                !proposed.bdoStaffId.isNullOrBlank() ||
+                !proposed.avpStaffId.isNullOrBlank() ||
+                !proposed.gmStaffId.isNullOrBlank() ||
+                !proposed.seniorManagerStaffId.isNullOrBlank()
+            )
+        val leadSvFixed = visit.lead?.followUpStatus
+            ?.lowercase(Locale.getDefault())
+            ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+            ?: false
+        val hasSvFixParty = (visit.expectedAttendeeCount ?: 0) > 0 ||
+            (visit.attendees?.isNotEmpty() == true) ||
+            !visit.foodPreferences.isNullOrBlank() ||
+            !visit.vehiclePreference.isNullOrBlank()
+        isSvFixedHint = proposedMeaningful || leadSvFixed || hasSvFixParty
         // Upgrade client info — prefer the fully-resolved name + phone from
         // the joined lead/client docs over the placeholders captured at list time.
         val displayName = formatPersonName(

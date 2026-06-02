@@ -490,16 +490,22 @@ class CpVisitsFragment : Fragment() {
         val inProgress = isInProgress(status)
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
-        // SV-via-CP "decision pending" — the trip is over (status=completed)
-        // but the field staff dismissed the Reject/Confirm bottom sheet
-        // without choosing. The CP visit's outcome is still blank, so the
-        // backend has no record of whether the SV was actually confirmed.
-        // We render a Pending state instead of the read-only Completed
-        // card; tapping reopens the bottom sheet so the user can still
-        // decide. Without this branch the card would route to the
-        // read-only detail screen and the decision would be stuck forever.
-        val isSvViaCpPending = completed &&
-            visit.visitCategory == "sv_cum_cp" &&
+        // "Outcome pending" — the trip is over (status=completed) but the
+        // CP visit's outcome is still blank, so the backend has no record
+        // of what happened on this visit. This covers two distinct miss
+        // paths:
+        //   1. SV-via-CP: field staff dismissed the Reject/Confirm sheet
+        //      without choosing (telecaller's pre-fixed SV stuck pending).
+        //   2. Regular CP: field staff swiped Trip Complete but the
+        //      outcome sheet was killed by the OS, app crash, or the user
+        //      backing out before picking Booking/SV/Postpone/NotInterested.
+        // In either case the card would otherwise route to the read-only
+        // Completed Detail screen and the decision would be stuck forever.
+        // Tapping the Pending action reopens CompleteCpVisitBottomSheet —
+        // SV-via-CP visits land in the locked SV tab automatically via
+        // the sheet's own detectAndApplyLockedSvMode signal, regular CP
+        // visits open in the default Booking-tab flow.
+        val isOutcomePending = completed &&
             visit.cpVisit?.outcome.isNullOrBlank()
 
         // Three click outcomes: open the trip flow, open the completed-visit
@@ -521,11 +527,12 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.imageTintList = null
                 tapMode = TapMode.NONE
             }
-            isSvViaCpPending -> {
-                // SV-via-CP visit, trip is complete but the user dismissed
-                // the Confirm/Reject sheet without choosing. Render an
+            isOutcomePending -> {
+                // CP visit's trip is complete but the outcome was never
+                // recorded (sheet dismissed, app crash, OS kill). Render an
                 // amber "Pending" status + Pending action — tap reopens
-                // the CompleteCpVisitBottomSheet so they can still decide.
+                // the CompleteCpVisitBottomSheet so the user can still
+                // record the outcome.
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
                 statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
                 statusText.text = "Pending"
@@ -674,16 +681,17 @@ class CpVisitsFragment : Fragment() {
      */
     private fun reopenConfirmSheet(visit: TodayVisit) {
         val cpId = visit.clientPlaceVisitId ?: visit.id
+        // Pre-pass the SV-fixed hint only when the row is actually a
+        // telecaller-fixed SV-via-CP visit. For regular CP visits the
+        // sheet should open in its default multi-tab Booking flow, not
+        // locked to the SV tab. detectAndApplyLockedSvMode still runs
+        // server-side either way as a backstop.
+        val isSvFixed = visit.visitCategory == "sv_cum_cp"
         CompleteCpVisitBottomSheet.newInstance(
             cpVisitId = cpId,
-            // The visit is already past the trip so clientMet has fired
-            // somewhere up-flow. Don't pass a hint here — letting the
-            // sheet fetch the current server state keeps it consistent
-            // if the user (or another device) updated anything in the
-            // meantime.
             cpClientMet = null,
             cpOutcome = null,
-            isSvFixedHint = true,
+            isSvFixedHint = isSvFixed,
         ).show(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
