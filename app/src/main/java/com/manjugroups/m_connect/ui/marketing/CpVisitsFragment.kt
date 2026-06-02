@@ -316,15 +316,25 @@ class CpVisitsFragment : Fragment() {
         val displayName = canonicalClient ?: typedContact ?: placeLabel ?: "CP visit"
         // Carry the CP outcome onto the mapped TodayVisit so the card
         // renderer can detect a "completed but no decision yet" state
-        // for SV-via-CP visits (telecaller-fixed SV path). Without this
-        // the renderer can't tell apart a finished CP visit from one
-        // that the field staff completed the trip on but dismissed the
-        // Confirm/Reject sheet without choosing.
+        // for SV-via-CP visits (telecaller-fixed SV path).
+        //
+        // Defensive: when the row already carries a convertedSiteVisitId
+        // or convertedBookingId, the conversion happened — even if the
+        // outcome string field is somehow blank (legacy data, partial
+        // patch, or a future mutation that forgets the explicit outcome
+        // write). Derive a synthetic outcome from those linkages so the
+        // Pending UI doesn't lure the user into a re-convert that would
+        // either no-op (idempotent path) or worse, double-action.
+        val effectiveOutcome = this.outcome?.takeIf { it.isNotBlank() }
+            ?: this.convertedSiteVisitId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_site_visit" }
+            ?: this.convertedBookingId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_booking" }
         val cpState = CpVisitState(
             clientMet = this.clientMet,
             clientMetAt = this.clientMetAt,
             clientNoShowReason = this.clientNoShowReason,
-            outcome = this.outcome,
+            outcome = effectiveOutcome,
             postponeReasons = this.postponeReasons,
         )
         return TodayVisit(
