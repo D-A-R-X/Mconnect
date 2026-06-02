@@ -1013,7 +1013,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
             Outcome.BOOKING -> { /* fall through to the Booking flow below */ }
         }
-        // From the mobile-find step, validate + advance to the form.
+        // From the mobile-find step, validate, look up an existing lead
+        // by phone, and advance to the form (pre-filled when a match is
+        // found). Mirrors the BookingCreateFragment flow so a staffer
+        // who already engaged this client through the telecaller doesn't
+        // have to retype name / address / WhatsApp / email / etc.
         if (bookingSub == BookingSub.CLIENT && bookingStep == BookingStep.FIND_MOBILE) {
             val raw = etClientMobile?.text?.toString().orEmpty().trim()
             if (raw.length < 6) {
@@ -1021,8 +1025,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return
             }
             tvFormPhone?.text = raw
+            // Advance immediately for snappy UX — the lookup runs async
+            // and prefills fields when (if) a match arrives. Most users
+            // type then tap Next and start filling the form; if a lead
+            // exists the fields just appear filled by the time they
+            // look at them.
             bookingStep = BookingStep.CLIENT_FORM
             renderState()
+            lookupAndPrefillClientByPhone(raw)
             return
         }
         // Final submit is on the Staff sub-tab. Anywhere else, Next moves
@@ -1038,6 +1048,52 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         bookingSub = nextSubTab(bookingSub)
         renderState()
+    }
+
+    /**
+     * Hit `/api/telecaller/leads/search-by-phone` and replay any
+     * existing lead profile onto the Client form fields. Only fills
+     * blank fields — the user's manual input wins. Silent on errors;
+     * the form already opened and the user is free to keep typing.
+     */
+    private fun lookupAndPrefillClientByPhone(phone: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val lead = try {
+                val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+                if (!resp.success) {
+                    android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    return@launch
+                }
+                resp.leads.firstOrNull() ?: run {
+                    android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                    return@launch
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                return@launch
+            }
+            if (!isAdded) return@launch
+            val profile = lead.latestAnalysisProfile
+
+            fun fill(field: EditText?, value: String?) {
+                val v = value?.trim().orEmpty()
+                if (v.isEmpty()) return
+                if (field?.text?.toString()?.trim().isNullOrEmpty()) field?.setText(v)
+            }
+
+            // Name: prefer the lead's contactName, fall back to analysis
+            // profile's clientName when the contact field was left blank.
+            fill(etFormName, lead.contactName ?: profile?.clientName)
+            fill(etFormEmail, lead.emailId)
+            fill(etFormAltNumber, profile?.alternateMobileNumber)
+            fill(etFormHomeAddress, profile?.address ?: lead.suggestedVisitAddress)
+            fill(etFormPincode, profile?.pincode)
+            fill(etFormState, profile?.state)
+            fill(etFormDistrict, profile?.district)
+            // Location preferred / city → "Location" field (the row
+            // shows preferred area on the lead-card too).
+            fill(etFormLocation, lead.locationPreferred ?: lead.clientCity)
+        }
     }
 
     private fun nextSubTab(current: BookingSub): BookingSub = when (current) {
