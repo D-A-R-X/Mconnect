@@ -129,50 +129,19 @@ class CompletedVisitDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvCvdAddress).text =
             placeAddress ?: "Address not mapped"
 
-        // ---- Status summary ----
-        // When the trip ended without an outcome (sheet dismissed, app
-        // crash, OS kill), the visit is in limbo: status=completed on the
-        // server but no decision was recorded. Surface this clearly and
-        // hand the user a "Record Outcome" CTA that reopens the bottom
-        // sheet — anything else strands the visit forever.
-        val outcomePending = outcome.isNullOrBlank()
-        val statusSummary = when {
-            outcomePending -> "Outcome pending"
-            clientMet == true -> "Client met"
-            clientMet == false -> "Client not seen"
-            else -> "Visit completed"
-        }
-        root.findViewById<TextView>(R.id.tvCvdStatusSummary).text = statusSummary
-
-        val statusSub = when {
-            outcomePending ->
-                "Trip was completed but no outcome was recorded. Tap below to finish."
-            clientMetAt != null -> "Outcome recorded on ${formatEpochMillis(clientMetAt)}"
-            else -> "Outcome captured for this client visit"
-        }
-        root.findViewById<TextView>(R.id.tvCvdStatusSubtitle).text = statusSub
-
-        // Status pill flips amber when outcome is pending so the
-        // top-of-screen badge matches the CP-list card colouring.
-        val statusPill = root.findViewById<TextView>(R.id.tvCvdStatusLabel)
-        if (outcomePending) {
-            statusPill.text = "Pending"
-            statusPill.setTextColor(Color.parseColor("#B54708"))
-            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
-        } else {
-            statusPill.text = "Completed"
-            statusPill.setTextColor(Color.parseColor("#169B2F"))
-            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_ready)
-        }
-
-        val recordBtn = root.findViewById<TextView>(R.id.btnCvdRecordOutcome)
-        if (outcomePending) {
-            recordBtn.visibility = View.VISIBLE
-            recordBtn.setOnClickListener { openOutcomeSheet() }
-        } else {
-            recordBtn.visibility = View.GONE
-            recordBtn.setOnClickListener(null)
-        }
+        // Initial status-card paint uses whatever outcome we got from
+        // the list args. When the server-side enrichment lands (a
+        // few hundred ms later) bindEnriched re-runs this with the
+        // authoritative outcome + conversion linkage so a row that
+        // was converted to SV/Booking flips off Pending immediately.
+        applyStatusCard(
+            root = root,
+            outcome = outcome,
+            clientMet = clientMet,
+            clientMetAt = clientMetAt,
+            convertedSiteVisitId = null,
+            convertedBookingId = null,
+        )
 
         // ---- Visit info grid ----
         root.findViewById<TextView>(R.id.tvCvdDate).text =
@@ -216,13 +185,40 @@ class CompletedVisitDetailFragment : Fragment() {
         }
 
         // ---- Outcome card ----
+        applyOutcomePill(
+            root = root,
+            outcome = outcome,
+            convertedSiteVisitId = null,
+            convertedBookingId = null,
+            postponeReasons = postponeReasons,
+        )
+    }
+
+    /**
+     * Binds the small "Outcome" pill on the lower card. Same
+     * conversion-linkage fallback as [applyStatusCard] so a row that
+     * carries convertedSiteVisitId without an explicit outcome string
+     * still reads "Converted to Site Visit" rather than "Not recorded".
+     */
+    private fun applyOutcomePill(
+        root: View,
+        outcome: String?,
+        convertedSiteVisitId: String?,
+        convertedBookingId: String?,
+        postponeReasons: List<String>,
+    ) {
+        val effectiveOutcome = outcome?.takeIf { it.isNotBlank() }
+            ?: convertedSiteVisitId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_site_visit" }
+            ?: convertedBookingId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_booking" }
         val outcomePill = root.findViewById<TextView>(R.id.tvCvdOutcomeLabel)
-        val (outcomeLabel, outcomeBg, outcomeFg) = outcomePresentation(outcome)
+        val (outcomeLabel, outcomeBg, outcomeFg) = outcomePresentation(effectiveOutcome)
         outcomePill.text = outcomeLabel
         outcomePill.setBackgroundResource(outcomeBg)
         outcomePill.setTextColor(Color.parseColor(outcomeFg))
 
-        if (outcome == "postponed" && postponeReasons.isNotEmpty()) {
+        if (effectiveOutcome == "postponed" && postponeReasons.isNotEmpty()) {
             renderPostponeChips(root, postponeReasons)
             root.findViewById<View>(R.id.tvCvdPostponeLabel).visibility = View.VISIBLE
             root.findViewById<View>(R.id.cvdPostponeChipScroll).visibility = View.VISIBLE
@@ -356,6 +352,70 @@ class CompletedVisitDetailFragment : Fragment() {
     }
 
     /**
+     * Renders the top status card. Treats a row as "outcome pending"
+     * only when:
+     *   1. The explicit `outcome` field is blank, AND
+     *   2. Neither convertedSiteVisitId nor convertedBookingId is set
+     *      (so we can be sure no conversion landed server-side).
+     *
+     * Conversion-linkage fallback covers the case where the server
+     * silently dropped the outcome string field but actually moved
+     * the visit to a completed state by creating the linked SV /
+     * booking row — same defensive read the CP list card uses.
+     */
+    private fun applyStatusCard(
+        root: View,
+        outcome: String?,
+        clientMet: Boolean?,
+        clientMetAt: Long?,
+        convertedSiteVisitId: String?,
+        convertedBookingId: String?,
+    ) {
+        val effectiveOutcome = outcome?.takeIf { it.isNotBlank() }
+            ?: convertedSiteVisitId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_site_visit" }
+            ?: convertedBookingId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_booking" }
+        val outcomePending = effectiveOutcome.isNullOrBlank()
+
+        val statusSummary = when {
+            outcomePending -> "Outcome pending"
+            clientMet == true -> "Client met"
+            clientMet == false -> "Client not seen"
+            else -> "Visit completed"
+        }
+        root.findViewById<TextView>(R.id.tvCvdStatusSummary).text = statusSummary
+
+        val statusSub = when {
+            outcomePending ->
+                "Trip was completed but no outcome was recorded. Tap below to finish."
+            clientMetAt != null -> "Outcome recorded on ${formatEpochMillis(clientMetAt)}"
+            else -> "Outcome captured for this client visit"
+        }
+        root.findViewById<TextView>(R.id.tvCvdStatusSubtitle).text = statusSub
+
+        val statusPill = root.findViewById<TextView>(R.id.tvCvdStatusLabel)
+        if (outcomePending) {
+            statusPill.text = "Pending"
+            statusPill.setTextColor(Color.parseColor("#B54708"))
+            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
+        } else {
+            statusPill.text = "Completed"
+            statusPill.setTextColor(Color.parseColor("#169B2F"))
+            (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_ready)
+        }
+
+        val recordBtn = root.findViewById<TextView>(R.id.btnCvdRecordOutcome)
+        if (outcomePending) {
+            recordBtn.visibility = View.VISIBLE
+            recordBtn.setOnClickListener { openOutcomeSheet() }
+        } else {
+            recordBtn.visibility = View.GONE
+            recordBtn.setOnClickListener(null)
+        }
+    }
+
+    /**
      * Reopens [CompleteCpVisitBottomSheet] so the user can finish the
      * outcome step they skipped/lost. Uses the same args path the
      * trip-complete swipe used; the sheet's own detect helper figures
@@ -395,6 +455,33 @@ class CompletedVisitDetailFragment : Fragment() {
             !visit.foodPreferences.isNullOrBlank() ||
             !visit.vehiclePreference.isNullOrBlank()
         isSvFixedHint = proposedMeaningful || leadSvFixed || hasSvFixParty
+
+        // Re-paint the status card with authoritative server state.
+        // Critical when the list-passed `outcome` arg was blank but the
+        // row actually carries convertedSiteVisitId / convertedBookingId
+        // — e.g. the Farima case where the CP was converted to SV and
+        // the row is fully complete, but the explicit outcome column
+        // never got the converted_to_site_visit write (legacy / partial
+        // patch). The conversion-linkage fallback flips Pending off.
+        applyStatusCard(
+            root = root,
+            outcome = visit.outcome,
+            clientMet = visit.clientMet,
+            clientMetAt = visit.clientMetAt,
+            convertedSiteVisitId = visit.convertedSiteVisitId,
+            convertedBookingId = visit.convertedBookingId,
+        )
+        // Same fallback for the small Outcome pill on the lower card —
+        // shows "Converted to Site Visit" / "Converted to Booking"
+        // when the linkage is present, instead of "Not recorded".
+        applyOutcomePill(
+            root = root,
+            outcome = visit.outcome,
+            convertedSiteVisitId = visit.convertedSiteVisitId,
+            convertedBookingId = visit.convertedBookingId,
+            postponeReasons = visit.postponeReasons ?: emptyList(),
+        )
+
         // Upgrade client info — prefer the fully-resolved name + phone from
         // the joined lead/client docs over the placeholders captured at list time.
         val displayName = formatPersonName(
