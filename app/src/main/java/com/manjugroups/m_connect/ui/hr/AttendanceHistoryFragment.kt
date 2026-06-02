@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import coil.load
+import coil.transform.CircleCropTransformation
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -224,8 +226,102 @@ class AttendanceHistoryFragment : Fragment() {
                 deleteBtn.setOnClickListener(null)
             }
 
+            // Decision footer — surfaces "Approved/Rejected at <date>
+            // By <approver>" on terminal rows. Mirrors the leaves
+            // history card's footer so the two surfaces feel like one
+            // feature. auto-approved rows skip the footer because
+            // there's no human approver to credit.
+            bindDecisionFooter(card, record)
+
             binding.attendanceList.addView(card)
         }
+    }
+
+    private fun bindDecisionFooter(card: View, record: AttendanceRecord) {
+        val row = card.findViewById<View>(R.id.historyItemDecisionRow)
+        val status = record.status?.lowercase(Locale.US).orEmpty()
+        val isApproved = status == "approved"
+        val isRejected = status == "rejected"
+        if (!isApproved && !isRejected) {
+            row.visibility = View.GONE
+            return
+        }
+        row.visibility = View.VISIBLE
+
+        val icon = card.findViewById<ImageView>(R.id.ivHistoryItemDecisionIcon)
+        val text = card.findViewById<TextView>(R.id.tvHistoryItemDecisionText)
+        val verb: String
+        if (isApproved) {
+            icon.setImageResource(R.drawable.ic_leave_status_approved)
+            text.setTextColor(android.graphics.Color.parseColor("#169B2F"))
+            verb = "Approved"
+        } else {
+            icon.setImageResource(R.drawable.ic_leave_status_rejected)
+            text.setTextColor(android.graphics.Color.parseColor("#B42318"))
+            verb = "Rejected"
+        }
+        val decidedDate = parseIsoOrEpoch(record.decidedAt)
+        val decidedLabel = decidedDate?.let {
+            SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(it)
+        }
+        text.text = if (decidedLabel != null) "$verb at $decidedLabel" else verb
+
+        val approverName = record.approverName?.trim().orEmpty().ifBlank { "HR" }
+        val nameView = card.findViewById<TextView>(R.id.tvHistoryItemApproverName)
+        val initialView = card.findViewById<TextView>(R.id.tvHistoryItemApproverInitial)
+        val photoView = card.findViewById<ImageView>(R.id.ivHistoryItemApproverPhoto)
+        nameView.text = approverName
+        initialView.text = approverName.firstOrNull { it.isLetterOrDigit() }
+            ?.uppercaseChar()?.toString() ?: "?"
+
+        val photoUrl = record.approverPhotoUrl?.takeIf { it.isNotBlank() }
+        if (photoUrl != null) {
+            photoView.visibility = View.VISIBLE
+            initialView.visibility = View.INVISIBLE
+            photoView.load(photoUrl) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            photoView.visibility = View.GONE
+            photoView.setImageDrawable(null)
+            initialView.visibility = View.VISIBLE
+        }
+    }
+
+    /**
+     * ISO date or numeric-epoch string → Date. Mirrors the helper in
+     * LeavesFragment so both surfaces parse decidedAt identically.
+     */
+    private fun parseIsoOrEpoch(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        raw.toDoubleOrNull()?.let { epoch ->
+            val millis = when {
+                epoch > 1_000_000_000_000 -> epoch.toLong()
+                epoch > 1_000_000_000 -> (epoch * 1000).toLong()
+                else -> epoch.toLong()
+            }
+            return runCatching { Date(millis) }.getOrNull()
+        }
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (pattern in patterns) {
+            runCatching {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                fmt.parse(raw)?.let { return it }
+            }
+        }
+        return null
     }
 
     /**

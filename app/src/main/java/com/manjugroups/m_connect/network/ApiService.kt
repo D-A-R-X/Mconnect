@@ -919,6 +919,13 @@ data class AttendanceRecord(
     val punchOutTime: String? = null,
     val hasOpenSession: Boolean? = null,
     val sessions: List<SessionData>? = emptyList(),
+    // Decision metadata mirrored from leaves — populated on
+    // approved/rejected rows so the history row can show
+    // "By <approver>" with photo and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -1057,7 +1064,14 @@ data class LeaveData(
     val toDate: String?,
     val reason: String?,
     val status: String?,
-    @SerializedName("_creationTime") val createdAt: Double?
+    @SerializedName("_creationTime") val createdAt: Double?,
+    // Decision metadata — populated server-side on /my for approved
+    // and rejected rows so the mobile card can render "By <approver>"
+    // with the person's avatar and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO datetime — approvedOn / rejectedOn / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class ApplyLeaveRequest(
     val leaveType: String,

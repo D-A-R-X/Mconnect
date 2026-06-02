@@ -17,6 +17,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
@@ -390,7 +392,11 @@ class LeavesFragment : Fragment() {
             }
 
             val bucket = bucketForStatus(leave.status)
-            val statusDate = parseCreationDate(leave.createdAt)
+            // Decision timestamp first (Approved/Rejected rows), fall
+            // back to creation time for Review rows / older data that
+            // pre-dates the decidedAt enrichment.
+            val decidedDate = parseIsoOrEpoch(leave.decidedAt)
+            val statusDate = decidedDate ?: parseCreationDate(leave.createdAt)
             val statusDateText = statusDate?.let { statusFmt.format(it) }
 
             val statusNote: String
@@ -425,19 +431,49 @@ class LeavesFragment : Fragment() {
 
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
+            val staffAvatar = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStaffAvatar)
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
             val approveButton = card.findViewById<TextView>(R.id.btnApproveLeave)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectLeave)
 
-            val displayName = leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            // For Approved/Rejected rows show the decision-maker (the
+            // approver who acted on the request) instead of the
+            // submitter — matches the design's "By Elaine" label on
+            // the approved/rejected cards. For Review rows we keep the
+            // submitter name, which is what the manager UI wants.
+            val showApprover = bucket == StatusBucket.APPROVED || bucket == StatusBucket.REJECTED
+            val displayName = if (showApprover) {
+                leave.approverName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: leave.staffName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: "Self"
+            } else {
+                leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            }
             val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
             staffRow.visibility = View.VISIBLE
             byLabel.visibility = View.VISIBLE
             staffName.visibility = View.VISIBLE
             staffName.text = displayName
             staffInitial.text = initial
+
+            // Approver photo when present; clear back to the initial
+            // chip otherwise so recycled views don't keep the previous
+            // person's avatar.
+            val photoUrl = if (showApprover) leave.approverPhotoUrl?.takeIf { it.isNotBlank() } else null
+            if (photoUrl != null) {
+                staffAvatar.visibility = View.VISIBLE
+                staffInitial.visibility = View.INVISIBLE
+                staffAvatar.load(photoUrl) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+            } else {
+                staffAvatar.visibility = View.GONE
+                staffAvatar.setImageDrawable(null)
+                staffInitial.visibility = View.VISIBLE
+            }
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
@@ -509,6 +545,39 @@ class LeavesFragment : Fragment() {
             else -> raw.toLong()
         }
         return runCatching { Date(millis) }.getOrNull()
+    }
+
+    /**
+     * Accepts either an ISO-8601 string ("2026-06-02T13:45:21.123Z" or
+     * "2026-06-02") OR a numeric epoch encoded as a string. Returns
+     * null on any failure so the caller can fall back to creationTime.
+     * Used to parse the server's `decidedAt` field on approved/rejected
+     * leave rows.
+     */
+    private fun parseIsoOrEpoch(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        raw.toDoubleOrNull()?.let { epoch ->
+            return parseCreationDate(epoch)
+        }
+        val isoPatterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (pattern in isoPatterns) {
+            runCatching {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                fmt.parse(raw)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun sameDate(date1: Date, date2: Date): Boolean {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="10dp"
@@ -110,5 +111,90 @@
                 android:textColor="#344054"
                 android:textSize="13sp" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!--
+      Decision footer — visible only on approved / rejected rows.
+      Mirrors the leaves history card's bottom row:
+        ✓ Approved at <date>           By <Approver> [avatar]
+        ✗ Rejected at <date>           By <Approver> [avatar]
+      Fragment-binding toggles visibility based on record.status and
+      whether the server enriched approver info onto the row.
+    -->
+    <LinearLayout
+        android:id="@+id/historyItemDecisionRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivHistoryItemDecisionIcon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_leave_status_approved" />
+
+        <TextView
+            android:id="@+id/tvHistoryItemDecisionText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#169B2F"
+            android:textSize="12sp"
+            tools:text="Approved at 19 Sept 2024" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_regular"
+            android:includeFontPadding="false"
+            android:text="By"
+            android:textColor="#101828"
+            android:textSize="12sp" />
+
+        <FrameLayout
+            android:id="@+id/historyItemApproverAvatarFrame"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_leave_avatar_chip"
+            android:clipChildren="true">
+
+            <TextView
+                android:id="@+id/tvHistoryItemApproverInitial"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="#98A2B3"
+                android:textSize="10sp" />
+
+            <ImageView
+                android:id="@+id/ivHistoryItemApproverPhoto"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvHistoryItemApproverName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:textColor="#101828"
+            android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>
