@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Red dot indicator for the "My Leaves" scope selector.
+     Matches Figma node 627:33041: #E10000 bg, circular. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#E10000" />
+    <size
+        android:width="7dp"
+        android:height="7dp" />
+</shape>
