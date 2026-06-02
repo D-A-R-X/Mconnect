@@ -147,6 +147,66 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- OEM Autostart row — only visible on Xiaomi / Vivo / Oppo /
+         Realme / Honor where the OS kills background services
+         regardless of the standard battery-opt grant. The fragment
+         toggles visibility based on Build.MANUFACTURER. -->
+    <LinearLayout
+        android:id="@+id/rowAutostart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_attendance_history_inner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Autostart"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvAutostartHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Enable Autostart so tracking survives a phone restart."
+                android:textColor="#6B7280"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnFixAutostart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_inspection_chip_active"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingStart="14dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="8dp"
+            android:text="Open"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <!-- Status footer auto-updates each time the dialog re-checks. -->
     <TextView
         android:id="@+id/tvGateStatus"
