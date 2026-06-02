@@ -1266,11 +1266,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSiteVisit(e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
-                    .show()
+                // Retrofit throws HttpException on a 5xx before deserialising
+                // the response body — `e.message` is just "HTTP 500 Internal
+                // Server Error" which is useless to the user. Try to extract
+                // the JSON {error: "..."} the backend puts in the body so the
+                // toast shows the actual reason (staff busy, project missing,
+                // etc.) instead of a generic 500.
+                val serverMessage = extractHttpErrorMessage(e)
+                val message = serverMessage ?: e.message ?: "Network error"
+                finishCtaSiteVisit(message)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /**
+     * Pull the `{ error: "..." }` field out of a Retrofit HttpException's
+     * error body. Returns null on any failure (non-HttpException, body
+     * unreadable, JSON parse error, missing field). Mirrors the helper
+     * AttendanceFlowViewModel uses for the same purpose.
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun finishCtaSiteVisit(error: String) {
