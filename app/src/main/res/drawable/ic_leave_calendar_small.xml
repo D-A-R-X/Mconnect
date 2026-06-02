@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="14dp"
+    android:width="20dp"
+    android:height="20dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- Outer ticket shell with left and right circular cutouts -->
     <path
-        android:pathData="M8,2V5M16,2V5M3.5,9.1H20.5M21,8.5V17C21,20 19.5,22 16,22H8C4.5,22 3,20 3,17V8.5C3,5.5 4.5,3.5 8,3.5H16C19.5,3.5 21,5.5 21,8.5Z"
-        android:strokeWidth="1.6"
-        android:strokeColor="#7A5AF8"
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:strokeLineJoin="round"
+        android:pathData="M 4,6 C 4,4.9 4.9,4 6,4 L 18,4 C 19.1,4 20,4.9 20,6 L 20,10 C 18.3,10 17,10.9 17,12 C 17,13.1 18.3,14 20,14 L 20,18 C 20,19.1 19.1,20 18,20 L 6,20 C 4.9,20 4,19.1 4,18 L 4,14 C 5.7,14 7,13.1 7,12 C 7,10.9 5.7,10 4,10 Z" />
+    <!-- Inner horizontal line -->
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 9,12 L 15,12" />
 </vector>
