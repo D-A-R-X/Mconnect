@@ -124,6 +124,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val argSiteVisitId: String?
         get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
 
+    /**
+     * Cached display name for the visit's lead/client, set when the
+     * locked SV mode initialises. Used by [renderVisitorRows] so the
+     * first visitor card auto-fills with the lead's name + Relation =
+     * Self — the common 1-visitor case where the only attendee is
+     * the client themself. Field staff can still edit the row.
+     */
+    private var cachedLeadDisplayName: String? = null
+
+    /**
+     * Cached lead-side attendees array (if the telecaller pre-set any
+     * via the SV-fix payload). Replays into the visitor cards
+     * one-for-one when [renderVisitorRows] runs.
+     */
+    private var cachedPrefilledAttendees: List<com.manjugroups.m_connect.network.CpVisitAttendee>? = null
+
     // ---- Sub-tab views --------------------------------------------------
     private var subTabsScroll: HorizontalScrollView? = null
     private var subTabClient: TextView? = null
@@ -1184,16 +1200,51 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { onPicked(it) }
     }
 
-    /** Inflates one visitor card per expected attendee (capped at 12). */
+    /**
+     * Inflates one visitor card per expected attendee (capped at 12).
+     *
+     * Pre-fill behaviour:
+     *   - Index 0 (first card): name + relation = "Self" use the cached
+     *     lead/client name when available — the common 1-visitor case
+     *     is the client themself, so save the user a tap.
+     *   - All cards: when the telecaller pre-set attendees on the CP
+     *     visit's SV-fix payload, replay those onto the cards in order
+     *     (overrides the lead-only default on index 0).
+     *
+     * Field staff can edit anything pre-filled — this only sets the
+     * initial values.
+     */
     private fun renderVisitorRows(count: Int) {
         val rows = siteVisitorRows ?: return
         rows.removeAllViews()
         val safeCount = count.coerceIn(0, 12)
-        repeat(safeCount) {
+        val prefilled = cachedPrefilledAttendees ?: emptyList()
+        val leadName = cachedLeadDisplayName
+        repeat(safeCount) { index ->
             val card = layoutInflater.inflate(
                 R.layout.item_outcome_site_visitor, rows, false
             )
             wireVisitorCardToggles(card)
+            val attendee = prefilled.getOrNull(index)
+            val nameField = card.findViewWithTag<EditText>("name")
+            val relationField = card.findViewWithTag<TextView>("relation")
+            val ageField = card.findViewWithTag<EditText>("age")
+            when {
+                attendee != null -> {
+                    nameField?.setText(attendee.name.orEmpty())
+                    relationField?.text = attendee.relation.orEmpty()
+                    ageField?.setText(attendee.age.orEmpty())
+                    if (attendee.isVeg == false) {
+                        // Default layout pre-selects Veg; flip to Non-Veg
+                        // when the telecaller captured otherwise.
+                        card.findViewWithTag<TextView>("foodNonVeg")?.performClick()
+                    }
+                }
+                index == 0 && !leadName.isNullOrBlank() -> {
+                    nameField?.setText(leadName)
+                    relationField?.text = "Self"
+                }
+            }
             rows.addView(card)
         }
     }
@@ -1928,10 +1979,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         //    client place if we have it).
         tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
         tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+
+        // Cache lead + attendee context for the visitor-row auto-fill.
+        // Order: client.clientName (canonical, manually entered) →
+        // lead.contactName (telecaller-typed during dialer flow) →
+        // clientPlace.name (fallback). renderVisitorRows reads this
+        // cache when expanding cards so the first row is pre-filled
+        // with the lead's name + Self relation — the common case for
+        // 1-visitor meetings.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        cachedPrefilledAttendees = visit.attendees
+
         val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
-        if (visitorCount > 0) {
-            etSvVisitorCount?.setText(visitorCount.toString())
-        }
+        // Default to 1 visitor when the telecaller didn't specify and the
+        // SV-fix flow doesn't carry attendees — the most common reality
+        // is the lead alone, and pre-populating saves a tap.
+        val effectiveVisitorCount = if (visitorCount > 0) visitorCount else 1
+        etSvVisitorCount?.setText(effectiveVisitorCount.toString())
         etSvPickupAddress?.setText(
             visit.clientPlace?.address
                 ?: visit.clientPlace?.formattedAddress
