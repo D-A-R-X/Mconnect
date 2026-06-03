@@ -25,6 +25,8 @@ import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.TodayVisit
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -39,6 +41,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private var visitId: String? = null
     private var cpVisitId: String? = null
+
+    // Track the current step index (0=Scheduled, 1=Assigned, 2=Picked
+    // Up, 3=On Site, 4=Dropped, 5=Done). Updated whenever the server
+    // returns a fresh status — drives stepper colouring AND gates
+    // which next-step button is clickable.
+    private var currentStepIndex: Int = 0
+    // Lock for the lifecycle-transition button so a double-tap doesn't
+    // fire two markPickedUp calls back-to-back.
+    private var transitioning: Boolean = false
 
     // UI elements
     private var tvTitle: TextView? = null
@@ -179,10 +190,117 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Bind initial arguments
         bindInitialArgs()
 
+        // Wire stepper circle taps to fire the next-state mutation.
+        // Each circle only acts if it represents the IMMEDIATE next
+        // step from current — out-of-order taps no-op with a toast so
+        // the user can't skip past an unfinished phase.
+        wireStepperTaps()
+
         // Load enriched details
         val id = visitId
         if (!id.isNullOrBlank()) {
             loadEnrichedDetail(id)
+        }
+    }
+
+    private fun wireStepperTaps() {
+        // Index 0 (Scheduled) is the initial state — no tap needed.
+        // Index 1 (Assigned) auto-progresses server-side when staff is
+        // attached, so we don't wire it as a manual transition.
+        // Index 2..4 are the user-driven transitions:
+        //   pickedUp        → markPickedUp / markClientStarted
+        //   onSite          → markArrivedSite
+        //   dropped         → markDropped
+        // Index 5 (Done) lands automatically when setOutcome fires.
+        circlePickedUp?.setOnClickListener {
+            advanceTo(stepIndex = 2, label = "Picked Up")
+        }
+        circleOnSite?.setOnClickListener {
+            advanceTo(stepIndex = 3, label = "On Site")
+        }
+        circleDropped?.setOnClickListener {
+            advanceTo(stepIndex = 4, label = "Dropped")
+        }
+    }
+
+    /**
+     * Fires the mutation that takes the SV from currentStepIndex up
+     * to [stepIndex]. Out-of-order taps (jumping multiple steps OR
+     * tapping a step already passed) show a toast and no-op so the
+     * server's assertTransition rules don't reject us with a 500.
+     */
+    private fun advanceTo(stepIndex: Int, label: String) {
+        if (transitioning) return
+        if (stepIndex <= currentStepIndex) {
+            Toast.makeText(
+                requireContext(),
+                "Already at or past '$label'",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        if (stepIndex != currentStepIndex + 1) {
+            Toast.makeText(
+                requireContext(),
+                "Finish the previous step first before marking '$label'",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val svId = visitId
+        if (svId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Site visit id missing", Toast.LENGTH_SHORT).show()
+            return
+        }
+        transitioning = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = when (stepIndex) {
+                    2 -> geoApi.markSiteVisitPickedUp(
+                        session.bearerToken,
+                        SiteVisitIdRequest(svId),
+                    )
+                    3 -> geoApi.markSiteVisitArrivedSite(
+                        session.bearerToken,
+                        SiteVisitIdRequest(svId),
+                    )
+                    4 -> geoApi.markSiteVisitDropped(
+                        session.bearerToken,
+                        SiteVisitIdRequest(svId),
+                    )
+                    else -> {
+                        transitioning = false
+                        return@launch
+                    }
+                }
+                if (!resp.success) {
+                    throw Exception(resp.error ?: "Transition failed")
+                }
+                // Optimistically advance the local stepper; the
+                // server's authoritative status will rebind on the
+                // next loadEnrichedDetail pass (e.g. when the sheet
+                // re-opens). For the in-session UX this is enough.
+                updateStepper(stepIndex)
+                bindStatusHeader(when (stepIndex) {
+                    2 -> "picked_up"
+                    3 -> "on_site"
+                    4 -> "dropped"
+                    else -> ""
+                })
+                Toast.makeText(
+                    requireContext(),
+                    "$label ✓",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Couldn't advance to '$label'",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                transitioning = false
+            }
         }
     }
 
@@ -264,6 +382,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     }
 
     private fun updateStepper(activeIndex: Int) {
+        currentStepIndex = activeIndex
         val context = requireContext()
         val blueColor = Color.parseColor("#004EEB")
         val grayColor = Color.parseColor("#98A2B3")
@@ -444,7 +563,6 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private fun saveOutcome(outcomeValue: String, label: String) {
         val targetVisitId = visitId ?: return
-        val cpId = cpVisitId ?: targetVisitId
 
         btnBooking?.isEnabled = false
         btnNotInterested?.isEnabled = false
@@ -452,47 +570,79 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // 1. Mark client met status
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpId, clientMet = true)
-                )
-                if (!metResp.success) {
-                    throw Exception(metResp.error ?: "Failed to mark client status")
-                }
-
-                // 2. Set outcome
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
-                    SetOutcomeRequest(
-                        id = cpId,
-                        outcome = outcomeValue,
-                        notes = "Outcome: $label recorded via mobile details"
+                // Two paths:
+                //
+                //   1. Pure SV (no cpVisitId behind it) → route through
+                //      the siteVisits.setOutcome mutation. The visit's
+                //      status MUST be on_site (or dropped) for the
+                //      backend assertTransition to accept the outcome;
+                //      the stepper UI already gates the outcome buttons
+                //      behind currentStepIndex >= 3 so we should be
+                //      past that point by the time we get here.
+                //
+                //   2. SV-via-CP (cpVisitId is set) → route through the
+                //      CP path so the CP visit row + its linked SV
+                //      both reach the correct terminal state. Mirrors
+                //      the legacy CP outcome flow.
+                val cpId = cpVisitId
+                if (cpId.isNullOrBlank()) {
+                    // Pure-SV outcome
+                    val postponeReasons = if (outcomeValue == "postponed") listOf("other") else null
+                    val notInterestedReasons = if (outcomeValue == "not_interested") listOf("other") else null
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = targetVisitId,
+                            outcome = outcomeValue,
+                            postponeReasons = postponeReasons,
+                            notInterestedReasons = notInterestedReasons,
+                            notes = "Outcome: $label recorded via mobile details",
+                        ),
                     )
-                )
-                if (!outcomeResp.success) {
-                    throw Exception(outcomeResp.error ?: "Failed to set outcome")
-                }
-
-                // 3. Mark the visit as completed
-                val completeResp = geoApi.completeVisit(
-                    session.bearerToken,
-                    CompleteVisitRequest(
-                        visitId = targetVisitId,
-                        remarks = "Outcome recorded: $label"
+                    if (!resp.success) {
+                        throw Exception(resp.error ?: "Failed to save outcome")
+                    }
+                } else {
+                    // SV-via-CP outcome — legacy CP path stays intact.
+                    val metResp = geoApi.markClientMet(
+                        session.bearerToken,
+                        MarkClientMetRequest(id = cpId, clientMet = true),
                     )
-                )
-                if (!completeResp.success) {
-                    throw Exception(completeResp.error ?: "Failed to complete visit")
+                    if (!metResp.success) {
+                        throw Exception(metResp.error ?: "Failed to mark client status")
+                    }
+                    val outcomeResp = geoApi.setCpVisitOutcome(
+                        session.bearerToken,
+                        SetOutcomeRequest(
+                            id = cpId,
+                            outcome = outcomeValue,
+                            notes = "Outcome: $label recorded via mobile details",
+                        ),
+                    )
+                    if (!outcomeResp.success) {
+                        throw Exception(outcomeResp.error ?: "Failed to set outcome")
+                    }
                 }
 
-                Toast.makeText(requireContext(), "Outcome saved successfully!", Toast.LENGTH_SHORT).show()
+                // Stepper visually completes — setOutcome on the
+                // server-side moves status to "completed" (Done step).
+                updateStepper(5)
+                bindStatusHeader("completed")
+                Toast.makeText(
+                    requireContext(),
+                    "$label ✓ Outcome saved.",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 dismiss()
             } catch (e: Exception) {
                 btnBooking?.isEnabled = true
                 btnNotInterested?.isEnabled = true
                 btnPostponed?.isEnabled = true
-                Toast.makeText(requireContext(), e.message ?: "Failed to save outcome", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Failed to save outcome",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
