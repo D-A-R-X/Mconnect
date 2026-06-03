@@ -83,6 +83,27 @@ class BookingsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // Push the top bar below the system status-bar inset so its
+        // content doesn't sit underneath the clock, notification dots,
+        // record indicator, etc. The bar's layout_height is wrap_content
+        // with minHeight=56dp, so paddingTop simply lifts the content
+        // and the bar grows by exactly the status-bar height.
+        val topBar = view.findViewById<View>(R.id.bkTopBar)
+        val basePaddingTop = topBar.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(topBar) { v, insets ->
+            val statusBarTop = insets
+                .getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                .top
+            v.setPadding(
+                v.paddingLeft,
+                basePaddingTop + statusBarTop,
+                v.paddingRight,
+                v.paddingBottom,
+            )
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(topBar)
+
         view.findViewById<ImageView>(R.id.btnBookingsBack)
             .setOnClickListener { parentFragmentManager.popBackStack() }
 
@@ -343,15 +364,25 @@ class BookingsFragment : Fragment() {
     }
 
     private fun openCreate() {
-        // Bookings list and BookingCreateFragment both live inside the
-        // MainActivity fragment container, so we navigate via the parent
-        // fragment manager (same pattern AppLibraryFragment uses for its
-        // tile clicks). Back stack is added so the user returns to the
-        // list after submitting the form.
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, BookingCreateFragment.newEmpty())
-            .addToBackStack(null)
-            .commit()
+        // Reuse the full outcome sheet's Booking flow — same multi-tab
+        // form (Client / Professional / Office / Booking / Charges /
+        // Payment / Staff) the CP and SV outcome paths use. The
+        // standalone factory locks SV / Postpone / Not Interested top
+        // tabs and routes Save Booking → api.createBooking, so the
+        // new row lands in the bookings table and the office-side
+        // approval workflow picks up from pending_gm.
+        //
+        // Listen for the sheet's success result so the list refreshes
+        // immediately without waiting for onResume.
+        parentFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, _ ->
+            loadBookings(showSkeleton = false)
+        }
+        com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+            .forStandaloneBooking()
+            .show(parentFragmentManager, "bookings_create_outcome")
     }
 
     companion object {

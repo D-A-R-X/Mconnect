@@ -127,6 +127,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
 
     /**
+     * Standalone booking mode. Set when the sheet is opened from the
+     * Bookings list (+ button) — no CP visit and no SV row behind it.
+     * In this mode:
+     *   - Site Visit / Postpone / Not Interested top tabs are faded
+     *     and unclickable (only Booking makes sense without a visit
+     *     to attach an outcome to).
+     *   - persistBooking POSTs directly to /api/bookings via
+     *     api.createBooking instead of the CP setOutcome path.
+     */
+    private val isStandaloneBookingMode: Boolean
+        get() = arguments?.getBoolean(ARG_STANDALONE_BOOKING, false) == true
+
+    /**
      * Cached display name for the visit's lead/client, set when the
      * locked SV mode initialises. Used by [renderVisitorRows] so the
      * first visitor card auto-fills with the lead's name + Relation =
@@ -432,6 +445,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Postpone / Not Interested paths persist, and they route to
         // the siteVisits endpoints instead of the CP path.
         if (isSiteVisitMode) applySiteVisitOutcomeMode()
+
+        // Standalone booking mode (Bookings page + button). Lock to
+        // the Booking outcome tab so the user is creating a booking
+        // from scratch, not recording an outcome against a visit.
+        if (isStandaloneBookingMode) applyStandaloneBookingMode()
+    }
+
+    private fun applyStandaloneBookingMode() {
+        // No visit attached → outcome tabs other than Booking are
+        // meaningless. Fade + disable all three.
+        listOf(tabSiteVisit, tabPostpone, tabNotInterested).forEach { tab ->
+            tab.cell?.isClickable = false
+            tab.cell?.alpha = 0.35f
+        }
+        activeOutcome = Outcome.BOOKING
+        renderState()
     }
 
     private fun applySiteVisitOutcomeMode() {
@@ -1812,6 +1841,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         showError(error)
     }
 
+    /**
+     * Parse the Booking-tab date row into yyyy-MM-dd for the API.
+     * The picker writes "dd/MM/yyyy"; we just rewrite. Returns null
+     * when the field is empty or holds the placeholder so callers
+     * can fall back to today.
+     */
+    private fun bookingDateForApi(): String? {
+        val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
+        if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
+        return runCatching {
+            val ddmmyyyy = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US)
+            val ymd = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            ymd.format(ddmmyyyy.parse(raw)!!)
+        }.getOrNull()
+    }
+
     // ---- Persistence ------------------------------------------------
     private fun persistBooking() {
         val met = true
@@ -1820,6 +1865,61 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Standalone booking from the Bookings + button — no
+                // CP visit / SV row to attach an outcome to. POST
+                // straight to /api/bookings (the same web flow uses)
+                // so the row lands in `bookings` and the office-side
+                // approval workflow picks up from pending_gm.
+                if (isStandaloneBookingMode) {
+                    val phone = etClientMobile?.text?.toString()?.trim()
+                        ?: tvFormPhone?.text?.toString()?.trim()
+                    val name = etFormName?.text?.toString()?.trim()
+                    val bookingDate = bookingDateForApi()
+                    if (phone.isNullOrBlank()) {
+                        finishCta(error = "Client phone number is required")
+                        return@launch
+                    }
+                    if (name.isNullOrBlank()) {
+                        finishCta(error = "Client name is required")
+                        return@launch
+                    }
+                    val createResp = api.createBooking(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.CreateBookingRequest(
+                            clientName = name,
+                            mobileNumber = phone,
+                            bookingDate = bookingDate
+                                ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                    .format(java.util.Calendar.getInstance().time),
+                            leadId = prefilledLeadId,
+                            email = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                            homeAddress = etFormHomeAddress?.text?.toString()?.trim()
+                                ?.takeIf { it.isNotBlank() },
+                            bookingCost = etChargeBookingCost?.text?.toString()
+                                ?.trim()?.toDoubleOrNull(),
+                            advanceAmount = etPayAdvanceAmount?.text?.toString()
+                                ?.trim()?.toDoubleOrNull(),
+                        ),
+                    )
+                    if (!createResp.success) {
+                        finishCta(error = createResp.error ?: "Failed to create booking")
+                        return@launch
+                    }
+                    // Push any edits the user made on the prefilled
+                    // client form back to the lead so the next person
+                    // sees the corrected profile.
+                    pushClientEditsToLeadIfAny()
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(
+                            KEY_CLIENT_MET to met,
+                            KEY_OUTCOME to OUTCOME_BOOKING,
+                        ),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
                 // SV-mode booking — write the booking outcome directly to
                 // the siteVisits row. The mobile booking form's plot /
                 // project pickers are still mocked, so we record the
@@ -2446,6 +2546,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Mutually exclusive with the CP path; presence of this arg
         // flips isSiteVisitMode true.
         private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
+        // Standalone booking creation mode — set by [forStandaloneBooking]
+        // when the sheet is opened from the Bookings list + button.
+        // No visit to attach to; persistBooking POSTs to /api/bookings
+        // instead of the CP / SV outcome paths.
+        private const val ARG_STANDALONE_BOOKING = "arg_standalone_booking"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -2488,6 +2593,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_SITE_VISIT_ID, siteVisitId)
+                }
+            }
+
+        /**
+         * Factory for standalone booking creation from the Bookings
+         * list + button. Sheet locks to the Booking outcome (Site
+         * Visit / Postpone / Not Interested top tabs are faded and
+         * disabled), and Save Booking POSTs to /api/bookings via
+         * api.createBooking — same endpoint the web booking form
+         * hits, so the new row syncs through the existing approval
+         * workflow.
+         */
+        fun forStandaloneBooking(): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putBoolean(ARG_STANDALONE_BOOKING, true)
                 }
             }
     }
