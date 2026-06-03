@@ -247,7 +247,20 @@ interface GeoTrackApi {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
+            // Same auto-logout-on-401 watchdog as ApiService.create() —
+            // GeoTrack endpoints also need it because every trip /
+            // visit call goes through this client, and a stale token
+            // would silently fail tracking + outcome flows otherwise.
+            val authWatchdog = okhttp3.Interceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 401) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized()
+                }
+                response
+            }
             val client = OkHttpClient.Builder()
+                .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
