@@ -244,7 +244,14 @@ interface GeoTrackApi {
     suspend fun getMyMarketingCpVisits(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        // Backend gates scope=all on IAM (marketing.cpVisits.viewAll /
+        // .view / projects.viewAll / isAdmin). Non-privileged callers
+        // get scoped assignment-only results regardless of what we
+        // send, so it's safe to default this to "all" — admins and
+        // managers get the full pool, field staff get their own
+        // assignments via the fallback path.
+        @Query("scope") scope: String = "all",
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──
