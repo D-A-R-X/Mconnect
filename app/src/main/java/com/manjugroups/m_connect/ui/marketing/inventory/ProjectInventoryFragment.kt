@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -54,7 +55,7 @@ class ProjectInventoryFragment : Fragment() {
             visibility = if (projectScope.isNullOrBlank()) View.GONE else View.VISIBLE
         }
         view.findViewById<View>(R.id.btnProjectInventoryBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnOpenLayoutMap).setOnClickListener {
             openLayoutMap()

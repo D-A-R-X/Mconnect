@@ -30,6 +30,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.GeoTrip
 import com.manjugroups.m_connect.network.GeoTripStop
 import com.manjugroups.m_connect.network.TimelinePoint
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -69,11 +70,11 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
         if (!session.hasPermission("attendance.liveTracking")) {
             Toast.makeText(requireContext(), "GeoTrack Live access is not enabled for this account", Toast.LENGTH_SHORT).show()
-            parentFragmentManager.popBackStack()
+            navigateUp()
             return
         }
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnExpandMap.setOnClickListener {
             isExpanded = !isExpanded
             renderExpandedState()

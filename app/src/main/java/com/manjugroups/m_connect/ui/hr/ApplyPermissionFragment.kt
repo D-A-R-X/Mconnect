@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyPermissionRequest
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.util.*
@@ -43,7 +44,7 @@ class ApplyPermissionFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
         binding.etDate.setOnClickListener { showDatePicker() }
         binding.etFromTime.setOnClickListener { showTimePicker(binding.etFromTime) }
@@ -87,7 +88,7 @@ class ApplyPermissionFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Permission applied!", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }

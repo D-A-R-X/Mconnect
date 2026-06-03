@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -76,7 +77,7 @@ class BookingCreateFragment : Fragment() {
 
         view.findViewById<TextView>(R.id.tvBookingTitle).text = "New Booking"
         view.findViewById<View>(R.id.btnBookingBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         view.findViewById<TextView>(R.id.tvBookingProject).apply {
@@ -349,7 +350,7 @@ class BookingCreateFragment : Fragment() {
                     return@launch
                 }
                 toast("Booking created")
-                parentFragmentManager.popBackStack()
+                navigateUp()
             } catch (e: Exception) {
                 submit.isEnabled = true
                 toast("Network error: ${e.message ?: "unknown"}")

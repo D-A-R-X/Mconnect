@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -45,7 +46,7 @@ class TaskDetailFragment : Fragment() {
         taskId = arguments?.getString(ARG_TASK_ID)
 
         view.findViewById<View>(R.id.btnDetailBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnUpdateTask).setOnClickListener {
             openUpdateSheet()
@@ -68,7 +69,7 @@ class TaskDetailFragment : Fragment() {
         val id = taskId
         if (id.isNullOrBlank()) {
             Toast.makeText(requireContext(), "Missing task id", Toast.LENGTH_SHORT).show()
-            parentFragmentManager.popBackStack()
+            navigateUp()
             return
         }
         loadDetail(view, id)
@@ -112,7 +113,7 @@ class TaskDetailFragment : Fragment() {
                         resp.error ?: "Failed to load task",
                         Toast.LENGTH_LONG
                     ).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                     return@launch
                 }
                 currentTask = task
@@ -127,7 +128,7 @@ class TaskDetailFragment : Fragment() {
                     "Network error: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
-                parentFragmentManager.popBackStack()
+                navigateUp()
             }
         }
     }

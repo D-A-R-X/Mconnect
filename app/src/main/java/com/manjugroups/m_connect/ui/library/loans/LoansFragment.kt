@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLoansBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,8 +51,8 @@ class LoansFragment : Fragment() {
         binding.rvLoans.adapter = adapter
         binding.rvLoans.itemAnimator = null
 
-        binding.btnLoansBack.setOnClickListener { parentFragmentManager.popBackStack() }
-        binding.btnLoansEmptyBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnLoansBack.setOnClickListener { navigateUp() }
+        binding.btnLoansEmptyBack.setOnClickListener { navigateUp() }
         binding.tvPreviousLoansViewAll.setOnClickListener {
             // No separate full-list screen yet — focus the list by scrolling it
             // into view. Future work could open a dedicated /loans/previous.

@@ -54,6 +54,7 @@ import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -318,7 +319,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tvOriginName?.text = "Current Location"
         bindTripClientHeader(view, placeName)
 
-        btnBack?.setOnClickListener { parentFragmentManager.popBackStack() }
+        btnBack?.setOnClickListener { navigateUp() }
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
         swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
         btnCompleteCpDetails?.setOnClickListener { showCpCompletionSheet() }
@@ -344,7 +345,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
         }
         setFragmentResultListener(CpTripCompletedBottomSheet.RESULT_KEY) { _, _ ->
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         mapView?.onCreate(savedInstanceState)
@@ -846,7 +847,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (!isAdded) return
         loadingOverlay?.visibility = View.GONE
         Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
-        parentFragmentManager.popBackStack()
+        navigateUp()
     }
 
     private fun hideTripStartTime() {
@@ -1529,7 +1530,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     CpTripCompletedBottomSheet().show(parentFragmentManager, "cp_trip_completed")
                 } else {
                     Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 }
             } catch (e: Exception) {
                 arrivalInProgress = false

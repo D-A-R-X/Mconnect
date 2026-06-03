@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.network.ApplyLeaveRequest
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
@@ -63,7 +64,7 @@ class ApplyLeaveFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
         binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
         binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
@@ -188,7 +189,7 @@ class ApplyLeaveFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Leave applied!", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }
