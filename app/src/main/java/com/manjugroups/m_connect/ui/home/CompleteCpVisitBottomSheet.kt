@@ -1184,10 +1184,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
             etFormDistrict, etFormLocation,
         ).forEach { f ->
-            f?.isEnabled = enabled
+            // CRITICAL: do NOT use isEnabled=false here. Many Material
+            // text themes pipe state_enabled=false through to a
+            // near-transparent disabled colour on the EditText text,
+            // which made the prefilled lead data invisible until the
+            // user tapped Edit (which restored isEnabled=true). The
+            // text was always in the field — just rendered in a
+            // colour the user couldn't read.
+            //
+            // Lock editability via focus + click suppression instead.
+            // The text stays in its normal #101828 colour, the cursor
+            // can't enter the field, and key/touch events on the
+            // field don't bring up the IME or change the value.
             f?.isFocusable = enabled
             f?.isFocusableInTouchMode = enabled
-            f?.alpha = if (enabled) 1f else 0.7f
+            f?.isClickable = enabled
+            f?.isLongClickable = enabled
+            f?.isCursorVisible = enabled
+            // Drop alpha only slightly so the locked state still reads
+            // as "look but don't touch" without dimming the data into
+            // unreadability (the previous 0.7 with isEnabled=false
+            // compounded into near-transparency on some devices).
+            f?.alpha = if (enabled) 1f else 0.95f
         }
     }
 
