@@ -787,11 +787,12 @@ class CpVisitsFragment : Fragment() {
             .ifBlank { "User" }
 
     /**
-     * Renders "MM/dd/yy hh:mm a" — matches design "12/12/26 09:30 AM".
-     * Uses scheduledStartTime if provided, otherwise the date-only field.
+     * Renders "dd/MM/yyyy hh:mm a" — matches the rest of the app's
+     * date convention (Indian dd/MM/yyyy, not US MM/dd/yy). Uses
+     * scheduledStartTime if provided, otherwise the date-only field.
      */
     private fun formatDateTime(visit: TodayVisit): String? {
-        val dateOut = SimpleDateFormat("MM/dd/yy", Locale.US)
+        val dateOut = SimpleDateFormat("dd/MM/yyyy", Locale.US)
         val timeOut = SimpleDateFormat("hh:mm a", Locale.US)
 
         val isoCandidates = listOf(visit.scheduledStartTime, visit.scheduledDate)
