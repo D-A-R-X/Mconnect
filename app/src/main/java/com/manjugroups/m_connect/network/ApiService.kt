@@ -782,6 +782,18 @@ interface ApiService {
         @Query("phone") phone: String,
     ): TelecallerLeadSearchResponse
 
+    /**
+     * Push edits made by the field staff on the prefilled client
+     * form back to the lead's manualProfile. Server records the
+     * caller as editorStaffId so the lead's edit-history timeline
+     * picks up the change with proper attribution.
+     */
+    @POST("api/telecaller/leads/update")
+    suspend fun updateTelecallerLead(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTelecallerLeadRequest,
+    ): SimpleResponse
+
     // ── Land Procurement: Inspection ────────────────────────────────────
     @GET("api/land/inspections/my")
     suspend fun listMyInspections(
@@ -1918,6 +1930,33 @@ data class TelecallerLeadSearchResponse(
     val total: Int? = null,
     val leads: List<TelecallerLeadSearchData> = emptyList(),
     val error: String? = null
+)
+
+/**
+ * Body for /api/telecaller/leads/update — used by the outcome
+ * sheet's Edit-mode submit to push field-staff edits back to the
+ * lead. Every field is optional; only ones the user actually
+ * changed are sent. manualProfile.* mirrors the schema shape so
+ * a single PATCH covers the whole client-form payload.
+ */
+data class UpdateTelecallerLeadRequest(
+    @SerializedName("id") val leadId: String,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val emailId: String? = null,
+    val alternateNumber: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val manualProfile: ManualProfilePatch? = null,
+)
+
+data class ManualProfilePatch(
+    val clientName: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val alternateMobileNumber: String? = null,
 )
 
 data class TelecallerLeadSearchData(

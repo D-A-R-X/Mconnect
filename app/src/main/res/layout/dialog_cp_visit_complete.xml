@@ -93,6 +93,34 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
+            <!--
+              "Edit" pill — visible only on the Client form sub-tab
+              once a lead has been auto-filled from a phone lookup.
+              Two visual states:
+                - Inactive (default after prefill): white fill,
+                  green outline. Form fields are read-only so the
+                  user doesn't accidentally edit canonical lead
+                  data.
+                - Active (after tap): filled green, white text.
+                  Form fields become editable; any changes get
+                  pushed back to the lead record on form submit.
+              Visibility + state are managed in the fragment.
+            -->
+            <TextView
+                android:id="@+id/btnOutcomeEdit"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_outcome_edit_chip_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="14dp"
+                android:text="Edit"
+                android:textColor="#2DAE12"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <!-- Top tab bar (4 outcomes) with vertical dividers + active underline -->

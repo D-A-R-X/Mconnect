@@ -32,7 +32,9 @@ import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.ManualProfilePatch
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
@@ -297,11 +299,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var svProjectCache: List<MarketingProject> = emptyList()
     private var svStaffCache: List<StaffData> = emptyList()
 
-    // Edit button removed from the layout — the field staff fills the
-    // outcome form in one pass and rarely needs to jump back to the
-    // mobile-find step. The Booking sub-tab row still lets them flip
-    // through CLIENT → PROFESSIONAL → etc., so back-navigation isn't
-    // strictly required.
+    // "Edit" pill on the Client form header. Visible only after a
+    // phone lookup actually returns a matching lead and the form is
+    // prefilled. Two states:
+    //   - inactive (default after prefill): pill is outlined, form
+    //     fields are read-only so the user doesn't accidentally edit
+    //     canonical lead data.
+    //   - active (after tap): pill is filled green, form fields are
+    //     editable; persistBooking pushes the new values back to the
+    //     lead's manualProfile via /api/telecaller/leads/update.
+    private var btnEdit: TextView? = null
+    private var editEnabled: Boolean = false
+    // _id of the lead the prefill came from; null when no match was
+    // found. Drives whether the edit-push fires on submit.
+    private var prefilledLeadId: String? = null
     private var btnSubmit: TextView? = null
     private var tvError: TextView? = null
 
@@ -364,7 +375,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bindPostponeFields(view)
         bindNotInterestedFields(view)
 
-        // Edit button removed — id no longer exists in the layout.
+        btnEdit = view.findViewById(R.id.btnOutcomeEdit)
+        btnEdit?.setOnClickListener { toggleEditMode() }
 
         // Drag-handle row at the top of the sheet — tap to dismiss.
         // Drag-down dismiss is intentionally disabled (nested form
@@ -1113,6 +1125,79 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
+     * Flip the prefilled client form between read-only (default
+     * after a successful lookup) and editable. Edit button background
+     * + text colour change to signal the state; underlying form
+     * fields toggle isEnabled / focusability together.
+     */
+    private fun toggleEditMode() {
+        editEnabled = !editEnabled
+        applyEditModeToFields(editEnabled)
+        val pill = btnEdit ?: return
+        if (editEnabled) {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_active)
+            pill.setTextColor(Color.WHITE)
+        } else {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+            pill.setTextColor(Color.parseColor("#2DAE12"))
+        }
+    }
+
+    /**
+     * Lock / unlock the client-form EditTexts + selector rows in one
+     * pass. Kept narrow to the prefilled identity fields; the
+     * professional / office / booking sub-tabs aren't touched (those
+     * are visit-specific, not lead-cached).
+     */
+    private fun applyEditModeToFields(enabled: Boolean) {
+        listOf(
+            etFormName, etFormFather, etFormAltNumber, etFormWhatsApp,
+            etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
+            etFormDistrict, etFormLocation,
+        ).forEach { f ->
+            f?.isEnabled = enabled
+            f?.isFocusable = enabled
+            f?.isFocusableInTouchMode = enabled
+            f?.alpha = if (enabled) 1f else 0.7f
+        }
+    }
+
+    /**
+     * Push field-staff edits back to the lead. No-op when the form
+     * wasn't prefilled (prefilledLeadId is null) or the user never
+     * tapped Edit (editEnabled is false). Silent on errors — the
+     * booking save already succeeded; lead sync is best-effort.
+     */
+    private suspend fun pushClientEditsToLeadIfAny() {
+        val leadId = prefilledLeadId ?: return
+        if (!editEnabled) return
+        try {
+            val req = UpdateTelecallerLeadRequest(
+                leadId = leadId,
+                contactName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                emailId = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                alternateNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                locationPreferred = etFormLocation?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                manualProfile = ManualProfilePatch(
+                    clientName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    pincode = etFormPincode?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    address = etFormHomeAddress?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    state = etFormState?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    district = etFormDistrict?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    alternateMobileNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val resp = api.updateTelecallerLead(session.bearerToken, req)
+            android.util.Log.d(
+                LOG_TAG,
+                "lead update ${if (resp.success) "ok" else "failed: ${resp.error}"}",
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(LOG_TAG, "lead update threw", e)
+        }
+    }
+
+    /**
      * Hit `/api/telecaller/leads/search-by-phone` and replay any
      * existing lead profile onto the Client form fields. Only fills
      * blank fields — the user's manual input wins. Silent on errors;
@@ -1155,6 +1240,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // Location preferred / city → "Location" field (the row
             // shows preferred area on the lead-card too).
             fill(etFormLocation, lead.locationPreferred ?: lead.clientCity)
+
+            // Record the lead id + lock the fields so the user has to
+            // tap Edit before they can change canonical lead data.
+            // The Edit pill appears only after a successful match —
+            // a blank form (no lookup) stays fully editable as before.
+            prefilledLeadId = lead.id
+            editEnabled = false
+            applyEditModeToFields(false)
+            btnEdit?.visibility = View.VISIBLE
+            btnEdit?.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+            btnEdit?.setTextColor(Color.parseColor("#2DAE12"))
         }
     }
 
@@ -1751,6 +1847,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         finishCta(error = resp.error ?: "Failed to save booking")
                         return@launch
                     }
+                    // Mirror the CP-mode lead push for SV-mode too —
+                    // same Edit-toggle semantics, same target lead row.
+                    pushClientEditsToLeadIfAny()
                     setFragmentResult(
                         RESULT_KEY,
                         bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
@@ -1786,6 +1885,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCta(error = outcomeResp.error ?: "Failed to save booking")
                     return@launch
                 }
+
+                // Push any field-staff edits to the prefilled client
+                // form back to the lead's manualProfile. No-op when
+                // the user didn't tap Edit. Best-effort — booking
+                // already saved, so failures here just get logged.
+                pushClientEditsToLeadIfAny()
 
                 setFragmentResult(
                     RESULT_KEY,
