@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.network.TelecallerLeadData
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,7 +53,7 @@ class MyLeadsFragment : Fragment() {
             ?: Mode.ALL
 
         view.findViewById<View>(R.id.btnLeadsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<TextView>(R.id.tvLeadsTitle).text = when (mode) {
             Mode.ALL -> "My Leads"

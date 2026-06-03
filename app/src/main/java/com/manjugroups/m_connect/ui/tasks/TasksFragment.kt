@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -59,7 +60,7 @@ class TasksFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnTasksBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         // Push the blue header below the OS status bar and grow its height

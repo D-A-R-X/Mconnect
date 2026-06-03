@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -136,7 +137,7 @@ class LandInspectionFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnInspectionBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         applyStatusBarInset()

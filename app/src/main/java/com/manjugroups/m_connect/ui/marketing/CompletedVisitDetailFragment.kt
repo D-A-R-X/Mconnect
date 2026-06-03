@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,7 +59,7 @@ class CompletedVisitDetailFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnCvdBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         bindContent(view)

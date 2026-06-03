@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 class StaffDetailFragment : Fragment() {
@@ -47,7 +48,7 @@ class StaffDetailFragment : Fragment() {
         session = SessionManager(requireContext())
         staffId = arguments?.getString("staffId") ?: return
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
 
         loadDetail()
     }

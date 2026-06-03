@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentPermissionsBinding
 import com.manjugroups.m_connect.network.PermissionData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -84,7 +85,7 @@ class PermissionsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()

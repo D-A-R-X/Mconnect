@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -41,7 +42,7 @@ class InventoryLayoutMapFragment : Fragment() {
 
         view.findViewById<TextView>(R.id.tvLayoutMapTitle).text = "$projectName · Layout"
         view.findViewById<View>(R.id.btnLayoutMapBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         loadLayout(view)
     }

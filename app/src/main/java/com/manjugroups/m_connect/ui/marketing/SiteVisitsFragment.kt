@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -68,7 +69,7 @@ class SiteVisitsFragment : Fragment() {
         view.findViewById<EditText>(R.id.etCpvSearch)?.hint = "Search projects / plots"
 
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         // No create flow yet — hide the + button (CP visits has its own create
         // dialog; site visit creation flows through the conversion path).

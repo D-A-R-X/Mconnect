@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentRepaymentHistoryBinding
 import com.manjugroups.m_connect.databinding.ItemRepaymentEntryBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -60,7 +61,7 @@ class RepaymentHistoryFragment : Fragment() {
         binding.rvRepayments.adapter = adapter
         binding.rvRepayments.itemAnimator = null
 
-        binding.btnRepaymentBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnRepaymentBack.setOnClickListener { navigateUp() }
 
         loadFromApi()
     }

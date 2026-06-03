@@ -48,6 +48,7 @@ import com.manjugroups.m_connect.network.TypingRequest
 import com.manjugroups.m_connect.network.ReactionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.DeleteMessageRequest
+import com.manjugroups.m_connect.ui.common.navigateUp
 import android.graphics.Bitmap
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
@@ -204,7 +205,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.rvMessages.visibility = View.VISIBLE
             renderMessages(scrollToBottom = true)
         }
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.titleGroup.setOnClickListener { openContactInfo() }
         binding.btnSearch.setOnClickListener { showInlineSearch() }
         setupInlineSearch()

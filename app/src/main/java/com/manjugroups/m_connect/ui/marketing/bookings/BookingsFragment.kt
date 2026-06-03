@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.Booking
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -105,7 +106,7 @@ class BookingsFragment : Fragment() {
         androidx.core.view.ViewCompat.requestApplyInsets(topBar)
 
         view.findViewById<ImageView>(R.id.btnBookingsBack)
-            .setOnClickListener { parentFragmentManager.popBackStack() }
+            .setOnClickListener { navigateUp() }
 
         btnCreate = view.findViewById<ImageView>(R.id.btnCreateBooking).apply {
             visibility = if (session.hasPermission("marketing.bookings.create")) {

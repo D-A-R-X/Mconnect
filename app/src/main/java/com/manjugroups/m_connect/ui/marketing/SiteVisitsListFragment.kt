@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -43,7 +44,7 @@ class SiteVisitsListFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnSiteVisitsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         loadVisits(view)

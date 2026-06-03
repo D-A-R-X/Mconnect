@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrStaffBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 class HrStaffFragment : Fragment() {
@@ -43,7 +44,7 @@ class HrStaffFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnSearch.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnSearch.setOnClickListener { navigateUp() }
 
         setupSearch()
         collectState()

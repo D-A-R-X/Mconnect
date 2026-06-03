@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -47,7 +48,7 @@ class AttendanceHistoryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
 
         // Pull-to-refresh re-runs loadData(); spinner is cleared in
         // loadData()'s end-of-fetch block.

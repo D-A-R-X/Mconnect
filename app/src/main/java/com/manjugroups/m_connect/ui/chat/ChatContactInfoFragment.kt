@@ -12,6 +12,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 class ChatContactInfoFragment : Fragment() {
@@ -48,7 +49,7 @@ class ChatContactInfoFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
 
         val title = arguments?.getString("title").orEmpty().ifBlank { "Chat" }
 
@@ -56,7 +57,7 @@ class ChatContactInfoFragment : Fragment() {
         val conversationId = arguments?.getString("conversationId")
         val otherStaffId = arguments?.getString("otherStaffId")
 
-        binding.btnMessage.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnMessage.setOnClickListener { navigateUp() }
         binding.btnCreateGroup.setOnClickListener {
             toast("Create group feature coming soon")
         }
