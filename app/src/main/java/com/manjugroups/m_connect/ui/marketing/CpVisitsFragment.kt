@@ -253,15 +253,42 @@ class CpVisitsFragment : Fragment() {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load CP visits")
+                    Toast.makeText(
+                        requireContext(),
+                        "CP fetch failed: ${resp.error ?: "unknown"}",
+                        Toast.LENGTH_LONG,
+                    ).show()
                     return@launch
                 }
                 allVisits = resp.visits
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedByDescending { it.scheduledDate }
+                // Diagnostic: surface server-reported count alongside
+                // the client-mapped count so the user can tell "0 from
+                // server" apart from "server returned N but mapper
+                // dropped them all".
+                if (resp.visits.isEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "CP /my: server returned 0 visits for your account",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else if (allVisits.isEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "CP /my: server sent ${resp.visits.size} but mapper dropped all",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
+                Toast.makeText(
+                    requireContext(),
+                    "CP network error: ${e.message ?: "unknown"}",
+                    Toast.LENGTH_LONG,
+                ).show()
             } finally {
                 root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
                     R.id.cpvRefresh
