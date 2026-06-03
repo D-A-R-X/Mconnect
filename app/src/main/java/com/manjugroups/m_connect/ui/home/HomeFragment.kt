@@ -119,7 +119,10 @@ class HomeFragment : Fragment() {
         // "overlays" the blue as it scrolls up.
         val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            setColor(android.graphics.Color.WHITE)
+            // Light grey (page-bg tone) so the pure-white trip cards
+            // inside read as floating on a softer surface, matching the
+            // reference design.
+            setColor(android.graphics.Color.parseColor("#F1F3F8"))
             cornerRadii = floatArrayOf(
                 maxCornerRadiusPx, maxCornerRadiusPx, // top-left
                 maxCornerRadiusPx, maxCornerRadiusPx, // top-right
