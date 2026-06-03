@@ -229,18 +229,6 @@ class SiteVisitsListFragment : Fragment() {
     }
 
     private fun openVisit(v: TodayVisit) {
-        val fragment = TripNavigationFragment.forVisit(
-            visitId = v.id,
-            placeName = v.placeName,
-            placeAddress = v.placeAddress,
-            destLat = v.placeLat,
-            destLng = v.placeLng,
-            status = v.status,
-            visitCategory = v.visitCategory ?: "site_visit",
-        )
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commit()
+        SiteVisitOverviewFragment.forVisit(v).show(parentFragmentManager, "site_visit_overview")
     }
 }

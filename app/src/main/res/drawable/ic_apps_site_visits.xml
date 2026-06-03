@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Site Visits item icon: lilac circle background with two overlapping card outlines and document lines. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+
+    <!-- Lilac background circle -->
+    <path
+        android:fillColor="#FFEDE4FF"
+        android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+
+    <!-- Background card outline -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#7F56D9"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M15.5,8 h7 A1.5,1.5 0 0 1 24,9.5 v9 A1.5,1.5 0 0 1 22.5,20 h-7 A1.5,1.5 0 0 1 14,18.5 v-9 A1.5,1.5 0 0 1 15.5,8 Z" />
+
+    <!-- Foreground card with solid fill to obscure background card lines -->
+    <path
+        android:fillColor="#FFEDE4FF"
+        android:strokeColor="#7F56D9"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9.5,12 h7 A1.5,1.5 0 0 1 18,13.5 v9 A1.5,1.5 0 0 1 16.5,24 h-7 A1.5,1.5 0 0 1 8,22.5 v-9 A1.5,1.5 0 0 1 9.5,12 Z" />
+
+    <!-- Inner document details inside the foreground card -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#7F56D9"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M11,16 h4" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#7F56D9"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M11,19 h4" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#7F56D9"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M11,21 h2" />
+</vector>

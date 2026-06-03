@@ -826,7 +826,7 @@
                                 android:layout_height="32dp"
                                 android:contentDescription="@null"
                                 android:scaleType="fitCenter"
-                                android:src="@drawable/ic_apps_field_visits" />
+                                android:src="@drawable/ic_apps_site_visits" />
 
                             <TextView
                                 android:layout_width="0dp"
