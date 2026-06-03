@@ -12,6 +12,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,6 +33,15 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+
+        if (message.data["type"] == "geotrack_sync") {
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching {
+                    GeoTrackBootstrapSync.sync(applicationContext, allowPromptConsent = false)
+                }
+            }
+            if (message.data["silent"] == "true") return
+        }
 
         val title = message.data["title"] ?: message.notification?.title ?: getString(R.string.app_name)
         val body = message.data["body"] ?: message.notification?.body ?: return

@@ -253,7 +253,7 @@ class OtpActivity : AppCompatActivity() {
             session.staffId = response.user?.staffId
             session.employeeId = response.user?.employeeId
             session.mustChangePassword = false
-            session.geoTrackingEnabled = false
+            session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
             session.geoConsentGiven = false
             session.geoConsentDeclined = false
             session.shouldTrackNow = false

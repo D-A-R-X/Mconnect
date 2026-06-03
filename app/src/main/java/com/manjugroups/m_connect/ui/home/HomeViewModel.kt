@@ -3,13 +3,11 @@ package com.manjugroups.m_connect.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
-import android.content.Intent
 import android.location.Geocoder
 import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
-import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
-import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -153,19 +151,8 @@ class HomeViewModel : ViewModel() {
                 _uiState.value = loaded
 
                 if (context != null) {
-                    if (hasOpen) {
-                        runCatching {
-                            applyTrackingBootstrap(
-                                context = context,
-                                bootstrap = geoApi.getTrackingBootstrap(
-                                    bearerToken,
-                                    SessionManager(context).trackingDeviceId,
-                                ).data,
-                                attendanceActive = true,
-                            )
-                        }
-                    } else {
-                        stopTrackingUntilClockIn(context)
+                    runCatching {
+                        GeoTrackBootstrapSync.sync(context, allowPromptConsent = true, api = geoApi)
                     }
                 }
 
@@ -603,32 +590,7 @@ class HomeViewModel : ViewModel() {
         bootstrap: TrackingBootstrapData?,
         attendanceActive: Boolean,
     ) {
-        val session = SessionManager(context)
-        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-        session.geoTrackingEnabled = bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-        session.geoConsentDeclined = bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
-
-        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
-            context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-            return
-        }
-
-        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
-            GeoTrackService.start(context)
-        } else {
-            GeoTrackService.stop(context)
-        }
-    }
-
-    private fun stopTrackingUntilClockIn(context: Context) {
-        val session = SessionManager(context)
-        session.shouldTrackNow = false
-        session.activeTrackingSessionId = null
-        GeoTrackService.stop(context)
+        GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
     /** Parse ISO timestamp like "2026-04-08T14:40:10+05:30" to display format "02:40 PM" */

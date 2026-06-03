@@ -3,6 +3,8 @@ package com.manjugroups.m_connect.ui.home
 import android.app.Dialog
 import android.graphics.Color
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,9 +26,13 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
+import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
 import com.manjugroups.m_connect.network.CpVisitDetail
+import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
@@ -84,6 +90,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var payOtherApplicable: Boolean = true
     private var payFlexi: Boolean = true
     private var staffSaveAs: SaveAs = SaveAs.DRAFT
+    private var lastBookingPrefillKey: String? = null
+    private var bookingGstPercent: Double? = null
 
     // ---- Top tab views --------------------------------------------------
     private data class OutcomeTab(
@@ -237,6 +245,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etPayGstAmount: EditText? = null
     private var ivPayGstApplicable: ImageView? = null
     private var etPayDocCharges: EditText? = null
+    private var etPayPattaCharges: EditText? = null
     private var etPayOtherCharges: EditText? = null
     private var ivPayOtherApplicable: ImageView? = null
     private var etPayAdvanceAmount: EditText? = null
@@ -312,6 +321,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var svProjectCache: List<MarketingProject> = emptyList()
     private var svStaffCache: List<StaffData> = emptyList()
 
+    // Booking selections + caches. These back the Booking sub-tab pickers;
+    // the labels stay in the XML views, while these hold the IDs needed by
+    // the web-parity createBooking mutation.
+    private var bookingProject: MarketingProject? = null
+    private var bookingUnit: InventoryUnit? = null
+    private var bookingStaffAvp: StaffData? = null
+    private var bookingStaffGm: StaffData? = null
+    private var bookingStaffSm: StaffData? = null
+    private var bookingStaffBdo: StaffData? = null
+    private var bookingStaffTelecaller: StaffData? = null
+    private var bookingProjectCache: List<MarketingProject> = emptyList()
+    private var bookingUnitCacheProjectId: String? = null
+    private var bookingUnitCache: List<InventoryUnit> = emptyList()
+    private var bookingStaffCache: List<StaffData> = emptyList()
+
     // "Edit" pill on the Client form header. Visible only after a
     // phone lookup actually returns a matching lead and the form is
     // prefilled. Two states:
@@ -322,10 +346,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     //     editable; persistBooking pushes the new values back to the
     //     lead's manualProfile via /api/telecaller/leads/update.
     private var btnEdit: TextView? = null
+    private var btnBack: TextView? = null
+    private var btnClear: TextView? = null
     private var editEnabled: Boolean = false
     // _id of the lead the prefill came from; null when no match was
     // found. Drives whether the edit-push fires on submit.
     private var prefilledLeadId: String? = null
+    private var lastLookedUpBookingPhone: String? = null
     private var btnSubmit: TextView? = null
     private var tvError: TextView? = null
 
@@ -390,6 +417,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         btnEdit = view.findViewById(R.id.btnOutcomeEdit)
         btnEdit?.setOnClickListener { toggleEditMode() }
+        btnBack = view.findViewById(R.id.btnOutcomeBack)
+        btnBack?.setOnClickListener { goBackInBookingFlow() }
+        btnClear = view.findViewById(R.id.btnOutcomeClear)
+        btnClear?.setOnClickListener { clearBookingForm() }
 
         // Drag-handle row at the top of the sheet — tap to dismiss.
         // Drag-down dismiss is intentionally disabled (nested form
@@ -453,12 +484,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun applyStandaloneBookingMode() {
-        // No visit attached → outcome tabs other than Booking are
-        // meaningless. Fade + disable all three.
-        listOf(tabSiteVisit, tabPostpone, tabNotInterested).forEach { tab ->
-            tab.cell?.isClickable = false
-            tab.cell?.alpha = 0.35f
+        view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = "New Booking"
+        view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = "Booking form"
+        view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
+        btnEdit?.visibility = View.GONE
+        btnBack?.visibility = View.VISIBLE
+        btnClear?.visibility = View.VISIBLE
+        editEnabled = true
+        prefilledLeadId = null
+        bookingSub = BookingSub.CLIENT
+        bookingStep = BookingStep.CLIENT_FORM
+        if (tvBookDate?.text?.toString()?.trim().isNullOrEmpty()) {
+            tvBookDate?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                .format(Calendar.getInstance().time)
         }
+        applyEditModeToFields(true)
         activeOutcome = Outcome.BOOKING
         renderState()
     }
@@ -514,6 +554,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         subTabCharges = view.findViewById(R.id.subTabChargesDetails)
         subTabPayment = view.findViewById(R.id.subTabPaymentDetails)
         subTabStaff = view.findViewById(R.id.subTabStaffDetails)
+        subTabProfessional?.visibility = View.GONE
+        subTabOffice?.visibility = View.GONE
+        subTabCharges?.visibility = View.GONE
+        subTabPayment?.visibility = View.GONE
     }
 
     private fun bindBodies(view: View) {
@@ -545,6 +589,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etFormState = view.findViewById(R.id.etFormState)
         etFormDistrict = view.findViewById(R.id.etFormDistrict)
         etFormLocation = view.findViewById(R.id.etFormLocation)
+        (tvFormPhone as? EditText)?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val raw = s?.toString()?.trim().orEmpty()
+                val digits = raw.filter { it.isDigit() }.takeLast(10)
+                if (digits.length < 10 || digits == lastLookedUpBookingPhone) return
+                lastLookedUpBookingPhone = digits
+                lookupAndPrefillClientByPhone(digits)
+            }
+        })
     }
 
     private fun bindProfessionalFields(view: View) {
@@ -593,6 +648,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etPayGstAmount = view.findViewById(R.id.etPayGstAmount)
         ivPayGstApplicable = view.findViewById(R.id.ivPayGstApplicable)
         etPayDocCharges = view.findViewById(R.id.etPayDocCharges)
+        etPayPattaCharges = view.findViewById(R.id.etPayPattaCharges)
         etPayOtherCharges = view.findViewById(R.id.etPayOtherCharges)
         ivPayOtherApplicable = view.findViewById(R.id.ivPayOtherApplicable)
         etPayAdvanceAmount = view.findViewById(R.id.etPayAdvanceAmount)
@@ -607,6 +663,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etPay4Mode = view.findViewById(R.id.etPay4Mode)
         tvPay4Date = view.findViewById(R.id.tvPay4Date)
         tvPayPrefReg = view.findViewById(R.id.tvPayPrefReg)
+        val recomputeWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                recomputeBookingFinanceDerivedFields()
+            }
+        }
+        etChargeBookingCost?.addTextChangedListener(recomputeWatcher)
+        etChargeSpecialConsideration?.addTextChangedListener(recomputeWatcher)
+        etChargeGuidelineValue?.addTextChangedListener(recomputeWatcher)
+        etPayAdvanceAmount?.addTextChangedListener(recomputeWatcher)
     }
 
     private fun bindStaffFields(view: View) {
@@ -707,12 +774,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowBookSource)?.setOnClickListener {
             picker("Select Source", listOf("Walk-in", "Referral", "Marketing", "Online")) { tvBookSource?.text = it }
         }
-        view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener { pickDate(tvBookDate) }
+        view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener {
+            pickDate(tvBookDate) { loadBookingPlotPrefill(force = true) }
+        }
         view?.findViewById<View>(R.id.rowBookProject)?.setOnClickListener {
-            picker("Select Project", listOf("Project A", "Project B", "Project C")) { tvBookProject?.text = it }
+            pickBookingProject()
         }
         view?.findViewById<View>(R.id.rowBookPlot)?.setOnClickListener {
-            picker("Select Plot", listOf("Plot 101", "Plot 102", "Plot 103")) { tvBookPlot?.text = it }
+            pickBookingUnit()
         }
         view?.findViewById<View>(R.id.rowBookProperty)?.setOnClickListener {
             picker("Select Property Type", listOf("Plot", "Apartment", "Villa")) { tvBookProperty?.text = it }
@@ -774,19 +843,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Staff pickers + radio
         view?.findViewById<View>(R.id.rowStaffAvp)?.setOnClickListener {
-            picker("Select AVP", listOf("AVP A", "AVP B")) { tvStaffAvp?.text = it }
+            pickBookingStaff("Select AVP", "avp") { bookingStaffAvp = it; tvStaffAvp?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffGm)?.setOnClickListener {
-            picker("Select GM", listOf("GM A", "GM B")) { tvStaffGm?.text = it }
+            pickBookingStaff("Select GM", "gm") { bookingStaffGm = it; tvStaffGm?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffSm)?.setOnClickListener {
-            picker("Select Senior Manager", listOf("SM A", "SM B")) { tvStaffSm?.text = it }
+            pickBookingStaff("Select Senior Manager", "seniorManager") { bookingStaffSm = it; tvStaffSm?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffBdo)?.setOnClickListener {
-            picker("Select BDO", listOf("BDO A", "BDO B")) { tvStaffBdo?.text = it }
+            pickBookingStaff("Select BDO", "bdo") { bookingStaffBdo = it; tvStaffBdo?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffTelecaller)?.setOnClickListener {
-            picker("Select Telecaller", listOf("Telecaller A", "Telecaller B")) { tvStaffTelecaller?.text = it }
+            pickBookingStaff("Select Telecaller", "telecaller") { bookingStaffTelecaller = it; tvStaffTelecaller?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffDocPrep)?.setOnClickListener {
             picker("Document Language", listOf("English", "Tamil", "Hindi")) { tvStaffDocPrep?.text = it }
@@ -884,6 +953,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         )
     }
 
+    private fun refreshPaymentToggles() {
+        ivPayGstApplicable?.setImageResource(
+            if (payGstApplicable) R.drawable.ic_outcome_checkbox_checked
+            else R.drawable.ic_outcome_checkbox_empty
+        )
+        ivPayOtherApplicable?.setImageResource(
+            if (payOtherApplicable) R.drawable.ic_outcome_checkbox_checked
+            else R.drawable.ic_outcome_checkbox_empty
+        )
+        ivPayFlexi?.setImageResource(
+            if (payFlexi) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
+        )
+    }
+
     private fun refreshStaffSaveRadios() {
         ivStaffSaveDraft?.setImageResource(
             if (staffSaveAs == SaveAs.DRAFT) R.drawable.ic_outcome_radio_on
@@ -900,14 +983,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         activeOutcome = o
         if (o == Outcome.BOOKING) {
             bookingSub = BookingSub.CLIENT
-            bookingStep = BookingStep.FIND_MOBILE
+            bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
         }
         renderState()
     }
 
     private fun switchBookingSub(sub: BookingSub) {
         bookingSub = sub
-        if (sub == BookingSub.CLIENT && bookingStep != BookingStep.CLIENT_FORM) {
+        if (!isStandaloneBookingMode && sub == BookingSub.CLIENT && bookingStep != BookingStep.CLIENT_FORM) {
             bookingStep = BookingStep.FIND_MOBILE
         }
         renderState()
@@ -929,24 +1012,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         subTabsScroll?.visibility = if (showSubTabs) View.VISIBLE else View.GONE
         if (showSubTabs) {
             styleSubTab(subTabClient, bookingSub == BookingSub.CLIENT)
-            styleSubTab(subTabProfessional, bookingSub == BookingSub.PROFESSIONAL)
-            styleSubTab(subTabOffice, bookingSub == BookingSub.OFFICE)
             styleSubTab(subTabBooking, bookingSub == BookingSub.BOOKING)
-            styleSubTab(subTabCharges, bookingSub == BookingSub.CHARGES)
-            styleSubTab(subTabPayment, bookingSub == BookingSub.PAYMENT)
             styleSubTab(subTabStaff, bookingSub == BookingSub.STAFF)
 
-            // Since the pills aren't tappable, the user can't manually
-            // scroll the strip to see what's next — auto-scroll the
-            // active pill into the centre so they always have context.
             val activePill: TextView? = when (bookingSub) {
                 BookingSub.CLIENT -> subTabClient
-                BookingSub.PROFESSIONAL -> subTabProfessional
-                BookingSub.OFFICE -> subTabOffice
                 BookingSub.BOOKING -> subTabBooking
-                BookingSub.CHARGES -> subTabCharges
-                BookingSub.PAYMENT -> subTabPayment
                 BookingSub.STAFF -> subTabStaff
+                BookingSub.PROFESSIONAL, BookingSub.OFFICE, BookingSub.CHARGES, BookingSub.PAYMENT -> subTabClient
             }
             val scroll = subTabsScroll
             if (activePill != null && scroll != null) {
@@ -958,7 +1031,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
 
         // Body swap.
-        //  - Booking         : sub-tab drives which of the 7 form bodies show.
+        //  - Booking         : three web-parity tabs group the native sections.
         //  - Site visit      : one-page conversion form.
         //  - Postpone        : 4 free-text fields + follow-up date/time.
         //  - Not Interested  : same 4 free-text fields, no follow-up.
@@ -969,22 +1042,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Coming Soon is only the fallback now — every outcome has a body.
         bodyComingSoon?.visibility = View.GONE
-        bodyFindClient?.visibility = if (bookingActive && bookingSub == BookingSub.CLIENT &&
-            bookingStep == BookingStep.FIND_MOBILE) View.VISIBLE else View.GONE
-        bodyClientForm?.visibility = if (bookingActive && bookingSub == BookingSub.CLIENT &&
-            bookingStep == BookingStep.CLIENT_FORM) View.VISIBLE else View.GONE
-        bodyProfessional?.visibility = if (bookingActive && bookingSub == BookingSub.PROFESSIONAL)
-            View.VISIBLE else View.GONE
-        bodyOffice?.visibility = if (bookingActive && bookingSub == BookingSub.OFFICE)
-            View.VISIBLE else View.GONE
+        val showFindClient = bookingActive && bookingSub == BookingSub.CLIENT &&
+            bookingStep == BookingStep.FIND_MOBILE && !isStandaloneBookingMode
+        val showClientGroup = bookingActive && bookingSub == BookingSub.CLIENT &&
+            (bookingStep == BookingStep.CLIENT_FORM || isStandaloneBookingMode)
+        val showBookingFinance = bookingActive && bookingSub == BookingSub.BOOKING
+        val showPaymentStaff = bookingActive && bookingSub == BookingSub.STAFF
+        bodyFindClient?.visibility = if (showFindClient) View.VISIBLE else View.GONE
+        bodyClientForm?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
+        bodyProfessional?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
+        bodyOffice?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
         bodyBooking?.visibility = if (bookingActive && bookingSub == BookingSub.BOOKING)
             View.VISIBLE else View.GONE
-        bodyCharges?.visibility = if (bookingActive && bookingSub == BookingSub.CHARGES)
-            View.VISIBLE else View.GONE
-        bodyPayment?.visibility = if (bookingActive && bookingSub == BookingSub.PAYMENT)
-            View.VISIBLE else View.GONE
-        bodyStaff?.visibility = if (bookingActive && bookingSub == BookingSub.STAFF)
-            View.VISIBLE else View.GONE
+        bodyCharges?.visibility = if (showBookingFinance) View.VISIBLE else View.GONE
+        bodyPayment?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
+        bodyStaff?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
         bodySiteVisit?.visibility = if (siteVisitActive) View.VISIBLE else View.GONE
         bodyPostpone?.visibility = if (postponeActive) View.VISIBLE else View.GONE
         bodyNotInterested?.visibility = if (notInterestedActive) View.VISIBLE else View.GONE
@@ -993,6 +1065,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // so the user can always jump back and re-enter the client mobile.
         val onFindMobile = bookingActive && bookingSub == BookingSub.CLIENT &&
             bookingStep == BookingStep.FIND_MOBILE
+        btnBack?.visibility = if (isStandaloneBookingMode && bookingActive) View.VISIBLE else View.GONE
+        btnClear?.visibility = if (isStandaloneBookingMode && bookingActive) View.VISIBLE else View.GONE
 
         // CTA label
         btnSubmit?.text = when {
@@ -1123,23 +1197,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         return when (bookingSub) {
             BookingSub.CLIENT -> {
-                // Only validated on the CLIENT_FORM step — the FIND_MOBILE
-                // step has its own phone-length check earlier in onCtaTap.
                 if (bookingStep != BookingStep.CLIENT_FORM) null
+                else if ((textOrNull(tvFormPhone?.text) ?: textOrNull(etClientMobile?.text)).isNullOrEmpty())
+                    "Mobile number is required before continuing"
                 else if (etFormName?.text?.toString()?.trim().isNullOrEmpty())
                     "Client Name is required before continuing"
                 else null
             }
-            BookingSub.PROFESSIONAL -> {
-                if (isBlankPlaceholder(tvProfProfession?.text?.toString(), "Select Profession"))
-                    "Profession is required before continuing"
-                else null
-            }
-            BookingSub.OFFICE -> {
-                if (etOfficeName?.text?.toString()?.trim().isNullOrEmpty())
-                    "Office Name is required before continuing"
-                else null
-            }
+            BookingSub.PROFESSIONAL, BookingSub.OFFICE -> null
             BookingSub.BOOKING -> {
                 when {
                     isBlankPlaceholder(tvBookDate?.text?.toString(), "dd/mm/yyyy") ->
@@ -1227,10 +1292,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * Hit `/api/telecaller/leads/search-by-phone` and replay any
-     * existing lead profile onto the Client form fields. Only fills
-     * blank fields — the user's manual input wins. Silent on errors;
-     * the form already opened and the user is free to keep typing.
+     * Lookup an existing client by phone and replay known profile data
+     * onto the Client form fields. Telecaller lead data is used first,
+     * then the clients master fills anything still blank.
      */
     private fun lookupAndPrefillClientByPhone(phone: String) {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -1238,18 +1302,32 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
                 if (!resp.success) {
                     android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
-                    return@launch
-                }
-                resp.leads.firstOrNull() ?: run {
-                    android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
-                    return@launch
+                    null
+                } else {
+                    resp.leads.firstOrNull().also {
+                        if (it == null) android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "lead lookup failed", e)
-                return@launch
+                null
             }
+            val client = try {
+                val resp = api.searchClientByPhone(session.bearerToken, phone)
+                if (!resp.success) {
+                    android.util.Log.d(LOG_TAG, "client lookup: ${resp.error ?: "no client"}")
+                    null
+                } else {
+                    resp.client.also {
+                        if (it == null) android.util.Log.d(LOG_TAG, "client lookup: no match for $phone")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "client lookup failed", e)
+                null
+            }
+            if (lead == null && client == null) return@launch
             if (!isAdded) return@launch
-            val profile = lead.latestAnalysisProfile
 
             fun fill(field: EditText?, value: String?) {
                 val v = value?.trim().orEmpty()
@@ -1257,40 +1335,158 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 if (field?.text?.toString()?.trim().isNullOrEmpty()) field?.setText(v)
             }
 
-            // Name: prefer the lead's contactName, fall back to analysis
-            // profile's clientName when the contact field was left blank.
-            fill(etFormName, lead.contactName ?: profile?.clientName)
-            fill(etFormEmail, lead.emailId)
-            fill(etFormAltNumber, profile?.alternateMobileNumber)
-            fill(etFormHomeAddress, profile?.address ?: lead.suggestedVisitAddress)
-            fill(etFormPincode, profile?.pincode)
-            fill(etFormState, profile?.state)
-            fill(etFormDistrict, profile?.district)
-            // Location preferred / city → "Location" field (the row
-            // shows preferred area on the lead-card too).
-            fill(etFormLocation, lead.locationPreferred ?: lead.clientCity)
+            lead?.let {
+                val profile = it.latestAnalysisProfile
+                fill(etFormName, it.contactName ?: profile?.clientName)
+                fill(etFormEmail, it.emailId)
+                fill(etFormAltNumber, profile?.alternateMobileNumber)
+                fill(etFormHomeAddress, profile?.address ?: it.suggestedVisitAddress)
+                fill(etFormPincode, profile?.pincode)
+                fill(etFormState, profile?.state)
+                fill(etFormDistrict, profile?.district)
+                fill(etFormLocation, it.locationPreferred ?: it.clientCity)
+            }
+            client?.let { prefillFromClient(it, ::fill) }
 
-            // Record the lead id + lock the fields so the user has to
-            // tap Edit before they can change canonical lead data.
-            // The Edit pill appears only after a successful match —
-            // a blank form (no lookup) stays fully editable as before.
-            prefilledLeadId = lead.id
-            editEnabled = false
-            applyEditModeToFields(false)
-            btnEdit?.visibility = View.VISIBLE
-            btnEdit?.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
-            btnEdit?.setTextColor(Color.parseColor("#2DAE12"))
+            if (lead != null && !isStandaloneBookingMode) {
+                // CP/SV lead-derived data is locked until Edit, so changes
+                // can be pushed back to the lead audit trail intentionally.
+                prefilledLeadId = lead.id
+                editEnabled = false
+                applyEditModeToFields(false)
+                btnEdit?.visibility = View.VISIBLE
+                btnEdit?.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+                btnEdit?.setTextColor(Color.parseColor("#2DAE12"))
+            } else {
+                prefilledLeadId = null
+                editEnabled = true
+                applyEditModeToFields(true)
+                btnEdit?.visibility = View.GONE
+            }
         }
     }
 
+    private fun prefillFromClient(
+        client: ClientProfile,
+        fill: (EditText?, String?) -> Unit,
+    ) {
+        fun fillLabel(field: TextView?, value: String?, placeholder: String) {
+            val v = value?.trim().orEmpty()
+            if (v.isEmpty()) return
+            val current = field?.text?.toString()?.trim().orEmpty()
+            if (current.isEmpty() || current.equals(placeholder, ignoreCase = true)) field?.text = v
+        }
+        fillLabel(tvFormTitle, client.title, "Title")
+        fill(etFormName, client.clientName)
+        fill(etFormFather, client.fatherSpouseName)
+        fillLabel(tvFormDob, client.dateOfBirth, "dd/mm/yyyy")
+        fillLabel(tvFormAnniversary, client.anniversaryDate, "dd/mm/yyyy")
+        fillLabel(tvFormNationality, client.nationality, "Nationality")
+        fill(etFormAltNumber, client.alternateNumbers)
+        fill(etFormWhatsApp, client.whatsappNumber)
+        fill(etFormEmail, client.email)
+        fill(etFormHomeAddress, client.homeAddress ?: client.formattedAddress ?: client.addressLine1)
+        fill(etFormPincode, client.pincode)
+        fill(etFormState, client.state)
+        fill(etFormDistrict, client.district)
+        fill(etFormLocation, client.location)
+        fillLabel(tvProfProfession, client.profession, "Select Profession")
+        fill(etProfDesignation, client.designation)
+        fill(etProfIncome, client.incomePerAnnum)
+        fill(etOfficeName, client.officeName)
+        fill(etOfficeAddress, client.officeAddress)
+        fill(etOfficeMobile, client.officeMobile)
+        fill(etOfficePhone, client.officePhone)
+        fill(etOfficeEmail, client.officeEmail)
+        fill(etStaffAadhar, client.aadhaar)
+        fill(etStaffPancard, client.pan)
+        fill(etStaffRefName1, client.referenceName1)
+        fill(etStaffRefMobile1, client.referenceMobile1)
+        fill(etStaffRefProf1, client.referenceProfession1)
+        fill(etStaffRefName2, client.referenceName2)
+        fill(etStaffRefMobile2, client.referenceMobile2)
+        fill(etStaffRefProf2, client.referenceProfession2)
+    }
+
     private fun nextSubTab(current: BookingSub): BookingSub = when (current) {
-        BookingSub.CLIENT -> BookingSub.PROFESSIONAL
-        BookingSub.PROFESSIONAL -> BookingSub.OFFICE
-        BookingSub.OFFICE -> BookingSub.BOOKING
-        BookingSub.BOOKING -> BookingSub.CHARGES
-        BookingSub.CHARGES -> BookingSub.PAYMENT
-        BookingSub.PAYMENT -> BookingSub.STAFF
+        BookingSub.CLIENT -> BookingSub.BOOKING
+        BookingSub.PROFESSIONAL, BookingSub.OFFICE -> BookingSub.BOOKING
+        BookingSub.BOOKING -> BookingSub.STAFF
+        BookingSub.CHARGES, BookingSub.PAYMENT -> BookingSub.STAFF
         BookingSub.STAFF -> BookingSub.STAFF
+    }
+
+    private fun previousSubTab(current: BookingSub): BookingSub? = when (current) {
+        BookingSub.STAFF -> BookingSub.BOOKING
+        BookingSub.BOOKING, BookingSub.PROFESSIONAL, BookingSub.OFFICE -> BookingSub.CLIENT
+        BookingSub.CLIENT, BookingSub.CHARGES, BookingSub.PAYMENT -> null
+    }
+
+    private fun goBackInBookingFlow() {
+        if (activeOutcome != Outcome.BOOKING) return
+        val previous = previousSubTab(bookingSub)
+        if (previous == null) {
+            dismissAllowingStateLoss()
+            return
+        }
+        bookingSub = previous
+        bookingStep = BookingStep.CLIENT_FORM
+        renderState()
+    }
+
+    private fun clearBookingForm() {
+        if (!isStandaloneBookingMode) return
+        listOf(
+            etClientMobile, tvFormPhone as? EditText, etFormName, etFormFather,
+            etFormAltNumber, etFormWhatsApp, etFormEmail, etFormHomeAddress,
+            etFormPincode, etFormState, etFormDistrict, etFormLocation,
+            etProfDesignation, etProfIncome, etOfficeName, etOfficeEmail,
+            etOfficeMobile, etOfficePhone, etOfficeAddress, etBookCef,
+            etChargeBookingCost, etChargeGuidelineValue, etChargeSpecialConsideration,
+            etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
+            etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
+            etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
+            etPayOtherCharges,
+            etPayAdvanceAmount, etPayAllotDue, etPay2Mode, etPay3Mode, etPay4Mode,
+            etStaffAadhar, etStaffPancard, etStaffRefName1, etStaffRefMobile1,
+            etStaffRefProf1, etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
+        ).forEach { it?.setText("") }
+        listOf(
+            tvFormTitle, tvFormDob, tvFormAnniversary, tvFormNationality,
+            tvProfProfession, tvBookType, tvBookSource, tvBookProject,
+            tvBookPlot, tvBookProperty, tvBookMode, tvChargePromoTnc,
+            tvPayPaymentMode, tvPayAllotDate, tvPay2Date, tvPay3Date,
+            tvPay4Date, tvPayPrefReg, tvStaffAvp, tvStaffGm, tvStaffSm,
+            tvStaffBdo, tvStaffTelecaller, tvStaffDocPrep,
+        ).forEach { it?.text = "" }
+        tvBookDate?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            .format(Calendar.getInstance().time)
+        bookingProject = null
+        bookingUnit = null
+        bookingStaffAvp = null
+        bookingStaffGm = null
+        bookingStaffSm = null
+        bookingStaffBdo = null
+        bookingStaffTelecaller = null
+        prefilledLeadId = null
+        lastLookedUpBookingPhone = null
+        lastBookingPrefillKey = null
+        bookingGstPercent = null
+        bookIsAgainstVisit = YesNo.YES
+        bookDuplicate = false
+        payGstApplicable = true
+        payOtherApplicable = true
+        payFlexi = false
+        staffSaveAs = SaveAs.DRAFT
+        bookingSub = BookingSub.CLIENT
+        bookingStep = BookingStep.CLIENT_FORM
+        applyEditModeToFields(true)
+        refreshBookingRadios()
+        refreshPaymentToggles()
+        refreshStaffSaveRadios()
+        clearError()
+        renderState()
+        Toast.makeText(requireContext(), "Booking form cleared", Toast.LENGTH_SHORT).show()
     }
 
     // ---- Pickers ----------------------------------------------------
@@ -1303,21 +1499,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { onPicked(it) }
     }
 
-    private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy") {
-        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val today = ymd.format(Calendar.getInstance().time)
-        setFragmentResultListener(RESULT_KEY_GENERIC_DATE) { _, bundle ->
-            val iso = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
-            val parsed = runCatching { ymd.parse(iso) }.getOrNull() ?: return@setFragmentResultListener
-            target?.text = SimpleDateFormat(format, Locale.US).format(parsed)
-        }
-        CalendarRangePickerSheet.newInstance(
-            title = "Select Date",
-            subtitle = "Pick a date",
-            initialFrom = today,
-            initialTo = today,
-            resultKey = RESULT_KEY_GENERIC_DATE,
-        ).show(parentFragmentManager, "cp_visit_generic_calendar")
+    private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy", afterPicked: (() -> Unit)? = null) {
+        val cal = Calendar.getInstance()
+        val raw = target?.text?.toString()?.trim().orEmpty()
+        listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy").firstNotNullOfOrNull { pattern ->
+            runCatching { SimpleDateFormat(pattern, Locale.US).parse(raw) }.getOrNull()
+        }?.let { cal.time = it }
+        android.app.DatePickerDialog(
+            requireContext(),
+            { _, year, month, day ->
+                cal.set(year, month, day)
+                target?.text = SimpleDateFormat(format, Locale.US).format(cal.time)
+                afterPicked?.invoke()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH),
+        ).show()
     }
 
     private fun pickTime(target: TextView?) {
@@ -1331,6 +1529,265 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cal.get(Calendar.MINUTE),
             false,
         ).show()
+    }
+
+    // ---- Booking picker helpers --------------------------------------
+    private fun pickBookingProject() {
+        if (bookingProjectCache.isNotEmpty()) {
+            showBookingProjectPicker(bookingProjectCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (!resp.success || resp.projects.isEmpty()) {
+                    showError(resp.error ?: "No projects available")
+                    return@launch
+                }
+                bookingProjectCache = resp.projects
+                showBookingProjectPicker(resp.projects)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load projects")
+            }
+        }
+    }
+
+    private fun showBookingProjectPicker(items: List<MarketingProject>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select project",
+            options = items.map { p ->
+                SearchableOption(
+                    item = p,
+                    title = p.name ?: "Unnamed project",
+                    subtitle = listOfNotNull(p.location, p.status).joinToString(" • ")
+                        .takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(p.id, p.scope, p.location, p.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No projects found",
+        ) { project ->
+            bookingProject = project
+            bookingUnit = null
+            bookingUnitCacheProjectId = null
+            bookingUnitCache = emptyList()
+            lastBookingPrefillKey = null
+            bookingGstPercent = null
+            tvBookProject?.text = project.name ?: "Selected"
+            tvBookPlot?.text = "Select Plot"
+        }
+    }
+
+    private fun pickBookingUnit() {
+        val project = bookingProject
+        if (project == null) {
+            showError("Select project first")
+            return
+        }
+        if (bookingUnitCacheProjectId == project.id && bookingUnitCache.isNotEmpty()) {
+            showBookingUnitPicker(bookingUnitCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listInventoryUnits(
+                    token = session.bearerToken,
+                    projectId = project.id,
+                    status = "available",
+                )
+                if (!resp.success) {
+                    showError(resp.error ?: "Failed to load plots")
+                    return@launch
+                }
+                val available = resp.units.filter { it.status == "available" }
+                if (available.isEmpty()) {
+                    showError("No available plots in this project")
+                    return@launch
+                }
+                bookingUnitCacheProjectId = project.id
+                bookingUnitCache = available
+                showBookingUnitPicker(available)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load plots")
+            }
+        }
+    }
+
+    private fun showBookingUnitPicker(items: List<InventoryUnit>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select plot",
+            options = items.map { unit ->
+                val title = unit.unitNumber ?: unit.id
+                val subtitle = listOfNotNull(
+                    unit.unitType,
+                    unit.facing?.let { "Facing $it" },
+                    unit.area?.let { "${it.toInt()} sqft" },
+                    unit.priceSnapshot?.let { "₹${it.toLong()}" },
+                ).joinToString(" • ").takeIf { it.isNotBlank() }
+                SearchableOption(
+                    item = unit,
+                    title = title,
+                    subtitle = subtitle,
+                    keywords = listOfNotNull(unit.id, unit.block, unit.dimensions, unit.rawStatus)
+                        .joinToString(" "),
+                )
+            },
+            emptyMessage = "No plots found",
+        ) { unit ->
+            if (unit.status != "available") {
+                showError("Selected plot is no longer available")
+                return@show
+            }
+            bookingUnit = unit
+            tvBookPlot?.text = unit.unitNumber ?: unit.id
+            loadBookingPlotPrefill(force = true)
+        }
+    }
+
+    private fun loadBookingPlotPrefill(force: Boolean = false) {
+        val unit = bookingUnit ?: return
+        val key = "${unit.id}:${bookingDateForApi().orEmpty()}"
+        if (!force && key == lastBookingPrefillKey) return
+        lastBookingPrefillKey = key
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getBookingPlotPrefill(
+                    token = session.bearerToken,
+                    plotId = unit.id,
+                    bookingDate = bookingDateForApi(),
+                )
+                if (!resp.success) {
+                    showError(resp.error ?: "Failed to load plot finance details")
+                    return@launch
+                }
+                applyBookingPlotPrefill(resp)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load plot finance details")
+            }
+        }
+    }
+
+    private fun applyBookingPlotPrefill(resp: BookingPlotPrefillResponse) {
+        bookingGstPercent = resp.project?.gstPercent
+        val fields = resp.fields
+        fun money(value: Double?): String? {
+            if (value == null || !value.isFinite()) return null
+            val rounded = kotlin.math.round(value)
+            return if (kotlin.math.abs(value - rounded) < 0.01) rounded.toLong().toString()
+            else String.format(Locale.US, "%.2f", value)
+        }
+        fun setMoney(field: EditText?, value: Double?) {
+            money(value)?.let { field?.setText(it) }
+        }
+        fun setDate(field: TextView?, iso: String?) {
+            val parsed = dateTextForApi(iso) ?: return
+            val date = runCatching {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(parsed)
+            }.getOrNull() ?: return
+            field?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(date)
+        }
+
+        setMoney(etChargeBookingCost, fields?.bookingCost)
+        setMoney(etChargeGuidelineValue, fields?.guidelineValue)
+        setMoney(etPayRegCharges, fields?.registrationCharges)
+        setMoney(etPayGstAmount, fields?.gstAmount)
+        setMoney(etPayDocCharges, fields?.documentCharges)
+        setMoney(etPayPattaCharges, fields?.pattaCharges)
+        setMoney(etPayOtherCharges, fields?.otherCharges)
+        setMoney(etPayAdvanceAmount, fields?.advanceAmount)
+        setMoney(etPayAllotDue, fields?.allotmentDueAmount)
+        setDate(tvPayAllotDate, fields?.allotmentDueDate)
+
+        val schedules = resp.schedules
+        schedules.getOrNull(0)?.let {
+            setMoney(etPay2Mode, it.amount)
+            setDate(tvPay2Date, it.dueDate)
+        }
+        schedules.getOrNull(1)?.let {
+            setMoney(etPay3Mode, it.amount)
+            setDate(tvPay3Date, it.dueDate)
+        }
+        schedules.getOrNull(2)?.let {
+            setMoney(etPay4Mode, it.amount)
+            setDate(tvPay4Date, it.dueDate)
+        }
+        recomputeBookingFinanceDerivedFields()
+        Toast.makeText(requireContext(), "Plot pricing filled from project settings", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun recomputeBookingFinanceDerivedFields() {
+        val gstPercent = bookingGstPercent ?: return
+        if (!payGstApplicable) return
+        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return
+        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        val guidelineValue = numberOrNull(etChargeGuidelineValue?.text) ?: return
+        val agreedAmount = bookingCost - specialConsideration
+        val taxable = agreedAmount - guidelineValue
+        if (taxable > 0 && gstPercent.isFinite()) {
+            etPayGstAmount?.setText(kotlin.math.round((taxable * gstPercent) / 100).toLong().toString())
+        }
+    }
+
+    private fun pickBookingStaff(
+        title: String,
+        roleKey: String,
+        onPicked: (StaffData) -> Unit,
+    ) {
+        if (bookingStaffCache.isNotEmpty()) {
+            showBookingStaffPicker(title, filterBookingStaff(roleKey, bookingStaffCache), onPicked)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                bookingStaffCache = resp.staff
+                showBookingStaffPicker(title, filterBookingStaff(roleKey, resp.staff), onPicked)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load staff")
+            }
+        }
+    }
+
+    private fun filterBookingStaff(roleKey: String, items: List<StaffData>): List<StaffData> {
+        fun StaffData.haystack(): String = listOfNotNull(name, role, designation, department)
+            .joinToString(" ")
+            .lowercase(Locale.US)
+        val tokens = when (roleKey) {
+            "avp" -> listOf("avp", "assistant vice president")
+            "gm" -> listOf("gm", "general manager")
+            "seniorManager" -> listOf("senior manager", "sm")
+            "bdo" -> listOf("bdo", "business development")
+            "telecaller" -> listOf("telecaller", "tele caller", "telesales")
+            else -> emptyList()
+        }
+        val filtered = items.filter { staff -> tokens.any { staff.haystack().contains(it) } }
+        return filtered.ifEmpty { items }
+    }
+
+    private fun showBookingStaffPicker(
+        title: String,
+        items: List<StaffData>,
+        onPicked: (StaffData) -> Unit,
+    ) {
+        if (items.isEmpty()) {
+            showError("No staff found")
+            return
+        }
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = title,
+            options = items.map { staff ->
+                SearchableOption(
+                    item = staff,
+                    title = staff.name ?: "Unnamed staff",
+                    subtitle = listOfNotNull(staff.designation, staff.department, staff.employeeId)
+                        .joinToString(" • ").takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(staff.phone, staff.role, staff.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No staff found",
+        ) { onPicked(it) }
     }
 
     // ---- Site Visit helpers -----------------------------------------
@@ -1850,11 +2307,199 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun bookingDateForApi(): String? {
         val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
         if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
-        return runCatching {
-            val ddmmyyyy = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US)
-            val ymd = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-            ymd.format(ddmmyyyy.parse(raw)!!)
-        }.getOrNull()
+        return dateTextForApi(raw)
+    }
+
+    private fun dateTextForApi(raw: CharSequence?): String? {
+        val value = raw?.toString()?.trim().orEmpty()
+        if (value.isBlank() || value.contains("dd/", ignoreCase = true)) return null
+        val out = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy").forEach { pattern ->
+            val parsed = runCatching {
+                SimpleDateFormat(pattern, Locale.US).parse(value)
+            }.getOrNull()
+            if (parsed != null) return out.format(parsed)
+        }
+        return null
+    }
+
+    private fun textOrNull(value: CharSequence?): String? =
+        value?.toString()?.trim()?.takeIf {
+            it.isNotBlank() &&
+                !it.equals("select", ignoreCase = true) &&
+                !it.startsWith("select ", ignoreCase = true) &&
+                !it.equals("dd/mm/yyyy", ignoreCase = true)
+        }
+
+    private fun numberOrNull(value: CharSequence?): Double? =
+        value?.toString()?.trim()?.replace(",", "")?.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+
+    private fun buildBookingRequest(
+        sourceType: String,
+        cpVisitId: String? = null,
+        siteVisitId: String? = null,
+    ): CreateBookingRequest? {
+        val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text)
+        val name = textOrNull(etFormName?.text)
+        val project = bookingProject
+        val unit = bookingUnit
+        if (phone.isNullOrBlank()) {
+            finishCta(error = "Client phone number is required")
+            return null
+        }
+        if (name.isNullOrBlank()) {
+            finishCta(error = "Client name is required")
+            return null
+        }
+        if (project == null) {
+            finishCta(error = "Select project")
+            return null
+        }
+        if (unit == null) {
+            finishCta(error = "Select plot")
+            return null
+        }
+        val bookingCost = numberOrNull(etChargeBookingCost?.text)
+        val advanceAmount = numberOrNull(etPayAdvanceAmount?.text)
+        if (staffSaveAs == SaveAs.CONFIRMED) {
+            val missing = confirmationMissingFields(bookingCost, advanceAmount)
+            if (missing.isNotEmpty()) {
+                finishCta(
+                    error = "Fill required approval fields or save as Draft: ${missing.take(6).joinToString(", ")}" +
+                        if (missing.size > 6) "…" else ""
+                )
+                return null
+            }
+        }
+        return CreateBookingRequest(
+            clientName = name,
+            mobileNumber = phone,
+            bookingDate = bookingDateForApi() ?: SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                .format(Calendar.getInstance().time),
+            leadId = prefilledLeadId,
+            title = textOrNull(tvFormTitle?.text),
+            fatherSpouseName = textOrNull(etFormFather?.text),
+            dateOfBirth = dateTextForApi(tvFormDob?.text),
+            anniversaryDate = dateTextForApi(tvFormAnniversary?.text),
+            alternateNumbers = textOrNull(etFormAltNumber?.text),
+            whatsappNumber = textOrNull(etFormWhatsApp?.text),
+            email = textOrNull(etFormEmail?.text),
+            pincode = textOrNull(etFormPincode?.text),
+            homeAddress = textOrNull(etFormHomeAddress?.text),
+            profession = textOrNull(tvProfProfession?.text),
+            designation = textOrNull(etProfDesignation?.text),
+            incomePerAnnum = textOrNull(etProfIncome?.text),
+            officeName = textOrNull(etOfficeName?.text),
+            officeAddress = textOrNull(etOfficeAddress?.text),
+            state = textOrNull(etFormState?.text),
+            district = textOrNull(etFormDistrict?.text),
+            location = textOrNull(etFormLocation?.text),
+            officeMobile = textOrNull(etOfficeMobile?.text),
+            officePhone = textOrNull(etOfficePhone?.text),
+            officeEmail = textOrNull(etOfficeEmail?.text),
+            nationality = textOrNull(tvFormNationality?.text),
+            projectId = project.id,
+            plotId = unit.id,
+            plotNo = unit.unitNumber,
+            bookingType = textOrNull(tvBookType?.text),
+            cefNo = textOrNull(etBookCef?.text),
+            isDuplicateBooking = bookDuplicate,
+            isAgainstSV = bookIsAgainstVisit == YesNo.YES,
+            propertyType = textOrNull(tvBookProperty?.text),
+            bookingMode = textOrNull(tvBookMode?.text),
+            bookingCost = bookingCost,
+            guidelineValue = numberOrNull(etChargeGuidelineValue?.text),
+            specialConsideration = numberOrNull(etChargeSpecialConsideration?.text),
+            specialConsiderationReason = textOrNull(etChargeScReason?.text),
+            discountApprovedBy = textOrNull(etChargeDiscountApprovedBy?.text),
+            specialConsiderationValidity = numberOrNull(etChargeScValidity?.text),
+            promotionalOffers = textOrNull(etChargePromoOffers?.text),
+            promotionalOffersTnC = textOrNull(tvChargePromoTnc?.text),
+            promotionalOfferValue = numberOrNull(etChargePromoValue?.text),
+            offerValidityPeriod = numberOrNull(etChargeOfferValidity?.text),
+            agreedAmount = bookingCost?.minus(numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0),
+            registrationCharges = numberOrNull(etPayRegCharges?.text),
+            gstAmount = numberOrNull(etPayGstAmount?.text),
+            gstApplicable = payGstApplicable,
+            documentCharges = numberOrNull(etPayDocCharges?.text),
+            pattaCharges = numberOrNull(etPayPattaCharges?.text),
+            otherCharges = numberOrNull(etPayOtherCharges?.text),
+            otherChargesApplicable = payOtherApplicable,
+            advanceAmount = advanceAmount,
+            balanceAmount = if (bookingCost != null && advanceAmount != null) bookingCost - advanceAmount else null,
+            paymentMode = textOrNull(tvPayPaymentMode?.text),
+            freePayment = payFlexi,
+            allotmentDueAmount = numberOrNull(etPayAllotDue?.text),
+            allotmentDueDate = dateTextForApi(tvPayAllotDate?.text),
+            secondPaymentAmount = numberOrNull(etPay2Mode?.text),
+            secondPaymentDate = dateTextForApi(tvPay2Date?.text),
+            thirdPaymentAmount = numberOrNull(etPay3Mode?.text),
+            thirdPaymentDate = dateTextForApi(tvPay3Date?.text),
+            fourthPaymentAmount = numberOrNull(etPay4Mode?.text),
+            fourthPaymentDate = dateTextForApi(tvPay4Date?.text),
+            preferredRegistrationDate = dateTextForApi(tvPayPrefReg?.text),
+            originalAvpStaffId = bookingStaffAvp?.id,
+            originalGmStaffId = bookingStaffGm?.id,
+            originalSeniorManagerStaffId = bookingStaffSm?.id,
+            originalBdoStaffId = bookingStaffBdo?.id,
+            originalTelecallerStaffId = bookingStaffTelecaller?.id,
+            aadhaar = textOrNull(etStaffAadhar?.text),
+            pan = textOrNull(etStaffPancard?.text),
+            referenceName1 = textOrNull(etStaffRefName1?.text),
+            referenceMobile1 = textOrNull(etStaffRefMobile1?.text),
+            referenceProfession1 = textOrNull(etStaffRefProf1?.text),
+            referenceName2 = textOrNull(etStaffRefName2?.text),
+            referenceMobile2 = textOrNull(etStaffRefMobile2?.text),
+            referenceProfession2 = textOrNull(etStaffRefProf2?.text),
+            docPreparedIn = textOrNull(tvStaffDocPrep?.text),
+            status = if (staffSaveAs == SaveAs.CONFIRMED) "pending_confirmation" else "draft",
+            sourceType = sourceType,
+            sourceClientPlaceVisitId = cpVisitId,
+            sourceSiteVisitId = siteVisitId,
+        )
+    }
+
+    private fun confirmationMissingFields(bookingCost: Double?, advanceAmount: Double?): List<String> {
+        val missing = mutableListOf<String>()
+        fun hasText(value: CharSequence?): Boolean = textOrNull(value) != null
+        fun requireText(label: String, value: CharSequence?) {
+            if (!hasText(value)) missing += label
+        }
+        requireText("CEF No", etBookCef?.text)
+        requireText("Property Type", tvBookProperty?.text)
+        requireText("Booking Mode", tvBookMode?.text)
+        requireText("Preferred Registration Date", tvPayPrefReg?.text)
+        requireText("Booking Type", tvBookType?.text)
+        requireText("Title", tvFormTitle?.text)
+        requireText("Alternate Numbers", etFormAltNumber?.text)
+        requireText("WhatsApp Number", etFormWhatsApp?.text)
+        requireText("Date of Birth", tvFormDob?.text)
+        requireText("Pincode", etFormPincode?.text)
+        requireText("Home Address", etFormHomeAddress?.text)
+        requireText("Office/Alternate Address", etOfficeAddress?.text)
+        requireText("Location", etFormLocation?.text)
+        requireText("State", etFormState?.text)
+        requireText("District", etFormDistrict?.text)
+        requireText("Father/Spouse Name", etFormFather?.text)
+        requireText("Profession", tvProfProfession?.text)
+        requireText("Reference Name 1", etStaffRefName1?.text)
+        requireText("Reference Name 2", etStaffRefName2?.text)
+        requireText("Reference Mobile Number 1", etStaffRefMobile1?.text)
+        requireText("Reference Mobile Number 2", etStaffRefMobile2?.text)
+        requireText("Aadhaar", etStaffAadhar?.text)
+        if (bookingProject == null) missing += "Project Name"
+        if (bookingUnit == null && textOrNull(tvBookPlot?.text) == null) missing += "Plot No"
+        if (bookingCost == null || bookingCost <= 0) missing += "Booking Cost"
+        if (bookingStaffTelecaller == null) missing += "Original TeleCaller"
+        if (bookingStaffBdo == null) missing += "Original BDO"
+        if (bookingStaffSm == null) missing += "Original Senior Manager"
+        if (bookingStaffGm == null) missing += "Original GM"
+        if (bookingStaffAvp == null && argSiteVisitId == null) missing += "Original AVP"
+        if (!hasText(tvPayPaymentMode?.text)) missing += "Payment Mode"
+        if (textOrNull(tvBookType?.text) == "NEW" && (advanceAmount == null || advanceAmount <= 0)) {
+            missing += "Advance Amount"
+        }
+        return missing
     }
 
     // ---- Persistence ------------------------------------------------
@@ -1871,35 +2516,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // so the row lands in `bookings` and the office-side
                 // approval workflow picks up from pending_gm.
                 if (isStandaloneBookingMode) {
-                    val phone = etClientMobile?.text?.toString()?.trim()
-                        ?: tvFormPhone?.text?.toString()?.trim()
-                    val name = etFormName?.text?.toString()?.trim()
-                    val bookingDate = bookingDateForApi()
-                    if (phone.isNullOrBlank()) {
-                        finishCta(error = "Client phone number is required")
-                        return@launch
-                    }
-                    if (name.isNullOrBlank()) {
-                        finishCta(error = "Client name is required")
-                        return@launch
-                    }
+                    val request = buildBookingRequest(sourceType = "walk_in") ?: return@launch
                     val createResp = api.createBooking(
                         session.bearerToken,
-                        com.manjugroups.m_connect.network.CreateBookingRequest(
-                            clientName = name,
-                            mobileNumber = phone,
-                            bookingDate = bookingDate
-                                ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                                    .format(java.util.Calendar.getInstance().time),
-                            leadId = prefilledLeadId,
-                            email = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
-                            homeAddress = etFormHomeAddress?.text?.toString()?.trim()
-                                ?.takeIf { it.isNotBlank() },
-                            bookingCost = etChargeBookingCost?.text?.toString()
-                                ?.trim()?.toDoubleOrNull(),
-                            advanceAmount = etPayAdvanceAmount?.text?.toString()
-                                ?.trim()?.toDoubleOrNull(),
-                        ),
+                        request,
                     )
                     if (!createResp.success) {
                         finishCta(error = createResp.error ?: "Failed to create booking")
@@ -1920,28 +2540,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     return@launch
                 }
 
-                // SV-mode booking — write the booking outcome directly to
-                // the siteVisits row. The mobile booking form's plot /
-                // project pickers are still mocked, so we record the
-                // outcome as `converted_to_booking` + serialised notes
-                // and let the office finalise the actual booking via the
-                // web flow (the SV row carries the full captured notes
-                // payload for them to act on). Future iteration can
-                // wire a real plot picker + hit convertSiteVisitToBooking
-                // directly to drop a `bookings` row in one shot.
+                // SV-mode booking — now uses the same booking-create
+                // endpoint as the web app, with sourceSiteVisitId set so
+                // the server can mark the SV converted.
                 if (isSiteVisitMode) {
                     val svId = argSiteVisitId
                         ?: run {
                             finishCta(error = "Missing site visit id")
                             return@launch
                         }
-                    val resp = geoApi.setSiteVisitOutcome(
+                    val request = buildBookingRequest(
+                        sourceType = "site_visit",
+                        siteVisitId = svId,
+                    ) ?: return@launch
+                    val resp = api.createBooking(
                         session.bearerToken,
-                        SetSiteVisitOutcomeRequest(
-                            id = svId,
-                            outcome = OUTCOME_SV_CONVERTED_TO_BOOKING,
-                            notes = serializeBookingForm(),
-                        ),
+                        request,
                     )
                     if (!resp.success) {
                         finishCta(error = resp.error ?: "Failed to save booking")
@@ -1972,14 +2586,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     return@launch
                 }
 
-                val outcomeResp = geoApi.setCpVisitOutcome(
+                val request = buildBookingRequest(
+                    sourceType = "cp_visit",
+                    cpVisitId = cpVisitId,
+                ) ?: return@launch
+                val outcomeResp = api.createBooking(
                     session.bearerToken,
-                    SetOutcomeRequest(
-                        id = cpVisitId,
-                        outcome = OUTCOME_BOOKING,
-                        postponeReasons = null,
-                        notes = serializeBookingForm(),
-                    ),
+                    request,
                 )
                 if (!outcomeResp.success) {
                     finishCta(error = outcomeResp.error ?: "Failed to save booking")

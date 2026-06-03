@@ -776,11 +776,51 @@ interface ApiService {
         @Query("status") status: String? = null,
     ): BookingsListResponse
 
+    @GET("api/bookings/{id}")
+    suspend fun getBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+    ): BookingDetailResponse
+
+    @PATCH("api/bookings/{id}")
+    suspend fun updateBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: UpdateBookingRequest,
+    ): SimpleResponse
+
+    @POST("api/bookings/{id}/approve")
+    suspend fun approveBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: BookingApproveRequest = BookingApproveRequest(),
+    ): BookingActionResponse
+
+    @POST("api/bookings/{id}/reject")
+    suspend fun rejectBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: BookingRejectRequest,
+    ): BookingActionResponse
+
+    @GET("api/bookings/plot-prefill")
+    suspend fun getBookingPlotPrefill(
+        @Header("Authorization") token: String,
+        @Query("plotId") plotId: String,
+        @Query("bookingDate") bookingDate: String? = null,
+    ): BookingPlotPrefillResponse
+
     @GET("api/telecaller/leads/search-by-phone")
     suspend fun searchTelecallerLeadsByPhone(
         @Header("Authorization") token: String,
         @Query("phone") phone: String,
     ): TelecallerLeadSearchResponse
+
+    @GET("api/clients/search-by-phone")
+    suspend fun searchClientByPhone(
+        @Header("Authorization") token: String,
+        @Query("phone") phone: String,
+    ): ClientSearchResponse
 
     /**
      * Push edits made by the field staff on the prefilled client
@@ -1932,6 +1972,49 @@ data class TelecallerLeadSearchResponse(
     val error: String? = null
 )
 
+data class ClientSearchResponse(
+    val success: Boolean,
+    val client: ClientProfile? = null,
+    val error: String? = null,
+)
+
+data class ClientProfile(
+    @SerializedName("_id") val id: String? = null,
+    val title: String? = null,
+    val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val nationality: String? = null,
+    val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val homeAddress: String? = null,
+    val addressLine1: String? = null,
+    val formattedAddress: String? = null,
+    val pincode: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+)
+
 /**
  * Body for /api/telecaller/leads/update — used by the outcome
  * sheet's Edit-mode submit to push field-staff edits back to the
@@ -2078,6 +2161,55 @@ data class InventoryLayoutResponse(
 
 data class InventoryUnitIdRequest(val id: String)
 
+data class BookingPlotPrefillProject(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val ratePerSqft: Double? = null,
+    val guidelineRatePerSqft: Double? = null,
+    val gstPercent: Double? = null,
+)
+
+data class BookingPlotPrefillPlot(
+    @SerializedName("_id") val id: String? = null,
+    val plotNo: String? = null,
+    val area: Double? = null,
+    val ratePerSqft: Double? = null,
+    val plotCost: Double? = null,
+    val guidelineValue: Double? = null,
+)
+
+data class BookingPlotPrefillFields(
+    val bookingCost: Double? = null,
+    val agreedAmount: Double? = null,
+    val guidelineValue: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherCharges: Double? = null,
+    val advanceAmount: Double? = null,
+    val advanceDueDate: String? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+)
+
+data class BookingPaymentSchedulePrefill(
+    val description: String? = null,
+    val paymentPercent: Double? = null,
+    val daysFromBooking: Double? = null,
+    val amount: Double? = null,
+    val dueDate: String? = null,
+)
+
+data class BookingPlotPrefillResponse(
+    val success: Boolean,
+    val project: BookingPlotPrefillProject? = null,
+    val plot: BookingPlotPrefillPlot? = null,
+    val fields: BookingPlotPrefillFields? = null,
+    val schedules: List<BookingPaymentSchedulePrefill> = emptyList(),
+    val error: String? = null,
+)
+
 // ── Marketing: Bookings (KOS-52) ────────────────────────────────────────────
 // Mobile sends only the fields the booking picker collects. plotId is always
 // included when the user selected an inventory unit — server-side validator
@@ -2087,16 +2219,85 @@ data class CreateBookingRequest(
     val mobileNumber: String,
     val bookingDate: String,                // yyyy-MM-dd
     val leadId: String? = null,
+    val title: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
     val projectId: String? = null,
     val plotId: String? = null,
     val plotNo: String? = null,
     val bookingType: String? = null,
+    val cefNo: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
     val bookingMode: String? = null,
     val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val agreedAmount: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstAmount: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
-    val email: String? = null,
-    val homeAddress: String? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
+    val originalAvpStaffId: String? = null,
+    val originalGmStaffId: String? = null,
+    val originalSeniorManagerStaffId: String? = null,
+    val originalBdoStaffId: String? = null,
+    val originalTelecallerStaffId: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val status: String? = null,
+    val sourceType: String? = null,
+    val sourceClientPlaceVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
 )
 
 data class CreateBookingResponse(
@@ -2112,14 +2313,67 @@ data class Booking(
     @SerializedName("_id") val id: String,
     @SerializedName("_creationTime") val creationTime: Double? = null,
     val bookingRefNo: String? = null,
+    val title: String? = null,
     val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
     val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
     val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
     val bookingDate: String? = null,                // yyyy-MM-dd
+    val bookingType: String? = null,
+    val cefNo: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
     val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
+    val otherCharges: Double? = null,
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val agreedAmount: Double? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
     val projectId: String? = null,
     val projectName: String? = null,
     val plotId: String? = null,
@@ -2132,12 +2386,173 @@ data class Booking(
     val createdByStaffId: String? = null,
     val createdAt: Double? = null,
     val updatedAt: Double? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val accountsTransactionId: String? = null,
+    val accountsPaymentProofStorageId: String? = null,
+    val accountsPaymentProofFileName: String? = null,
+    val approvalRequest: BookingApprovalRequest? = null,
+    val approvalWorkflow: BookingApprovalWorkflow? = null,
+    val cancellationRequest: BookingApprovalRequest? = null,
+    val cancellationApprovalStage: String? = null,
+    val cancellationRequestedAt: Double? = null,
+    val plot: BookingPlotDetail? = null,
+    val sourceTelecallerStaff: BookingStaffBrief? = null,
+    val sourceAvpStaff: BookingStaffBrief? = null,
 )
 
 data class BookingsListResponse(
     val success: Boolean,
     val total: Int? = null,
     val bookings: List<Booking> = emptyList(),
+    val error: String? = null,
+)
+
+data class BookingDetailResponse(
+    val success: Boolean,
+    val booking: Booking? = null,
+    val error: String? = null,
+)
+
+data class BookingApprovalHistory(
+    val stepOrder: Int? = null,
+    val action: String? = null,
+    val approverName: String? = null,
+    val comment: String? = null,
+    val timestamp: String? = null,
+)
+
+data class BookingApprovalRequest(
+    val requestedBy: String? = null,
+    val requestedOn: String? = null,
+    val currentStep: Int? = null,
+    val totalSteps: Int? = null,
+    val currentApproverId: String? = null,
+    val currentApproverName: String? = null,
+    val currentApproverRole: String? = null,
+    val status: String? = null,
+    val approvalHistory: List<BookingApprovalHistory> = emptyList(),
+)
+
+data class BookingApprovalWorkflow(
+    val steps: List<BookingApprovalStep> = emptyList(),
+)
+
+data class BookingApprovalStep(
+    val stepOrder: Int? = null,
+    val approverRole: String? = null,
+    val requiresTransactionId: Boolean? = null,
+    val allowsPaymentProof: Boolean? = null,
+)
+
+data class BookingPlotDetail(
+    @SerializedName("_id") val id: String? = null,
+    val unitNumber: String? = null,
+    val plotNo: String? = null,
+    val status: String? = null,
+)
+
+data class BookingStaffBrief(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+)
+
+data class UpdateBookingRequest(
+    val title: String? = null,
+    val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
+    val bookingType: String? = null,
+    val cefNo: String? = null,
+    val bookingDate: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
+    val plotNo: String? = null,
+    val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val agreedAmount: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
+    val otherCharges: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val status: String? = null,
+)
+
+data class BookingApproveRequest(
+    val comment: String? = null,
+    val accountsTransactionId: String? = null,
+    val accountsPaymentProofStorageId: String? = null,
+    val accountsPaymentProofFileName: String? = null,
+)
+
+data class BookingRejectRequest(
+    val rejectionReason: String,
+)
+
+data class BookingActionResponse(
+    val success: Boolean,
+    val booking: Booking? = null,
     val error: String? = null,
 )
 

@@ -1,12 +1,10 @@
 package com.manjugroups.m_connect
 
-import android.Manifest
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import androidx.core.view.ViewCompat
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -17,21 +15,17 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.auth.ForcePasswordChangeActivity
 import com.manjugroups.m_connect.auth.LoginActivity
 import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.auth.WelcomeActivity
-import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
-import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TrackingBootstrapData
-import com.manjugroups.m_connect.network.TrackingDeviceSyncRequest
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
@@ -444,66 +438,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun syncTrackingBootstrap() {
-        val deviceId = session.trackingDeviceId
-        val deviceSync = geoApi.syncTrackingDevice(
-            session.bearerToken,
-            TrackingDeviceSyncRequest(
-                deviceId = deviceId,
-                appVersion = BuildConfig.VERSION_NAME,
-                pushToken = session.pushToken,
-                notificationPermission = PushTokenManager.hasNotificationPermission(this),
-                fineLocationPermission = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION),
-                backgroundLocationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                } else true,
-                activityRecognitionPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)
-                } else true,
-                batteryOptimizationIgnored = (getSystemService(POWER_SERVICE) as PowerManager)
-                    .isIgnoringBatteryOptimizations(packageName),
-                manufacturer = android.os.Build.MANUFACTURER,
-                model = android.os.Build.MODEL,
-            )
-        )
-        val bootstrap = deviceSync.bootstrap ?: geoApi.getTrackingBootstrap(session.bearerToken, deviceId).data
-        val attendanceActive = runCatching {
-            AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
-        }.getOrDefault(false)
-        applyTrackingBootstrap(bootstrap, attendanceActive)
+        GeoTrackBootstrapSync.sync(this, allowPromptConsent = true, api = geoApi)
     }
 
     private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
-        session.geoTrackingEnabled = bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-        session.geoConsentDeclined = bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
-        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-
-        if (attendanceActive && bootstrap?.shouldPromptConsent == true && !isFinishing) {
-            startActivity(Intent(this, GeoTrackConsentActivity::class.java))
-            return
-        }
-
-        val canStartTracking = attendanceActive &&
-            bootstrap?.shouldTrack == true &&
-            !bootstrap.activeSession?.id.isNullOrBlank() &&
-            GeoTrackService.hasRequiredLocationPermissions(this)
-
-        if (canStartTracking) {
-            GeoTrackService.start(this)
-        } else {
-            GeoTrackService.stop(this)
-        }
+        GeoTrackBootstrapSync.apply(this, bootstrap, allowPromptConsent = attendanceActive && !isFinishing)
 
         // First-time users only learn they're tracked after the bootstrap
         // flips geoTrackingEnabled on. Re-evaluate the gate here so the
         // dialog appears immediately on the first login, not only after
         // the next foreground cycle.
         maybeShowBackgroundPermissionsGate()
-    }
-
-    private fun hasPermission(permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private fun handleWorkflowNotificationIntent(sourceIntent: Intent?) {

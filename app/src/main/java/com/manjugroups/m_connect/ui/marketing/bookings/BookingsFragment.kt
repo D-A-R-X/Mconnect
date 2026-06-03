@@ -147,6 +147,13 @@ class BookingsFragment : Fragment() {
             })
         }
 
+        parentFragmentManager.setFragmentResultListener(
+            BookingDetailBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, _ ->
+            loadBookings(showSkeleton = false)
+        }
+
         renderFilterPills()
         loadBookings(showSkeleton = true)
     }
@@ -306,19 +313,20 @@ class BookingsFragment : Fragment() {
         )
 
         row.setOnClickListener {
-            // TODO: wire detail screen when the mobile booking-detail
-            // fragment lands. For now the row is non-navigating.
+            BookingDetailBottomSheet
+                .newInstance(b.id)
+                .show(parentFragmentManager, "booking_detail_${b.id}")
         }
     }
 
     private fun bindStatus(pill: TextView, status: String?) {
-        when (status) {
+        when (status?.lowercase(Locale.US)) {
             "draft" -> {
                 pill.text = "Draft"
                 pill.setBackgroundResource(R.drawable.bg_home_trip_status_done)
                 pill.setTextColor(android.graphics.Color.parseColor("#475467"))
             }
-            "pending_confirmation" -> {
+            "pending", "pending_confirmation" -> {
                 pill.text = "Pending"
                 pill.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
                 pill.setTextColor(android.graphics.Color.parseColor("#B54708"))
@@ -328,7 +336,7 @@ class BookingsFragment : Fragment() {
                 pill.setBackgroundResource(R.drawable.bg_home_trip_status_ready)
                 pill.setTextColor(android.graphics.Color.parseColor("#169B2F"))
             }
-            "cancelled" -> {
+            "cancel", "canceled", "cancelled" -> {
                 pill.text = "Cancelled"
                 pill.setBackgroundResource(R.drawable.bg_booking_status_cancelled)
                 pill.setTextColor(android.graphics.Color.parseColor("#B42318"))

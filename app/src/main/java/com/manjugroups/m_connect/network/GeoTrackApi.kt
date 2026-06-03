@@ -225,6 +225,15 @@ interface GeoTrackApi {
         @Query("dayEnd") dayEnd: Long
     ): TimelineResponse
 
+    @GET("api/geotrack/session-route")
+    suspend fun getSessionRoute(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null,
+        @Query("dayStart") dayStart: Long,
+        @Query("dayEnd") dayEnd: Long,
+        @Query("minStopMinutes") minStopMinutes: Int? = null,
+    ): SessionRouteResponse
+
     @GET("api/geotrack/trips")
     suspend fun getTrips(
         @Header("Authorization") token: String,
@@ -457,6 +466,22 @@ data class PlaceSuggestion(
 data class TimelineResponse(
     val success: Boolean,
     val data: List<TimelinePoint>? = null
+)
+
+data class SessionRouteResponse(
+    val success: Boolean,
+    val data: SessionRouteData? = null,
+    val error: String? = null
+)
+
+data class SessionRouteData(
+    val session: TrackingSession? = null,
+    val timeline: List<TimelinePoint> = emptyList(),
+    val trips: List<GeoTrip> = emptyList(),
+    val stops: List<GeoTripStop> = emptyList(),
+    val routeStart: Long = 0L,
+    val routeEnd: Long = 0L,
+    val distanceMeters: Int = 0
 )
 
 data class LiveStatusResponse(

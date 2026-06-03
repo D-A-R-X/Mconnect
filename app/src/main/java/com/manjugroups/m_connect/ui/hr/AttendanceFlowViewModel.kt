@@ -1,21 +1,19 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
-import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
-import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
-import com.manjugroups.m_connect.auth.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -453,27 +451,7 @@ class AttendanceFlowViewModel(
         bootstrap: TrackingBootstrapData?,
         attendanceActive: Boolean,
     ) {
-        val session = SessionManager(context)
-        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-        session.geoTrackingEnabled =
-            bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-        session.geoConsentDeclined =
-            bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
-
-        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
-            context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-            return
-        }
-
-        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
-            GeoTrackService.start(context)
-        } else {
-            GeoTrackService.stop(context)
-        }
+        GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
     companion object {

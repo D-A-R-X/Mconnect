@@ -31,16 +31,21 @@
             android:contentDescription="@null"
             android:src="@drawable/ic_outcome_phone" />
 
-        <TextView
+        <EditText
             android:id="@+id/tvFormClientPhone"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_marginStart="10dp"
             android:layout_weight="1"
+            android:background="@android:color/transparent"
             android:fontFamily="@font/inter_medium"
+            android:hint="Enter Mobile Number"
+            android:imeOptions="actionDone"
             android:includeFontPadding="false"
-            android:text=""
+            android:inputType="phone"
+            android:maxLength="15"
             android:textColor="#101828"
+            android:textColorHint="#94A3B8"
             android:textSize="13sp" />
     </LinearLayout>
 

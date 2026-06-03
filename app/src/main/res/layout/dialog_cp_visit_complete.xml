@@ -73,6 +73,7 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/tvOutcomeTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_semibold"
@@ -121,10 +122,45 @@
                 android:textColor="#2DAE12"
                 android:textSize="12sp"
                 android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btnOutcomeBack"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_outcome_subtab_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="12dp"
+                android:text="Back"
+                android:textColor="#475467"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btnOutcomeClear"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_outcome_edit_chip_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="12dp"
+                android:text="Clear"
+                android:textColor="#2DAE12"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <!-- Top tab bar (4 outcomes) with vertical dividers + active underline -->
         <LinearLayout
+            android:id="@+id/outcomeTopTabs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
@@ -407,7 +443,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:paddingHorizontal="14dp"
-                    android:text="Booking Details"
+                    android:text="Booking &amp; Finance"
                     android:textColor="#475467"
                     android:textSize="12sp" />
 
@@ -455,17 +491,18 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:paddingHorizontal="14dp"
-                    android:text="Staff Details"
+                    android:text="Payment &amp; Staff"
                     android:textColor="#475467"
                     android:textSize="12sp" />
             </LinearLayout>
         </HorizontalScrollView>
 
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/outcomeBodyContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
+            android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
             <!-- Each included layout already has its own root @id (bodyComingSoon,
@@ -486,7 +523,7 @@
             <include layout="@layout/outcome_body_site_visit" />
             <include layout="@layout/outcome_body_postpone" />
             <include layout="@layout/outcome_body_not_interested" />
-        </FrameLayout>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/btnCpSubmit"

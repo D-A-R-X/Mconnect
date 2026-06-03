@@ -5,8 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
-import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TamperReportRequest
 import kotlinx.coroutines.CoroutineScope
@@ -28,23 +27,8 @@ class BootReceiver : BroadcastReceiver() {
                                 mapOf("ts" to System.currentTimeMillis())
                             )
                         )
-                        val bootstrap = api.getTrackingBootstrap(
-                            session.bearerToken,
-                            session.trackingDeviceId
-                        ).data
-                        val attendanceActive = AttendanceTrackingGate.isClockedInForToday(
-                            session.bearerToken,
-                            ApiService.create(),
-                        )
-                        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-                        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-                        if (attendanceActive &&
-                            bootstrap?.shouldTrack == true &&
-                            !bootstrap.activeSession?.id.isNullOrBlank() &&
-                            GeoTrackService.hasRequiredLocationPermissions(context)
-                        ) {
+                        if (GeoTrackBootstrapSync.sync(context, allowPromptConsent = false, api = api)) {
                             Log.i("BootReceiver", "Device rebooted — resuming tracking from server-backed session")
-                            GeoTrackService.start(context)
                         }
                     } catch (e: Exception) {
                         Log.w("BootReceiver", "Failed to resume tracking after reboot: ${e.message}")

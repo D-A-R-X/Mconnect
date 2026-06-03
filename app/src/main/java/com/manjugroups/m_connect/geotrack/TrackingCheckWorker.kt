@@ -9,8 +9,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
-import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.GeoTrackApi
 import java.util.concurrent.TimeUnit
 
 /**
@@ -32,29 +30,9 @@ class TrackingCheckWorker(
         if (GeoTrackService.isRunning) return Result.success()
 
         return try {
-            val token = session.bearerToken
-            val api = GeoTrackApi.create()
-            val attendanceActive = AttendanceTrackingGate.isClockedInForToday(
-                token = token,
-                api = ApiService.create(),
-            )
-
-            if (!attendanceActive) return Result.success()
-
-            val bootstrap = api.getTrackingBootstrap(token, session.trackingDeviceId).data
-
-            session.activeTrackingSessionId = bootstrap?.activeSession?.id
-            session.shouldTrackNow = bootstrap?.shouldTrack == true
-            session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-            session.geoTrackingEnabled =
-                bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-
-            if (bootstrap?.shouldTrack == true &&
-                !bootstrap.activeSession?.id.isNullOrBlank() &&
-                GeoTrackService.hasRequiredLocationPermissions(applicationContext)
-            ) {
-                Log.i(TAG, "Biometric punch detected — starting GeoTrackService via periodic check")
-                GeoTrackService.start(applicationContext)
+            val started = GeoTrackBootstrapSync.sync(applicationContext, allowPromptConsent = false)
+            if (started) {
+                Log.i(TAG, "GeoTrack session active — synced via periodic check")
             }
 
             Result.success()

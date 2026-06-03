@@ -28,7 +28,10 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.GeoLiveStatus
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.GeoTrip
+import com.manjugroups.m_connect.network.GeoTripStop
 import com.manjugroups.m_connect.network.TimelinePoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -47,6 +50,9 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     private var liveStatuses: List<GeoLiveStatus> = emptyList()
     private var timeline: List<TimelinePoint> = emptyList()
     private var trips: List<GeoTrip> = emptyList()
+    private var routeStops: List<GeoTripStop> = emptyList()
+    private var routeDistanceMeters: Int = 0
+    private var refreshJob: Job? = null
     private var selectedStaffId: String? = null
     private var isUpdatingSpinner = false
     private var isExpanded = false
@@ -123,6 +129,8 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                     selectedStaffId = null
                     timeline = emptyList()
                     trips = emptyList()
+                    routeStops = emptyList()
+                    routeDistanceMeters = 0
                     renderSpinner()
                     renderSelection()
                     renderMap()
@@ -159,27 +167,26 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
-                val timelineResp = geoApi.getTimeline(
+                geoApi.getSessionRoute(
                     token = session.bearerToken,
                     staffId = staffId,
                     dayStart = range.first,
-                    dayEnd = range.second
+                    dayEnd = range.second,
+                    minStopMinutes = 30,
                 )
-                val tripsResp = geoApi.getTrips(
-                    token = session.bearerToken,
-                    staffId = staffId,
-                    startDate = range.first,
-                    endDate = range.second
-                )
-                Pair(timelineResp.data ?: emptyList(), tripsResp.data ?: emptyList())
-            }.onSuccess { (timelineData, tripsData) ->
-                timeline = timelineData
-                trips = tripsData.sortedBy { it.startedAt }
+            }.onSuccess { response ->
+                val route = response.data
+                timeline = route?.timeline.orEmpty()
+                trips = route?.trips.orEmpty().sortedBy { it.startedAt }
+                routeStops = route?.stops.orEmpty()
+                routeDistanceMeters = route?.distanceMeters ?: trips.sumOf { it.distanceMeters }
                 renderSelection()
                 renderMap()
             }.onFailure { error ->
                 timeline = emptyList()
                 trips = emptyList()
+                routeStops = emptyList()
+                routeDistanceMeters = 0
                 renderSelection()
                 renderMap()
                 Toast.makeText(requireContext(), error.message ?: "Failed to load staff route", Toast.LENGTH_SHORT).show()
@@ -254,9 +261,9 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
         val tamper = if (selected.hasTamperAlert) " • Tamper alert" else ""
         binding.tvSelectedStaffStatus.text = "$onlineState • ${selected.batteryPct}% battery • $lastSeen$tamper"
 
-        val totalDistanceKm = trips.sumOf { it.distanceMeters.toDouble() } / 1000.0
+        val totalDistanceKm = routeDistanceMeters.toDouble() / 1000.0
         binding.tvTripDistance.text = String.format(Locale.getDefault(), "%.1f km", totalDistanceKm)
-        binding.tvTripCount.text = "${trips.size} trip${if (trips.size == 1) "" else "s"} selected"
+        binding.tvTripCount.text = "${routeStops.size} stop${if (routeStops.size == 1) "" else "s"} detected"
         binding.tvMapModeLabel.text = formattedSelectedDate()
     }
 
@@ -333,20 +340,22 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        trips.forEach { trip ->
-            trip.stops.orEmpty().forEach { stop ->
+        val allStops = (routeStops + trips.flatMap { it.stops.orEmpty() })
+            .distinctBy { "${it.arrivedAt}:${it.departedAt}" }
+        allStops.forEach { stop ->
                 val stopPoint = LatLng(stop.lat, stop.lng)
                 map.addMarker(
                     MarkerOptions()
                         .position(stopPoint)
                         .title(stop.address ?: "Stop")
-                        .snippet("${stop.durationMinutes} min")
+                        .snippet("Stayed ${stop.durationMinutes} min")
                         .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
                 )
                 boundsBuilder.include(stopPoint)
                 hasBounds = true
-            }
+        }
 
+        trips.forEach { trip ->
             val startPoint = trip.startLat?.let { lat -> trip.startLng?.let { lng -> LatLng(lat, lng) } }
             if (startPoint != null) {
                 map.addMarker(
@@ -465,9 +474,11 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         _binding?.mapView?.onResume()
+        startLiveRefresh()
     }
 
     override fun onPause() {
+        stopLiveRefresh()
         _binding?.mapView?.onPause()
         super.onPause()
     }
@@ -483,11 +494,28 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     }
 
     override fun onDestroyView() {
+        stopLiveRefresh()
         SkeletonUtils.stopAll()
         _binding?.mapView?.onDestroy()
         googleMap = null
         _binding = null
         super.onDestroyView()
+    }
+
+    private fun startLiveRefresh() {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (true) {
+                delay(LIVE_REFRESH_MS)
+                if (_binding == null) return@launch
+                loadLiveStatuses()
+            }
+        }
+    }
+
+    private fun stopLiveRefresh() {
+        refreshJob?.cancel()
+        refreshJob = null
     }
 
     private fun resolveColor(colorRes: Int): Int = ContextCompat.getColor(requireContext(), colorRes)
@@ -500,6 +528,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val DAY_MS = 24 * 60 * 60 * 1000L
+        private const val LIVE_REFRESH_MS = 30_000L
         private const val RESULT_KEY_DATE = "geotrack_live_date_calendar"
 
         private fun startOfDay(timeMillis: Long): Long {
