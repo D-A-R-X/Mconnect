@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.library.land
 
-import android.app.DatePickerDialog
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -11,7 +10,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -19,7 +20,9 @@ import com.manjugroups.m_connect.databinding.FragmentQueriesBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.QueryListItem
 import com.manjugroups.m_connect.network.QueryUpdateRequest
+import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -45,6 +48,10 @@ class QueriesFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
     private val api by lazy { ApiService.create() }
+
+    companion object {
+        private const val RESULT_KEY_FILTER = "queries_filter_calendar"
+    }
 
     private enum class Filter(val label: String) { ALL("All"), PENDING("Pending"), COMPLETED("Completed") }
 
@@ -104,7 +111,44 @@ class QueriesFragment : Fragment() {
 
         binding.queriesRefresh.setupPullToRefresh { loadQueries() }
 
+        setupQueriesScrollAnimation()
+
         loadQueries()
+    }
+
+    /**
+     * "White card slides up over the blue header" scroll effect — the
+     * same two-component model used on Home / Attendance / App Library /
+     * Inspection. The blue header stays anchored; the panel below
+     * (which overlaps the header by -20dp in XML and carries the
+     * rounded-top grey bg) translates up as the user scrolls until it
+     * fully covers the blue. Its top corners interpolate 24dp → 0dp in
+     * step so the curve flattens at full overlay.
+     */
+    private fun setupQueriesScrollAnimation() {
+        val density = binding.root.resources.displayMetrics.density
+        val maxPanelRadiusPx = 24f * density
+        // Header stays a flat-bottomed solid blue rectangle.
+        val headerBg = binding.queriesHeader.applyShrinkableBlueHeaderBackground()
+        headerBg.setBottomCornerRadius(0f)
+
+        // Grey card — rounded TOP corners + grey bg applied to
+        // `queriesWhitePanel`, which lives INSIDE the NestedScrollView.
+        // It IS the scrolling content, so it moves up at exactly 1×
+        // rate (no parallax, no shrinking, no separate translation).
+        // The ancestors set clipChildren=false in XML so the rounded
+        // top edge can draw OUTSIDE the panel and over the blue header.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(android.graphics.Color.parseColor("#F1F3F8"))
+            cornerRadii = floatArrayOf(
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-left
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-right
+                0f, 0f,                              // bottom-right
+                0f, 0f,                              // bottom-left
+            )
+        }
+        binding.queriesWhitePanel.background = whiteCardBg
     }
 
     override fun onResume() {
@@ -183,22 +227,20 @@ class QueriesFragment : Fragment() {
     }
 
     private fun openDatePicker() {
-        val cal = Calendar.getInstance()
-        dateFilter?.let { iso ->
-            runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }
-                .getOrNull()?.let { cal.time = it }
+        val initial = dateFilter ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_FILTER) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            dateFilter = date
+            updateDateFilterChip()
+            renderList()
         }
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                dateFilter = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
-                updateDateFilterChip()
-                renderList()
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        CalendarRangePickerSheet.newInstance(
+            title = "Date Filter",
+            subtitle = "Select Date Filter",
+            initialFrom = initial,
+            initialTo = initial,
+            resultKey = RESULT_KEY_FILTER,
+        ).show(parentFragmentManager, "queries_filter_calendar")
     }
 
     private fun updateDateFilterChip() {

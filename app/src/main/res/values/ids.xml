@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Tag ID used by SiteInspectionBottomSheet to mark the inline
+      "+ Add another <category>" pill that sits at the bottom of each
+      Area-tab entries container. Letting us tell pill rows from real
+      entry rows when iterating the container to reposition or count.
+    -->
+    <item name="areaEntryAddPillTag" type="id" />
+</resources>

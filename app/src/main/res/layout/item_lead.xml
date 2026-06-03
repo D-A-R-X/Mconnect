@@ -78,18 +78,24 @@
         android:gravity="end"
         android:orientation="horizontal">
 
+        <!--
+          Call action replaced with a Coming-soon pill until the
+          out-bound dialer integration ships. Layout keeps the same
+          view id so the fragment can still findViewById; visibility
+          + non-clickable state is set in code.
+        -->
         <TextView
             android:id="@+id/btnLeadCall"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_button_primary"
-            android:clickable="true"
-            android:focusable="true"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_apps_coming_soon_pill"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
-            android:paddingHorizontal="16dp"
-            android:text="Call"
-            android:textColor="@android:color/white"
-            android:textSize="12sp" />
+            android:includeFontPadding="false"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="Coming soon"
+            android:textColor="#B54708"
+            android:textSize="11sp" />
     </LinearLayout>
 </LinearLayout>

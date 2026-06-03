@@ -177,6 +177,24 @@ interface GeoTrackApi {
         @Body body: ConvertCpVisitToSiteVisitRequest
     ): ConvertCpVisitToSiteVisitResponse
 
+    // ── Site Visits (mobile outcome sheet) ──────────────────────────
+    // The CompleteCpVisitBottomSheet drives the same outcome capture
+    // for pure-SV visits (not CP-converted). These wrappers mirror
+    // the CP setOutcome / convertToSiteVisit shape but write to the
+    // new siteVisits table.
+
+    @POST("api/marketing/siteVisits/setOutcome")
+    suspend fun setSiteVisitOutcome(
+        @Header("Authorization") token: String,
+        @Body body: SetSiteVisitOutcomeRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/convertToBooking")
+    suspend fun convertSiteVisitToBooking(
+        @Header("Authorization") token: String,
+        @Body body: ConvertSiteVisitToBookingRequest,
+    ): ConvertSiteVisitToBookingResponse
+
     // Returns the enriched CP visit (lead + client + place + fieldVisit +
     // arrivalProof) used by the Completed Visit Detail screen. Mirrors the
     // web's clientPlaceVisits.get() Convex query.
@@ -638,6 +656,55 @@ data class ConvertCpVisitToSiteVisitResponse(
     val success: Boolean,
     val siteVisitId: String? = null,
     val visitId: String? = null,
+    val error: String? = null,
+)
+
+// ── SV outcome (mobile) ───────────────────────────────────────────
+// Used when the field staff records an outcome on a pure SV from
+// the CompleteCpVisitBottomSheet. Mirrors the CP SetOutcomeRequest
+// but accepts the richer not_interested fields the SV backend
+// allows. `id` is a siteVisits._id.
+data class SetSiteVisitOutcomeRequest(
+    val id: String,
+    /** interested | not_interested | postponed | converted_to_booking | other */
+    val outcome: String,
+    val postponeReasons: List<String>? = null,
+    val notInterestedReasons: List<String>? = null,
+    val notInterestedDetails: List<SvNotInterestedDetail>? = null,
+    val notes: String? = null,
+)
+
+data class SvNotInterestedDetail(
+    val reason: String,
+    val detail: String? = null,
+)
+
+/**
+ * Booking outcome path — drops a booking row keyed off the SV's
+ * project. The mobile sheet collects clientName, mobileNumber, plot,
+ * bookingDate, plus optional pricing fields. Backend approval
+ * workflow (pending_gm → CRM → VP) kicks in once the row lands.
+ */
+data class ConvertSiteVisitToBookingRequest(
+    val id: String,
+    val plotId: String,
+    val clientName: String,
+    val mobileNumber: String,
+    val bookingDate: String,
+    val bookingType: String? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val paymentMode: String? = null,
+    val notes: String? = null,
+    val originalTelecallerStaffId: String? = null,
+)
+
+data class ConvertSiteVisitToBookingResponse(
+    val success: Boolean,
+    val bookingId: String? = null,
+    val siteVisitId: String? = null,
     val error: String? = null,
 )
 

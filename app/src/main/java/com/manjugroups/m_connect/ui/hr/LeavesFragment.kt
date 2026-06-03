@@ -17,6 +17,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
@@ -32,6 +34,19 @@ class LeavesFragment : Fragment() {
 
     private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
     private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
+    // Top-level scope in History mode for higher-role users:
+    //   • MY    – the user's own leaves (default; only option for
+    //             regular employees, chip is hidden)
+    //   • TEAM  – leaves submitted by the user's reporting team
+    //             (pendingApprovals, surfaces Approve/Reject buttons)
+    //   • ALL   – every leave across the org (admin / HR view; for
+    //             now reuses myLeaves as a passthrough since the
+    //             mobile API doesn't yet ship an "all-leaves" feed)
+    private enum class Scope(val label: String) {
+        MY("My Leaves"),
+        TEAM("Team Leaves"),
+        ALL("All Leaves"),
+    }
 
     private var _binding: FragmentLeavesBinding? = null
     private val binding get() = _binding!!
@@ -40,6 +55,7 @@ class LeavesFragment : Fragment() {
     private var screenMode: String = MODE_HISTORY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
@@ -103,6 +119,13 @@ class LeavesFragment : Fragment() {
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
             updateFilterUi()
+            // Higher-role scope chip — visible only when the user can
+            // approve leaves. Regular employees never see the chip and
+            // stay on the My Leaves view by default.
+            val canApprove = session.hasPermission("leaves.approve")
+            binding.scopeChip.visibility = if (canApprove) View.VISIBLE else View.GONE
+            if (canApprove) setupScopeChip()
+            updateScopeUi()
         }
 
         collectState()
@@ -135,6 +158,45 @@ class LeavesFragment : Fragment() {
         }
     }
 
+    private fun setupScopeChip() {
+        binding.scopeChip.setOnClickListener { anchor ->
+            val popup = android.widget.PopupMenu(requireContext(), anchor)
+            // Stable menu ids — Scope.ordinal lines up with menu order
+            // so we can map back without a separate switch.
+            popup.menu.add(0, Scope.MY.ordinal, 0, Scope.MY.label)
+            popup.menu.add(0, Scope.TEAM.ordinal, 1, Scope.TEAM.label)
+            popup.menu.add(0, Scope.ALL.ordinal, 2, Scope.ALL.label)
+            popup.setOnMenuItemClickListener { item ->
+                val picked = Scope.values()
+                    .firstOrNull { it.ordinal == item.itemId } ?: return@setOnMenuItemClickListener false
+                if (picked != scope) {
+                    scope = picked
+                    updateScopeUi()
+                    renderState(viewModel.uiState.value)
+                }
+                true
+            }
+            popup.show()
+        }
+    }
+
+    private fun updateScopeUi() {
+        binding.tvScopeLabel.text = scope.label
+        // Switch the header title so the screen self-labels (matches
+        // the design — "Total Leave" for My, "Team Leaves" for Team).
+        binding.tvBalanceTitle.text = when (scope) {
+            Scope.MY -> "Total Leave"
+            Scope.TEAM -> "Team Leaves"
+            Scope.ALL -> "All Leaves"
+        }
+        // Status filter chips (Review / Approved / Rejected) are only
+        // meaningful for the My scope today — Team scope ships the
+        // pending pile straight through (server returns pending only),
+        // and All scope reuses My data so chips still apply there.
+        binding.filterRow.visibility =
+            if (scope == Scope.TEAM) View.GONE else View.VISIBLE
+    }
+
     private fun updateFilterUi() {
         styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
         styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
@@ -161,10 +223,18 @@ class LeavesFragment : Fragment() {
 
     private fun renderState(state: LeavesState) {
         val canApprove = session.hasPermission("leaves.approve")
+        // Notification deep-link → approver pile (unchanged).
+        // History mode now routes by scope:
+        //   • MY   → own leaves, status-filtered
+        //   • TEAM → team pending approvals, Approve/Reject inline
+        //   • ALL  → own + status filter applied (passthrough until
+        //            a dedicated "all-leaves" endpoint exists)
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
-        } else {
-            filterHistoryLeaves(state.myLeaves)
+        } else when (scope) {
+            Scope.MY -> filterHistoryLeaves(state.myLeaves)
+            Scope.TEAM -> state.pendingApprovals
+            Scope.ALL -> filterHistoryLeaves(state.myLeaves)
         }
         val isLoading = state.isLoading
         // Clear the pull-refresh spinner as soon as a non-loading state
@@ -199,7 +269,15 @@ class LeavesFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayLeaves.isEmpty())
-        renderLeaves(displayLeaves, canApprove && screenMode == MODE_APPROVAL)
+        // Approve/Reject inline on rows in:
+        //   • approval mode (notification deep-link), AND
+        //   • history mode with Team scope (manager reviewing pending
+        //     team leaves from the chip dropdown)
+        val showApprovalActions = canApprove && (
+            screenMode == MODE_APPROVAL
+                || (screenMode == MODE_HISTORY && scope == Scope.TEAM)
+        )
+        renderLeaves(displayLeaves, showApprovalActions)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
@@ -314,7 +392,11 @@ class LeavesFragment : Fragment() {
             }
 
             val bucket = bucketForStatus(leave.status)
-            val statusDate = parseCreationDate(leave.createdAt)
+            // Decision timestamp first (Approved/Rejected rows), fall
+            // back to creation time for Review rows / older data that
+            // pre-dates the decidedAt enrichment.
+            val decidedDate = parseIsoOrEpoch(leave.decidedAt)
+            val statusDate = decidedDate ?: parseCreationDate(leave.createdAt)
             val statusDateText = statusDate?.let { statusFmt.format(it) }
 
             val statusNote: String
@@ -349,19 +431,49 @@ class LeavesFragment : Fragment() {
 
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
+            val staffAvatar = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStaffAvatar)
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
             val approveButton = card.findViewById<TextView>(R.id.btnApproveLeave)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectLeave)
 
-            val displayName = leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            // For Approved/Rejected rows show the decision-maker (the
+            // approver who acted on the request) instead of the
+            // submitter — matches the design's "By Elaine" label on
+            // the approved/rejected cards. For Review rows we keep the
+            // submitter name, which is what the manager UI wants.
+            val showApprover = bucket == StatusBucket.APPROVED || bucket == StatusBucket.REJECTED
+            val displayName = if (showApprover) {
+                leave.approverName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: leave.staffName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: "Self"
+            } else {
+                leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            }
             val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
             staffRow.visibility = View.VISIBLE
             byLabel.visibility = View.VISIBLE
             staffName.visibility = View.VISIBLE
             staffName.text = displayName
             staffInitial.text = initial
+
+            // Approver photo when present; clear back to the initial
+            // chip otherwise so recycled views don't keep the previous
+            // person's avatar.
+            val photoUrl = if (showApprover) leave.approverPhotoUrl?.takeIf { it.isNotBlank() } else null
+            if (photoUrl != null) {
+                staffAvatar.visibility = View.VISIBLE
+                staffInitial.visibility = View.INVISIBLE
+                staffAvatar.load(photoUrl) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+            } else {
+                staffAvatar.visibility = View.GONE
+                staffAvatar.setImageDrawable(null)
+                staffInitial.visibility = View.VISIBLE
+            }
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
@@ -379,6 +491,38 @@ class LeavesFragment : Fragment() {
                 }
             } else {
                 actionRow.visibility = View.GONE
+            }
+
+            // Per-row cancel affordance — visible ONLY on the user's
+            // own pending requests in History mode (My Leaves view).
+            // Mirrors the Permissions screen's trash icon. Hidden on
+            // approver-mode rows (those already get Approve/Reject)
+            // and on Approved/Rejected buckets (terminal states).
+            val cancelIcon = card.findViewById<android.widget.ImageView>(R.id.ivLeaveCancel)
+            val canCancel = !approvalMode
+                && screenMode == MODE_HISTORY
+                && scope == Scope.MY
+                && bucket == StatusBucket.REVIEW
+                && leave.id != null
+            cancelIcon.visibility = if (canCancel) View.VISIBLE else View.GONE
+            if (canCancel) {
+                cancelIcon.setOnClickListener {
+                    val id = leave.id ?: return@setOnClickListener
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Cancel leave request?")
+                        .setMessage("This will withdraw your pending request.")
+                        .setPositiveButton("Cancel Request") { _, _ ->
+                            viewModel.cancelLeave(
+                                session.bearerToken,
+                                id,
+                                session.hasPermission("leaves.approve"),
+                            )
+                        }
+                        .setNegativeButton("Keep", null)
+                        .show()
+                }
+            } else {
+                cancelIcon.setOnClickListener(null)
             }
 
             if (leave.id == focusedEntityId) {
@@ -401,6 +545,39 @@ class LeavesFragment : Fragment() {
             else -> raw.toLong()
         }
         return runCatching { Date(millis) }.getOrNull()
+    }
+
+    /**
+     * Accepts either an ISO-8601 string ("2026-06-02T13:45:21.123Z" or
+     * "2026-06-02") OR a numeric epoch encoded as a string. Returns
+     * null on any failure so the caller can fall back to creationTime.
+     * Used to parse the server's `decidedAt` field on approved/rejected
+     * leave rows.
+     */
+    private fun parseIsoOrEpoch(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        raw.toDoubleOrNull()?.let { epoch ->
+            return parseCreationDate(epoch)
+        }
+        val isoPatterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (pattern in isoPatterns) {
+            runCatching {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                fmt.parse(raw)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun sameDate(date1: Date, date2: Date): Boolean {

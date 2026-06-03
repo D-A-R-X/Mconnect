@@ -45,6 +45,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
 
     private var resultKey: String = DEFAULT_RESULT_KEY
     private var maxDate: Calendar? = null  // null = no upper bound
+    private var minDate: Calendar? = null  // null = no lower bound
 
     private var tvMonth: TextView? = null
     private var grid: LinearLayout? = null
@@ -93,6 +94,11 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         // Optional cap (e.g. "no future days" for the attendance filter).
         args?.getString(ARG_MAX_DATE)?.let { maxIso ->
             maxDate = parseIso(maxIso)
+        }
+        // Optional floor (e.g. "no past days" for inspection reschedule —
+        // dates before the floor render greyed and refuse taps).
+        args?.getString(ARG_MIN_DATE)?.let { minIso ->
+            minDate = parseIso(minIso)
         }
 
         tvMonth = view.findViewById(R.id.tvCalendarMonth)
@@ -226,7 +232,8 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
             set(Calendar.MILLISECOND, 0)
         }
         val capped = maxDate?.let { cellCal.timeInMillis > stripTime(it).timeInMillis } ?: false
-        if (capped) {
+        val floored = minDate?.let { cellCal.timeInMillis < stripTime(it).timeInMillis } ?: false
+        if (capped || floored) {
             cell.setTextColor(Color.parseColor("#D0D5DD"))
             return
         }
@@ -272,6 +279,10 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
             set(Calendar.DAY_OF_MONTH, day)
         }
         val tappedStripped = stripTime(tapped)
+        // Out-of-bounds taps are no-ops — matches the greyed-out
+        // styling so a (cap|floor) day looks AND behaves disabled.
+        maxDate?.let { if (tappedStripped.timeInMillis > stripTime(it).timeInMillis) return }
+        minDate?.let { if (tappedStripped.timeInMillis < stripTime(it).timeInMillis) return }
         val start = rangeStart
         val end = rangeEnd
 
@@ -333,6 +344,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         private const val ARG_FROM = "arg_from"
         private const val ARG_TO = "arg_to"
         private const val ARG_MAX_DATE = "arg_max_date"
+        private const val ARG_MIN_DATE = "arg_min_date"
         private const val ARG_RESULT_KEY = "arg_result_key"
 
         fun newInstance(
@@ -341,6 +353,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
             initialFrom: String? = null,
             initialTo: String? = null,
             maxDate: String? = null,
+            minDate: String? = null,
             resultKey: String = DEFAULT_RESULT_KEY,
         ): CalendarRangePickerSheet = CalendarRangePickerSheet().apply {
             arguments = Bundle().apply {
@@ -349,6 +362,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
                 if (initialFrom != null) putString(ARG_FROM, initialFrom)
                 if (initialTo != null) putString(ARG_TO, initialTo)
                 if (maxDate != null) putString(ARG_MAX_DATE, maxDate)
+                if (minDate != null) putString(ARG_MIN_DATE, minDate)
                 putString(ARG_RESULT_KEY, resultKey)
             }
         }

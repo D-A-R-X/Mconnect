@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.gson.Gson
@@ -63,10 +64,50 @@ class ApplyLeaveFragment : Fragment() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
         binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
-        binding.btnSubmit.setOnClickListener { submitLeave() }
+        // Submit Now now opens the confirmation modal; the real
+        // applyLeave call only fires after the user picks "Yes, Submit"
+        // in the sheet. Mirrors the design's third frame in the apply
+        // flow ("Double-check your leave details…").
+        binding.btnSubmit.setOnClickListener { promptSubmitConfirmation() }
+
+        // Listen once at view-create so multiple sheet opens reuse the
+        // same handler. The sheet emits a single boolean signalling
+        // whether the user confirmed; we drop the result on the floor
+        // when false and dismiss naturally.
+        setFragmentResultListener(SubmitLeaveConfirmSheet.RESULT_KEY) { _, bundle ->
+            val confirmed = bundle.getBoolean(SubmitLeaveConfirmSheet.KEY_CONFIRMED, false)
+            if (confirmed) submitLeave()
+        }
 
         updateDurationLabel()
         loadLeaveTypes()
+    }
+
+    /**
+     * Validate the form locally before opening the confirmation sheet
+     * so the user doesn't see the "Submit Leave" double-check modal
+     * just to be told their description is blank. Same checks
+     * submitLeave() runs — keeping them in sync.
+     */
+    private fun promptSubmitConfirmation() {
+        val fromMillis = selectedFromMillis
+        val toMillis = selectedToMillis
+        val reason = binding.etReason.text.toString().trim()
+        if (fromMillis == null || toMillis == null) {
+            Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (toMillis < fromMillis) {
+            Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (reason.isBlank()) {
+            Toast.makeText(requireContext(), "Enter leave description", Toast.LENGTH_SHORT).show()
+            return
+        }
+        SubmitLeaveConfirmSheet
+            .newInstance()
+            .show(parentFragmentManager, "submit_leave_confirm")
     }
 
     private fun loadLeaveTypes() {

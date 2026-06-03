@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Edit" pill — ACTIVE state. Filled green, white text. Signals
+  to the user that the prefilled client form is now editable and
+  any changes they make will sync back to the lead record on
+  submit.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#2DAE12" />
+    <stroke
+        android:width="1dp"
+        android:color="#2DAE12" />
+    <corners android:radius="18dp" />
+</shape>

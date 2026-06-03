@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -8,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.manjugroups.m_connect.auth.SessionManager
@@ -100,10 +100,23 @@ class ApplyPermissionFragment : Fragment() {
     }
 
     private fun showDatePicker() {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(requireContext(), { _, y, m, d ->
-            binding.etDate.setText(String.format("%04d-%02d-%02d", y, m + 1, d))
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+        val current = binding.etDate.text?.toString()?.takeIf { it.isNotBlank() }
+            ?: java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            binding.etDate.setText(date)
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Permission Date",
+            subtitle = "Select Date",
+            initialFrom = current,
+            initialTo = current,
+            resultKey = RESULT_KEY_DATE,
+        ).show(parentFragmentManager, "apply_permission_calendar")
+    }
+
+    companion object {
+        private const val RESULT_KEY_DATE = "apply_permission_date_calendar"
     }
 
     private fun showTimePicker(target: android.widget.EditText) {

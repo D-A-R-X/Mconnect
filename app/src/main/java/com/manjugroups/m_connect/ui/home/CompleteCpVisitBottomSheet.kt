@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.home
 
-import android.app.DatePickerDialog
 import android.app.Dialog
 import android.graphics.Color
 import android.os.Bundle
@@ -17,6 +16,7 @@ import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -29,8 +29,12 @@ import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.ManualProfilePatch
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
@@ -101,6 +105,55 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var cpLockedFooter: View? = null
     private var btnCpLockedReject: TextView? = null
     private var btnCpLockedConfirm: TextView? = null
+
+    /**
+     * "Pure SV" outcome mode. When [ARG_SITE_VISIT_ID] is set the sheet
+     * is being invoked from the Trip Details screen of a real siteVisits
+     * row (not a CP visit). In this mode:
+     *   - The Site Visit top tab is disabled and faded (this row IS
+     *     already an SV — re-converting would be nonsensical).
+     *   - Booking / Postpone / Not Interested all persist via the
+     *     /api/marketing/siteVisits/... endpoints instead of the CP
+     *     path.
+     *   - markClientMet is skipped (no CP visit to mark).
+     */
+    private val isSiteVisitMode: Boolean
+        get() {
+            val raw = arguments?.getString(ARG_SITE_VISIT_ID)
+            return !raw.isNullOrBlank()
+        }
+
+    private val argSiteVisitId: String?
+        get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
+
+    /**
+     * Standalone booking mode. Set when the sheet is opened from the
+     * Bookings list (+ button) — no CP visit and no SV row behind it.
+     * In this mode:
+     *   - Site Visit / Postpone / Not Interested top tabs are faded
+     *     and unclickable (only Booking makes sense without a visit
+     *     to attach an outcome to).
+     *   - persistBooking POSTs directly to /api/bookings via
+     *     api.createBooking instead of the CP setOutcome path.
+     */
+    private val isStandaloneBookingMode: Boolean
+        get() = arguments?.getBoolean(ARG_STANDALONE_BOOKING, false) == true
+
+    /**
+     * Cached display name for the visit's lead/client, set when the
+     * locked SV mode initialises. Used by [renderVisitorRows] so the
+     * first visitor card auto-fills with the lead's name + Relation =
+     * Self — the common 1-visitor case where the only attendee is
+     * the client themself. Field staff can still edit the row.
+     */
+    private var cachedLeadDisplayName: String? = null
+
+    /**
+     * Cached lead-side attendees array (if the telecaller pre-set any
+     * via the SV-fix payload). Replays into the visitor cards
+     * one-for-one when [renderVisitorRows] runs.
+     */
+    private var cachedPrefilledAttendees: List<com.manjugroups.m_connect.network.CpVisitAttendee>? = null
 
     // ---- Sub-tab views --------------------------------------------------
     private var subTabsScroll: HorizontalScrollView? = null
@@ -259,7 +312,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var svProjectCache: List<MarketingProject> = emptyList()
     private var svStaffCache: List<StaffData> = emptyList()
 
+    // "Edit" pill on the Client form header. Visible only after a
+    // phone lookup actually returns a matching lead and the form is
+    // prefilled. Two states:
+    //   - inactive (default after prefill): pill is outlined, form
+    //     fields are read-only so the user doesn't accidentally edit
+    //     canonical lead data.
+    //   - active (after tap): pill is filled green, form fields are
+    //     editable; persistBooking pushes the new values back to the
+    //     lead's manualProfile via /api/telecaller/leads/update.
     private var btnEdit: TextView? = null
+    private var editEnabled: Boolean = false
+    // _id of the lead the prefill came from; null when no match was
+    // found. Drives whether the edit-push fires on submit.
+    private var prefilledLeadId: String? = null
     private var btnSubmit: TextView? = null
     private var tvError: TextView? = null
 
@@ -323,6 +389,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bindNotInterestedFields(view)
 
         btnEdit = view.findViewById(R.id.btnOutcomeEdit)
+        btnEdit?.setOnClickListener { toggleEditMode() }
+
+        // Drag-handle row at the top of the sheet — tap to dismiss.
+        // Drag-down dismiss is intentionally disabled (nested form
+        // scrolls used to trigger it accidentally), so the handle
+        // doubles as the close affordance.
+        view.findViewById<View>(R.id.outcomeDragHandleRow)?.setOnClickListener {
+            dismissAllowingStateLoss()
+        }
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
         cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
@@ -364,6 +439,42 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Check whether the CP visit was pre-fixed by the telecaller. If
         // so, lock the sheet to Site Visit and surface Reject / Confirm.
         detectAndApplyLockedSvMode()
+
+        // Pure-SV outcome mode (no CP behind it). Disables the Site
+        // Visit top tab and pre-selects Booking — only the Booking /
+        // Postpone / Not Interested paths persist, and they route to
+        // the siteVisits endpoints instead of the CP path.
+        if (isSiteVisitMode) applySiteVisitOutcomeMode()
+
+        // Standalone booking mode (Bookings page + button). Lock to
+        // the Booking outcome tab so the user is creating a booking
+        // from scratch, not recording an outcome against a visit.
+        if (isStandaloneBookingMode) applyStandaloneBookingMode()
+    }
+
+    private fun applyStandaloneBookingMode() {
+        // No visit attached → outcome tabs other than Booking are
+        // meaningless. Fade + disable all three.
+        listOf(tabSiteVisit, tabPostpone, tabNotInterested).forEach { tab ->
+            tab.cell?.isClickable = false
+            tab.cell?.alpha = 0.35f
+        }
+        activeOutcome = Outcome.BOOKING
+        renderState()
+    }
+
+    private fun applySiteVisitOutcomeMode() {
+        // The Site Visit tab itself makes no sense on a row that IS
+        // already a site visit — fade + disable it.
+        tabSiteVisit.cell?.isClickable = false
+        tabSiteVisit.cell?.alpha = 0.35f
+
+        // Default to Booking on entry — the most common SV outcome and
+        // the one the user is most likely to tap from "Complete Outcome".
+        // The user can still flip to Postpone / Not Interested from the
+        // top tabs.
+        activeOutcome = Outcome.BOOKING
+        renderState()
     }
 
     // ---- View binding helpers ------------------------------------------
@@ -687,14 +798,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             staffSaveAs = SaveAs.CONFIRMED; refreshStaffSaveRadios()
         }
 
-        // Top-level chrome
-        btnEdit?.setOnClickListener {
-            // Take the user back to the mobile-find step from any sub-tab.
-            activeOutcome = Outcome.BOOKING
-            bookingSub = BookingSub.CLIENT
-            bookingStep = BookingStep.FIND_MOBILE
-            renderState()
-        }
+        // Top-level chrome — Edit button was removed from the layout.
         btnSubmit?.setOnClickListener { onCtaTap() }
 
         // ---- Site Visit interactions ----
@@ -738,29 +842,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickPostponeDateTime() {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(
-            requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                android.app.TimePickerDialog(
-                    requireContext(),
-                    { _, hour, minute ->
-                        cal.set(Calendar.HOUR_OF_DAY, hour)
-                        cal.set(Calendar.MINUTE, minute)
-                        tvPostDateTime?.text = SimpleDateFormat(
-                            "dd/MM/yyyy hh:mm a", Locale.US
-                        ).format(cal.time)
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    false,
-                ).show()
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val today = ymd.format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_POSTPONE_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            val pickedCal = Calendar.getInstance().apply {
+                time = runCatching { ymd.parse(date) }.getOrNull() ?: return@setFragmentResultListener
+            }
+            android.app.TimePickerDialog(
+                requireContext(),
+                { _, hour, minute ->
+                    pickedCal.set(Calendar.HOUR_OF_DAY, hour)
+                    pickedCal.set(Calendar.MINUTE, minute)
+                    tvPostDateTime?.text = SimpleDateFormat(
+                        "dd/MM/yyyy hh:mm a", Locale.US
+                    ).format(pickedCal.time)
+                },
+                pickedCal.get(Calendar.HOUR_OF_DAY),
+                pickedCal.get(Calendar.MINUTE),
+                false,
+            ).show()
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Postpone Date",
+            subtitle = "Select Date",
+            initialFrom = today,
+            initialTo = today,
+            minDate = today,
+            resultKey = RESULT_KEY_POSTPONE_DATE,
+        ).show(parentFragmentManager, "cp_visit_postpone_calendar")
     }
 
     private fun refreshBookingRadios() {
@@ -883,7 +993,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // so the user can always jump back and re-enter the client mobile.
         val onFindMobile = bookingActive && bookingSub == BookingSub.CLIENT &&
             bookingStep == BookingStep.FIND_MOBILE
-        btnEdit?.visibility = if (bookingActive && !onFindMobile) View.VISIBLE else View.GONE
 
         // CTA label
         btnSubmit?.text = when {
@@ -949,7 +1058,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
             Outcome.BOOKING -> { /* fall through to the Booking flow below */ }
         }
-        // From the mobile-find step, validate + advance to the form.
+        // From the mobile-find step, validate, look up an existing lead
+        // by phone, and advance to the form (pre-filled when a match is
+        // found). Mirrors the BookingCreateFragment flow so a staffer
+        // who already engaged this client through the telecaller doesn't
+        // have to retype name / address / WhatsApp / email / etc.
         if (bookingSub == BookingSub.CLIENT && bookingStep == BookingStep.FIND_MOBILE) {
             val raw = etClientMobile?.text?.toString().orEmpty().trim()
             if (raw.length < 6) {
@@ -957,8 +1070,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return
             }
             tvFormPhone?.text = raw
+            // Advance immediately for snappy UX — the lookup runs async
+            // and prefills fields when (if) a match arrives. Most users
+            // type then tap Next and start filling the form; if a lead
+            // exists the fields just appear filled by the time they
+            // look at them.
             bookingStep = BookingStep.CLIENT_FORM
             renderState()
+            lookupAndPrefillClientByPhone(raw)
             return
         }
         // Final submit is on the Staff sub-tab. Anywhere else, Next moves
@@ -972,8 +1091,196 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             persistBooking()
             return
         }
+        // Required-field gate — block forward navigation until the
+        // current tab's must-have field is filled. Keeps the user
+        // from landing on Staff with a half-filled booking that the
+        // final Save would reject anyway. Tabs with no hard
+        // requirement (Charges / Payment money fields are optional
+        // — finance team finalises later) fall through cleanly.
+        val gateError = currentSubTabRequiredFieldMissing()
+        if (gateError != null) {
+            showError(gateError)
+            return
+        }
         bookingSub = nextSubTab(bookingSub)
         renderState()
+    }
+
+    /**
+     * Returns the user-facing error message for whichever required
+     * field on the active sub-tab is still blank, or null when the
+     * tab is OK to advance from. Matches the asterisk-marked fields
+     * in the design — Client Name on CLIENT, Profession on
+     * PROFESSIONAL, Office Name on OFFICE, Booking Date + Project on
+     * BOOKING. CHARGES / PAYMENT / STAFF have no hard prerequisites
+     * here (Staff has its own check on the final Save).
+     */
+    private fun currentSubTabRequiredFieldMissing(): String? {
+        fun isBlankPlaceholder(value: String?, vararg placeholders: String): Boolean {
+            val v = value?.trim().orEmpty()
+            if (v.isEmpty()) return true
+            return placeholders.any { v.equals(it, ignoreCase = true) }
+        }
+        return when (bookingSub) {
+            BookingSub.CLIENT -> {
+                // Only validated on the CLIENT_FORM step — the FIND_MOBILE
+                // step has its own phone-length check earlier in onCtaTap.
+                if (bookingStep != BookingStep.CLIENT_FORM) null
+                else if (etFormName?.text?.toString()?.trim().isNullOrEmpty())
+                    "Client Name is required before continuing"
+                else null
+            }
+            BookingSub.PROFESSIONAL -> {
+                if (isBlankPlaceholder(tvProfProfession?.text?.toString(), "Select Profession"))
+                    "Profession is required before continuing"
+                else null
+            }
+            BookingSub.OFFICE -> {
+                if (etOfficeName?.text?.toString()?.trim().isNullOrEmpty())
+                    "Office Name is required before continuing"
+                else null
+            }
+            BookingSub.BOOKING -> {
+                when {
+                    isBlankPlaceholder(tvBookDate?.text?.toString(), "dd/mm/yyyy") ->
+                        "Booking Date is required before continuing"
+                    isBlankPlaceholder(tvBookProject?.text?.toString(), "Select Project") ->
+                        "Project is required before continuing"
+                    else -> null
+                }
+            }
+            BookingSub.CHARGES, BookingSub.PAYMENT, BookingSub.STAFF -> null
+        }
+    }
+
+    /**
+     * Flip the prefilled client form between read-only (default
+     * after a successful lookup) and editable. Edit button background
+     * + text colour change to signal the state; underlying form
+     * fields toggle isEnabled / focusability together.
+     */
+    private fun toggleEditMode() {
+        editEnabled = !editEnabled
+        applyEditModeToFields(editEnabled)
+        val pill = btnEdit ?: return
+        if (editEnabled) {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_active)
+            pill.setTextColor(Color.WHITE)
+        } else {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+            pill.setTextColor(Color.parseColor("#2DAE12"))
+        }
+    }
+
+    /**
+     * Lock / unlock the client-form EditTexts + selector rows in one
+     * pass. Kept narrow to the prefilled identity fields; the
+     * professional / office / booking sub-tabs aren't touched (those
+     * are visit-specific, not lead-cached).
+     */
+    private fun applyEditModeToFields(enabled: Boolean) {
+        listOf(
+            etFormName, etFormFather, etFormAltNumber, etFormWhatsApp,
+            etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
+            etFormDistrict, etFormLocation,
+        ).forEach { f ->
+            f?.isEnabled = enabled
+            f?.isFocusable = enabled
+            f?.isFocusableInTouchMode = enabled
+            f?.alpha = if (enabled) 1f else 0.7f
+        }
+    }
+
+    /**
+     * Push field-staff edits back to the lead. No-op when the form
+     * wasn't prefilled (prefilledLeadId is null) or the user never
+     * tapped Edit (editEnabled is false). Silent on errors — the
+     * booking save already succeeded; lead sync is best-effort.
+     */
+    private suspend fun pushClientEditsToLeadIfAny() {
+        val leadId = prefilledLeadId ?: return
+        if (!editEnabled) return
+        try {
+            val req = UpdateTelecallerLeadRequest(
+                leadId = leadId,
+                contactName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                emailId = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                alternateNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                locationPreferred = etFormLocation?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                manualProfile = ManualProfilePatch(
+                    clientName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    pincode = etFormPincode?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    address = etFormHomeAddress?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    state = etFormState?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    district = etFormDistrict?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    alternateMobileNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val resp = api.updateTelecallerLead(session.bearerToken, req)
+            android.util.Log.d(
+                LOG_TAG,
+                "lead update ${if (resp.success) "ok" else "failed: ${resp.error}"}",
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(LOG_TAG, "lead update threw", e)
+        }
+    }
+
+    /**
+     * Hit `/api/telecaller/leads/search-by-phone` and replay any
+     * existing lead profile onto the Client form fields. Only fills
+     * blank fields — the user's manual input wins. Silent on errors;
+     * the form already opened and the user is free to keep typing.
+     */
+    private fun lookupAndPrefillClientByPhone(phone: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val lead = try {
+                val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+                if (!resp.success) {
+                    android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    return@launch
+                }
+                resp.leads.firstOrNull() ?: run {
+                    android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                    return@launch
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                return@launch
+            }
+            if (!isAdded) return@launch
+            val profile = lead.latestAnalysisProfile
+
+            fun fill(field: EditText?, value: String?) {
+                val v = value?.trim().orEmpty()
+                if (v.isEmpty()) return
+                if (field?.text?.toString()?.trim().isNullOrEmpty()) field?.setText(v)
+            }
+
+            // Name: prefer the lead's contactName, fall back to analysis
+            // profile's clientName when the contact field was left blank.
+            fill(etFormName, lead.contactName ?: profile?.clientName)
+            fill(etFormEmail, lead.emailId)
+            fill(etFormAltNumber, profile?.alternateMobileNumber)
+            fill(etFormHomeAddress, profile?.address ?: lead.suggestedVisitAddress)
+            fill(etFormPincode, profile?.pincode)
+            fill(etFormState, profile?.state)
+            fill(etFormDistrict, profile?.district)
+            // Location preferred / city → "Location" field (the row
+            // shows preferred area on the lead-card too).
+            fill(etFormLocation, lead.locationPreferred ?: lead.clientCity)
+
+            // Record the lead id + lock the fields so the user has to
+            // tap Edit before they can change canonical lead data.
+            // The Edit pill appears only after a successful match —
+            // a blank form (no lookup) stays fully editable as before.
+            prefilledLeadId = lead.id
+            editEnabled = false
+            applyEditModeToFields(false)
+            btnEdit?.visibility = View.VISIBLE
+            btnEdit?.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+            btnEdit?.setTextColor(Color.parseColor("#2DAE12"))
+        }
     }
 
     private fun nextSubTab(current: BookingSub): BookingSub = when (current) {
@@ -997,17 +1304,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy") {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(
-            requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                target?.text = SimpleDateFormat(format, Locale.US).format(cal.time)
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val today = ymd.format(Calendar.getInstance().time)
+        setFragmentResultListener(RESULT_KEY_GENERIC_DATE) { _, bundle ->
+            val iso = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            val parsed = runCatching { ymd.parse(iso) }.getOrNull() ?: return@setFragmentResultListener
+            target?.text = SimpleDateFormat(format, Locale.US).format(parsed)
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Select Date",
+            subtitle = "Pick a date",
+            initialFrom = today,
+            initialTo = today,
+            resultKey = RESULT_KEY_GENERIC_DATE,
+        ).show(parentFragmentManager, "cp_visit_generic_calendar")
     }
 
     private fun pickTime(target: TextView?) {
@@ -1133,16 +1443,51 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { onPicked(it) }
     }
 
-    /** Inflates one visitor card per expected attendee (capped at 12). */
+    /**
+     * Inflates one visitor card per expected attendee (capped at 12).
+     *
+     * Pre-fill behaviour:
+     *   - Index 0 (first card): name + relation = "Self" use the cached
+     *     lead/client name when available — the common 1-visitor case
+     *     is the client themself, so save the user a tap.
+     *   - All cards: when the telecaller pre-set attendees on the CP
+     *     visit's SV-fix payload, replay those onto the cards in order
+     *     (overrides the lead-only default on index 0).
+     *
+     * Field staff can edit anything pre-filled — this only sets the
+     * initial values.
+     */
     private fun renderVisitorRows(count: Int) {
         val rows = siteVisitorRows ?: return
         rows.removeAllViews()
         val safeCount = count.coerceIn(0, 12)
-        repeat(safeCount) {
+        val prefilled = cachedPrefilledAttendees ?: emptyList()
+        val leadName = cachedLeadDisplayName
+        repeat(safeCount) { index ->
             val card = layoutInflater.inflate(
                 R.layout.item_outcome_site_visitor, rows, false
             )
             wireVisitorCardToggles(card)
+            val attendee = prefilled.getOrNull(index)
+            val nameField = card.findViewWithTag<EditText>("name")
+            val relationField = card.findViewWithTag<TextView>("relation")
+            val ageField = card.findViewWithTag<EditText>("age")
+            when {
+                attendee != null -> {
+                    nameField?.setText(attendee.name.orEmpty())
+                    relationField?.text = attendee.relation.orEmpty()
+                    ageField?.setText(attendee.age.orEmpty())
+                    if (attendee.isVeg == false) {
+                        // Default layout pre-selects Veg; flip to Non-Veg
+                        // when the telecaller captured otherwise.
+                        card.findViewWithTag<TextView>("foodNonVeg")?.performClick()
+                    }
+                }
+                index == 0 && !leadName.isNullOrBlank() -> {
+                    nameField?.setText(leadName)
+                    relationField?.text = "Self"
+                }
+            }
             rows.addView(card)
         }
     }
@@ -1164,11 +1509,24 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             veg?.setBackgroundResource(R.drawable.bg_outcome_segment_inactive)
             veg?.setTextColor(Color.parseColor("#475467"))
         }
-        // Relation dropdown opens a simple picker.
+        // Relation dropdown opens a simple picker. "Self" sits at the
+        // top because it's the most-used value — the first visitor row
+        // is auto-filled with the lead's name + Self, and we want the
+        // option present in the picker too so the user can re-select
+        // it on subsequent cards or after editing.
         card.findViewWithTag<View>("relationRow")?.setOnClickListener {
             picker(
                 "Relation",
-                listOf("Spouse", "Parent", "Sibling", "Child", "Friend", "Colleague", "Other"),
+                listOf(
+                    "Self",
+                    "Spouse",
+                    "Parent",
+                    "Sibling",
+                    "Child",
+                    "Friend",
+                    "Colleague",
+                    "Other",
+                ),
             ) { card.findViewWithTag<TextView>("relation")?.text = it }
         }
     }
@@ -1256,11 +1614,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSiteVisit(e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
-                    .show()
+                // Retrofit throws HttpException on a 5xx before deserialising
+                // the response body — `e.message` is just "HTTP 500 Internal
+                // Server Error" which is useless to the user. Try to extract
+                // the JSON {error: "..."} the backend puts in the body so the
+                // toast shows the actual reason (staff busy, project missing,
+                // etc.) instead of a generic 500.
+                val serverMessage = extractHttpErrorMessage(e)
+                val message = serverMessage ?: e.message ?: "Network error"
+                finishCtaSiteVisit(message)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /**
+     * Pull the `{ error: "..." }` field out of a Retrofit HttpException's
+     * error body. Returns null on any failure (non-HttpException, body
+     * unreadable, JSON parse error, missing field). Mirrors the helper
+     * AttendanceFlowViewModel uses for the same purpose.
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun finishCtaSiteVisit(error: String) {
@@ -1340,6 +1722,41 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit?.text = "Saving…"
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // SV mode: write directly to the siteVisits row via the
+                // dedicated endpoint. No markClientMet (there's no CP
+                // visit to mark), no CP setOutcome. The SV path accepts
+                // the same outcome strings (postponed / not_interested)
+                // and stores notes/reasons on the row.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCtaSave("Missing site visit id")
+                            return@launch
+                        }
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = svId,
+                            outcome = outcomeEnum,
+                            postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
+                                postponedReasonsFromForm() else null,
+                            notInterestedReasons = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
+                                notInterestedReasonsFromForm() else null,
+                            notes = notes,
+                        ),
+                    )
+                    if (!resp.success) {
+                        finishCtaSave(resp.error ?: "Failed to save outcome")
+                        return@launch
+                    }
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to outcomeEnum),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
                     MarkClientMetRequest(id = cpVisitId, clientMet = true),
@@ -1374,23 +1791,178 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * Best-effort extraction of structured postpone reasons from the
+     * Postpone tab's form. The current CP path doesn't actually pass
+     * these to the server (sends notes only), so for SV mode we
+     * synthesise a single-element array from the captured fields when
+     * present. The SV backend requires a non-empty array for
+     * outcome=postponed.
+     */
+    private fun postponedReasonsFromForm(): List<String> {
+        val budget = etPostBudget?.text?.toString()?.trim().orEmpty()
+        val timing = etPostTiming?.text?.toString()?.trim().orEmpty()
+        val project = etPostProject?.text?.toString()?.trim().orEmpty()
+        val other = etPostOther?.text?.toString()?.trim().orEmpty()
+        val labels = listOf(
+            "Budget" to budget,
+            "Timing" to timing,
+            "Project" to project,
+            "Other" to other,
+        ).filter { it.second.isNotBlank() }.map { it.first }
+        // Backend rejects an empty array — fall back to "other" so the
+        // mutation still lands even when the user hits Save without
+        // ticking specific reasons.
+        return labels.ifEmpty { listOf("other") }
+    }
+
+    /**
+     * Same pattern for the Not Interested tab. The CP path also sends
+     * just notes, so SV mode collapses to a generic "other" reason
+     * when no structured fields are present.
+     */
+    private fun notInterestedReasonsFromForm(): List<String> {
+        val budget = etNiBudget?.text?.toString()?.trim().orEmpty()
+        val timing = etNiTiming?.text?.toString()?.trim().orEmpty()
+        val project = etNiProject?.text?.toString()?.trim().orEmpty()
+        val other = etNiOther?.text?.toString()?.trim().orEmpty()
+        val labels = listOf(
+            "Budget" to budget,
+            "Timing" to timing,
+            "Project" to project,
+            "Other" to other,
+        ).filter { it.second.isNotBlank() }.map { it.first }
+        return labels.ifEmpty { listOf("other") }
+    }
+
     private fun finishCtaSave(error: String) {
         btnSubmit?.isClickable = true
         btnSubmit?.text = "Save"
         showError(error)
     }
 
+    /**
+     * Parse the Booking-tab date row into yyyy-MM-dd for the API.
+     * The picker writes "dd/MM/yyyy"; we just rewrite. Returns null
+     * when the field is empty or holds the placeholder so callers
+     * can fall back to today.
+     */
+    private fun bookingDateForApi(): String? {
+        val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
+        if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
+        return runCatching {
+            val ddmmyyyy = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US)
+            val ymd = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            ymd.format(ddmmyyyy.parse(raw)!!)
+        }.getOrNull()
+    }
+
     // ---- Persistence ------------------------------------------------
     private fun persistBooking() {
-        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
-            ?: return showError("Missing CP visit id")
         val met = true
-
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Standalone booking from the Bookings + button — no
+                // CP visit / SV row to attach an outcome to. POST
+                // straight to /api/bookings (the same web flow uses)
+                // so the row lands in `bookings` and the office-side
+                // approval workflow picks up from pending_gm.
+                if (isStandaloneBookingMode) {
+                    val phone = etClientMobile?.text?.toString()?.trim()
+                        ?: tvFormPhone?.text?.toString()?.trim()
+                    val name = etFormName?.text?.toString()?.trim()
+                    val bookingDate = bookingDateForApi()
+                    if (phone.isNullOrBlank()) {
+                        finishCta(error = "Client phone number is required")
+                        return@launch
+                    }
+                    if (name.isNullOrBlank()) {
+                        finishCta(error = "Client name is required")
+                        return@launch
+                    }
+                    val createResp = api.createBooking(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.CreateBookingRequest(
+                            clientName = name,
+                            mobileNumber = phone,
+                            bookingDate = bookingDate
+                                ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                    .format(java.util.Calendar.getInstance().time),
+                            leadId = prefilledLeadId,
+                            email = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                            homeAddress = etFormHomeAddress?.text?.toString()?.trim()
+                                ?.takeIf { it.isNotBlank() },
+                            bookingCost = etChargeBookingCost?.text?.toString()
+                                ?.trim()?.toDoubleOrNull(),
+                            advanceAmount = etPayAdvanceAmount?.text?.toString()
+                                ?.trim()?.toDoubleOrNull(),
+                        ),
+                    )
+                    if (!createResp.success) {
+                        finishCta(error = createResp.error ?: "Failed to create booking")
+                        return@launch
+                    }
+                    // Push any edits the user made on the prefilled
+                    // client form back to the lead so the next person
+                    // sees the corrected profile.
+                    pushClientEditsToLeadIfAny()
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(
+                            KEY_CLIENT_MET to met,
+                            KEY_OUTCOME to OUTCOME_BOOKING,
+                        ),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                // SV-mode booking — write the booking outcome directly to
+                // the siteVisits row. The mobile booking form's plot /
+                // project pickers are still mocked, so we record the
+                // outcome as `converted_to_booking` + serialised notes
+                // and let the office finalise the actual booking via the
+                // web flow (the SV row carries the full captured notes
+                // payload for them to act on). Future iteration can
+                // wire a real plot picker + hit convertSiteVisitToBooking
+                // directly to drop a `bookings` row in one shot.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCta(error = "Missing site visit id")
+                            return@launch
+                        }
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = svId,
+                            outcome = OUTCOME_SV_CONVERTED_TO_BOOKING,
+                            notes = serializeBookingForm(),
+                        ),
+                    )
+                    if (!resp.success) {
+                        finishCta(error = resp.error ?: "Failed to save booking")
+                        return@launch
+                    }
+                    // Mirror the CP-mode lead push for SV-mode too —
+                    // same Edit-toggle semantics, same target lead row.
+                    pushClientEditsToLeadIfAny()
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+                    ?: run {
+                        finishCta(error = "Missing CP visit id")
+                        return@launch
+                    }
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
                     MarkClientMetRequest(id = cpVisitId, clientMet = met),
@@ -1413,6 +1985,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCta(error = outcomeResp.error ?: "Failed to save booking")
                     return@launch
                 }
+
+                // Push any field-staff edits to the prefilled client
+                // form back to the lead's manualProfile. No-op when
+                // the user didn't tap Edit. Best-effort — booking
+                // already saved, so failures here just get logged.
+                pushClientEditsToLeadIfAny()
 
                 setFragmentResult(
                     RESULT_KEY,
@@ -1597,29 +2175,31 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // We previously called /api/marketing/clientPlaceVisits/get
-                // here, but the server side never wired up that HTTP route.
-                // Use the existing /my list endpoint and find the visit by
-                // id — the list is paginated to the latest 200 CP visits
-                // for the bearer, which always includes the one we're
-                // actively completing.
-                val resp = geoApi.getMyMarketingCpVisits(
+                // Single-visit get — replaces the historical hack of
+                // pulling the full 200-row /my list just to find one row.
+                // Cuts latency on sheet open from ~1-2s on a slow link
+                // down to one round-trip (~100ms) AND removes the visible
+                // glitch where the Booking tab body painted for one frame
+                // before async detect resolved and snapped the UI to
+                // locked SV. The /api/marketing/clientPlaceVisits/get
+                // route was wired in a later patch — keeping the helper
+                // shape identical so the rest of this method is unchanged.
+                val detailResp = geoApi.getCpVisitDetail(
                     session.bearerToken,
-                    fromDate = null,
-                    toDate = null,
+                    cpVisitId,
                 )
-                if (!resp.success) {
+                if (!detailResp.success) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: list call failed: ${resp.error ?: "(no error)"}",
+                        "detect: get call failed: ${detailResp.error ?: "(no error)"}",
                     )
                     return@launch
                 }
-                val visit = resp.visits.firstOrNull { it.id == cpVisitId }
+                val visit = detailResp.visit
                 if (visit == null) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: cpVisitId=$cpVisitId not in list of ${resp.visits.size} visits",
+                        "detect: cpVisitId=$cpVisitId not returned by get",
                     )
                     return@launch
                 }
@@ -1737,10 +2317,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         //    client place if we have it).
         tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
         tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+
+        // Cache lead + attendee context for the visitor-row auto-fill.
+        // Order: client.clientName (canonical, manually entered) →
+        // lead.contactName (telecaller-typed during dialer flow) →
+        // clientPlace.name (fallback). renderVisitorRows reads this
+        // cache when expanding cards so the first row is pre-filled
+        // with the lead's name + Self relation — the common case for
+        // 1-visitor meetings.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        cachedPrefilledAttendees = visit.attendees
+
         val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
-        if (visitorCount > 0) {
-            etSvVisitorCount?.setText(visitorCount.toString())
-        }
+        // Default to 1 visitor when the telecaller didn't specify and the
+        // SV-fix flow doesn't carry attendees — the most common reality
+        // is the lead alone, and pre-populating saves a tap.
+        val effectiveVisitorCount = if (visitorCount > 0) visitorCount else 1
+        etSvVisitorCount?.setText(effectiveVisitorCount.toString())
         etSvPickupAddress?.setText(
             visit.clientPlace?.address
                 ?: visit.clientPlace?.formattedAddress
@@ -1936,6 +2531,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
+        private const val RESULT_KEY_POSTPONE_DATE = "cp_visit_postpone_date"
+        private const val RESULT_KEY_GENERIC_DATE = "cp_visit_generic_date"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
@@ -1944,6 +2541,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // fixed SV. Lets us avoid the brief Booking-tab flash while the
         // sheet's own detect call resolves.
         private const val ARG_IS_SV_FIXED_HINT = "arg_is_sv_fixed_hint"
+        // Pure-SV outcome mode — set by [forSiteVisit] when the sheet
+        // is opened from the SV Trip Details "Complete Outcome" CTA.
+        // Mutually exclusive with the CP path; presence of this arg
+        // flips isSiteVisitMode true.
+        private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
+        // Standalone booking creation mode — set by [forStandaloneBooking]
+        // when the sheet is opened from the Bookings list + button.
+        // No visit to attach to; persistBooking POSTs to /api/bookings
+        // instead of the CP / SV outcome paths.
+        private const val ARG_STANDALONE_BOOKING = "arg_standalone_booking"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -1954,6 +2561,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // shipped as notes; Convex outcomeValidator was extended to
         // accept this value.
         private const val OUTCOME_REJECTED = "rejected"
+
+        // siteVisits.setOutcome accepts a subset of CP outcome strings.
+        // Booking outcome translates to the SV's "converted_to_booking"
+        // value — the actual booking row creation is deferred to the
+        // office side until the mobile plot picker is real.
+        private const val OUTCOME_SV_CONVERTED_TO_BOOKING = "converted_to_booking"
 
         fun newInstance(
             cpVisitId: String,
@@ -1967,6 +2580,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
                     if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
+                }
+            }
+
+        /**
+         * Factory for the pure-SV outcome flow. The sheet renders the
+         * same Booking / Postpone / Not Interested tabs but locks the
+         * Site Visit tab (this row IS already a site visit), and all
+         * persistence routes to /api/marketing/siteVisits/... endpoints.
+         */
+        fun forSiteVisit(siteVisitId: String): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_SITE_VISIT_ID, siteVisitId)
+                }
+            }
+
+        /**
+         * Factory for standalone booking creation from the Bookings
+         * list + button. Sheet locks to the Booking outcome (Site
+         * Visit / Postpone / Not Interested top tabs are faded and
+         * disabled), and Save Booking POSTs to /api/bookings via
+         * api.createBooking — same endpoint the web booking form
+         * hits, so the new row syncs through the existing approval
+         * workflow.
+         */
+        fun forStandaloneBooking(): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putBoolean(ARG_STANDALONE_BOOKING, true)
                 }
             }
     }

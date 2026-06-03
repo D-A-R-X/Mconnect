@@ -188,10 +188,17 @@ class MyLeadsFragment : Fragment() {
             }
         }
 
-        row.findViewById<View>(R.id.btnLeadCall).setOnClickListener {
-            placeCall(lead.mobileNumber)
-        }
-        row.setOnClickListener { placeCall(lead.mobileNumber) }
+        // Call action is currently a Coming-soon pill — the out-bound
+        // dialer integration isn't ready yet. Keep the pill inert so
+        // taps don't trigger the dial flow; the row itself is also
+        // non-tappable to avoid a confused "I clicked the row and
+        // nothing happened" experience.
+        val callPill = row.findViewById<View>(R.id.btnLeadCall)
+        callPill.isClickable = false
+        callPill.isFocusable = false
+        callPill.setOnClickListener(null)
+        row.isClickable = false
+        row.setOnClickListener(null)
     }
 
     private fun placeCall(rawPhone: String?) {

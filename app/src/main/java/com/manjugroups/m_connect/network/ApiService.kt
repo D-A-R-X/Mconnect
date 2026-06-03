@@ -82,6 +82,17 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    /**
+     * Withdraw a pending attendance submission for a specific date.
+     * Mirrors /api/hr/leaves/cancel — same delete affordance on the
+     * mobile attendance history page. Server rejects non-pending dates.
+     */
+    @POST("api/hr/attendance/cancel")
+    suspend fun cancelMyAttendance(
+        @Header("Authorization") token: String,
+        @Body body: AttendanceCancelRequest,
+    ): SimpleResponse
+
     // Attendance — manager approval queue (mirrors leaves/permissions approval).
     @GET("api/hr/attendance/pending-approvals")
     suspend fun getPendingAttendanceApprovals(
@@ -755,11 +766,33 @@ interface ApiService {
         @Body body: CreateBookingRequest,
     ): CreateBookingResponse
 
+    // GET /api/marketing/bookings/my — bookings the caller is involved in.
+    // `status` is one of draft|pending_confirmation|confirmed|cancelled or
+    // null for "All". Backend gates on marketing.bookings.view and returns
+    // an empty list (200) when the user lacks permission.
+    @GET("api/marketing/bookings/my")
+    suspend fun listMyBookings(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = null,
+    ): BookingsListResponse
+
     @GET("api/telecaller/leads/search-by-phone")
     suspend fun searchTelecallerLeadsByPhone(
         @Header("Authorization") token: String,
         @Query("phone") phone: String,
     ): TelecallerLeadSearchResponse
+
+    /**
+     * Push edits made by the field staff on the prefilled client
+     * form back to the lead's manualProfile. Server records the
+     * caller as editorStaffId so the lead's edit-history timeline
+     * picks up the change with proper attribution.
+     */
+    @POST("api/telecaller/leads/update")
+    suspend fun updateTelecallerLead(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTelecallerLeadRequest,
+    ): SimpleResponse
 
     // ── Land Procurement: Inspection ────────────────────────────────────
     @GET("api/land/inspections/my")
@@ -886,6 +919,9 @@ data class StaffData(
 // Attendance models
 data class AttendanceTodayResponse(val success: Boolean, val attendance: AttendanceData?)
 data class MyAttendanceResponse(val success: Boolean, val total: Int?, val records: List<AttendanceRecord> = emptyList())
+
+/** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
+data class AttendanceCancelRequest(val date: String)
 data class AttendanceRecord(
     val date: String?,
     val status: String?,
@@ -895,6 +931,13 @@ data class AttendanceRecord(
     val punchOutTime: String? = null,
     val hasOpenSession: Boolean? = null,
     val sessions: List<SessionData>? = emptyList(),
+    // Decision metadata mirrored from leaves — populated on
+    // approved/rejected rows so the history row can show
+    // "By <approver>" with photo and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -1033,7 +1076,14 @@ data class LeaveData(
     val toDate: String?,
     val reason: String?,
     val status: String?,
-    @SerializedName("_creationTime") val createdAt: Double?
+    @SerializedName("_creationTime") val createdAt: Double?,
+    // Decision metadata — populated server-side on /my for approved
+    // and rejected rows so the mobile card can render "By <approver>"
+    // with the person's avatar and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO datetime — approvedOn / rejectedOn / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class ApplyLeaveRequest(
     val leaveType: String,
@@ -1882,6 +1932,33 @@ data class TelecallerLeadSearchResponse(
     val error: String? = null
 )
 
+/**
+ * Body for /api/telecaller/leads/update — used by the outcome
+ * sheet's Edit-mode submit to push field-staff edits back to the
+ * lead. Every field is optional; only ones the user actually
+ * changed are sent. manualProfile.* mirrors the schema shape so
+ * a single PATCH covers the whole client-form payload.
+ */
+data class UpdateTelecallerLeadRequest(
+    @SerializedName("id") val leadId: String,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val emailId: String? = null,
+    val alternateNumber: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val manualProfile: ManualProfilePatch? = null,
+)
+
+data class ManualProfilePatch(
+    val clientName: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val alternateMobileNumber: String? = null,
+)
+
 data class TelecallerLeadSearchData(
     @SerializedName("_id") val id: String,
     val contactName: String? = null,
@@ -2025,6 +2102,42 @@ data class CreateBookingRequest(
 data class CreateBookingResponse(
     val success: Boolean,
     val id: String? = null,
+    val error: String? = null,
+)
+
+// ── Marketing: Bookings list (mobile) ──────────────────────────────────────
+// Server enriches each row with projectName + plotNumber so the list card
+// can render without secondary lookups.
+data class Booking(
+    @SerializedName("_id") val id: String,
+    @SerializedName("_creationTime") val creationTime: Double? = null,
+    val bookingRefNo: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val email: String? = null,
+    val bookingDate: String? = null,                // yyyy-MM-dd
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val agreedAmount: Double? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val plotNumber: String? = null,                  // server-enriched fallback
+    /** draft | pending_confirmation | confirmed | cancelled */
+    val status: String? = null,
+    val approvalStage: String? = null,
+    val sourceType: String? = null,                  // cp_visit | site_visit | walk_in
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+)
+
+data class BookingsListResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val bookings: List<Booking> = emptyList(),
     val error: String? = null,
 )
 

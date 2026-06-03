@@ -144,10 +144,12 @@
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cardWorkSummary"
                     android:layout_width="match_parent"
-                    android:layout_height="150dp"
+                    android:layout_height="160dp"
                     android:layout_marginTop="4dp"
                     android:clipChildren="false"
-                    android:paddingHorizontal="16dp"
+                    android:clipToPadding="false"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="20dp"
                     android:paddingBottom="16dp">
 
                     <LinearLayout
@@ -217,7 +219,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        app:layout_constraintGuide_percent="0.55" />
+                        app:layout_constraintGuide_percent="0.50" />
 
                     <FrameLayout
                         android:id="@+id/bannerIllustrationContainer"
@@ -275,44 +277,52 @@
             </LinearLayout>
 
     <!-- Refreshable scrolling content area — sits BELOW the sticky blue
-         header. The today's-trip / activity cards scroll inside this
-         while the header above stays pinned. -->
+         header but overlaps it by -20dp so the panel's rounded top
+         corners curve up cleanly into the blue (matches the Inspection
+         page pattern). The white panel background + rounded top corners
+         are applied at runtime in setupHomeScrollAnimation(), so when
+         the panel translates up on scroll the WHOLE blue header is
+         covered by white. clipToOutline=true bounds inner content to
+         the rounded shape. -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/homeRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_marginTop="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
             android:id="@+id/homeContent"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
             android:clipToPadding="false"
             android:fillViewport="true"
-            android:paddingBottom="96dp">
+            android:paddingBottom="120dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipChildren="false"
                 android:orientation="vertical">
 
-            <!-- Section container — NO white sheet wrap. The previous
-                 rounded-top white sheet was sitting flush against the
-                 blue header's rounded bottom corners, with the two
-                 interlocking curves cancelling each other out so the
-                 seam looked flat. Dropping the sheet bg (transparent)
-                 + bumping marginTop to 24dp lets the blue header's
-                 rounded shoulders read cleanly against the grey panel
-                 above the cards, matching App Library / Inspection. -->
+            <!-- Section container — sits on the panel's white surface
+                 (the panel itself now carries the white bg + rounded
+                 top corners, applied at runtime, overlapping the blue
+                 header by -20dp). paddingTop pushes the "Today's Trip"
+                 title clear of the rounded-corner curve at the top. -->
             <LinearLayout
                 android:id="@+id/whiteContentArea"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="12dp"
                 android:background="@android:color/transparent"
                 android:orientation="vertical"
                 android:paddingHorizontal="16dp"
-                android:paddingTop="0dp"
+                android:paddingTop="20dp"
                 android:paddingBottom="20dp">
 
                 <LinearLayout

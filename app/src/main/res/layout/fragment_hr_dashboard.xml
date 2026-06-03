@@ -65,25 +65,37 @@
                 android:src="@drawable/ic_attendance_header_illustration" />
     </FrameLayout>
 
-    <!-- Refreshable scrolling content area — sits below the sticky header. -->
+    <!-- White content "card" — overlaps the blue header by -20dp so its
+         rounded top corners curve up cleanly into the blue, then slides
+         up over the blue on scroll. Same pattern as Home / App Library /
+         Inspection. White bg + rounded top corners are applied at runtime
+         in setupAttendanceScrollAnimation(). -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/hrRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_marginTop="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
             android:id="@+id/hrScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:fillViewport="true"
             android:overScrollMode="never">
 
             <LinearLayout
+                android:id="@+id/hrWhitePanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipChildren="false"
                 android:orientation="vertical"
-                android:paddingBottom="96dp">
+                android:paddingBottom="120dp">
 
         <!-- 24dp top gap = the blue header's 24dp rounded bottom corners
              show through cleanly against the grey panel bg before being

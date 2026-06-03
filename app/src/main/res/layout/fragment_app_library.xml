@@ -401,29 +401,41 @@
          only. The sticky header above is excluded so the user can pull
          from anywhere in the cards to refresh without hitting the
          header. -->
+    <!-- White content "card" — overlaps the blue header by -20dp so its
+         rounded top corners curve up cleanly into the blue, then slides
+         up over the blue on scroll. Same pattern as Home / Inspection.
+         White bg + rounded top corners are applied at runtime in
+         setupScrollAnimation(). -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/libraryRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_marginTop="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
             android:id="@+id/scrollLibrary"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:fillViewport="true"
             android:overScrollMode="never">
 
-            <!-- paddingBottom = visible height of the floating tab bar
-                 (~96dp: 66dp pill + 10dp top margin + ~20dp gesture inset).
-                 The panel itself is extended past the column bottom by
-                 headerHeight at runtime, so the last card lands right
-                 above the tab bar with no grey strip below. -->
+            <!-- The white card with rounded top corners. White bg +
+                 rounded TOP corners applied at runtime so this LinearLayout
+                 IS the visible white card — scrolls up at 1× rate with
+                 the page content, no separate panel translation. -->
             <LinearLayout
+                android:id="@+id/libraryWhitePanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipChildren="false"
                 android:orientation="vertical"
-                android:paddingBottom="96dp">
+                android:paddingBottom="120dp">
 
             <LinearLayout
                 android:id="@+id/sectionsContainer"
@@ -884,9 +896,6 @@
                             android:id="@+id/itemMarketingDialer"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingVertical="12dp">
@@ -909,11 +918,24 @@
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 
-                            <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:contentDescription="@null"
-                                android:src="@drawable/ic_apps_chevron" />
+                            <!--
+                              Coming-soon pill replaces the chevron — the
+                              Dialer tab is intentionally not navigable
+                              until the feature ships. The fragment
+                              binding clears the click handler so taps
+                              on this row are no-ops.
+                            -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_apps_coming_soon_pill"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="4dp"
+                                android:text="Coming soon"
+                                android:textColor="#B54708"
+                                android:textSize="11sp" />
                         </LinearLayout>
 
                         <View
@@ -987,7 +1009,7 @@
                                 android:layout_weight="1"
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
-                                android:text="New Booking"
+                                android:text="Booking"
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 
@@ -1092,6 +1114,11 @@
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_apps_chevron" />
                         </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
 
                         <LinearLayout
                             android:id="@+id/itemProjectExpenses"

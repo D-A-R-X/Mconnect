@@ -120,6 +120,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     //   - the outcome sheet opens directly in locked SV mode (no flash
     //     of the Booking tab while detect runs async inside the sheet)
     private var cpIsSvFixed: Boolean = false
+
+    // True when this Trip Details is rendering a pure SV row (no CP
+    // behind it). Set from the visitCategory arg; lets renderPreStartPhase
+    // skip "Start Trip" and surface the outcome flow directly via
+    // CompleteCpVisitBottomSheet.forSiteVisit. Pure-SV visits don't go
+    // through the trip-tracking lifecycle on mobile — staff arrive
+    // directly and record the outcome.
+    private var isPureSiteVisit: Boolean = false
     private var showClientNotSeenCompletion = false
     // KOS-52: Set when the user picked "No, didn't see client" on the Yes/No
     // sheet. We still capture an arrival photo for proof but skip the OTP
@@ -290,6 +298,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val visitCategory = args.getString(ARG_VISIT_CATEGORY)
         val cpVisitIdLocal = args.getString(ARG_CP_VISIT_ID)
         val isPlaceOnly = args.containsKey(ARG_PLACE_ID) && args.getString(ARG_VISIT_ID).isNullOrBlank()
+        // Pure-SV detection. visitCategory=site_visit AND no CP visit id
+        // behind it → this is a real siteVisits row whose trip lifecycle
+        // doesn't go through the legacy fieldVisits flow. The CTA at
+        // the bottom of the screen becomes "Complete Outcome" instead
+        // of "Start Trip"; tap opens the outcome sheet in SV mode.
+        isPureSiteVisit = (visitCategory == "site_visit") && cpVisitIdLocal.isNullOrBlank()
         tvDestName?.text = when (visitCategory) {
             "sv_cum_cp" -> "SV confirmation CP"
             "direct_cp" -> "Direct CP"
@@ -714,8 +728,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         hideTripStartTime()
         loadingOverlay?.visibility = View.GONE
         btnOpenMaps?.visibility = View.VISIBLE
-        tvStartTripLabel?.text = "Start Trip"
-        btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
+        // Pure SV: skip "Start Trip" entirely — the staff is already at
+        // the project; tap routes straight to the outcome sheet so
+        // they can record Booking / Postpone / Not Interested. Trip
+        // tracking on a real SV happens server-side on the parent row
+        // when the office side advances status. CP-derived visits
+        // keep the original "Start Trip" → trip-lifecycle flow.
+        if (isPureSiteVisit) {
+            tvStartTripLabel?.text = "Complete Outcome"
+            btnOpenMaps?.setOnClickListener { openSiteVisitOutcomeSheet() }
+        } else {
+            tvStartTripLabel?.text = "Start Trip"
+            btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
+        }
         swipeArrived?.visibility = View.GONE
         btnCompleteCpDetails?.visibility = View.GONE
         tvOriginName?.text = "Current Location"
@@ -1315,18 +1340,48 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val cpId = cpVisitId ?: return
         arrivalConfirmedForProgress = true
         applyStatusPill("Reaching")
+        // Treat the row as SV-fix when EITHER signal fires:
+        //   - cpIsSvFixed (set by the async reconcile when it completes)
+        //   - visitCategory == "sv_cum_cp" (handed down synchronously
+        //     from the caller — Home or CP list — which already
+        //     classified this row via the same payload signals)
+        // The visitCategory check fixes the visible flicker where users
+        // tap Complete-Outcome before reconcile finishes, briefly see
+        // the Booking tab body, then watch it snap to locked SV. With
+        // the synchronous hint the very first paint is already locked.
+        val visitCategory = arguments?.getString(ARG_VISIT_CATEGORY)
+        val svFix = cpIsSvFixed || visitCategory == "sv_cum_cp"
         CompleteCpVisitBottomSheet
             .newInstance(
                 cpVisitId = cpId,
                 cpClientMet = cpClientMet,
                 cpOutcome = cpOutcome,
-                // Pre-pass the SV-fix verdict so the sheet can switch
-                // straight to its locked Site Visit mode in onViewCreated
-                // — no flash of the default Booking tab while the
-                // sheet's own async detect runs.
-                isSvFixedHint = cpIsSvFixed,
+                isSvFixedHint = svFix,
             )
             .show(parentFragmentManager, "cp_visit_complete")
+    }
+
+    /**
+     * Pure-SV outcome flow. Opens [CompleteCpVisitBottomSheet] in
+     * SV-mode (Site Visit tab disabled, Booking / Postpone /
+     * Not Interested all persisting to the
+     * /api/marketing/siteVisits/setOutcome endpoint).
+     * Triggered by the "Complete Outcome" CTA that replaces "Start
+     * Trip" on pure-SV trip detail screens.
+     */
+    private fun openSiteVisitOutcomeSheet() {
+        val svId = arguments?.getString(ARG_VISIT_ID)
+        if (svId.isNullOrBlank()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Site visit id is missing",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        CompleteCpVisitBottomSheet
+            .forSiteVisit(svId)
+            .show(parentFragmentManager, "sv_outcome")
     }
 
     // KOS-52: After the user confirms "Yes, I saw the client" we still need

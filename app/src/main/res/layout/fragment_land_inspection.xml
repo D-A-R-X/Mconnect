@@ -96,24 +96,29 @@
         android:id="@+id/inspectionRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="-20dp"
+        android:layout_marginTop="0dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_inspection_panel"
-        android:clipToOutline="true">
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
             android:id="@+id/inspectionScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:fillViewport="true"
             android:overScrollMode="never">
 
             <LinearLayout
+                android:id="@+id/inspectionWhitePanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipChildren="false"
                 android:orientation="vertical"
                 android:paddingTop="10dp"
-                android:paddingBottom="32dp">
+                android:paddingBottom="120dp">
 
                 <!-- Search pill + calendar pill row. -->
                 <LinearLayout

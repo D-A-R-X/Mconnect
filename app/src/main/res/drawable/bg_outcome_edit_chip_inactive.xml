@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Small outlined "Edit" pill that appears on the form frames. Brand-
-     green stroke, white fill, fully rounded. -->
+<!--
+  "Edit" pill — INACTIVE state. White fill with green outline.
+  Default state after the client form is prefilled from a phone
+  lookup: form fields are locked, and tapping this pill toggles
+  the active state to unlock them for editing.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#FFFFFF" />

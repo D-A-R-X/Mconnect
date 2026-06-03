@@ -26,10 +26,12 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.CpVisitState
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
 import kotlinx.coroutines.launch
@@ -51,6 +53,11 @@ class CpVisitsFragment : Fragment() {
     private var currentFilter: Filter = Filter.SCHEDULED
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
+    // True once the user has punched in at least once today — sticky for the
+    // rest of the day even after subsequent clock-outs. Mid-day clock-outs
+    // (the user steps away, locks the punch-out time at midnight) must NOT
+    // re-gate the CP cards to "Need to Clock In", so we read this field
+    // from AttendanceFlowState rather than the right-now `isClockedIn` one.
     private var isClockedIn: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -109,7 +116,13 @@ class CpVisitsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 attendanceVm.uiState.collect { state ->
-                    val newValue = state.isClockedIn
+                    // Use hasClockedInToday, not isClockedIn. The latter
+                    // flips to false the moment a user taps Clock Out, but
+                    // the one-time-Clock-In rule means trips/CP visits
+                    // should stay unlocked until the day ends. After the
+                    // midnight finalize the next morning's load resets
+                    // both flags via loadTodayAttendance().
+                    val newValue = state.hasClockedInToday
                     if (newValue != isClockedIn) {
                         isClockedIn = newValue
                         renderList()
@@ -301,6 +314,29 @@ class CpVisitsFragment : Fragment() {
         val typedContact = this.lead?.contactName?.takeIf { it.isNotBlank() }
         val placeLabel = this.clientPlace?.name?.takeIf { it.isNotBlank() }
         val displayName = canonicalClient ?: typedContact ?: placeLabel ?: "CP visit"
+        // Carry the CP outcome onto the mapped TodayVisit so the card
+        // renderer can detect a "completed but no decision yet" state
+        // for SV-via-CP visits (telecaller-fixed SV path).
+        //
+        // Defensive: when the row already carries a convertedSiteVisitId
+        // or convertedBookingId, the conversion happened — even if the
+        // outcome string field is somehow blank (legacy data, partial
+        // patch, or a future mutation that forgets the explicit outcome
+        // write). Derive a synthetic outcome from those linkages so the
+        // Pending UI doesn't lure the user into a re-convert that would
+        // either no-op (idempotent path) or worse, double-action.
+        val effectiveOutcome = this.outcome?.takeIf { it.isNotBlank() }
+            ?: this.convertedSiteVisitId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_site_visit" }
+            ?: this.convertedBookingId?.takeIf { it.isNotBlank() }
+                ?.let { "converted_to_booking" }
+        val cpState = CpVisitState(
+            clientMet = this.clientMet,
+            clientMetAt = this.clientMetAt,
+            clientNoShowReason = this.clientNoShowReason,
+            outcome = effectiveOutcome,
+            postponeReasons = this.postponeReasons,
+        )
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
@@ -317,6 +353,7 @@ class CpVisitsFragment : Fragment() {
             leadName = canonicalClient ?: typedContact,
             leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
             scheduledStartTime = this.scheduledTime,
+            cpVisit = cpState,
         )
     }
 
@@ -463,6 +500,23 @@ class CpVisitsFragment : Fragment() {
         val inProgress = isInProgress(status)
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
+        // "Outcome pending" — the trip is over (status=completed) but the
+        // CP visit's outcome is still blank, so the backend has no record
+        // of what happened on this visit. This covers two distinct miss
+        // paths:
+        //   1. SV-via-CP: field staff dismissed the Reject/Confirm sheet
+        //      without choosing (telecaller's pre-fixed SV stuck pending).
+        //   2. Regular CP: field staff swiped Trip Complete but the
+        //      outcome sheet was killed by the OS, app crash, or the user
+        //      backing out before picking Booking/SV/Postpone/NotInterested.
+        // In either case the card would otherwise route to the read-only
+        // Completed Detail screen and the decision would be stuck forever.
+        // Tapping the Pending action reopens CompleteCpVisitBottomSheet —
+        // SV-via-CP visits land in the locked SV tab automatically via
+        // the sheet's own detectAndApplyLockedSvMode signal, regular CP
+        // visits open in the default Booking-tab flow.
+        val isOutcomePending = completed &&
+            visit.cpVisit?.outcome.isNullOrBlank()
 
         // Three click outcomes: open the trip flow, open the completed-visit
         // detail (read-only summary), or no-op (cancelled cards stay inert).
@@ -482,6 +536,25 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
                 tapMode = TapMode.NONE
+            }
+            isOutcomePending -> {
+                // CP visit's trip is complete but the outcome was never
+                // recorded (sheet dismissed, app crash, OS kill). Render an
+                // amber "Pending" status + Pending action — tap reopens
+                // the CompleteCpVisitBottomSheet so the user can still
+                // record the outcome.
+                statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
+                statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
+                statusText.text = "Pending"
+                statusText.setTextColor(Color.parseColor("#B54708"))
+
+                actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_action_ready)
+                actionLabel.text = "Pending"
+                actionLabel.setTextColor(Color.WHITE)
+                actionIcon.setImageResource(R.drawable.ic_home_trip_play)
+                actionIcon.visibility = View.VISIBLE
+                actionIcon.imageTintList = null
+                tapMode = TapMode.REOPEN_CONFIRM
             }
             completed -> {
                 statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_ready)
@@ -505,7 +578,18 @@ class CpVisitsFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor("#B54708"))
 
                 actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_action_ready)
-                actionLabel.text = "Complete Trip"
+                // Match the Trip Details screen's CTA: when this is a
+                // telecaller-fixed SV-via-CP visit (visitCategory =
+                // sv_cum_cp) the next action is to fill the SV form,
+                // not "complete" a regular CP. TripNavigationFragment
+                // already does this label flip on its own button —
+                // mirror it here so the user sees the same affordance
+                // on the list card.
+                actionLabel.text = if (visit.visitCategory == "sv_cum_cp") {
+                    "Complete SV details"
+                } else {
+                    "Complete Trip"
+                }
                 actionLabel.setTextColor(Color.WHITE)
                 actionIcon.setImageResource(R.drawable.ic_home_trip_play)
                 actionIcon.visibility = View.VISIBLE
@@ -518,7 +602,15 @@ class CpVisitsFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor("#B54708"))
 
                 actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_action_progress)
-                actionLabel.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                // Same SV-via-CP rename as the needsCpDetails branch —
+                // covers the case where the card lands on a generic
+                // "arrived" state without the outcome-blank gate firing.
+                val arrivedLabel = if (visit.visitCategory == "sv_cum_cp") {
+                    "Complete SV details"
+                } else {
+                    "Complete Trip"
+                }
+                actionLabel.text = if (status == "arrived") arrivedLabel else "Enroute"
                 actionLabel.setTextColor(Color.parseColor("#B54708"))
                 actionIcon.visibility = View.GONE
             }
@@ -591,6 +683,13 @@ class CpVisitsFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openClockIn)
             }
+            TapMode.REOPEN_CONFIRM -> {
+                val reopen: (View) -> Unit = { reopenConfirmSheet(visit) }
+                itemView.isClickable = true
+                itemView.setOnClickListener(reopen)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(reopen)
+            }
             TapMode.NONE -> {
                 itemView.isClickable = false
                 itemView.setOnClickListener(null)
@@ -600,7 +699,30 @@ class CpVisitsFragment : Fragment() {
         }
     }
 
-    private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, NONE }
+    private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, REOPEN_CONFIRM, NONE }
+
+    /**
+     * Reopens [CompleteCpVisitBottomSheet] for a CP visit whose trip is
+     * complete but no SV outcome was chosen yet. The sheet's own
+     * `detectAndApplyLockedSvMode` then resolves the SV-via-CP signals
+     * and shows the Reject / Confirm footer — same UX the user got
+     * immediately after the trip-complete swipe.
+     */
+    private fun reopenConfirmSheet(visit: TodayVisit) {
+        val cpId = visit.clientPlaceVisitId ?: visit.id
+        // Pre-pass the SV-fixed hint only when the row is actually a
+        // telecaller-fixed SV-via-CP visit. For regular CP visits the
+        // sheet should open in its default multi-tab Booking flow, not
+        // locked to the SV tab. detectAndApplyLockedSvMode still runs
+        // server-side either way as a backstop.
+        val isSvFixed = visit.visitCategory == "sv_cum_cp"
+        CompleteCpVisitBottomSheet.newInstance(
+            cpVisitId = cpId,
+            cpClientMet = null,
+            cpOutcome = null,
+            isSvFixedHint = isSvFixed,
+        ).show(parentFragmentManager, "CompleteCpVisitBottomSheet")
+    }
 
     /**
      * Routes the "Need to Clock In" card tap to the clock-in attendance

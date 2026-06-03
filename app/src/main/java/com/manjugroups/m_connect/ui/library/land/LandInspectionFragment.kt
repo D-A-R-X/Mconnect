@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.library.land
 
-import android.app.DatePickerDialog
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -21,10 +20,12 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InspectionAcceptRequest
 import com.manjugroups.m_connect.network.InspectionListItem
 import com.manjugroups.m_connect.network.InspectionRescheduleRequest
+import androidx.fragment.app.setFragmentResultListener
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -49,6 +50,36 @@ class LandInspectionFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
     private val api by lazy { ApiService.create() }
+
+    companion object {
+        // Fragment-result keys for the two calendar bottom-sheet flows
+        // (date filter + reschedule). Per-fragment scoped so the two
+        // listeners can't collide.
+        private const val RESULT_KEY_FILTER = "land_inspection_filter_calendar"
+        private const val RESULT_KEY_RESCHEDULE = "land_inspection_reschedule_calendar"
+
+        // Local persistence of "user has already rescheduled this
+        // property". Mobile-only — the web flow doesn't track this; once
+        // the inspector has used their one-shot reschedule on a given
+        // property, the Reschedule button stays hidden from then on.
+        private const val PREFS_NAME = "inspection_rescheduled"
+        private const val PREFS_KEY_IDS = "property_ids"
+    }
+
+    private fun rescheduledPrefs(): android.content.SharedPreferences =
+        requireContext().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+
+    private fun isAlreadyRescheduled(propertyId: String): Boolean =
+        rescheduledPrefs().getStringSet(PREFS_KEY_IDS, emptySet())?.contains(propertyId) == true
+
+    private fun markRescheduled(propertyId: String) {
+        val prefs = rescheduledPrefs()
+        val current = prefs.getStringSet(PREFS_KEY_IDS, emptySet()) ?: emptySet()
+        if (propertyId in current) return
+        // Build a fresh set — Android's StringSet pref returns the same
+        // instance on next read if you mutate-in-place + commit.
+        prefs.edit().putStringSet(PREFS_KEY_IDS, current + propertyId).apply()
+    }
 
     private enum class Status(val label: String, val key: String) {
         IN_PROGRESS("In Progress", "in_progress"),
@@ -227,32 +258,37 @@ class LandInspectionFragment : Fragment() {
      * fall back to [today, today + 3].
      */
     private fun openRescheduleDatePicker(propertyId: String, scheduledIso: String?) {
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val anchor = Calendar.getInstance()
         scheduledIso?.let { iso ->
-            runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }
-                .getOrNull()?.let { anchor.time = it }
+            runCatching { ymd.parse(iso) }.getOrNull()?.let { anchor.time = it }
         }
-        // Normalise to start-of-day so day-level min/max comparisons are exact.
-        anchor.set(Calendar.HOUR_OF_DAY, 0)
-        anchor.set(Calendar.MINUTE, 0)
-        anchor.set(Calendar.SECOND, 0)
-        anchor.set(Calendar.MILLISECOND, 0)
+        // Picker shows exactly 3 selectable dates AFTER the scheduled
+        // date: scheduled+1, scheduled+2, scheduled+3. The scheduled
+        // day itself (and everything beyond the third) renders greyed
+        // out — so the inspector can't pick today/the original date
+        // and can't push further than a 3-day window. Initial selection
+        // lands on scheduled+1 so the first tap-able day is highlighted.
+        val firstAllowed = (anchor.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
+        val lastAllowed = (anchor.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 3) }
+        val minIso = ymd.format(firstAllowed.time)
+        val maxIso = ymd.format(lastAllowed.time)
 
-        val maxCal = (anchor.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 3) }
-
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                val date = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
-                requestReschedule(propertyId, date)
-            },
-            anchor.get(Calendar.YEAR),
-            anchor.get(Calendar.MONTH),
-            anchor.get(Calendar.DAY_OF_MONTH),
-        ).apply {
-            datePicker.minDate = anchor.timeInMillis
-            datePicker.maxDate = maxCal.timeInMillis
-        }.show()
+        // Listen for the next reschedule submission. Re-registering on
+        // every open is fine — the listener overrides any previous one.
+        setFragmentResultListener(RESULT_KEY_RESCHEDULE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            requestReschedule(propertyId, date)
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Reschedule Inspection",
+            subtitle = "Pick one of the next 3 days",
+            initialFrom = minIso,
+            initialTo = minIso,
+            minDate = minIso,
+            maxDate = maxIso,
+            resultKey = RESULT_KEY_RESCHEDULE,
+        ).show(parentFragmentManager, "reschedule_calendar")
     }
 
     private fun requestReschedule(propertyId: String, date: String) {
@@ -264,6 +300,10 @@ class LandInspectionFragment : Fragment() {
                     InspectionRescheduleRequest(propertyId = propertyId, requestedDate = date),
                 )
                 if (resp.success) {
+                    // Mobile-only one-shot: hide the Reschedule button on
+                    // every subsequent render for this property. Survives
+                    // re-list, fragment recreate, app restart (SharedPrefs).
+                    markRescheduled(propertyId)
                     android.widget.Toast.makeText(
                         requireContext(),
                         "Date change requested for ${formatInspectionDate(date)}",
@@ -280,30 +320,30 @@ class LandInspectionFragment : Fragment() {
     }
 
     /**
-     * Open a system DatePickerDialog defaulting to either the currently
-     * filtered date or today. The picked date narrows the visible list
+     * Open the in-house calendar bottom sheet to narrow the visible list
      * to properties whose `inspectionDate` matches exactly (yyyy-MM-dd
-     * comparison — the server stores it as a date string).
+     * comparison — the server stores it as a date string). Replaces the
+     * stock DatePickerDialog so the look matches the rest of the app's
+     * date pickers (sheet with header + month nav + blue circle).
      */
     private fun openDatePicker() {
-        val cal = Calendar.getInstance()
-        dateFilter?.let { iso ->
-            try {
-                val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
-                if (parsed != null) cal.time = parsed
-            } catch (_: Exception) { /* default to today */ }
+        val initial = dateFilter ?: run {
+            val cal = Calendar.getInstance()
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
         }
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                dateFilter = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
-                updateDateFilterChip()
-                renderList()
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        setFragmentResultListener(RESULT_KEY_FILTER) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            dateFilter = date
+            updateDateFilterChip()
+            renderList()
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Date Filter",
+            subtitle = "Select Date Filter",
+            initialFrom = initial,
+            initialTo = initial,
+            resultKey = RESULT_KEY_FILTER,
+        ).show(parentFragmentManager, "filter_calendar")
     }
 
     private fun updateDateFilterChip() {
@@ -410,13 +450,18 @@ class LandInspectionFragment : Fragment() {
     private fun setupInspectionScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
         val maxPanelRadiusPx = 24f * density
+
         // Header stays a flat-bottomed solid blue rectangle.
         val headerBg = binding.inspectionHeader.applyShrinkableBlueHeaderBackground()
         headerBg.setBottomCornerRadius(0f)
 
-        // Mutable panel background so the TOP corners can sharpen as it
-        // slides up over the header.
-        val panelBg = android.graphics.drawable.GradientDrawable().apply {
+        // Grey card — rounded TOP corners + grey bg applied to
+        // `inspectionWhitePanel`, which lives INSIDE the NestedScrollView.
+        // It IS the scrolling content, so it moves up at exactly 1× rate
+        // (no parallax, no shrinking, no separate translation). The
+        // ancestors set clipChildren=false in XML so the rounded top
+        // edge can draw OUTSIDE the panel and over the blue header.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             setColor(android.graphics.Color.parseColor("#F1F3F8"))
             cornerRadii = floatArrayOf(
@@ -425,41 +470,7 @@ class LandInspectionFragment : Fragment() {
                 0f, 0f, 0f, 0f,
             )
         }
-        binding.inspectionRefresh.background = panelBg
-
-        // Need the header height to know how far the panel must slide
-        // before the blue is fully covered. wrap_content → measure post.
-        binding.inspectionHeader.post {
-            val b = _binding ?: return@post
-            val overlayDistancePx = b.inspectionHeader.height.toFloat()
-            // NOTE: we used to override the panel's height + bottomMargin
-            // here to keep its bottom edge glued to the screen during the
-            // translate-up. That grew the inner NestedScrollView taller
-            // than the visible viewport, so any list whose content fit
-            // inside the inflated panel never scrolled. The root
-            // background already matches the panel colour (#F1F3F8), so
-            // letting the panel sit at its weighted height has no visible
-            // downside — and restores normal scrolling on short lists.
-            b.inspectionScroll.setOnScrollChangeListener(
-                androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
-                    val view = _binding ?: return@OnScrollChangeListener
-                    // translationY clamps to -overlayDistancePx so once
-                    // the header is fully covered, further scroll just
-                    // scrolls the panel content normally (no more lift).
-                    val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
-                    view.inspectionRefresh.translationY = translateY
-
-                    val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
-                    val r = (1f - progress) * maxPanelRadiusPx
-                    panelBg.cornerRadii = floatArrayOf(
-                        r, r,   // top-left
-                        r, r,   // top-right
-                        0f, 0f, // bottom-right
-                        0f, 0f, // bottom-left
-                    )
-                }
-            )
-        }
+        binding.inspectionWhitePanel.background = whiteCardBg
     }
 
     private fun setFilter(status: Status?) {
@@ -516,22 +527,44 @@ class LandInspectionFragment : Fragment() {
             val rescheduleBtn = card.findViewById<View>(R.id.btnInspectionReschedule)
             val arrowBtn = card.findViewById<View>(R.id.btnInspectionArrow)
 
+            // Mobile-only one-shot reschedule. Once the inspector has
+            // requested a date change on this property, the Reschedule
+            // button stays hidden on every subsequent render — only
+            // Accept remains. The web side doesn't track this; the
+            // SharedPrefs flag set in requestReschedule does.
+            val rescheduledOnce = isAlreadyRescheduled(item.propertyId)
+            // A reschedule request is in flight whenever the server has
+            // it marked date_change_requested. While that's true the
+            // card should show ONE locked button — never both an active
+            // Reschedule AND a passive Re-scheduled side-by-side.
+            val rescheduleInFlight = item.acceptanceStatus == "date_change_requested"
+            // Drop Accept's left margin whenever it sits alone on the
+            // row (either because Reschedule was hidden by the one-shot
+            // flag OR because a reschedule is currently awaiting
+            // approval). Otherwise the lone button looks offset by the
+            // 10dp gap that used to separate it from Reschedule.
+            val acceptAlone = rescheduledOnce || rescheduleInFlight
+            (acceptBtn.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+                lp.marginStart = if (acceptAlone) 0
+                    else (10 * resources.displayMetrics.density).toInt()
+                acceptBtn.layoutParams = lp
+            }
+
             when {
-                item.acceptanceStatus == "date_change_requested" -> {
-                    // A reschedule has been requested → show a locked
-                    // "Re-scheduled" pill until a VP approves/rejects on web.
-                    // Not clickable; on the next refresh (approval flips the
-                    // status back to pending) this reverts to Accept. The
-                    // reschedule icon stays so the inspector can amend the
-                    // requested date.
+                rescheduleInFlight -> {
+                    // Reschedule pending VP approval → show a single
+                    // full-width locked "Reschedule Requested" pill.
+                    // The standalone Reschedule button is hidden
+                    // entirely (no one-shot escape hatch, no parallel
+                    // entry point) so the UI never reads as "you can
+                    // still re-request" while one's already in flight.
                     arrowBtn.visibility = View.GONE
-                    rescheduleBtn.visibility = View.VISIBLE
+                    rescheduleBtn.visibility = View.GONE
                     acceptBtn.visibility = View.VISIBLE
-                    acceptLabel.text = "Re-scheduled"
-                    acceptBtn.alpha = 0.6f
+                    acceptLabel.text = "Reschedule Requested"
+                    acceptBtn.alpha = 0.7f
                     acceptBtn.isClickable = false
                     acceptBtn.setOnClickListener(null)
-                    rescheduleBtn.setOnClickListener { openRescheduleDatePicker(item.propertyId, item.rawInspectionDate) }
                     card.setOnClickListener {
                         android.widget.Toast.makeText(
                             requireContext(),
@@ -556,10 +589,11 @@ class LandInspectionFragment : Fragment() {
                     arrowBtn.setOnClickListener(openForm)
                 }
                 else -> {
-                    // Pending acceptance → gate the form behind Accept; offer a
-                    // Reschedule date-change request instead.
+                    // Pending acceptance → Accept always available. Show
+                    // Reschedule only if the inspector hasn't used their
+                    // one-shot on this property yet.
                     acceptBtn.visibility = View.VISIBLE
-                    rescheduleBtn.visibility = View.VISIBLE
+                    rescheduleBtn.visibility = if (rescheduledOnce) View.GONE else View.VISIBLE
                     arrowBtn.visibility = View.GONE
                     acceptLabel.text = "Accept"
                     acceptBtn.alpha = 1f

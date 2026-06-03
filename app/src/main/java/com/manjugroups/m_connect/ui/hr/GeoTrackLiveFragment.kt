@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.DatePickerDialog
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -12,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -400,27 +400,31 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun showDatePicker() {
-        val calendar = Calendar.getInstance().apply { timeInMillis = selectedDayStartMillis }
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, dayOfMonth ->
-                val picked = Calendar.getInstance().apply {
-                    set(Calendar.YEAR, year)
-                    set(Calendar.MONTH, month)
-                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                selectedDayStartMillis = picked.timeInMillis
-                renderDateControls()
-                loadSelectedStaffRoute()
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
+        val ymd = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val current = ymd.format(java.util.Date(selectedDayStartMillis))
+        val today = ymd.format(java.util.Date())
+        setFragmentResultListener(RESULT_KEY_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            val parsed = runCatching { ymd.parse(date) }.getOrNull() ?: return@setFragmentResultListener
+            val picked = Calendar.getInstance().apply {
+                time = parsed
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            selectedDayStartMillis = picked.timeInMillis
+            renderDateControls()
+            loadSelectedStaffRoute()
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Pick a Date",
+            subtitle = "Select a day to replay",
+            initialFrom = current,
+            initialTo = current,
+            maxDate = today,
+            resultKey = RESULT_KEY_DATE,
+        ).show(parentFragmentManager, "geotrack_date_calendar")
     }
 
     private fun formattedSelectedDate(): String {
@@ -496,6 +500,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val DAY_MS = 24 * 60 * 60 * 1000L
+        private const val RESULT_KEY_DATE = "geotrack_live_date_calendar"
 
         private fun startOfDay(timeMillis: Long): Long {
             return Calendar.getInstance().apply {

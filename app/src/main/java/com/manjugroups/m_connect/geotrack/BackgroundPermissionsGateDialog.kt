@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
+import java.util.Locale
 
 /**
  * Non-dismissible gate that blocks the app until the two background
@@ -82,6 +83,9 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         view.findViewById<View>(R.id.btnFixBatteryOpt).setOnClickListener {
             openBatteryOptimizationSettings()
         }
+        view.findViewById<View>(R.id.btnFixAutostart).setOnClickListener {
+            openOemAutostartSettings()
+        }
         // Manual Continue button — re-runs the gate check on demand. On
         // some OEM skins (Samsung One UI, Xiaomi MIUI, etc.) the
         // PowerManager.isIgnoringBatteryOptimizations flag updates
@@ -130,9 +134,12 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     }
 
     private fun missingReasonMessage(ctx: android.content.Context): String {
+        val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         return when {
+            !fgOk ->
+                "Open the location toggle and select \"Allow all the time\" for Mconnect."
             !bgOk && !batOk ->
                 "Enable background location (Allow all the time) and unrestricted battery use to continue."
             !bgOk ->
@@ -145,26 +152,59 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
 
     private fun refreshStatus(root: View) {
         val ctx = requireContext()
+        val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
+        val needsAutostart = isAutostartManaged()
 
         val locBtn = root.findViewById<TextView>(R.id.btnFixBgLocation)
         val batBtn = root.findViewById<TextView>(R.id.btnFixBatteryOpt)
+        val autoRow = root.findViewById<View>(R.id.rowAutostart)
+        val autoBtn = root.findViewById<TextView>(R.id.btnFixAutostart)
+        val autoHint = root.findViewById<TextView>(R.id.tvAutostartHint)
         val status = root.findViewById<TextView>(R.id.tvGateStatus)
 
-        locBtn.text = if (bgOk) "Enabled" else "Open"
-        locBtn.alpha = if (bgOk) 0.5f else 1f
-        locBtn.isEnabled = !bgOk
+        // Foreground location is the prerequisite for "Allow all the
+        // time" being available at all — when the user denied at the
+        // initial OS prompt, no amount of Settings poking surfaces the
+        // background-location toggle. Surface the issue here.
+        if (!fgOk) {
+            locBtn.text = "Open"
+            locBtn.alpha = 1f
+            locBtn.isEnabled = true
+        } else {
+            locBtn.text = if (bgOk) "Enabled" else "Open"
+            locBtn.alpha = if (bgOk) 0.5f else 1f
+            locBtn.isEnabled = !bgOk
+        }
 
         batBtn.text = if (batOk) "Enabled" else "Open"
         batBtn.alpha = if (batOk) 0.5f else 1f
         batBtn.isEnabled = !batOk
 
+        // OEM autostart row — only show on Xiaomi / Vivo / Oppo /
+        // Realme / Honor where the OS kills background services
+        // regardless of the standard "ignore battery optimisation"
+        // grant. We can't programmatically check whether autostart is
+        // ON for our package (no public API), so the row stays as a
+        // permanent "Open Autostart settings" CTA the user can tap.
+        if (needsAutostart) {
+            autoRow.visibility = View.VISIBLE
+            autoHint.text = autostartHintForOem()
+            autoBtn.text = "Open"
+            autoBtn.alpha = 1f
+            autoBtn.isEnabled = true
+        } else {
+            autoRow.visibility = View.GONE
+        }
+
         status.text = when {
-            bgOk && batOk -> "All set — closing…"
-            bgOk -> "Battery optimisation still needs to be off."
-            batOk -> "Background location still needs Allow all the time."
-            else -> "Both must be enabled before you can continue."
+            !fgOk -> "Tap Open and select \"Allow all the time\" under Location for Mconnect."
+            !bgOk && !batOk -> "Background location + battery optimisation both need attention."
+            !bgOk -> "Background location still needs \"Allow all the time\"."
+            !batOk -> "Battery optimisation still needs to be off."
+            needsAutostart -> "On your phone brand, also enable Autostart — tap Open above."
+            else -> "All set — closing…"
         }
     }
 
@@ -195,6 +235,96 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             }
     }
 
+    /**
+     * Best-effort launch of the OEM-specific autostart-permission
+     * screen. Tries the known component name for each manufacturer's
+     * Security / Permissions app; falls through to the app details
+     * page if every direct target fails. Public hint dialog explains
+     * what to look for so the user doesn't get lost.
+     */
+    private fun openOemAutostartSettings() {
+        val ctx = requireContext()
+        val brand = Build.MANUFACTURER.lowercase(Locale.US)
+        val candidates = when {
+            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") -> listOf(
+                "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                "com.miui.securitycenter" to "com.miui.appmanager.ApplicationsDetailsActivity",
+            )
+            brand.contains("vivo") -> listOf(
+                "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
+                "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+            )
+            brand.contains("oppo") || brand.contains("realme") -> listOf(
+                "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+                "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
+                "com.coloros.safecenter" to "com.coloros.safecenter.startupapp.StartupAppListActivity",
+            )
+            brand.contains("huawei") || brand.contains("honor") -> listOf(
+                "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+                "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
+            )
+            brand.contains("samsung") -> listOf(
+                "com.samsung.android.lool" to "com.samsung.android.sm.ui.battery.BatteryActivity",
+            )
+            brand.contains("oneplus") -> listOf(
+                "com.oneplus.security" to "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity",
+            )
+            else -> emptyList()
+        }
+        for ((pkg, cls) in candidates) {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(pkg, cls)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try {
+                ctx.startActivity(intent)
+                return
+            } catch (_: Exception) {
+                // Try the next candidate.
+            }
+        }
+        // Final fallback: app details page. Better than a dead button.
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", ctx.packageName, null)
+                },
+            )
+        }
+    }
+
+    private fun isAutostartManaged(): Boolean {
+        val brand = Build.MANUFACTURER.lowercase(Locale.US)
+        return brand.contains("xiaomi") ||
+            brand.contains("redmi") ||
+            brand.contains("poco") ||
+            brand.contains("vivo") ||
+            brand.contains("oppo") ||
+            brand.contains("realme") ||
+            brand.contains("huawei") ||
+            brand.contains("honor") ||
+            brand.contains("oneplus")
+    }
+
+    private fun autostartHintForOem(): String {
+        val brand = Build.MANUFACTURER.lowercase(Locale.US)
+        return when {
+            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") ->
+                "MIUI Security → Autostart → enable Mconnect."
+            brand.contains("vivo") ->
+                "iManager → Whitelisted apps → add Mconnect."
+            brand.contains("oppo") || brand.contains("realme") ->
+                "Phone Manager → Privacy permissions → Startup manager → enable Mconnect."
+            brand.contains("huawei") || brand.contains("honor") ->
+                "Phone Manager → App launch → set Mconnect to Manage manually with all three switches ON."
+            brand.contains("oneplus") ->
+                "Settings → Battery → Battery optimization → choose Don't optimize for Mconnect."
+            brand.contains("samsung") ->
+                "Settings → Apps → Mconnect → Battery → set to Unrestricted."
+            else -> "Enable Autostart so tracking survives a phone restart."
+        }
+    }
+
     companion object {
         private const val TAG = "BackgroundPermissionsGateDialog"
 
@@ -205,6 +335,22 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             ) == PackageManager.PERMISSION_GRANTED
         }
 
+        /**
+         * Foreground (fine OR coarse) location. If the user denied this
+         * at the initial OS prompt, the Settings page won't even show
+         * an "Allow all the time" option, so it's the first thing the
+         * gate has to surface.
+         */
+        fun hasForegroundLocation(ctx: android.content.Context): Boolean {
+            val fine = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+            return fine || coarse
+        }
+
         fun hasBatteryOptIgnored(ctx: android.content.Context): Boolean {
             val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE)
                 as android.os.PowerManager
@@ -212,7 +358,9 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         }
 
         fun allGranted(ctx: android.content.Context): Boolean =
-            hasBackgroundLocation(ctx) && hasBatteryOptIgnored(ctx)
+            hasForegroundLocation(ctx) &&
+                hasBackgroundLocation(ctx) &&
+                hasBatteryOptIgnored(ctx)
 
         /**
          * Show the gate if anything is missing, no-op otherwise. Safe to

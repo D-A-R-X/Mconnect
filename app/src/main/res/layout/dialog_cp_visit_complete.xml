@@ -36,13 +36,27 @@
         android:orientation="vertical"
         android:paddingBottom="20dp">
 
-        <View
-            android:layout_width="40dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="10dp"
-            android:background="#E4E7EC" />
+        <!--
+          Drag-handle row. The grey bar is the standard bottom-sheet
+          handle; making the row itself clickable gives the user a
+          large enough tap target to dismiss the sheet from the top
+          (drag-to-dismiss stays disabled because nested form scrolls
+          used to accidentally trigger it).
+        -->
+        <FrameLayout
+            android:id="@+id/outcomeDragHandleRow"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center"
+                android:background="#E4E7EC" />
+        </FrameLayout>
 
         <!-- Header row -->
         <LinearLayout
@@ -79,11 +93,24 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
+            <!--
+              "Edit" pill — visible only on the Client form sub-tab
+              once a lead has been auto-filled from a phone lookup.
+              Two visual states:
+                - Inactive (default after prefill): white fill,
+                  green outline. Form fields are read-only so the
+                  user doesn't accidentally edit canonical lead
+                  data.
+                - Active (after tap): filled green, white text.
+                  Form fields become editable; any changes get
+                  pushed back to the lead record on form submit.
+              Visibility + state are managed in the fragment.
+            -->
             <TextView
                 android:id="@+id/btnOutcomeEdit"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
-                android:background="@drawable/bg_outcome_edit_chip"
+                android:background="@drawable/bg_outcome_edit_chip_inactive"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
@@ -92,7 +119,8 @@
                 android:paddingHorizontal="14dp"
                 android:text="Edit"
                 android:textColor="#2DAE12"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <!-- Top tab bar (4 outcomes) with vertical dividers + active underline -->

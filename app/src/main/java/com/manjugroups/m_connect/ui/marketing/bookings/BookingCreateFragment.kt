@@ -1,7 +1,6 @@
 package com.manjugroups.m_connect.ui.marketing.bookings
 
 import android.app.AlertDialog
-import android.app.DatePickerDialog
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -13,8 +12,10 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -290,16 +291,18 @@ class BookingCreateFragment : Fragment() {
     }
 
     private fun pickDate(label: TextView) {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(
-            requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                bookingDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-                label.text = bookingDate
-            },
-            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        setFragmentResultListener(RESULT_KEY_DATE) { _, bundle ->
+            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
+            bookingDate = date
+            label.text = date
+        }
+        CalendarRangePickerSheet.newInstance(
+            title = "Booking Date",
+            subtitle = "Select Date",
+            initialFrom = bookingDate,
+            initialTo = bookingDate,
+            resultKey = RESULT_KEY_DATE,
+        ).show(parentFragmentManager, "booking_create_calendar")
     }
 
     private fun submitBooking(root: View) {
@@ -374,6 +377,7 @@ class BookingCreateFragment : Fragment() {
         private const val ARG_PROJECT_NAME = "projectName"
         private const val ARG_UNIT_ID = "unitId"
         private const val ARG_UNIT_NUMBER = "unitNumber"
+        private const val RESULT_KEY_DATE = "booking_create_date_calendar"
 
         fun newEmpty(): BookingCreateFragment = BookingCreateFragment()
 

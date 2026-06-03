@@ -8,6 +8,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.graphics.Color
+import android.widget.ImageView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import coil.load
+import coil.transform.CircleCropTransformation
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -17,6 +22,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -204,8 +210,184 @@ class AttendanceHistoryFragment : Fragment() {
                     .show(parentFragmentManager, "attendance_punch_log")
             }
 
+            // Withdraw button — only on pending submissions (mirror of
+            // the leaves trash-icon UX). HR-finalised rows
+            // (approved/rejected/auto-approved) keep the button hidden
+            // because the server-side mutation rejects them anyway.
+            val deleteBtn = card.findViewById<ImageView>(R.id.btnHistoryItemDelete)
+            val isPending = record.status?.equals("pending", ignoreCase = true) == true
+            if (isPending) {
+                deleteBtn.visibility = View.VISIBLE
+                deleteBtn.setOnClickListener {
+                    confirmAndCancelAttendance(record)
+                }
+            } else {
+                deleteBtn.visibility = View.GONE
+                deleteBtn.setOnClickListener(null)
+            }
+
+            // Decision footer — surfaces "Approved/Rejected at <date>
+            // By <approver>" on terminal rows. Mirrors the leaves
+            // history card's footer so the two surfaces feel like one
+            // feature. auto-approved rows skip the footer because
+            // there's no human approver to credit.
+            bindDecisionFooter(card, record)
+
             binding.attendanceList.addView(card)
         }
+    }
+
+    private fun bindDecisionFooter(card: View, record: AttendanceRecord) {
+        val row = card.findViewById<View>(R.id.historyItemDecisionRow)
+        val status = record.status?.lowercase(Locale.US).orEmpty()
+        val isApproved = status == "approved"
+        val isRejected = status == "rejected"
+        if (!isApproved && !isRejected) {
+            row.visibility = View.GONE
+            return
+        }
+        row.visibility = View.VISIBLE
+
+        val icon = card.findViewById<ImageView>(R.id.ivHistoryItemDecisionIcon)
+        val text = card.findViewById<TextView>(R.id.tvHistoryItemDecisionText)
+        val verb: String
+        if (isApproved) {
+            icon.setImageResource(R.drawable.ic_leave_status_approved)
+            text.setTextColor(android.graphics.Color.parseColor("#169B2F"))
+            verb = "Approved"
+        } else {
+            icon.setImageResource(R.drawable.ic_leave_status_rejected)
+            text.setTextColor(android.graphics.Color.parseColor("#B42318"))
+            verb = "Rejected"
+        }
+        val decidedDate = parseIsoOrEpoch(record.decidedAt)
+        val decidedLabel = decidedDate?.let {
+            SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(it)
+        }
+        text.text = if (decidedLabel != null) "$verb at $decidedLabel" else verb
+
+        val approverName = record.approverName?.trim().orEmpty().ifBlank { "HR" }
+        val nameView = card.findViewById<TextView>(R.id.tvHistoryItemApproverName)
+        val initialView = card.findViewById<TextView>(R.id.tvHistoryItemApproverInitial)
+        val photoView = card.findViewById<ImageView>(R.id.ivHistoryItemApproverPhoto)
+        nameView.text = approverName
+        initialView.text = approverName.firstOrNull { it.isLetterOrDigit() }
+            ?.uppercaseChar()?.toString() ?: "?"
+
+        val photoUrl = record.approverPhotoUrl?.takeIf { it.isNotBlank() }
+        if (photoUrl != null) {
+            photoView.visibility = View.VISIBLE
+            initialView.visibility = View.INVISIBLE
+            photoView.load(photoUrl) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            photoView.visibility = View.GONE
+            photoView.setImageDrawable(null)
+            initialView.visibility = View.VISIBLE
+        }
+    }
+
+    /**
+     * ISO date or numeric-epoch string → Date. Mirrors the helper in
+     * LeavesFragment so both surfaces parse decidedAt identically.
+     */
+    private fun parseIsoOrEpoch(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        raw.toDoubleOrNull()?.let { epoch ->
+            val millis = when {
+                epoch > 1_000_000_000_000 -> epoch.toLong()
+                epoch > 1_000_000_000 -> (epoch * 1000).toLong()
+                else -> epoch.toLong()
+            }
+            return runCatching { Date(millis) }.getOrNull()
+        }
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (pattern in patterns) {
+            runCatching {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                fmt.parse(raw)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Two-step confirm → cancel flow. Mirrors the leaves cancel UX in
+     * LeavesFragment so the user gets the same affordance on both
+     * surfaces. On success we reload — the row disappears (delete) or
+     * flips status per backend semantics.
+     */
+    private fun confirmAndCancelAttendance(record: AttendanceRecord) {
+        val date = record.date ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle("Withdraw attendance?")
+            .setMessage(
+                "This will remove your submitted attendance for $date. " +
+                    "You can punch in again after.",
+            )
+            .setPositiveButton("Withdraw") { _, _ -> cancelAttendance(date) }
+            .setNegativeButton("Keep", null)
+            .show()
+    }
+
+    private fun cancelAttendance(date: String) {
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.cancelMyAttendance(token, AttendanceCancelRequest(date))
+                if (resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Attendance withdrawn",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadData()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Failed to withdraw attendance",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                val serverMessage = extractHttpErrorMessage(e)
+                Toast.makeText(
+                    requireContext(),
+                    serverMessage ?: e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Pull the {error: "..."} field out of a Retrofit HttpException's
+     * response body so the toast shows the actual server message
+     * ("Cannot delete approved attendance…") instead of "HTTP 500".
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun formatIsoTime(iso: String): String {

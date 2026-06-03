@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Blue rounded-square chip behind the layer icon on the Submit
+  Leave confirmation modal. 76dp square with 16dp corners and a
+  vertical gradient that matches the in-app blue palette.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="16dp" />
+    <gradient
+        android:angle="270"
+        android:startColor="#0B61CA"
+        android:endColor="#02499D"
+        android:type="linear" />
+</shape>

@@ -34,6 +34,10 @@ class PermissionsFragment : Fragment() {
 
     private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
     private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
+    // Top-level scope inside History mode: My own permissions vs the
+    // user's reporting-team's pending approvals. Team is only
+    // available when canApprove() is true. Default = MY.
+    private enum class Scope { MY, TEAM }
 
     private var _binding: FragmentPermissionsBinding? = null
     private val binding get() = _binding!!
@@ -42,6 +46,7 @@ class PermissionsFragment : Fragment() {
     private var screenMode: String = MODE_HISTORY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
@@ -97,13 +102,21 @@ class PermissionsFragment : Fragment() {
             binding.tvSectionTitle.text = "Permission Approvals"
             binding.tvSectionSubtitle.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
+            binding.scopeRow.visibility = View.GONE
         } else {
             binding.tvHeaderTitle.text = "Permission Summary"
             binding.tvHeaderSubtitle.text = "Submit Permission"
             binding.tvSectionTitle.text = "Recent Requests"
             binding.tvSectionSubtitle.visibility = View.VISIBLE
             binding.filterRow.visibility = View.VISIBLE
+            // My/Team scope switch is only meaningful to staff who
+            // can approve. Plain employees stay on the (default) My
+            // scope with no extra control on screen.
+            val canApprove = session.hasPermission("permissions.approve")
+            binding.scopeRow.visibility = if (canApprove) View.VISIBLE else View.GONE
+            setupScopeTabs()
             setupFilterTabs()
+            updateScopeUi()
             updateFilterUi()
         }
 
@@ -134,6 +147,30 @@ class PermissionsFragment : Fragment() {
         }
     }
 
+    private fun setupScopeTabs() {
+        binding.tabScopeMy.setOnClickListener {
+            scope = Scope.MY
+            updateScopeUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabScopeTeam.setOnClickListener {
+            scope = Scope.TEAM
+            updateScopeUi()
+            renderState(viewModel.uiState.value)
+        }
+    }
+
+    private fun updateScopeUi() {
+        styleFilterTab(binding.tabScopeMy, scope == Scope.MY)
+        styleFilterTab(binding.tabScopeTeam, scope == Scope.TEAM)
+        // Status filter chips are only meaningful for My (which has
+        // a full history of approved/rejected rows). Team scope shows
+        // the pending-approvals pile straight through — server only
+        // returns pending rows there, so Approved / Rejected chips
+        // would always read empty.
+        binding.filterRow.visibility = if (scope == Scope.MY) View.VISIBLE else View.GONE
+    }
+
     private fun updateFilterUi() {
         styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
         styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
@@ -160,10 +197,18 @@ class PermissionsFragment : Fragment() {
 
     private fun renderState(state: PermissionsState) {
         val canApprove = session.hasPermission("permissions.approve")
+        // Approval-mode entry from notifications still renders the
+        // pendingApprovals pile with Approve/Reject buttons.
+        // History-mode now routes by the user's Scope toggle:
+        //   • Scope.MY   → user's own permissions, status-filtered
+        //   • Scope.TEAM → team pending approvals (Approve/Reject UI),
+        //                   skipping the status filter since the
+        //                   server only returns pending rows there.
         val displayPermissions = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
-        } else {
-            filterHistoryPermissions(state.myPermissions)
+        } else when (scope) {
+            Scope.MY -> filterHistoryPermissions(state.myPermissions)
+            Scope.TEAM -> state.pendingApprovals
         }
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
@@ -187,7 +232,12 @@ class PermissionsFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayPermissions.isEmpty())
-        renderPermissions(displayPermissions, canApprove && screenMode == MODE_APPROVAL)
+        // Approval mode (notification deep-link) AND History-mode Team
+        // scope both show Approve/Reject; Team scope is only entered
+        // when the user has the permission, so this is safe.
+        val showApprovalActions = (screenMode == MODE_APPROVAL && canApprove)
+            || (screenMode == MODE_HISTORY && scope == Scope.TEAM && canApprove)
+        renderPermissions(displayPermissions, showApprovalActions)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
@@ -229,6 +279,11 @@ class PermissionsFragment : Fragment() {
         if (screenMode == MODE_APPROVAL) {
             binding.tvEmpty.text = "No Permission Approvals"
             binding.tvEmptyHint.text = "There are no pending permission requests in review right now."
+            return
+        }
+        if (scope == Scope.TEAM) {
+            binding.tvEmpty.text = "No Team Permissions"
+            binding.tvEmptyHint.text = "No pending permission requests from your team."
             return
         }
         when (historyFilter) {
@@ -356,6 +411,38 @@ class PermissionsFragment : Fragment() {
                 }
             } else {
                 actionRow.visibility = View.GONE
+            }
+
+            // Per-row cancel affordance — visible ONLY on the user's
+            // own pending requests on the My scope of History mode.
+            // Approver-mode rows already get Approve/Reject; cancelled
+            // rows live in REJECTED/APPROVED buckets and shouldn't
+            // re-surface a trash icon there.
+            val cancelIcon = card.findViewById<ImageView>(R.id.ivPermCancel)
+            val canCancel = !approvalMode
+                && screenMode == MODE_HISTORY
+                && scope == Scope.MY
+                && bucket == StatusBucket.REVIEW
+                && perm.id != null
+            cancelIcon.visibility = if (canCancel) View.VISIBLE else View.GONE
+            if (canCancel) {
+                cancelIcon.setOnClickListener {
+                    val id = perm.id ?: return@setOnClickListener
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Cancel permission request?")
+                        .setMessage("This will withdraw your pending request.")
+                        .setPositiveButton("Cancel Request") { _, _ ->
+                            viewModel.cancelPermission(
+                                session.bearerToken,
+                                id,
+                                session.hasPermission("permissions.approve"),
+                            )
+                        }
+                        .setNegativeButton("Keep", null)
+                        .show()
+                }
+            } else {
+                cancelIcon.setOnClickListener(null)
             }
 
             if (perm.id == focusedEntityId) {

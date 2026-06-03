@@ -7,8 +7,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.IamUpdateBus
 import com.manjugroups.m_connect.databinding.FragmentAppLibraryBinding
+import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -22,6 +27,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
 import com.manjugroups.m_connect.ui.marketing.inventory.InventoryProjectsListFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment
@@ -35,6 +41,10 @@ class AppLibraryFragment : Fragment() {
     private val binding get() = _binding!!
 
     private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, SETTINGS }
+    // Tracked so the IAM-bus listener can re-apply whichever filter
+    // the user is currently looking at when tiles re-bind; otherwise
+    // an IAM update would silently snap the filter back to ALL.
+    private var currentFilter: Filter = Filter.ALL
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,9 +59,30 @@ class AppLibraryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         movePillStripIntoScroll()
         setupClickActions()
+        pruneEmptySections()
         setupFilterPills()
         setupScrollAnimation()
         applyFilter(Filter.ALL)
+
+        // Live-update tiles whenever the IAM bus emits. The bus is
+        // driven by MainActivity.onResume (every foreground) AND by
+        // this fragment's own onResume below (every time the user
+        // opens the Apps tab), so a permission change on the web is
+        // reflected within seconds — no app restart needed.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                IamUpdateBus.updates.collect {
+                    // SessionManager already has the new set by the
+                    // time we get here (the bus writes it before
+                    // emitting), so just re-bind tiles + prune empty
+                    // sections + re-apply the current filter so
+                    // visibility is recomputed.
+                    setupClickActions()
+                    pruneEmptySections()
+                    applyFilter(currentFilter)
+                }
+            }
+        }
 
         // App Library has no remote data of its own — the pull just
         // re-plays the entry animation so the user sees the screen
@@ -63,6 +94,7 @@ class AppLibraryFragment : Fragment() {
 
         binding.sectionsContainer.post { playLibraryEntryAnimation() }
     }
+
 
     private fun playLibraryEntryAnimation() {
         if (_binding == null) return
@@ -247,78 +279,109 @@ class AppLibraryFragment : Fragment() {
     private fun setupScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
         val maxBottomRadiusPx = 24f * density
+        val maxPanelRadiusPx = 24f * density
+
+        // Blue header — rounded BOTTOM corners.
         val headerBg = binding.libraryHeaderFrame
             .applyShrinkableBlueHeaderBackground()
         headerBg.setBottomCornerRadius(maxBottomRadiusPx)
 
-        // Need the panel container (parent of the scroll view) to translate.
-        val panel = binding.libraryRefresh
-        // Without a solid background the SwipeRefreshLayout is transparent;
-        // translating it up would leave the blue header visible through any
-        // gap between section cards. Painting it with the page bg makes the
-        // whole panel act as the "cover" that hides the header on scroll.
-        panel.setBackgroundColor(android.graphics.Color.parseColor("#F1F3F8"))
-
-        binding.libraryHeaderFrame.post {
-            val overlayDistancePx = binding.libraryHeaderFrame.height.toFloat()
-            // Grow the panel to the FULL content-area height (= the
-            // column's height) so that when it's translated up by
-            // overlayDistancePx its bottom edge still reaches the screen
-            // bottom — no grey strip / "empty window" left behind the
-            // last card.
-            //
-            // We read the height from the PARENT column (deterministic V)
-            // rather than `panel.height + overlay` — the latter
-            // double-counted and over-grew the panel, which shrank the
-            // scroll viewport so far the header could never be fully
-            // covered on shorter pages. bottomMargin = -overlay keeps the
-            // column arithmetic balanced (header H + panel V - H = V).
-            val parentHeight = (panel.parent as? View)?.height ?: 0
-            (panel.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
-                // weight MUST be cleared — otherwise the LinearLayout
-                // recomputes the height from the weight and ignores the
-                // explicit value below, leaving the panel at V-H (the
-                // short window that produced the grey gap).
-                if (parentHeight > 0) {
-                    weight = 0f
-                    height = parentHeight
-                }
-                bottomMargin = -overlayDistancePx.toInt()
-                panel.layoutParams = this
-            }
-            binding.scrollLibrary.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                val translateY = -scrollY.toFloat().coerceAtMost(overlayDistancePx)
-                panel.translationY = translateY
-                val progress = (-translateY / overlayDistancePx).coerceIn(0f, 1f)
-                headerBg.setBottomCornerRadius((1f - progress) * maxBottomRadiusPx)
-            }
+        // White card — rounded TOP corners + white bg applied to
+        // `libraryWhitePanel`, which lives INSIDE the NestedScrollView.
+        // The white card IS the scrolling content, so it moves up at
+        // exactly 1× rate (no parallax, no shrinking, no separate
+        // translation). The ancestors all set clipChildren=false in
+        // XML so the rounded top edge can draw OUTSIDE the panel into
+        // the blue header's area — that's how the white visually
+        // "overlays" the blue as it scrolls up.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(android.graphics.Color.WHITE)
+            cornerRadii = floatArrayOf(
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-left
+                maxPanelRadiusPx, maxPanelRadiusPx, // top-right
+                0f, 0f,                              // bottom-right
+                0f, 0f,                              // bottom-left
+            )
         }
+        binding.libraryWhitePanel.background = whiteCardBg
     }
 
     private fun setupClickActions() {
-        binding.itemHrAttendance.setOnClickListener { openScreen(AttendanceHistoryFragment()) }
-        binding.itemHrLeave.setOnClickListener { openScreen(LeavesFragment()) }
-        binding.itemHrPermissions.setOnClickListener { openScreen(PermissionsFragment()) }
-        binding.itemHrLoans.setOnClickListener {
-            openScreen(com.manjugroups.m_connect.ui.library.loans.LoansFragment())
-        }
-
-        binding.itemMarketingCpVisits.setOnClickListener { openScreen(CpVisitsFragment()) }
-        binding.itemMarketingSiteVisits.setOnClickListener { openScreen(SiteVisitsFragment()) }
-        binding.itemMarketingDialer.setOnClickListener { openScreen(DialerFragment()) }
-        binding.itemMarketingMyLeads.setOnClickListener {
-            openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL))
-        }
-
+        // Pull effective IAM permissions once per setup pass. Every
+        // App Library tile then gates its click + visibility on the
+        // matching permission key — mirrors the web's per-designation
+        // IAM model so a staff who can't see a feature on web can't
+        // see its mobile tile either. Mobile uses GONE rather than
+        // disabled-grey because the App Library is a discoverable
+        // catalog; if a permission lapses, the tile vanishes rather
+        // than tempting the user to tap it. bindIamEntry handles both
+        // visibility and click wiring atomically.
         val session = SessionManager(requireContext())
+        val hasAny = { keys: List<String> -> keys.any { session.hasPermission(it) } }
+
+        // ── HR ────────────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemHrAttendance,
+            allowed = hasAny(listOf("attendance.view", "attendance.viewAll")),
+        ) { openScreen(AttendanceHistoryFragment()) }
+        bindIamEntry(
+            row = binding.itemHrLeave,
+            allowed = hasAny(listOf("leaves.view", "leaves.viewAll", "leaves.approve")),
+        ) { openScreen(LeavesFragment()) }
+        bindIamEntry(
+            row = binding.itemHrPermissions,
+            allowed = hasAny(listOf("permissions.view", "permissions.viewAll", "permissions.approve")),
+        ) { openScreen(PermissionsFragment()) }
+        bindIamEntry(
+            row = binding.itemHrLoans,
+            allowed = hasAny(listOf("loans.view", "loans.manage", "loans.approve")),
+        ) { openScreen(com.manjugroups.m_connect.ui.library.loans.LoansFragment()) }
+
+        // ── Marketing ─────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemMarketingCpVisits,
+            allowed = session.hasPermission("marketing.cpVisits.view"),
+        ) { openScreen(CpVisitsFragment()) }
+        bindIamEntry(
+            row = binding.itemMarketingSiteVisits,
+            allowed = session.hasPermission("marketing.siteVisits.view"),
+        ) { openScreen(SiteVisitsFragment()) }
+        // Dialer is gated as Coming Soon — IAM checks still decide
+        // whether the row appears (so unauthorised users don't see it),
+        // but the row itself is non-tappable until the feature ships.
+        // Layout swaps the chevron for a "Coming soon" pill; we mirror
+        // that here by clearing the click handler + isClickable.
+        bindIamEntry(
+            row = binding.itemMarketingDialer,
+            allowed = hasAny(listOf("telecaller.dashboard", "telecaller.calls")),
+        ) { /* no-op — Dialer is coming soon */ }
+        binding.itemMarketingDialer.isClickable = false
+        binding.itemMarketingDialer.isFocusable = false
+        binding.itemMarketingDialer.setOnClickListener(null)
+        binding.itemMarketingDialer.background = null
+        bindIamEntry(
+            row = binding.itemMarketingMyLeads,
+            allowed = hasAny(listOf(
+                "telecaller.externalLeads.viewOwn",
+                "telecaller.externalLeads.viewAll",
+            )),
+        ) { openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL)) }
         bindIamEntry(
             row = binding.itemMarketingInventory,
             allowed = session.hasPermission("projects.view"),
         ) { openScreen(InventoryProjectsListFragment()) }
+        // Booking tile now opens the list screen (the "+" inside the list
+        // routes to the create form). Permission to merely view the list is
+        // marketing.bookings.view; the create button inside the list is
+        // gated separately on marketing.bookings.create. Showing the tile
+        // if the user has EITHER permission preserves access for creators
+        // even when their org hasn't granted the view scope.
         bindIamEntry(
             row = binding.itemMarketingNewBooking,
-            allowed = session.hasPermission("marketing.bookings.create"),
-        ) { openScreen(BookingCreateFragment.newEmpty()) }
+            allowed = session.hasPermission("marketing.bookings.view") ||
+                session.hasPermission("marketing.bookings.create"),
+        ) { openScreen(BookingsFragment.newInstance()) }
 
         // Managers only — surfaced when the backend grants attendance.approve.
         // Show the matching divider so the row joins the HR card cleanly when
@@ -331,21 +394,41 @@ class AppLibraryFragment : Fragment() {
             allowed = canApproveAttendance,
         ) { openScreen(AttendanceReviewFragment.newInstance()) }
 
-        binding.itemProjectTasks.setOnClickListener { openScreen(TasksFragment()) }
-        binding.itemProjectExpenses.setOnClickListener {
-            openScreen(ProjectExpensesFragment())
-        }
+        // ── Project ───────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemProjectTasks,
+            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+        ) { openScreen(TasksFragment()) }
+        bindIamEntry(
+            row = binding.itemProjectExpenses,
+            allowed = hasAny(listOf(
+                "projects.expenses.view",
+                "projects.expenses.create",
+                "projects.expenses.approve",
+            )),
+        ) { openScreen(ProjectExpensesFragment()) }
+
+        // Settings → Profile. Every authenticated staff edits their own
+        // profile; no IAM gate.
         binding.itemSettings.setOnClickListener { openScreen(ProfileFragment()) }
 
-        // Land Procurement — Inspection list. Opens LandInspectionFragment,
-        // which currently renders 5 placeholder rows from the design
-        // pending a real backend endpoint.
-        binding.itemLandInspection.setOnClickListener {
-            openScreen(com.manjugroups.m_connect.ui.library.land.LandInspectionFragment())
-        }
-        binding.itemLandQueries.setOnClickListener {
-            openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment())
-        }
+        // ── Land Procurement ──────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemLandInspection,
+            allowed = hasAny(listOf(
+                "land.inspect",
+                "land.inspection.view",
+                "land.inspection.edit",
+                "land.view",
+            )),
+        ) { openScreen(com.manjugroups.m_connect.ui.library.land.LandInspectionFragment()) }
+        bindIamEntry(
+            row = binding.itemLandQueries,
+            // No dedicated `land.queries.*` permission key — gate on the
+            // section's view permission. Queries are a sub-feature of
+            // the inspection workflow.
+            allowed = hasAny(listOf("land.view", "land.inspect", "land.inspection.view")),
+        ) { openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment()) }
     }
 
     private fun setupFilterPills() {
@@ -358,11 +441,27 @@ class AppLibraryFragment : Fragment() {
     }
 
     private fun applyFilter(filter: Filter) {
-        binding.cardHr.visibility = if (filter == Filter.ALL || filter == Filter.HR) View.VISIBLE else View.GONE
-        binding.cardMarketing.visibility = if (filter == Filter.ALL || filter == Filter.MARKETING) View.VISIBLE else View.GONE
-        binding.cardProject.visibility = if (filter == Filter.ALL || filter == Filter.PROJECT) View.VISIBLE else View.GONE
-        binding.cardLand.visibility = if (filter == Filter.ALL || filter == Filter.LAND) View.VISIBLE else View.GONE
-        binding.cardConfig.visibility = if (filter == Filter.ALL || filter == Filter.SETTINGS) View.VISIBLE else View.GONE
+        currentFilter = filter
+        // Section visibility is the AND of two predicates:
+        //   1. the filter chip picks this section (or ALL is selected)
+        //   2. the section has at least one tile the user can see
+        // (2) is determined by walking the tile IDs in sectionTileMap;
+        // applying it here means selecting a category never resurrects
+        // a card that IAM has pruned to empty.
+        fun show(card: View, allowedByFilter: Boolean, sectionFilter: Filter): Int {
+            if (!allowedByFilter) return View.GONE
+            val tileIds = sectionTileMap.firstOrNull { it.first == sectionFilter }?.third
+                ?: return View.VISIBLE
+            val anyVisible = tileIds.any { id ->
+                binding.root.findViewById<View>(id)?.visibility == View.VISIBLE
+            }
+            return if (anyVisible) View.VISIBLE else View.GONE
+        }
+        binding.cardHr.visibility = show(binding.cardHr, filter == Filter.ALL || filter == Filter.HR, Filter.HR)
+        binding.cardMarketing.visibility = show(binding.cardMarketing, filter == Filter.ALL || filter == Filter.MARKETING, Filter.MARKETING)
+        binding.cardProject.visibility = show(binding.cardProject, filter == Filter.ALL || filter == Filter.PROJECT, Filter.PROJECT)
+        binding.cardLand.visibility = show(binding.cardLand, filter == Filter.ALL || filter == Filter.LAND, Filter.LAND)
+        binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
         styleTab(binding.pillHrIcon, binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
@@ -373,9 +472,12 @@ class AppLibraryFragment : Fragment() {
     }
 
     /**
-     * Flips a pill between active and inactive look:
-     * - Active: solid blue circle + white icon + blue label + visible underline
-     * - Inactive: light grey circle + grey icon + grey label + hidden underline
+     * Flips a pill between active and inactive look — matches the
+     * reference design exactly:
+     * - Active   = solid blue circle behind a white icon + blue label
+     *              + small blue underline dash below.
+     * - Inactive = bare grey icon (no circle, no border) + grey label
+     *              + indicator hidden.
      */
     private fun styleTab(icon: android.widget.ImageView, label: TextView, indicator: View, active: Boolean) {
         if (active) {
@@ -386,12 +488,14 @@ class AppLibraryFragment : Fragment() {
             label.setTextColor(Color.parseColor("#0B61CA"))
             indicator.visibility = View.VISIBLE
         } else {
-            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_inactive)
+            // No circle background for inactive tabs — just the icon
+            // on the panel surface, the way the reference shows it.
+            icon.background = null
             icon.imageTintList = android.content.res.ColorStateList.valueOf(
                 Color.parseColor("#6A6D78")
             )
             label.setTextColor(Color.parseColor("#6A6D78"))
-            indicator.visibility = View.INVISIBLE
+            indicator.visibility = View.GONE
         }
     }
 
@@ -403,6 +507,142 @@ class AppLibraryFragment : Fragment() {
             row.visibility = View.GONE
             row.setOnClickListener(null)
         }
+    }
+
+    // Map of section card → tile IDs inside it. When every tile in a
+    // section is hidden by IAM (all GONE after setupClickActions), the
+    // whole section card disappears too — otherwise the user would see
+    // an empty card with just the section header. The matching filter
+    // pill also hides so the user can't tap a category that has nothing
+    // to show. Re-run on every setupClickActions / IAM bus update.
+    private val sectionTileMap: List<Triple<Filter, View, List<Int>>> by lazy {
+        listOf(
+            Triple(
+                Filter.HR, binding.cardHr,
+                listOf(
+                    R.id.itemHrAttendance,
+                    R.id.itemHrLeave,
+                    R.id.itemHrPermissions,
+                    R.id.itemHrLoans,
+                    R.id.itemHrAttendanceReview,
+                ),
+            ),
+            Triple(
+                Filter.MARKETING, binding.cardMarketing,
+                listOf(
+                    R.id.itemMarketingCpVisits,
+                    R.id.itemMarketingSiteVisits,
+                    R.id.itemMarketingMyLeads,
+                    R.id.itemMarketingDialer,
+                    R.id.itemMarketingInventory,
+                    R.id.itemMarketingNewBooking,
+                ),
+            ),
+            Triple(
+                Filter.PROJECT, binding.cardProject,
+                listOf(R.id.itemProjectTasks, R.id.itemProjectExpenses),
+            ),
+            Triple(
+                Filter.LAND, binding.cardLand,
+                listOf(R.id.itemLandInspection, R.id.itemLandQueries),
+            ),
+            // Settings card: itemSettings is never IAM-gated (every
+            // staff can edit their own profile), so this section is
+            // effectively always non-empty. Listed for completeness.
+            Triple(
+                Filter.SETTINGS, binding.cardConfig,
+                listOf(R.id.itemSettings),
+            ),
+        )
+    }
+
+    private fun pruneEmptySections() {
+        if (_binding == null) return
+        for ((filter, card, tileIds) in sectionTileMap) {
+            val anyVisible = tileIds.any { id ->
+                binding.root.findViewById<View>(id)?.visibility == View.VISIBLE
+            }
+            card.visibility = if (anyVisible) View.VISIBLE else View.GONE
+            // Hide the matching filter pill too so a user can't tap a
+            // category that has nothing to show. Mapping pill → filter
+            // is the inverse of styleTab's mapping; we just hide the
+            // pill's parent (each pill is wrapped in its own clickable
+            // LinearLayout).
+            val pillRoot = pillRootFor(filter)
+            pillRoot?.visibility = if (anyVisible) View.VISIBLE else View.GONE
+
+            // When IAM hides some tiles inside a visible card, the static
+            // `<View>` dividers between rows can be left dangling (no row
+            // above or no row below), or doubled-up when an interior row
+            // collapses — e.g. with Loans hidden, the divider above Loans
+            // AND `dividerHrAttendanceReview` end up between Permissions
+            // and Approvals. Re-run a sweep that keeps exactly one
+            // divider between each pair of visible rows.
+            if (anyVisible) {
+                val firstVisibleTile = tileIds
+                    .mapNotNull { binding.root.findViewById<View>(it) }
+                    .firstOrNull { it.visibility == View.VISIBLE }
+                    ?: tileIds.firstNotNullOfOrNull { binding.root.findViewById<View>(it) }
+                (firstVisibleTile?.parent as? ViewGroup)?.let { pruneDanglingDividers(it) }
+            }
+        }
+    }
+
+    /**
+     * Walks a tile container in order and enforces: at most one divider
+     * sits between any two visible rows, and no divider hangs at the top
+     * or bottom of the run. Identifies rows as `LinearLayout` children
+     * (the tile rows are LinearLayouts; the dividers are plain `View`s).
+     */
+    private fun pruneDanglingDividers(container: ViewGroup) {
+        var lastShownDivider: View? = null
+        // pendingGap = a visible row has been seen; the next divider is
+        // eligible. dividerInGap = a divider has already been placed in
+        // the current gap, so any further divider before the next visible
+        // row should be hidden.
+        var pendingGap = false
+        var dividerInGap = false
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            if (child is android.widget.LinearLayout) {
+                // It's a tile row. A visible row opens a new gap; a GONE
+                // row collapses to 0 height and doesn't change state.
+                if (child.visibility == View.VISIBLE) {
+                    pendingGap = true
+                    dividerInGap = false
+                }
+            } else {
+                // Plain View → treat as a divider.
+                if (pendingGap && !dividerInGap) {
+                    child.visibility = View.VISIBLE
+                    lastShownDivider = child
+                    dividerInGap = true
+                } else {
+                    child.visibility = View.GONE
+                }
+            }
+        }
+        // If a divider was placed but no visible row followed it before
+        // we hit the end (trailing divider), hide it too.
+        if (dividerInGap) lastShownDivider?.visibility = View.GONE
+    }
+
+    /**
+     * Resolve the clickable wrapper for a given filter's pill. The
+     * pills sit in a horizontal strip; each one has a known root view
+     * (e.g. `pillHr` for the HR section's pill). Returns null for
+     * Filter.ALL (which is never hidden — it remains a way back to the
+     * unfiltered view if some sections are visible, or it's the only
+     * pill visible when everything else is gone, but tapping it just
+     * shows whatever cards remain).
+     */
+    private fun pillRootFor(filter: Filter): View? = when (filter) {
+        Filter.ALL -> null
+        Filter.HR -> binding.pillHr
+        Filter.MARKETING -> binding.pillMarketing
+        Filter.PROJECT -> binding.pillProject
+        Filter.LAND -> binding.pillLand
+        Filter.SETTINGS -> binding.pillSettings
     }
 
     private fun openScreen(fragment: Fragment) {
@@ -427,6 +667,19 @@ class AppLibraryFragment : Fragment() {
         }
         if (_binding != null) {
             binding.sectionsContainer.post { playLibraryEntryAnimation() }
+        }
+        // Pull the freshest permissions whenever the user opens the
+        // Apps tab — covers the case where MainActivity's foreground
+        // resume already fired (and was throttled) but the user has
+        // been mid-session and now wants to see something newly
+        // granted. The bus's own throttle prevents back-to-back
+        // fetches; the SharedFlow subscriber set up in onViewCreated
+        // re-binds tiles automatically when the fetch returns a
+        // changed permission set.
+        if (_binding == null) return
+        val session = SessionManager(requireContext())
+        viewLifecycleOwner.lifecycleScope.launch {
+            IamUpdateBus.refresh(session)
         }
     }
 
