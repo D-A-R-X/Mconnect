@@ -19,7 +19,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.auth.ForcePasswordChangeActivity
 import com.manjugroups.m_connect.auth.LoginActivity
 import com.manjugroups.m_connect.auth.OnboardingPrefs
@@ -107,6 +109,38 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ForcePasswordChangeActivity::class.java))
             finish()
             return
+        }
+
+        // Listen for any API call returning 401 — when that happens
+        // the saved session token is no longer valid (expired, revoked,
+        // or minted against a different Convex deployment than the
+        // current build is pointing at). Clear local state + bounce to
+        // login so the user can re-authenticate. Without this, a 401
+        // would silently fail every screen and leave the app in a
+        // "everything's empty / errored" stuck state.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                com.manjugroups.m_connect.auth.SessionInvalidationBus
+                    .signals.collect {
+                        if (!session.isLoggedIn) return@collect
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            "Session expired. Please sign in again.",
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                        session.clearSession()
+                        startActivity(
+                            Intent(
+                                this@MainActivity,
+                                LoginActivity::class.java,
+                            ).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            },
+                        )
+                        finish()
+                    }
+            }
         }
 
         TrackingCheckWorker.enqueue(this)
