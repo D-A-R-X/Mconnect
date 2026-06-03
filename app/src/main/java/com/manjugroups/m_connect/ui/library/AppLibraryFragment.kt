@@ -347,12 +347,19 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemMarketingSiteVisits,
             allowed = session.hasPermission("marketing.siteVisits.view"),
         ) { openScreen(SiteVisitsFragment()) }
+        // Dialer is gated as Coming Soon — IAM checks still decide
+        // whether the row appears (so unauthorised users don't see it),
+        // but the row itself is non-tappable until the feature ships.
+        // Layout swaps the chevron for a "Coming soon" pill; we mirror
+        // that here by clearing the click handler + isClickable.
         bindIamEntry(
             row = binding.itemMarketingDialer,
-            // Dialer screen also acts as the telecaller dashboard; either
-            // permission grants entry.
             allowed = hasAny(listOf("telecaller.dashboard", "telecaller.calls")),
-        ) { openScreen(DialerFragment()) }
+        ) { /* no-op — Dialer is coming soon */ }
+        binding.itemMarketingDialer.isClickable = false
+        binding.itemMarketingDialer.isFocusable = false
+        binding.itemMarketingDialer.setOnClickListener(null)
+        binding.itemMarketingDialer.background = null
         bindIamEntry(
             row = binding.itemMarketingMyLeads,
             allowed = hasAny(listOf(
