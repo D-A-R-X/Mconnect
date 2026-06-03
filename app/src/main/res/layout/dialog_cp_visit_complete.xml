@@ -36,13 +36,27 @@
         android:orientation="vertical"
         android:paddingBottom="20dp">
 
-        <View
-            android:layout_width="40dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="10dp"
-            android:background="#E4E7EC" />
+        <!--
+          Drag-handle row. The grey bar is the standard bottom-sheet
+          handle; making the row itself clickable gives the user a
+          large enough tap target to dismiss the sheet from the top
+          (drag-to-dismiss stays disabled because nested form scrolls
+          used to accidentally trigger it).
+        -->
+        <FrameLayout
+            android:id="@+id/outcomeDragHandleRow"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center"
+                android:background="#E4E7EC" />
+        </FrameLayout>
 
         <!-- Header row -->
         <LinearLayout

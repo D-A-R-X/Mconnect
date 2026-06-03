@@ -365,6 +365,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bindNotInterestedFields(view)
 
         // Edit button removed — id no longer exists in the layout.
+
+        // Drag-handle row at the top of the sheet — tap to dismiss.
+        // Drag-down dismiss is intentionally disabled (nested form
+        // scrolls used to trigger it accidentally), so the handle
+        // doubles as the close affordance.
+        view.findViewById<View>(R.id.outcomeDragHandleRow)?.setOnClickListener {
+            dismissAllowingStateLoss()
+        }
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
         cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
@@ -1042,8 +1050,66 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             persistBooking()
             return
         }
+        // Required-field gate — block forward navigation until the
+        // current tab's must-have field is filled. Keeps the user
+        // from landing on Staff with a half-filled booking that the
+        // final Save would reject anyway. Tabs with no hard
+        // requirement (Charges / Payment money fields are optional
+        // — finance team finalises later) fall through cleanly.
+        val gateError = currentSubTabRequiredFieldMissing()
+        if (gateError != null) {
+            showError(gateError)
+            return
+        }
         bookingSub = nextSubTab(bookingSub)
         renderState()
+    }
+
+    /**
+     * Returns the user-facing error message for whichever required
+     * field on the active sub-tab is still blank, or null when the
+     * tab is OK to advance from. Matches the asterisk-marked fields
+     * in the design — Client Name on CLIENT, Profession on
+     * PROFESSIONAL, Office Name on OFFICE, Booking Date + Project on
+     * BOOKING. CHARGES / PAYMENT / STAFF have no hard prerequisites
+     * here (Staff has its own check on the final Save).
+     */
+    private fun currentSubTabRequiredFieldMissing(): String? {
+        fun isBlankPlaceholder(value: String?, vararg placeholders: String): Boolean {
+            val v = value?.trim().orEmpty()
+            if (v.isEmpty()) return true
+            return placeholders.any { v.equals(it, ignoreCase = true) }
+        }
+        return when (bookingSub) {
+            BookingSub.CLIENT -> {
+                // Only validated on the CLIENT_FORM step — the FIND_MOBILE
+                // step has its own phone-length check earlier in onCtaTap.
+                if (bookingStep != BookingStep.CLIENT_FORM) null
+                else if (etFormName?.text?.toString()?.trim().isNullOrEmpty())
+                    "Client Name is required before continuing"
+                else null
+            }
+            BookingSub.PROFESSIONAL -> {
+                if (isBlankPlaceholder(tvProfProfession?.text?.toString(), "Select Profession"))
+                    "Profession is required before continuing"
+                else null
+            }
+            BookingSub.OFFICE -> {
+                if (etOfficeName?.text?.toString()?.trim().isNullOrEmpty())
+                    "Office Name is required before continuing"
+                else null
+            }
+            BookingSub.BOOKING -> {
+                when {
+                    isBlankPlaceholder(tvBookDate?.text?.toString(), "dd/mm/yyyy") ->
+                        "Booking Date is required before continuing"
+                    isBlankPlaceholder(tvBookProject?.text?.toString(), "Select Project") ->
+                        "Project is required before continuing"
+                    else -> null
+                }
+            }
+            BookingSub.CHARGES, BookingSub.PAYMENT, BookingSub.STAFF -> null
+        }
     }
 
     /**
