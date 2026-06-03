@@ -79,20 +79,6 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/btnOutcomeEdit"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_outcome_edit_chip"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:paddingHorizontal="14dp"
-                android:text="Edit"
-                android:textColor="#2DAE12"
-                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- Top tab bar (4 outcomes) with vertical dividers + active underline -->

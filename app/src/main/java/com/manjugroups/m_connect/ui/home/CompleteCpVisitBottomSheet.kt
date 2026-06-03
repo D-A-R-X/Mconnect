@@ -297,7 +297,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var svProjectCache: List<MarketingProject> = emptyList()
     private var svStaffCache: List<StaffData> = emptyList()
 
-    private var btnEdit: TextView? = null
+    // Edit button removed from the layout — the field staff fills the
+    // outcome form in one pass and rarely needs to jump back to the
+    // mobile-find step. The Booking sub-tab row still lets them flip
+    // through CLIENT → PROFESSIONAL → etc., so back-navigation isn't
+    // strictly required.
     private var btnSubmit: TextView? = null
     private var tvError: TextView? = null
 
@@ -360,7 +364,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bindPostponeFields(view)
         bindNotInterestedFields(view)
 
-        btnEdit = view.findViewById(R.id.btnOutcomeEdit)
+        // Edit button removed — id no longer exists in the layout.
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
         cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
@@ -745,14 +749,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             staffSaveAs = SaveAs.CONFIRMED; refreshStaffSaveRadios()
         }
 
-        // Top-level chrome
-        btnEdit?.setOnClickListener {
-            // Take the user back to the mobile-find step from any sub-tab.
-            activeOutcome = Outcome.BOOKING
-            bookingSub = BookingSub.CLIENT
-            bookingStep = BookingStep.FIND_MOBILE
-            renderState()
-        }
+        // Top-level chrome — Edit button was removed from the layout.
         btnSubmit?.setOnClickListener { onCtaTap() }
 
         // ---- Site Visit interactions ----
@@ -947,7 +944,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // so the user can always jump back and re-enter the client mobile.
         val onFindMobile = bookingActive && bookingSub == BookingSub.CLIENT &&
             bookingStep == BookingStep.FIND_MOBILE
-        btnEdit?.visibility = if (bookingActive && !onFindMobile) View.VISIBLE else View.GONE
 
         // CTA label
         btnSubmit?.text = when {
