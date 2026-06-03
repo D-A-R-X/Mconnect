@@ -1256,14 +1256,39 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
                 if (!resp.success) {
                     android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    // Surface server-side rejection (FORBIDDEN, scope
+                    // restrictions, etc.) so the user knows the prefill
+                    // didn't happen — instead of silently leaving the
+                    // form blank and making them wonder.
+                    val msg = resp.error ?: "Lead lookup failed"
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    }
                     return@launch
                 }
                 resp.leads.firstOrNull() ?: run {
                     android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                    if (isAdded) {
+                        Toast.makeText(
+                            requireContext(),
+                            "No existing lead for $phone — fill the form",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                     return@launch
                 }
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                // Surface network / HTTP failures so the user can retry
+                // by re-entering the phone instead of staring at a
+                // blank form. Prefer the parsed server message when
+                // available (Convex 500 includes the thrown error in
+                // the JSON body).
+                val serverMsg = extractHttpErrorMessage(e)
+                val msg = serverMsg ?: e.message ?: "Lead lookup network error"
+                if (isAdded) {
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                }
                 return@launch
             }
             if (!isAdded) return@launch
