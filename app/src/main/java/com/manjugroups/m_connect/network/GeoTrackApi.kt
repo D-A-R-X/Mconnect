@@ -195,6 +195,38 @@ interface GeoTrackApi {
         @Body body: ConvertSiteVisitToBookingRequest,
     ): ConvertSiteVisitToBookingResponse
 
+    // ── SV lifecycle transitions ────────────────────────────────────
+    // Drive a siteVisits row through the same web state machine the
+    // SV Overview stepper visualises. Each takes the SV's _id and
+    // patches the row to the next state. assertTransition on the
+    // server-side mutation enforces the legal source state — calling
+    // markArrivedSite from scheduled (skipping picked_up) will 500
+    // with a transition error, so the mobile flow stays linear.
+
+    @POST("api/marketing/siteVisits/markPickedUp")
+    suspend fun markSiteVisitPickedUp(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markClientStarted")
+    suspend fun markSiteVisitClientStarted(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markArrivedSite")
+    suspend fun markSiteVisitArrivedSite(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markDropped")
+    suspend fun markSiteVisitDropped(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
     // Returns the enriched CP visit (lead + client + place + fieldVisit +
     // arrivalProof) used by the Completed Visit Detail screen. Mirrors the
     // web's clientPlaceVisits.get() Convex query.
@@ -745,6 +777,9 @@ data class ConvertSiteVisitToBookingResponse(
     val siteVisitId: String? = null,
     val error: String? = null,
 )
+
+/** Single-id payload shared by every SV lifecycle transition route. */
+data class SiteVisitIdRequest(val id: String)
 
 // ── Enriched CP visit detail (mirrors web clientPlaceVisits.get) ──────────
 // Every field is optional because (a) older rows pre-date some columns and
