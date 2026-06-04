@@ -11,38 +11,109 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <FrameLayout
+        <!-- Header -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/headerContainer"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="wrap_content"
             android:background="#FFFFFF"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp">
 
             <FrameLayout
                 android:id="@+id/btnBack"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:layout_gravity="start|center_vertical"
                 android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
-                android:focusable="true">
+                android:focusable="true"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <ImageView
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_arrow_left"
-                    app:tint="#0B61CA" />
+                    app:tint="#004EEB" />
             </FrameLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Contact Info"
-                android:textColor="#101828"
-                android:textSize="17sp" />
-        </FrameLayout>
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:layout_marginHorizontal="8dp"
+                app:layout_constraintStart_toEndOf="@id/btnBack"
+                app:layout_constraintEnd_toStartOf="@id/btnPhone"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <TextView
+                    android:id="@+id/tvHeaderTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:textColor="#101828"
+                    android:textSize="17sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    tools:text="Alicia Rochefort" />
+
+                <TextView
+                    android:id="@+id/tvHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:textColor="#667085"
+                    android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    tools:text="Last seen Today 11:30AM" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/btnPhone"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                app:layout_constraintEnd_toStartOf="@id/btnSearch"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_phone_outline"
+                    app:tint="#004EEB" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/btnSearch"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_chat_search"
+                    app:tint="#004EEB" />
+            </FrameLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -70,30 +141,45 @@
                         android:background="#FFFFFF">
 
                         <FrameLayout
-                            android:id="@+id/avatarContainer"
-                            android:layout_width="100dp"
-                            android:layout_height="100dp"
-                            android:background="@drawable/bg_chat_avatar_circle">
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
 
-                            <TextView
-                                android:id="@+id/tvAvatar"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_gravity="center"
-                                android:fontFamily="@font/inter_bold"
-                                android:textColor="#0B61CA"
-                                android:textSize="28sp"
-                                tools:text="AR" />
+                            <FrameLayout
+                                android:id="@+id/avatarContainer"
+                                android:layout_width="100dp"
+                                android:layout_height="100dp"
+                                android:background="@drawable/bg_chat_avatar_circle">
+
+                                <ImageView
+                                    android:id="@+id/ivAvatarPhoto"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:scaleType="centerCrop"
+                                    android:visibility="gone" />
+
+                                <TextView
+                                    android:id="@+id/tvAvatar"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:fontFamily="@font/inter_bold"
+                                    android:textColor="#0B61CA"
+                                    android:textSize="28sp"
+                                    tools:text="AR" />
+                            </FrameLayout>
 
                             <View
                                 android:id="@+id/statusDot"
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
                                 android:layout_gravity="bottom|end"
-                                android:layout_marginEnd="6dp"
-                                android:layout_marginBottom="6dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_marginBottom="4dp"
                                 android:background="@drawable/bg_chat_status_online"
-                                android:elevation="2dp" />
+                                android:elevation="4dp"
+                                android:visibility="gone" />
                         </FrameLayout>
 
                         <TextView
@@ -104,23 +190,24 @@
                             android:fontFamily="@font/inter_bold"
                             android:textColor="#101828"
                             android:textSize="20sp"
+                            android:visibility="gone"
                             tools:text="Alicia Rochefort" />
 
                         <TextView
                             android:id="@+id/tvCompany"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="12dp"
                             android:fontFamily="@font/inter_semibold"
                             android:textColor="#0B61CA"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             tools:text="Stark Industries" />
 
                         <TextView
                             android:id="@+id/tvRole"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="4dp"
                             android:fontFamily="@font/inter_medium"
                             android:textColor="#667085"
                             android:textSize="13sp"
@@ -133,86 +220,191 @@
                             android:layout_marginHorizontal="20dp"
                             android:orientation="horizontal">
 
-                            <androidx.appcompat.widget.AppCompatButton
+                            <LinearLayout
                                 android:id="@+id/btnMessage"
                                 android:layout_width="0dp"
-                                android:layout_height="48dp"
+                                android:layout_height="72dp"
                                 android:layout_weight="1"
                                 android:layout_marginEnd="8dp"
                                 android:background="@drawable/bg_chat_primary_button"
-                                android:text="Message"
-                                android:textAllCaps="false"
-                                android:textColor="#FFFFFF"
-                                android:fontFamily="@font/inter_semibold" />
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:orientation="vertical">
 
-                            <androidx.appcompat.widget.AppCompatButton
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:src="@drawable/ic_nav_chat"
+                                    app:tint="#FFFFFF" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:text="Message"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
+
+                            <LinearLayout
                                 android:id="@+id/btnCreateGroup"
                                 android:layout_width="0dp"
-                                android:layout_height="48dp"
+                                android:layout_height="72dp"
                                 android:layout_weight="1"
                                 android:layout_marginStart="8dp"
-                                android:background="@drawable/bg_chat_create_button"
-                                android:text="Create Group"
-                                android:textAllCaps="false"
-                                android:textColor="#FFFFFF"
-                                android:fontFamily="@font/inter_semibold" />
+                                android:background="@drawable/bg_chat_primary_button"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:src="@drawable/ic_video_outline"
+                                    app:tint="#FFFFFF" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:text="Create Group"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- Contact Details Card -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_margin="16dp"
-                        android:background="@drawable/bg_chat_action_card"
+                        android:background="@drawable/bg_chat_contact_card"
                         android:orientation="vertical">
 
+                        <!-- Phone Row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:padding="16dp"
                             android:gravity="center_vertical">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_phone" app:tint="#0B61CA" />
-                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="16dp">
-                                <TextView android:id="@+id/tvPhone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_semibold" tools:text="+1 (555) 123-4567" />
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mobile" android:textColor="#667085" android:textSize="12sp" />
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_phone_outline"
+                                app:tint="#0B61CA" />
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="16dp">
+                                <TextView
+                                    android:id="@+id/tvPhone"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="#101828"
+                                    android:textSize="14sp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    tools:text="+1 (555) 123-4567" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Mobile"
+                                    android:textColor="#667085"
+                                    android:textSize="12sp" />
                             </LinearLayout>
                         </LinearLayout>
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#EAECF0" android:layout_marginStart="52dp" />
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#EAECF0"
+                            android:layout_marginStart="52dp" />
 
+                        <!-- Email Row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:padding="16dp"
                             android:gravity="center_vertical">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_auth_user" app:tint="#0B61CA" />
-                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="16dp">
-                                <TextView android:id="@+id/tvEmail" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_semibold" tools:text="alicia.rochefort@starkindustries.com" />
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Work" android:textColor="#667085" android:textSize="12sp" />
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_mail_outline"
+                                app:tint="#0B61CA" />
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="16dp">
+                                <TextView
+                                    android:id="@+id/tvEmail"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="#101828"
+                                    android:textSize="14sp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    tools:text="alicia.rochefort@starkindustries.com" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Work"
+                                    android:textColor="#667085"
+                                    android:textSize="12sp" />
                             </LinearLayout>
                         </LinearLayout>
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#EAECF0" android:layout_marginStart="52dp" />
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#EAECF0"
+                            android:layout_marginStart="52dp" />
 
+                        <!-- Address Row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:padding="16dp"
                             android:gravity="center_vertical">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_map_pin" app:tint="#0B61CA" />
-                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="16dp">
-                                <TextView android:id="@+id/tvAddress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#101828" android:textSize="14sp" android:fontFamily="@font/inter_semibold" tools:text="Ashok Nagar Main Road" />
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Location" android:textColor="#667085" android:textSize="12sp" />
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_pin_outline"
+                                app:tint="#0B61CA" />
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="16dp">
+                                <TextView
+                                    android:id="@+id/tvAddress"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="#101828"
+                                    android:textSize="14sp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    tools:text="Ashok Nagar Main Road" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Location"
+                                    android:textColor="#667085"
+                                    android:textSize="12sp" />
                             </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- About Card -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginHorizontal="16dp"
                         android:layout_marginBottom="16dp"
-                        android:background="@drawable/bg_chat_action_card"
+                        android:background="@drawable/bg_chat_about_card"
                         android:orientation="vertical"
                         android:padding="16dp">
 
@@ -221,7 +413,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_semibold"
                             android:text="About"
-                            android:textColor="#101828"
+                            android:textColor="#0B61CA"
                             android:textSize="14sp" />
 
                         <TextView
@@ -235,12 +427,13 @@
                             tools:text="Design leader with a passion for building intuitive experiences." />
                     </LinearLayout>
 
+                    <!-- Media, Links and Docs Card -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginHorizontal="16dp"
                         android:layout_marginBottom="32dp"
-                        android:background="@drawable/bg_chat_action_card"
+                        android:background="@drawable/bg_chat_contact_card"
                         android:orientation="vertical">
 
                         <LinearLayout
@@ -253,7 +446,11 @@
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingHorizontal="16dp">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_tab_chat" app:tint="#0B61CA" />
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_image_outline"
+                                app:tint="#0B61CA" />
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
@@ -263,6 +460,15 @@
                                 android:text="Media, Links, and Docs"
                                 android:textColor="#101828"
                                 android:textSize="14sp" />
+                            <TextView
+                                android:id="@+id/tvMediaCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="156"
+                                android:textColor="#98A2B3"
+                                android:textSize="14sp"
+                                android:fontFamily="@font/inter_medium"
+                                android:layout_marginEnd="8dp" />
                             <ImageView
                                 android:layout_width="16dp"
                                 android:layout_height="16dp"
@@ -270,65 +476,29 @@
                                 app:tint="#98A2B3" />
                         </LinearLayout>
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#EAECF0" android:layout_marginStart="52dp" />
-
+                        <!-- Mute and Search rows hidden / removed as they are not in the design mockup -->
                         <LinearLayout
                             android:id="@+id/rowMute"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="16dp">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_mute" app:tint="#0B61CA" />
-                            <TextView
-                                android:id="@+id/tvMuteLabel"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="16dp"
-                                android:fontFamily="@font/inter_medium"
-                                android:text="Set as silent"
-                                android:textColor="#101828"
-                                android:textSize="14sp" />
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchMute"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:clickable="false"
-                                android:focusable="false" />
-                        </LinearLayout>
-
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#EAECF0" android:layout_marginStart="52dp" />
-
+                            android:layout_height="0dp"
+                            android:visibility="gone"
+                            tools:ignore="UselessLeaf" />
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/switchMute"
+                            android:layout_width="wrap_content"
+                            android:layout_height="0dp"
+                            android:visibility="gone" />
+                        <TextView
+                            android:id="@+id/tvMuteLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="0dp"
+                            android:visibility="gone" />
                         <LinearLayout
                             android:id="@+id/rowSearch"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="16dp">
-                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_search" app:tint="#0B61CA" />
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="16dp"
-                                android:fontFamily="@font/inter_medium"
-                                android:text="Chat Search"
-                                android:textColor="#101828"
-                                android:textSize="14sp" />
-                            <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:src="@drawable/ic_chevron_right"
-                                app:tint="#98A2B3" />
-                        </LinearLayout>
+                            android:layout_height="0dp"
+                            android:visibility="gone"
+                            tools:ignore="UselessLeaf" />
                     </LinearLayout>
                 </LinearLayout>
             </ScrollView>

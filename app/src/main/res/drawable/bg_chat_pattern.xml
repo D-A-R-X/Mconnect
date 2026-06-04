@@ -1,50 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#F1F3F8" />
-        </shape>
-    </item>
-    <item android:left="14dp" android:top="22dp">
-        <shape android:shape="oval">
-            <solid android:color="#E4E9F2" />
-            <size android:width="6dp" android:height="6dp" />
-        </shape>
-    </item>
-    <item android:left="92dp" android:top="74dp">
-        <shape android:shape="oval">
-            <solid android:color="#DCE3EF" />
-            <size android:width="4dp" android:height="4dp" />
-        </shape>
-    </item>
-    <item android:left="190dp" android:top="48dp">
-        <shape android:shape="oval">
-            <solid android:color="#E4E9F2" />
-            <size android:width="5dp" android:height="5dp" />
-        </shape>
-    </item>
-    <item android:left="270dp" android:top="120dp">
-        <shape android:shape="oval">
-            <solid android:color="#DCE3EF" />
-            <size android:width="3dp" android:height="3dp" />
-        </shape>
-    </item>
-    <item android:left="50dp" android:top="170dp">
-        <shape android:shape="oval">
-            <solid android:color="#E4E9F2" />
-            <size android:width="4dp" android:height="4dp" />
-        </shape>
-    </item>
-    <item android:left="320dp" android:top="220dp">
-        <shape android:shape="oval">
-            <solid android:color="#DCE3EF" />
-            <size android:width="6dp" android:height="6dp" />
-        </shape>
-    </item>
-    <item android:left="140dp" android:top="270dp">
-        <shape android:shape="oval">
-            <solid android:color="#E4E9F2" />
-            <size android:width="3dp" android:height="3dp" />
-        </shape>
-    </item>
-</layer-list>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/bg_chat_pattern_img"
+    android:tileMode="repeat"
+    android:dither="true" />

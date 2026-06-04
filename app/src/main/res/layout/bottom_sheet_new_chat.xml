@@ -6,49 +6,65 @@
     android:background="@drawable/bg_chat_sheet_top"
     android:orientation="vertical">
 
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="2dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
     <!-- Header -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="6dp">
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp">
 
         <FrameLayout
             android:id="@+id/btnSheetClose"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:layout_gravity="start|center_vertical"
             android:background="@drawable/bg_sheet_close_circle"
             android:clickable="true"
             android:focusable="true">
 
             <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:layout_gravity="center"
                 android:contentDescription="Close"
                 android:src="@drawable/ic_sheet_close"
-                app:tint="#101828" />
+                app:tint="#004EEB" />
         </FrameLayout>
 
-        <TextView
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:fontFamily="@font/inter_regular"
-            android:text="New Chat"
-            android:textColor="#FF000000"
-            android:textSize="16sp" />
-    </FrameLayout>
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-    <View
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="2dp"
-        android:layout_marginBottom="6dp"
-        android:background="@drawable/bg_chat_sheet_handle" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="New Chat"
+                android:textColor="#FF000000"
+                android:textSize="18sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Start a conversation"
+                android:textColor="#FF8E8E93"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- Body container -->
     <LinearLayout
@@ -64,17 +80,17 @@
         <FrameLayout
             android:id="@+id/cardCreateGroup"
             android:layout_width="match_parent"
-            android:layout_height="71dp"
+            android:layout_height="76dp"
             android:background="@drawable/bg_sheet_dashed_card"
             android:clickable="true"
             android:focusable="true">
 
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
 
                 <FrameLayout
                     android:layout_width="40dp"
@@ -85,42 +101,42 @@
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:layout_gravity="center"
-                        android:contentDescription="Plus"
-                        android:src="@drawable/ic_chat_plus"
+                        android:contentDescription="Group"
+                        android:src="@drawable/ic_chat_users"
                         app:tint="#FFFFFFFF" />
                 </FrameLayout>
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="14dp"
+                    android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_regular"
-                        android:letterSpacing="-0.025"
+                        android:fontFamily="@font/inter_semibold"
                         android:text="Create Group"
                         android:textColor="#FF000000"
-                        android:textSize="17sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="-1dp"
+                        android:layout_marginTop="2dp"
                         android:fontFamily="@font/inter_regular"
                         android:text="Add people and start a group chat"
                         android:textColor="#FF777777"
-                        android:textSize="14sp" />
+                        android:textSize="13sp" />
                 </LinearLayout>
 
                 <ImageView
                     android:layout_width="16dp"
                     android:layout_height="16dp"
-                    android:layout_marginStart="14dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_sheet_arrow_right" />
+                    android:src="@drawable/ic_sheet_arrow_right"
+                    app:tint="#FFC7C7CC" />
             </LinearLayout>
         </FrameLayout>
 
@@ -156,7 +172,7 @@
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:fontFamily="@font/inter_regular"
-                android:hint="Search..."
+                android:hint="Search people"
                 android:importantForAutofill="no"
                 android:inputType="text"
                 android:paddingStart="40dp"
