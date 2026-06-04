@@ -17,6 +17,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -111,6 +112,14 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.btnCalendarNext).setOnClickListener {
             displayedMonth.add(Calendar.MONTH, 1)
             rebuild()
+        }
+        tvMonth?.setOnClickListener {
+            MonthYearPicker.show(requireContext(), displayedMonth, minDate, maxDate) { year, month ->
+                displayedMonth.set(Calendar.YEAR, year)
+                displayedMonth.set(Calendar.MONTH, month)
+                displayedMonth.set(Calendar.DAY_OF_MONTH, 1)
+                rebuild()
+            }
         }
         view.findViewById<View>(R.id.btnCalendarClose).setOnClickListener {
             dismissAllowingStateLoss()

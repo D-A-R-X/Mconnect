@@ -311,11 +311,16 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
             return
         }
         cameraFile = f
-        val uri = FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            f,
-        )
+        val uri = runCatching {
+            FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                f,
+            )
+        }.getOrElse {
+            Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            return
+        }
         cameraUri = uri
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, uri)

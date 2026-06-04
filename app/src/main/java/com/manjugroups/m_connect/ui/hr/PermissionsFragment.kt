@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.animation.ObjectAnimator
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.os.Bundle
@@ -86,6 +87,7 @@ class PermissionsFragment : Fragment() {
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ApplyPermissionFragment())

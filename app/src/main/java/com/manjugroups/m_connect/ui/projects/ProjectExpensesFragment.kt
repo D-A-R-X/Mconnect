@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectExpense
 import com.manjugroups.m_connect.network.ProjectSummary
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
@@ -114,6 +115,7 @@ class ProjectExpensesFragment : Fragment() {
         rvExpenses = view.findViewById(R.id.rvExpenses)
         donut = view.findViewById(R.id.donutChart)
         btnAddExpense = view.findViewById(R.id.btnAddExpense)
+        BottomActionInsets.applyAboveSystemNavAndTabs(btnAddExpense)
 
         rvExpenses.layoutManager = LinearLayoutManager(requireContext())
         rvExpenses.adapter = adapter

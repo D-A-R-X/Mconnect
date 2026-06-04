@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -51,6 +52,14 @@ class DateFilterBottomSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.btnNextMonth).setOnClickListener {
             currentMonth.add(Calendar.MONTH, 1)
             render()
+        }
+        tvMonthYear.setOnClickListener {
+            MonthYearPicker.show(requireContext(), currentMonth) { year, month ->
+                currentMonth.set(Calendar.YEAR, year)
+                currentMonth.set(Calendar.MONTH, month)
+                currentMonth.set(Calendar.DAY_OF_MONTH, 1)
+                render()
+            }
         }
 
         view.findViewById<View>(R.id.btnSubmitDate).setOnClickListener {

@@ -19,6 +19,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentApplyLeaveBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyLeaveRequest
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
+import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -62,6 +64,7 @@ class ApplyLeaveFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
         binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
         binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
         // Submit Now now opens the confirmation modal; the real
@@ -363,6 +366,16 @@ class ApplyLeaveFragment : Fragment() {
             displayMonth.set(Calendar.DAY_OF_MONTH, 1)
             displayMonth.clearTime()
             renderCalendar()
+        }
+
+        monthLabel.setOnClickListener {
+            MonthYearPicker.show(requireContext(), displayMonth) { year, month ->
+                displayMonth.set(Calendar.YEAR, year)
+                displayMonth.set(Calendar.MONTH, month)
+                displayMonth.set(Calendar.DAY_OF_MONTH, 1)
+                displayMonth.clearTime()
+                renderCalendar()
+            }
         }
 
         submitButton.setOnClickListener {

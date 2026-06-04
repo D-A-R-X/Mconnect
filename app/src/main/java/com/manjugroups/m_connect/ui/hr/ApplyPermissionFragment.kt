@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentApplyPermissionBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyPermissionRequest
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -43,6 +44,7 @@ class ApplyPermissionFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
         binding.etDate.setOnClickListener { showDatePicker() }
         binding.etFromTime.setOnClickListener { showTimePicker(binding.etFromTime) }
         binding.etToTime.setOnClickListener { showTimePicker(binding.etToTime) }
