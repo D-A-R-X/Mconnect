@@ -195,6 +195,38 @@ interface GeoTrackApi {
         @Body body: ConvertSiteVisitToBookingRequest,
     ): ConvertSiteVisitToBookingResponse
 
+    // ── SV lifecycle transitions ────────────────────────────────────
+    // Drive a siteVisits row through the same web state machine the
+    // SV Overview stepper visualises. Each takes the SV's _id and
+    // patches the row to the next state. assertTransition on the
+    // server-side mutation enforces the legal source state — calling
+    // markArrivedSite from scheduled (skipping picked_up) will 500
+    // with a transition error, so the mobile flow stays linear.
+
+    @POST("api/marketing/siteVisits/markPickedUp")
+    suspend fun markSiteVisitPickedUp(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markClientStarted")
+    suspend fun markSiteVisitClientStarted(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markArrivedSite")
+    suspend fun markSiteVisitArrivedSite(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markDropped")
+    suspend fun markSiteVisitDropped(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
     // Returns the enriched CP visit (lead + client + place + fieldVisit +
     // arrivalProof) used by the Completed Visit Detail screen. Mirrors the
     // web's clientPlaceVisits.get() Convex query.
@@ -212,7 +244,14 @@ interface GeoTrackApi {
     suspend fun getMyMarketingCpVisits(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        // Backend gates scope=all on IAM (marketing.cpVisits.viewAll /
+        // .view / projects.viewAll / isAdmin). Non-privileged callers
+        // get scoped assignment-only results regardless of what we
+        // send, so it's safe to default this to "all" — admins and
+        // managers get the full pool, field staff get their own
+        // assignments via the fallback path.
+        @Query("scope") scope: String = "all",
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──
@@ -247,7 +286,20 @@ interface GeoTrackApi {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
+            // Same auto-logout-on-401 watchdog as ApiService.create() —
+            // GeoTrack endpoints also need it because every trip /
+            // visit call goes through this client, and a stale token
+            // would silently fail tracking + outcome flows otherwise.
+            val authWatchdog = okhttp3.Interceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 401) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized()
+                }
+                response
+            }
             val client = OkHttpClient.Builder()
+                .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
@@ -732,6 +784,9 @@ data class ConvertSiteVisitToBookingResponse(
     val siteVisitId: String? = null,
     val error: String? = null,
 )
+
+/** Single-id payload shared by every SV lifecycle transition route. */
+data class SiteVisitIdRequest(val id: String)
 
 // ── Enriched CP visit detail (mirrors web clientPlaceVisits.get) ──────────
 // Every field is optional because (a) older rows pre-date some columns and
