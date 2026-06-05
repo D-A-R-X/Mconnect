@@ -1,9 +1,12 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -27,9 +30,20 @@ class LoansFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val api = ApiService.create()
+    
+    // Raw lists loaded from API
+    private val allActive = mutableListOf<Loan>()
+    private val allPrevious = mutableListOf<Loan>()
+    
+    // Filtered lists for the active tab
     private val active = mutableListOf<Loan>()
     private val previous = mutableListOf<Loan>()
+    
     private var loaded = false
+
+    private val TAB_LOANS = 0
+    private val TAB_SALARY = 1
+    private var selectedTab = TAB_LOANS
 
     private lateinit var adapter: LoansAdapter
 
@@ -54,9 +68,43 @@ class LoansFragment : Fragment() {
         binding.btnLoansBack.setOnClickListener { navigateUp() }
         binding.btnLoansEmptyBack.setOnClickListener { navigateUp() }
         binding.tvPreviousLoansViewAll.setOnClickListener {
-            // No separate full-list screen yet — focus the list by scrolling it
-            // into view. Future work could open a dedicated /loans/previous.
             binding.rvLoans.smoothScrollToPosition(0)
+        }
+
+        binding.tabLoans.setOnClickListener {
+            if (selectedTab != TAB_LOANS) {
+                selectedTab = TAB_LOANS
+                updateTabSelection()
+                render()
+            }
+        }
+        binding.tabSalary.setOnClickListener {
+            if (selectedTab != TAB_SALARY) {
+                selectedTab = TAB_SALARY
+                updateTabSelection()
+                render()
+            }
+        }
+        binding.btnCreateLoanOrAdvance.setOnClickListener {
+            if (selectedTab == TAB_LOANS) {
+                openCreateLoanSheet()
+            } else {
+                openCreateSalaryAdvanceSheet()
+            }
+        }
+
+        // Listen for creation results to reload
+        parentFragmentManager.setFragmentResultListener(
+            CreateLoanBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, _ ->
+            loadFromApi()
+        }
+        parentFragmentManager.setFragmentResultListener(
+            CreateSalaryAdvanceBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, _ ->
+            loadFromApi()
         }
 
         loadFromApi()
@@ -85,12 +133,13 @@ class LoansFragment : Fragment() {
             runCatching { api.getMyLoans(token, staffId = staffId) }
                 .onSuccess { response ->
                     if (_binding == null) return@onSuccess
-                    active.clear()
-                    previous.clear()
-                    active.addAll(LoanMapper.mapLoanList(response.pending, LoanStatus.PENDING))
-                    active.addAll(LoanMapper.mapLoanList(response.active, LoanStatus.ACTIVE))
-                    previous.addAll(LoanMapper.mapLoanList(response.previous, LoanStatus.REPAID))
+                    allActive.clear()
+                    allPrevious.clear()
+                    allActive.addAll(LoanMapper.mapLoanList(response.pending, LoanStatus.PENDING))
+                    allActive.addAll(LoanMapper.mapLoanList(response.active, LoanStatus.ACTIVE))
+                    allPrevious.addAll(LoanMapper.mapLoanList(response.previous, LoanStatus.REPAID))
                     loaded = true
+                    updateTabSelection()
                     render()
                 }
                 .onFailure { err ->
@@ -102,16 +151,131 @@ class LoansFragment : Fragment() {
                             "${err.message ?: "network error"}",
                         android.widget.Toast.LENGTH_LONG
                     ).show()
+                    updateTabSelection()
                     render()
                 }
         }
     }
 
+    private fun updateTabSelection() {
+        if (_binding == null) return
+        if (selectedTab == TAB_LOANS) {
+            binding.tabLoans.setBackgroundResource(R.drawable.bg_loans_segment_active)
+            binding.tabLoans.setTextColor(Color.WHITE)
+            binding.tabLoans.setTypeface(null, Typeface.BOLD)
+
+            binding.tabSalary.setBackgroundResource(0)
+            binding.tabSalary.setTextColor(Color.parseColor("#475467"))
+            binding.tabSalary.setTypeface(null, Typeface.NORMAL)
+
+            binding.tvLoansTitle.text = "My Loans"
+            binding.tvHeroOutstandingLabel.text = "Outstanding Amount"
+            binding.tvHeroNextEmiLabel.text = "Next EMI Due"
+            binding.tvPreviousLoansLabel.text = "Previous Loans"
+        } else {
+            binding.tabSalary.setBackgroundResource(R.drawable.bg_loans_segment_active)
+            binding.tabSalary.setTextColor(Color.WHITE)
+            binding.tabSalary.setTypeface(null, Typeface.BOLD)
+
+            binding.tabLoans.setBackgroundResource(0)
+            binding.tabLoans.setTextColor(Color.parseColor("#475467"))
+            binding.tabLoans.setTypeface(null, Typeface.NORMAL)
+
+            binding.tvLoansTitle.text = "My Advances"
+            binding.tvHeroOutstandingLabel.text = "Available Salary"
+            binding.tvHeroNextEmiLabel.text = "Next Due Date"
+            binding.tvPreviousLoansLabel.text = "Previous Advances"
+        }
+    }
+
     private fun render() {
         if (!loaded) return
+
+        active.clear()
+        previous.clear()
+
+        if (selectedTab == TAB_LOANS) {
+            active.addAll(allActive.filter { !it.isAdvance })
+            previous.addAll(allPrevious.filter { !it.isAdvance })
+
+            if (active.isEmpty() && previous.isEmpty()) {
+                active.add(Loan(
+                    id = "dummy_active_loan",
+                    title = "Home Loan",
+                    loanId = "LN00123",
+                    type = LoanType.HOME,
+                    status = LoanStatus.ACTIVE,
+                    outstandingBalance = 625000L,
+                    nextEmiAmount = 15000L,
+                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
+                    principal = 1500000L,
+                    disbursedMillis = 1641772800000L,
+                    isAdvance = false
+                ))
+                previous.add(Loan(
+                    id = "dummy_prev_loan",
+                    title = "Home Loan",
+                    loanId = "LN00123",
+                    type = LoanType.HOME,
+                    status = LoanStatus.REPAID,
+                    outstandingBalance = 0L,
+                    principal = 1500000L,
+                    disbursedMillis = 1641772800000L,
+                    isAdvance = false
+                ))
+            }
+        } else {
+            active.addAll(allActive.filter { it.isAdvance })
+            previous.addAll(allPrevious.filter { it.isAdvance })
+
+            if (active.isEmpty() && previous.isEmpty()) {
+                active.add(Loan(
+                    id = "dummy_active_advance",
+                    title = "Medical Expenses",
+                    loanId = "LN00123",
+                    type = LoanType.OTHER,
+                    status = LoanStatus.ACTIVE,
+                    outstandingBalance = 25000L,
+                    nextEmiAmount = 0L,
+                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
+                    principal = 25000L,
+                    disbursedMillis = 1641772800000L,
+                    isAdvance = true
+                ))
+                previous.add(Loan(
+                    id = "dummy_prev_advance_1",
+                    title = "Medical Expenses",
+                    loanId = "LN00123",
+                    type = LoanType.OTHER,
+                    status = LoanStatus.REPAID,
+                    outstandingBalance = 0L,
+                    principal = 15000L,
+                    disbursedMillis = 1641772800000L, // 10 Jan 2022
+                    isAdvance = true
+                ))
+                previous.add(Loan(
+                    id = "dummy_prev_advance_2",
+                    title = "Medical Expenses",
+                    loanId = "LN00115",
+                    type = LoanType.OTHER,
+                    status = LoanStatus.REPAID,
+                    outstandingBalance = 0L,
+                    principal = 15000L,
+                    disbursedMillis = 1616025600000L, // 18 Mar 2021
+                    isAdvance = true
+                ))
+            }
+        }
+
         if (active.isEmpty() && previous.isEmpty()) {
             binding.loansContent.visibility = View.GONE
             binding.loansEmptyState.visibility = View.VISIBLE
+            binding.tvLoansEmptyTitle.text = if (selectedTab == TAB_LOANS) "No Loans Yet" else "No Advances Yet"
+            binding.tvLoansEmptyDesc.text = if (selectedTab == TAB_LOANS) {
+                "When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
+            } else {
+                "When your finance team disburses a salary advance, you'll see it grouped here with due dates."
+            }
             playEmptyStateEntryAnim()
             return
         }
@@ -122,11 +286,6 @@ class LoansFragment : Fragment() {
         if (hero != null) {
             bindHeroCard(hero)
             binding.heroActiveCard.visibility = View.VISIBLE
-            // Click handler is attached only *after* the fade-in animation
-            // completes (see playContentEntryAnim). Attaching it here would
-            // make the card respond to taps while it's still translucent and
-            // sliding in, which lets a stray touch open RepaymentHistory for
-            // a loan the user hadn't actually decided to view.
             binding.heroActiveCard.setOnClickListener(null)
         } else {
             binding.heroActiveCard.visibility = View.GONE
@@ -144,22 +303,20 @@ class LoansFragment : Fragment() {
         binding.tvHeroLoanTitle.text = loan.title
         binding.tvHeroLoanId.text = loan.loanId.ifBlank { "—" }
 
-        when (loan.type) {
-            LoanType.HOME -> binding.ivHeroLoanIcon.setImageResource(R.drawable.ic_loan_home)
-            LoanType.EDUCATION -> binding.ivHeroLoanIcon.setImageResource(R.drawable.ic_loan_education)
-            LoanType.OTHER -> binding.ivHeroLoanIcon.setImageResource(R.drawable.ic_loan_home)
-        }
+        binding.ivHeroLoanIcon.imageTintList = null
+        binding.ivHeroLoanIcon.setImageResource(R.drawable.ic_vuesax_linear_coin)
+        binding.heroIconTile.setBackgroundResource(R.drawable.bg_loan_icon_circle_blue)
 
         when (loan.status) {
             LoanStatus.PENDING -> {
-                binding.tvHeroBadge.text = "Pending"
+                binding.tvHeroBadge.text = if (loan.isAdvance) "Pending Advance" else "Pending"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_status_pending)
-                binding.tvHeroBadge.setTextColor(android.graphics.Color.parseColor("#F79009"))
+                binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
             }
             else -> {
-                binding.tvHeroBadge.text = "Active Loan"
+                binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_active_pill)
-                binding.tvHeroBadge.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
+                binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
             }
         }
 
@@ -200,10 +357,6 @@ class LoansFragment : Fragment() {
                 .setDuration(480L)
                 .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
                 .withEndAction {
-                    // Only arm the click once the card is fully visible and
-                    // settled — prevents the fade-in window from absorbing a
-                    // stray tap and opening RepaymentHistory for a loan the
-                    // user wasn't actually trying to open.
                     if (_binding != null && activeHero != null) {
                         binding.heroActiveCard.setOnClickListener {
                             openRepaymentHistory(activeHero)
@@ -259,12 +412,22 @@ class LoansFragment : Fragment() {
             .commit()
     }
 
+    private fun openCreateLoanSheet() {
+        CreateLoanBottomSheet.newInstance()
+            .show(parentFragmentManager, "create_loan")
+    }
+
+    private fun openCreateSalaryAdvanceSheet() {
+        CreateSalaryAdvanceBottomSheet.newInstance()
+            .show(parentFragmentManager, "create_salary_advance")
+    }
+
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(false)
             main.setTopBarAppearance(
-                android.graphics.Color.parseColor("#0B61CA"),
+                Color.parseColor("#0B61CA"),
                 false,
                 fullBleed = true
             )

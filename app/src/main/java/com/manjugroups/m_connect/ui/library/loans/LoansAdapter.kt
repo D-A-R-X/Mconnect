@@ -79,26 +79,16 @@ class LoansAdapter(
             b.tvLoanTitle.text = loan.title
             b.tvLoanId.text = loan.loanId
             b.tvLoanPrincipal.text = formatRupees(loan.principal)
+            b.tvLoanPrincipalLabel.text = if (loan.isAdvance) "Advance" else "Principal"
             b.tvLoanDisbursed.text = formatShortDate(loan.disbursedMillis)
             b.btnViewRepayment.setOnClickListener { onPreviousClick(loan) }
         }
     }
 
     private fun applyIcon(loan: Loan, icon: android.widget.ImageView, tile: android.widget.FrameLayout) {
-        when (loan.type) {
-            LoanType.HOME -> {
-                icon.setImageResource(R.drawable.ic_loan_home)
-                tile.setBackgroundResource(R.drawable.bg_loan_icon_tile)
-            }
-            LoanType.EDUCATION -> {
-                icon.setImageResource(R.drawable.ic_loan_education)
-                tile.setBackgroundResource(R.drawable.bg_loan_icon_tile_green)
-            }
-            LoanType.OTHER -> {
-                icon.setImageResource(R.drawable.ic_loan_home)
-                tile.setBackgroundResource(R.drawable.bg_loan_icon_tile)
-            }
-        }
+        icon.imageTintList = null
+        icon.setImageResource(R.drawable.ic_vuesax_linear_coin)
+        tile.setBackgroundResource(R.drawable.bg_loan_icon_tile)
     }
 
     companion object {
