@@ -278,13 +278,10 @@ class AppLibraryFragment : Fragment() {
      */
     private fun setupScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
-        val maxBottomRadiusPx = 24f * density
         val maxPanelRadiusPx = 30f * density
 
-        // Blue header — rounded BOTTOM corners.
-        val headerBg = binding.libraryHeaderFrame
-            .applyShrinkableBlueHeaderBackground()
-        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+        // Blue header — full rectangular background (no rounded bottom corners).
+        binding.libraryHeaderFrame.applyShrinkableBlueHeaderBackground()
 
         // Grey background card — rounded TOP corners + grey bg applied to
         // `libraryWhitePanel`, which lives INSIDE the NestedScrollView.
