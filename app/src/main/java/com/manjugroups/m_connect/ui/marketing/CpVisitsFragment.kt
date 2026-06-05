@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -919,68 +920,12 @@ class CpVisitsFragment : Fragment() {
     // ---------- Create dialog ----------
 
     private fun showCreateDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_create_cp_visit, null)
-        val date = view.findViewById<EditText>(R.id.etCpVisitDate)
-        date.setText(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time))
-
-        val dialog = BottomSheetDialog(requireContext())
-        dialog.setContentView(view)
-        dialog.setOnShowListener { di ->
-            val sheet = (di as BottomSheetDialog)
-                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            sheet?.let {
-                val behavior = BottomSheetBehavior.from(it)
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
-            }
-        }
-        view.findViewById<TextView>(R.id.btnCancelCpCreate).setOnClickListener { dialog.dismiss() }
-        view.findViewById<TextView>(R.id.btnSubmitCpCreate).setOnClickListener {
-            createCpVisitFromDialog(view, dialog)
-        }
-        dialog.show()
-    }
-
-    private fun createCpVisitFromDialog(view: View, dialog: Dialog) {
-        val phone = view.findViewById<EditText>(R.id.etCpClientPhone).text.toString().filter(Char::isDigit).takeLast(10)
-        val name = view.findViewById<EditText>(R.id.etCpClientName).text.toString().trim()
-        val date = view.findViewById<EditText>(R.id.etCpVisitDate).text.toString().trim()
-        val time = view.findViewById<EditText>(R.id.etCpVisitTime).text.toString().trim()
-        val address = view.findViewById<EditText>(R.id.etCpVisitAddress).text.toString().trim()
-        val maps = view.findViewById<EditText>(R.id.etCpMapsLink).text.toString().trim()
-        val notes = view.findViewById<EditText>(R.id.etCpNotes).text.toString().trim()
-        val staffId = session.staffId
-
-        if (phone.length != 10) return Toast.makeText(requireContext(), "Enter 10 digit phone", Toast.LENGTH_SHORT).show()
-        if (staffId.isNullOrBlank()) return Toast.makeText(requireContext(), "Staff session missing", Toast.LENGTH_SHORT).show()
-        if (date.isBlank()) return Toast.makeText(requireContext(), "Date is required", Toast.LENGTH_SHORT).show()
-        if (address.isBlank()) return Toast.makeText(requireContext(), "Address is required", Toast.LENGTH_SHORT).show()
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = geoApi.createCpVisit(
-                    session.bearerToken,
-                    CreateCpVisitRequest(
-                        clientName = name.takeIf { it.isNotBlank() },
-                        mobileNumber = phone,
-                        assignedStaffId = staffId,
-                        scheduledDate = date,
-                        scheduledTime = time.takeIf { it.isNotBlank() },
-                        visitAddress = address,
-                        googleMapsLink = maps.takeIf { it.isNotBlank() },
-                        notes = notes.takeIf { it.isNotBlank() },
-                    )
-                )
-                if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed to create CP visit", Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-                dialog.dismiss()
-                Toast.makeText(requireContext(), "CP visit created", Toast.LENGTH_SHORT).show()
+        setFragmentResultListener(CreateCpVisitBottomSheet.RESULT_KEY_CREATED) { _, bundle ->
+            val success = bundle.getBoolean("success", false)
+            if (success) {
                 loadVisits()
-            } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
             }
         }
+        CreateCpVisitBottomSheet.newInstance().show(parentFragmentManager, "create_cp_visit")
     }
 }

@@ -681,6 +681,7 @@ data class CreateCpVisitRequest(
     val visitLng: Double? = null,
     val googleMapsLink: String? = null,
     val notes: String? = null,
+    val projectId: String? = null,
 )
 
 data class CreateCpVisitResponse(

@@ -1080,7 +1080,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
                 .getFont(ctx, R.font.inter_semibold)
             indicator.visibility = View.VISIBLE
         } else {
-            icon.background = null
+            icon.setBackgroundResource(R.drawable.bg_inspection_tab_circle_inactive)
             icon.imageTintList = android.content.res.ColorStateList.valueOf(
                 android.graphics.Color.parseColor("#6A6D78")
             )

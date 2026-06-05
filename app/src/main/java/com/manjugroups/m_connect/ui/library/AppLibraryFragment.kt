@@ -232,22 +232,40 @@ class AppLibraryFragment : Fragment() {
         // After layout, size each pill to exactly 1/5 of the visible HSV
         // width so 5 fit on screen regardless of device width, and the
         // 6th tab (currently Settings) becomes reachable by scrolling.
-        hsv.post {
-            val pillWidth = hsv.width / 5
-            if (pillWidth <= 0) return@post
-            listOf(
-                binding.pillAllApps,
-                binding.pillHr,
-                binding.pillMarketing,
-                binding.pillProject,
-                binding.pillLand,
-                binding.pillSettings,
-            ).forEach { pill ->
-                val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
-                lp.width = pillWidth
-                lp.weight = 0f
-                pill.layoutParams = lp
+        val sizePills = { width: Int ->
+            val pillWidth = width / 5
+            if (pillWidth > 0) {
+                listOf(
+                    binding.pillAllApps,
+                    binding.pillHr,
+                    binding.pillMarketing,
+                    binding.pillProject,
+                    binding.pillLand,
+                    binding.pillSettings,
+                ).forEach { pill ->
+                    val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
+                    lp.width = pillWidth
+                    lp.weight = 0f
+                    pill.layoutParams = lp
+                }
             }
+        }
+
+        if (hsv.width > 0) {
+            sizePills(hsv.width)
+        } else {
+            hsv.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+                override fun onLayoutChange(
+                    v: View, left: Int, top: Int, right: Int, bottom: Int,
+                    oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
+                ) {
+                    val width = right - left
+                    if (width > 0) {
+                        hsv.removeOnLayoutChangeListener(this)
+                        sizePills(width)
+                    }
+                }
+            })
         }
     }
 
@@ -278,25 +296,22 @@ class AppLibraryFragment : Fragment() {
      */
     private fun setupScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
-        val maxBottomRadiusPx = 24f * density
-        val maxPanelRadiusPx = 24f * density
+        val maxPanelRadiusPx = 30f * density
 
-        // Blue header — rounded BOTTOM corners.
-        val headerBg = binding.libraryHeaderFrame
-            .applyShrinkableBlueHeaderBackground()
-        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+        // Blue header — full rectangular background (no rounded bottom corners).
+        binding.libraryHeaderFrame.applyShrinkableBlueHeaderBackground()
 
-        // White card — rounded TOP corners + white bg applied to
+        // Grey background card — rounded TOP corners + grey bg applied to
         // `libraryWhitePanel`, which lives INSIDE the NestedScrollView.
-        // The white card IS the scrolling content, so it moves up at
+        // The panel IS the scrolling content, so it moves up at
         // exactly 1× rate (no parallax, no shrinking, no separate
         // translation). The ancestors all set clipChildren=false in
         // XML so the rounded top edge can draw OUTSIDE the panel into
-        // the blue header's area — that's how the white visually
+        // the blue header's area — that's how the panel visually
         // "overlays" the blue as it scrolls up.
         val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            setColor(android.graphics.Color.WHITE)
+            setColor(android.graphics.Color.parseColor("#F1F3F8"))
             cornerRadii = floatArrayOf(
                 maxPanelRadiusPx, maxPanelRadiusPx, // top-left
                 maxPanelRadiusPx, maxPanelRadiusPx, // top-right

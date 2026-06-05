@@ -20,7 +20,8 @@ data class Loan(
     val nextEmiDueMillis: Long = 0L,
     val principal: Long = 0L,
     val disbursedMillis: Long = 0L,
-    val repayments: List<Repayment> = emptyList()
+    val repayments: List<Repayment> = emptyList(),
+    val isAdvance: Boolean = false
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
@@ -75,6 +76,13 @@ object LoanMapper {
             else -> (remote.remainingBalance ?: 0.0)
         }
 
+        val isAdvance = remote.interestType.equals("Salary Advance", ignoreCase = true)
+            || remote.interestType.equals("salary_advance", ignoreCase = true)
+            || remote.purpose?.contains("advance", ignoreCase = true) == true
+            || (remote.interestType.isNullOrBlank()
+                && remote.purpose?.contains("home", ignoreCase = true) == false
+                && remote.purpose?.contains("education", ignoreCase = true) == false)
+
         return Loan(
             id = remote.id.orEmpty(),
             title = title,
@@ -86,7 +94,8 @@ object LoanMapper {
             nextEmiDueMillis = nextEmiMillis,
             principal = (remote.loanAmount ?: remote.principalAmount ?: 0.0).toLong(),
             disbursedMillis = parseDay(remote.disbursedDate) ?: 0L,
-            repayments = repayments
+            repayments = repayments,
+            isAdvance = isAdvance
         )
     }
 

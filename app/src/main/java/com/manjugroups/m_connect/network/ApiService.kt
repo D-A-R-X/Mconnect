@@ -190,6 +190,12 @@ interface ApiService {
         @Query("loanId") loanId: String
     ): LoanRepaymentsResponse
 
+    @POST("api/hr/loans/apply")
+    suspend fun applyLoan(
+        @Header("Authorization") token: String,
+        @Body body: ApplyLoanRequest
+    ): ApplyLoanResponse
+
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
         @Header("Authorization") token: String,
@@ -1285,6 +1291,27 @@ data class LoanRepaymentsResponse(
     val success: Boolean = false,
     val total: Int = 0,
     val repayments: List<LoanRepaymentData> = emptyList(),
+    val error: String? = null
+)
+
+data class ApplyLoanRequest(
+    val nominee1Id: String? = null,
+    val nominee1Name: String? = null,
+    val nominee2Id: String? = null,
+    val nominee2Name: String? = null,
+    val loanAmount: Double? = null,
+    val interestType: String? = null,
+    val disbursedDate: String? = null,
+    val repaymentStartMonth: String? = null,
+    val tenureMonths: Double? = null,
+    val originalDocument: String? = null,
+    val purpose: String? = null,
+    val notes: String? = null
+)
+
+data class ApplyLoanResponse(
+    val success: Boolean = false,
+    val loanId: String? = null,
     val error: String? = null
 )
 
