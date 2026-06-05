@@ -1249,10 +1249,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
             etFormDistrict, etFormLocation,
         ).forEach { f ->
-            f?.isEnabled = enabled
+            // CRITICAL: do NOT use isEnabled=false here. Many Material
+            // text themes pipe state_enabled=false through to a
+            // near-transparent disabled colour on the EditText text,
+            // which made the prefilled lead data invisible until the
+            // user tapped Edit (which restored isEnabled=true). The
+            // text was always in the field — just rendered in a
+            // colour the user couldn't read.
+            //
+            // Lock editability via focus + click suppression instead.
+            // The text stays in its normal #101828 colour, the cursor
+            // can't enter the field, and key/touch events on the
+            // field don't bring up the IME or change the value.
             f?.isFocusable = enabled
             f?.isFocusableInTouchMode = enabled
-            f?.alpha = if (enabled) 1f else 0.7f
+            f?.isClickable = enabled
+            f?.isLongClickable = enabled
+            f?.isCursorVisible = enabled
+            // Drop alpha only slightly so the locked state still reads
+            // as "look but don't touch" without dimming the data into
+            // unreadability (the previous 0.7 with isEnabled=false
+            // compounded into near-transparency on some devices).
+            f?.alpha = if (enabled) 1f else 0.95f
         }
     }
 
@@ -1298,18 +1316,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      */
     private fun lookupAndPrefillClientByPhone(phone: String) {
         viewLifecycleOwner.lifecycleScope.launch {
+            // Track a user-friendly reason if the lead lookup misses or
+            // fails. We don't early-return on miss because the same
+            // phone might still match in the clients master — the
+            // function's contract is "lead first, then client". Only
+            // surface this toast if BOTH lookups end up empty.
+            var leadLookupError: String? = null
             val lead = try {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
                 if (!resp.success) {
                     android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    // Server-side rejection (FORBIDDEN, scope, etc.) —
+                    // record the message but still fall through to the
+                    // client master in case that returns something.
+                    leadLookupError = resp.error ?: "Lead lookup failed"
                     null
                 } else {
                     resp.leads.firstOrNull().also {
-                        if (it == null) android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                        if (it == null) {
+                            android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                            leadLookupError = "No existing lead for $phone"
+                        }
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                // Prefer parsed server message; otherwise the exception
+                // string. Convex 500s carry the thrown reason in the body.
+                val serverMsg = extractHttpErrorMessage(e)
+                leadLookupError = serverMsg ?: e.message ?: "Lead lookup network error"
                 null
             }
             val client = try {
@@ -1326,7 +1361,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 android.util.Log.w(LOG_TAG, "client lookup failed", e)
                 null
             }
-            if (lead == null && client == null) return@launch
+            if (lead == null && client == null) {
+                // Both lookups missed — only show the captured lead
+                // error if we're still on screen. Helps the user
+                // distinguish "no record yet" from a real fetch
+                // failure (FORBIDDEN, network, etc.). Falls back to a
+                // generic message when the lead miss was a clean
+                // "no match" and the client miss was also clean.
+                if (isAdded) {
+                    val msg = leadLookupError ?: "No existing record for $phone — fill the form"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             if (!isAdded) return@launch
 
             fun fill(field: EditText?, value: String?) {
