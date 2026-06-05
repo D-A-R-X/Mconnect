@@ -232,22 +232,40 @@ class AppLibraryFragment : Fragment() {
         // After layout, size each pill to exactly 1/5 of the visible HSV
         // width so 5 fit on screen regardless of device width, and the
         // 6th tab (currently Settings) becomes reachable by scrolling.
-        hsv.post {
-            val pillWidth = hsv.width / 5
-            if (pillWidth <= 0) return@post
-            listOf(
-                binding.pillAllApps,
-                binding.pillHr,
-                binding.pillMarketing,
-                binding.pillProject,
-                binding.pillLand,
-                binding.pillSettings,
-            ).forEach { pill ->
-                val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
-                lp.width = pillWidth
-                lp.weight = 0f
-                pill.layoutParams = lp
+        val sizePills = { width: Int ->
+            val pillWidth = width / 5
+            if (pillWidth > 0) {
+                listOf(
+                    binding.pillAllApps,
+                    binding.pillHr,
+                    binding.pillMarketing,
+                    binding.pillProject,
+                    binding.pillLand,
+                    binding.pillSettings,
+                ).forEach { pill ->
+                    val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
+                    lp.width = pillWidth
+                    lp.weight = 0f
+                    pill.layoutParams = lp
+                }
             }
+        }
+
+        if (hsv.width > 0) {
+            sizePills(hsv.width)
+        } else {
+            hsv.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+                override fun onLayoutChange(
+                    v: View, left: Int, top: Int, right: Int, bottom: Int,
+                    oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
+                ) {
+                    val width = right - left
+                    if (width > 0) {
+                        hsv.removeOnLayoutChangeListener(this)
+                        sizePills(width)
+                    }
+                }
+            })
         }
     }
 
