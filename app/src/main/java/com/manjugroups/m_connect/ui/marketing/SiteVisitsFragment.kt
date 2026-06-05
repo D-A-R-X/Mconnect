@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -55,8 +56,7 @@ class SiteVisitsFragment : Fragment() {
     private var pendingEntryAnimation = true
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        // Reuse the CP visits layout — same chrome, different data source.
-        return inflater.inflate(R.layout.fragment_cp_visits, container, false)
+        return inflater.inflate(R.layout.fragment_site_visits, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -65,10 +65,10 @@ class SiteVisitsFragment : Fragment() {
 
         // Update the title and search-bar hint to match the SV context.
         view.findViewById<TextView>(R.id.tvCpVisitsTitle)?.text = "Site Visits"
-        view.findViewById<EditText>(R.id.etCpvSearch)?.hint = "Search projects / plots"
+        view.findViewById<EditText>(R.id.etCpvSearch)?.hint = "Search SV"
 
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         // No create flow yet — hide the + button (CP visits has its own create
         // dialog; site visit creation flows through the conversion path).
@@ -220,9 +220,21 @@ class SiteVisitsFragment : Fragment() {
                 }
                 // Exclude CP visits (which live in CpVisitsFragment) — keep only
                 // proper site visits where tripType is null/"site_visit"/etc.
+                //
+                // Sort by creationTime descending so the most recently
+                // CREATED SV shows up at the top (matches the server's
+                // own ordering and what the user reads as "latest").
+                // The previous sortedByDescending { it.scheduledDate }
+                // ordered by FUTURE-most planned visit instead, which
+                // pushed brand-new conversions below older-but-later-
+                // scheduled entries. Fall back to scheduledDate when
+                // creationTime is missing (legacy rows).
                 allVisits = resp.visits
                     .filter { it.tripType != "client_place" && it.clientPlaceVisitId == null }
-                    .sortedByDescending { it.scheduledDate }
+                    .sortedWith(
+                        compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                            .thenByDescending { it.scheduledDate }
+                    )
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
@@ -293,58 +305,92 @@ class SiteVisitsFragment : Fragment() {
     // ---------- Row ----------
 
     private fun createRow(visit: TodayVisit, parent: ViewGroup): View {
-        val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, parent, false)
+        val itemView = layoutInflater.inflate(R.layout.item_site_visit, parent, false)
         val name = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
-        val role = itemView.findViewById<TextView>(R.id.tvVisitItemStaffRole)
-        val avatar = itemView.findViewById<TextView>(R.id.tvVisitItemAvatar)
-        val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
-        val siteLabel = itemView.findViewById<TextView>(R.id.tvVisitItemSiteLabel)
-        val timeLabel = itemView.findViewById<TextView>(R.id.tvVisitItemTimeLabel)
-        val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
-        val distance = itemView.findViewById<TextView>(R.id.tvVisitItemDistance)
-        val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
+        val phone = itemView.findViewById<TextView>(R.id.tvVisitItemPhone)
+        val dayView = itemView.findViewById<TextView>(R.id.tvVisitItemDay)
+        val dateView = itemView.findViewById<TextView>(R.id.tvVisitItemDate)
+        val monthView = itemView.findViewById<TextView>(R.id.tvVisitItemMonth)
+        val timeView = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
+        
         val statusPill = itemView.findViewById<LinearLayout>(R.id.visitItemStatusPill)
+        val statusDot = itemView.findViewById<View>(R.id.visitItemStatusDot)
         val statusText = itemView.findViewById<TextView>(R.id.tvVisitItemStatus)
-        val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
-        val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
-        val actionIcon = itemView.findViewById<android.widget.ImageView>(R.id.ivVisitItemActionIcon)
-        val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
-        lead.visibility = View.GONE
+        
+        val vehiclePill = itemView.findViewById<LinearLayout>(R.id.visitItemVehiclePill)
+        val vehicleIcon = itemView.findViewById<android.widget.ImageView>(R.id.ivVisitItemVehicleIcon)
+        val vehicleStatus = itemView.findViewById<TextView>(R.id.tvVisitItemVehicleStatus)
+        
+        val bdoName = itemView.findViewById<TextView>(R.id.tvVisitItemBdoName)
+        val bdoRole = itemView.findViewById<TextView>(R.id.tvVisitItemBdoRole)
+        val destination = itemView.findViewById<TextView>(R.id.tvVisitItemDestination)
+        val destinationLabel = itemView.findViewById<TextView>(R.id.tvVisitItemDestinationLabel)
 
-        // Site-specific labels — replace "Client" with "Site" for the
-        // left-column header and "Date/Time" for the right column.
-        siteLabel.text = "Site"
-        timeLabel.text = "Date/Time"
-
-        val displayName = visit.leadName ?: "Client"
+        // Customer Name — backend now falls back through
+        // lead → CP.client → CP.clientPlace, so a real name almost
+        // always lands here. Render the em-dash placeholder only when
+        // the backend genuinely has nothing.
+        val displayName = visit.leadName?.takeIf { it.isNotBlank() } ?: "—"
         name.text = displayName
-        role.visibility = View.GONE
-        avatar.text = displayName.firstOrNull()?.uppercase() ?: "C"
 
-        title.text = visit.placeName ?: visit.placeAddress ?: "Site"
-        time.text = visit.scheduledDate
-        distance.text = if (visit.placeLat != null && visit.placeLng != null) "Mapped" else "Not mapped"
-        eta.text = "After start"
+        // Phone — show em-dash when missing instead of a fake
+        // hardcoded number (the previous "916379556429" looked like
+        // real data and confused users into thinking every SV had it).
+        phone.text = visit.leadPhone?.takeIf { it.isNotBlank() } ?: "—"
 
+        // Date — leave the date chip blank when scheduledDate is
+        // unparseable. The fake "THU 07 MAY" fallback masked malformed
+        // dates as if they were real ones.
+        try {
+            val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(visit.scheduledDate)
+            if (dateObj != null) {
+                dayView.text = SimpleDateFormat("EEE", Locale.US).format(dateObj).uppercase(Locale.US)
+                dateView.text = SimpleDateFormat("dd", Locale.US).format(dateObj)
+                monthView.text = SimpleDateFormat("MMM", Locale.US).format(dateObj).uppercase(Locale.US)
+            } else {
+                dayView.text = ""
+                dateView.text = "—"
+                monthView.text = ""
+            }
+        } catch (e: Exception) {
+            dayView.text = ""
+            dateView.text = "—"
+            monthView.text = ""
+        }
+
+        // Time — blank when not set rather than a synthetic "11:00 AM".
+        timeView.text = visit.scheduledStartTime?.takeIf { it.isNotBlank() } ?: ""
+
+        // BDO Details — the logged-in staff name is the right value to
+        // show on rows assigned to the viewer; the prior "AKASH.B"
+        // fallback was leftover seed data. Em-dash when the session
+        // hasn't yet hydrated a user name.
+        bdoName.text = session.userName?.uppercase(Locale.US)?.takeIf { it.isNotBlank() } ?: "—"
+        bdoRole.text = "BDO"
+
+        // Destination details — prefer the project/place name, fall
+        // back to the pickup address, and finally an em-dash. "Client
+        // Place Visit" was a generic label that was indistinguishable
+        // from real titles.
+        destination.text = visit.placeName?.takeIf { it.isNotBlank() }
+            ?: visit.placeAddress?.takeIf { it.isNotBlank() }
+            ?: "—"
+        destinationLabel.text = "ORIGIN"
+
+        // Status pill binding
         val status = visit.status.lowercase(Locale.US)
         when {
             isCancelled(status) -> {
                 statusText.text = "Cancelled"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cpv_status_cancelled)
+                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_red)
                 statusText.setTextColor(Color.parseColor("#B42318"))
-                actionLabel.text = "Cancelled"
-                actionBtn.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cpv_action_cancelled)
-                actionLabel.setTextColor(Color.parseColor("#7A0F0A"))
-                actionIcon.visibility = View.GONE
+                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B42318"))
             }
             isCompleted(status) -> {
                 statusText.text = "Completed"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_home_trip_status_ready)
-                statusText.setTextColor(Color.parseColor("#169B2F"))
-                actionLabel.text = "Completed"
-                actionBtn.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_cpv_action_completed)
-                actionLabel.setTextColor(Color.parseColor("#1F7A3F"))
-                actionIcon.visibility = View.GONE
+                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_green)
+                statusText.setTextColor(Color.parseColor("#027A48"))
+                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#027A48"))
             }
             isInProgress(status) -> {
                 statusText.text = when (status) {
@@ -354,27 +400,34 @@ class SiteVisitsFragment : Fragment() {
                     "arrived" -> "Arrived"
                     else -> "Enroute"
                 }
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_home_trip_status_progress)
+                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_orange)
                 statusText.setTextColor(Color.parseColor("#B54708"))
-                actionLabel.text = statusText.text
-                actionBtn.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_home_trip_action_progress)
-                actionLabel.setTextColor(Color.parseColor("#B54708"))
-                actionIcon.visibility = View.GONE
+                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B54708"))
             }
             else -> {
                 statusText.text = "Scheduled"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_home_trip_status_ready)
-                statusText.setTextColor(Color.parseColor("#169B2F"))
-                actionLabel.text = "View"
-                actionBtn.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_home_trip_action_ready)
-                actionLabel.setTextColor(Color.WHITE)
-                actionIcon.visibility = View.VISIBLE
+                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_orange)
+                statusText.setTextColor(Color.parseColor("#B54708"))
+                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F79009"))
             }
         }
 
-        val openDetail: (View) -> Unit = { openVisit(visit) }
-        itemView.setOnClickListener(openDetail)
-        actionBtn.setOnClickListener(openDetail)
+        // Vehicle Assignment Pill binding
+        val vehicleAssigned = !visit.visitCategory.isNullOrBlank() && visit.visitCategory != "direct_cp" && visit.visitCategory != "site_visit"
+        if (vehicleAssigned) {
+            vehicleStatus.text = "Vehicle Assigned"
+            vehiclePill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_green)
+            vehicleStatus.setTextColor(Color.parseColor("#027A48"))
+            vehicleIcon?.setColorFilter(Color.parseColor("#027A48"))
+        } else {
+            vehicleStatus.text = "No Vehicle Assigned"
+            vehiclePill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_red)
+            vehicleStatus.setTextColor(Color.parseColor("#F04438"))
+            vehicleIcon?.setColorFilter(Color.parseColor("#F04438"))
+        }
+
+        // Click actions: Open details on card tap
+        itemView.setOnClickListener { openVisit(visit) }
 
         val params = itemView.layoutParams as? LinearLayout.LayoutParams
             ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -384,28 +437,7 @@ class SiteVisitsFragment : Fragment() {
     }
 
     private fun openVisit(visit: TodayVisit) {
-        // Site visit tap routes to the same TripNavigationFragment used for
-        // CP visits — TripNavigation handles both trip types via its `status`
-        // / `tripType` params.
-        parentFragmentManager.beginTransaction()
-            .replace(
-                R.id.fragmentContainer,
-                TripNavigationFragment.forVisit(
-                    visitId = visit.id,
-                    placeName = visit.placeName,
-                    placeAddress = visit.placeAddress,
-                    destLat = visit.placeLat,
-                    destLng = visit.placeLng,
-                    status = visit.status,
-                    tripType = visit.tripType,
-                    clientPlaceVisitId = visit.clientPlaceVisitId,
-                    cpClientMet = visit.cpVisit?.clientMet,
-                    cpOutcome = visit.cpVisit?.outcome,
-                    visitCategory = visit.visitCategory ?: "site_visit",
-                )
-            )
-            .addToBackStack(null)
-            .commit()
+        SiteVisitOverviewFragment.forVisit(visit).show(parentFragmentManager, "site_visit_overview")
     }
 
     // ---------- Entry animation (mirrors CpVisitsFragment cadence) ----------

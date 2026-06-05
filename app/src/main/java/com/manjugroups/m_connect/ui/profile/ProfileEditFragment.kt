@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.network.PincodePostOffice
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.network.UpdateMyProfileRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -46,7 +47,7 @@ class ProfileEditFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnEditBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         labelField(view, R.id.fldName, "Full Name", "Your full name")
@@ -96,7 +97,7 @@ class ProfileEditFragment : Fragment() {
         val id = session.staffId?.takeIf { it.isNotBlank() }
         if (id == null) {
             Toast.makeText(requireContext(), "Missing session", Toast.LENGTH_SHORT).show()
-            parentFragmentManager.popBackStack()
+            navigateUp()
             return
         }
 
@@ -108,14 +109,14 @@ class ProfileEditFragment : Fragment() {
                 val staff = resp.staff
                 if (!resp.success || staff == null) {
                     Toast.makeText(requireContext(), "Failed to load profile", Toast.LENGTH_LONG).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                     return@launch
                 }
                 fillForm(root, staff)
                 scroll.visibility = View.VISIBLE
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Network error: ${e.message}", Toast.LENGTH_LONG).show()
-                parentFragmentManager.popBackStack()
+                navigateUp()
             } finally {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             }
@@ -181,7 +182,7 @@ class ProfileEditFragment : Fragment() {
                 saveBtn.isEnabled = true
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Profile updated", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 } else {
                     errorView.text = resp.error ?: "Failed to update"
                     errorView.visibility = View.VISIBLE

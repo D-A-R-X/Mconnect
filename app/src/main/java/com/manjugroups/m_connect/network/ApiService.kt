@@ -880,7 +880,26 @@ interface ApiService {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
+            // Auto-logout on 401. Without this, a deployment URL swap
+            // (dev → prod or vice versa) or a server-side session
+            // revocation leaves the app stuck with every screen showing
+            // empty / errored data and no way back to a working state.
+            // The interceptor watches every response, fires the
+            // SessionInvalidationBus on 401, and the currently-foreground
+            // activity collects + bounces the user to login. Bearer-less
+            // requests (auth/OTP/login endpoints) shouldn't normally 401
+            // unless the token is invalid anyway, so we don't try to
+            // distinguish — every 401 is treated as "session is dead."
+            val authWatchdog = okhttp3.Interceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 401) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized()
+                }
+                response
+            }
             val client = OkHttpClient.Builder()
+                .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)

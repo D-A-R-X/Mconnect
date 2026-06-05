@@ -30,20 +30,23 @@
             android:textColor="#101828"
             android:textSize="14sp" />
 
-        <!-- Cancel-while-in-review affordance — mirror of the trash
-             icon on the Permissions item row. Flipped to VISIBLE at
-             runtime ONLY for the user's own pending requests on the
-             My Leaves view; hidden everywhere else (approved /
-             rejected / Team view / approver-mode). -->
-        <ImageView
-            android:id="@+id/ivLeaveCancel"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Cancel leave"
-            android:padding="2dp"
-            android:src="@drawable/ic_trash"
-            android:visibility="gone" />
+        <FrameLayout
+            android:id="@+id/btnDeleteLeave"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:background="@drawable/bg_leave_delete_icon"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Delete leave"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_leave_card_trash" />
+        </FrameLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -61,9 +64,10 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvLeaveReasonLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_regular"
+                android:fontFamily="@font/inter_medium"
                 android:text="Leave Date"
                 android:textColor="#667085"
                 android:textSize="12sp" />
@@ -84,9 +88,10 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvLeaveTypeLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_regular"
+                android:fontFamily="@font/inter_medium"
                 android:text="Total Leave"
                 android:textColor="#667085"
                 android:textSize="12sp" />

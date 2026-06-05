@@ -36,7 +36,7 @@
                     android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_arrow_left"
-                    app:tint="#0B61CA" />
+                    app:tint="#004EEB" />
             </FrameLayout>
 
             <FrameLayout
@@ -73,7 +73,7 @@
                 android:orientation="vertical"
                 android:layout_marginHorizontal="8dp"
                 app:layout_constraintStart_toEndOf="@id/headerAvatarContainer"
-                app:layout_constraintEnd_toStartOf="@id/btnSearch"
+                app:layout_constraintEnd_toStartOf="@id/btnPhone"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent">
 
@@ -110,16 +110,44 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
+            <FrameLayout
+                android:id="@+id/btnPhone"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                app:layout_constraintEnd_toStartOf="@id/btnSearch"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_phone_outline"
+                    app:tint="#004EEB" />
+            </FrameLayout>
+
+            <FrameLayout
                 android:id="@+id/btnSearch"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:padding="6dp"
-                android:src="@drawable/ic_chat_search"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:tint="#101828" />
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_chat_search"
+                    app:tint="#004EEB" />
+            </FrameLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <LinearLayout
@@ -571,23 +599,27 @@
                     android:orientation="horizontal">
 
                     <ImageView
+                        android:id="@+id/btnInputCamera"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginEnd="8dp"
+                        android:contentDescription="Camera"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#98A2B3"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                    <ImageView
                         android:id="@+id/btnEmoji"
                         android:layout_width="22dp"
                         android:layout_height="22dp"
                         android:contentDescription="Emoji"
                         android:src="@drawable/ic_chat_emoji"
-                        app:tint="#98A2B3" />
-
-                    <ImageView
-                        android:id="@+id/btnInputCamera"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="14dp"
+                        app:tint="#98A2B3"
                         android:clickable="true"
                         android:focusable="true"
-                        android:contentDescription="Camera"
-                        android:src="@drawable/ic_chat_camera"
-                        app:tint="#98A2B3" />
+                        android:background="?attr/selectableItemBackgroundBorderless" />
                 </LinearLayout>
             </FrameLayout>
 

@@ -117,10 +117,6 @@
                     android:orientation="vertical"
                     android:padding="12dp">
 
-                    <!-- Header row: title + subtitle on the left, scope
-                         chip on the right. Chip is the My / Team / All
-                         dropdown trigger; hidden at runtime for staff
-                         who don't have leaves.approve. -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -152,42 +148,6 @@
                                 android:textSize="10sp" />
                         </LinearLayout>
 
-                        <LinearLayout
-                            android:id="@+id/scopeChip"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_leave_filter_container"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="6dp"
-                            android:visibility="gone">
-
-                            <View
-                                android:layout_width="6dp"
-                                android:layout_height="6dp"
-                                android:background="@drawable/bg_icon_accent" />
-
-                            <TextView
-                                android:id="@+id/tvScopeLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="6dp"
-                                android:fontFamily="@font/inter_semibold"
-                                android:text="My Leaves"
-                                android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="11sp" />
-
-                            <ImageView
-                                android:layout_width="14dp"
-                                android:layout_height="14dp"
-                                android:layout_marginStart="4dp"
-                                android:contentDescription="@null"
-                                android:src="@drawable/ic_chevron_down"
-                                app:tint="?attr/colorForegroundSecondary" />
-                        </LinearLayout>
                     </LinearLayout>
 
                     <LinearLayout

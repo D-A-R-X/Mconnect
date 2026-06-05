@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -75,7 +76,7 @@ class DialerFragment : Fragment() {
         station = prefs.getString(KEY_STATION, DEFAULT_STATION) ?: DEFAULT_STATION
 
         view.findViewById<View>(R.id.btnDialerBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnDialerSettings).setOnClickListener { showStationDialog() }
 

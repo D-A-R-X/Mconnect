@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -7,11 +9,13 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 class ChatContactInfoFragment : Fragment() {
@@ -48,7 +52,8 @@ class ChatContactInfoFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.avatarContainer.clipToOutline = true
+        binding.btnBack.setOnClickListener { navigateUp() }
 
         val title = arguments?.getString("title").orEmpty().ifBlank { "Chat" }
 
@@ -56,12 +61,16 @@ class ChatContactInfoFragment : Fragment() {
         val conversationId = arguments?.getString("conversationId")
         val otherStaffId = arguments?.getString("otherStaffId")
 
-        binding.btnMessage.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.tvHeaderTitle.text = title
+        binding.tvHeaderSubtitle.text = "Last seen recently"
+
+        binding.btnMessage.setOnClickListener { navigateUp() }
         binding.btnCreateGroup.setOnClickListener {
             toast("Create group feature coming soon")
         }
 
         setupMuteRow(channelId, conversationId)
+        
         binding.rowMedia.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(
@@ -71,7 +80,9 @@ class ChatContactInfoFragment : Fragment() {
                 .addToBackStack(null)
                 .commit()
         }
-        binding.rowSearch.setOnClickListener {
+        
+        // Search button in header behaves same as search row
+        binding.btnSearch.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(
                     R.id.fragmentContainer,
@@ -79,6 +90,11 @@ class ChatContactInfoFragment : Fragment() {
                 )
                 .addToBackStack(null)
                 .commit()
+        }
+
+        // Phone button in header dial digits
+        binding.btnPhone.setOnClickListener {
+            dialPhone()
         }
 
         // Hydrate from local cache before showing skeleton so the page paints
@@ -105,6 +121,16 @@ class ChatContactInfoFragment : Fragment() {
         }
     }
 
+    private fun dialPhone() {
+        val phone = binding.tvPhone.text?.toString()
+        if (!phone.isNullOrBlank() && phone != "+1 (555) 123-4567") {
+            val digits = phone.filter { it.isDigit() || it == '+' }
+            runCatching {
+                startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$digits")))
+            }
+        }
+    }
+
     private fun hydrateFromCache(
         channelId: String?,
         conversationId: String?,
@@ -118,9 +144,12 @@ class ChatContactInfoFragment : Fragment() {
                 val title = channel.name?.ifBlank { null } ?: fallbackTitle
                 val type = channel.type?.replaceFirstChar { it.uppercase() } ?: "Channel"
                 binding.tvCompany.text = type
-                binding.tvRole.text = (channel.memberCount ?: 0).let {
+                val membersStr = (channel.memberCount ?: 0).let {
                     if (it > 0) "$it members" else ""
                 }
+                binding.tvRole.text = membersStr
+                binding.tvHeaderSubtitle.text = membersStr
+                binding.statusDot.visibility = View.GONE
                 render(title, channel.description?.ifBlank { null }
                     ?: "Team updates and discussions live here.")
                 true
@@ -161,7 +190,10 @@ class ChatContactInfoFragment : Fragment() {
             val type = channel?.type?.replaceFirstChar { it.uppercase() } ?: "Channel"
 
             binding.tvCompany.text = type
-            binding.tvRole.text = if (memberCount > 0) "$memberCount members" else ""
+            val membersStr = if (memberCount > 0) "$memberCount members" else ""
+            binding.tvRole.text = membersStr
+            binding.tvHeaderSubtitle.text = membersStr
+            binding.statusDot.visibility = View.GONE
 
             val about = channel?.description?.ifBlank { null }
                 ?: "Team updates and discussions live here."
@@ -212,15 +244,67 @@ class ChatContactInfoFragment : Fragment() {
             ?: conversation?.displayName?.ifBlank { null }
             ?: fallbackTitle
 
+        binding.tvHeaderTitle.text = title
         binding.tvCompany.text = staff?.company ?: "Stark Industries"
         binding.tvRole.text = staff?.designation ?: staff?.role ?: "Senior Design Manager"
         binding.tvPhone.text = staff?.phone ?: "+1 (555) 123-4567"
         binding.tvEmail.text = staff?.email ?: "alicia.rochefort@starkindustries.com"
-        binding.tvAddress.text = staff?.address ?: "Ash Nagar Main Road"
+        binding.tvAddress.text = staff?.address ?: "Ashok Nagar Main Road"
+
+        val photoUrl = staff?.photo
+        if (!photoUrl.isNullOrBlank()) {
+            binding.ivAvatarPhoto.visibility = View.VISIBLE
+            binding.ivAvatarPhoto.load(photoUrl)
+        } else {
+            binding.ivAvatarPhoto.visibility = View.GONE
+        }
+
+        val contactId = staff?.id ?: otherStaffId()
+        if (!contactId.isNullOrBlank()) {
+            binding.statusDot.visibility = View.GONE
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching {
+                    val presence = api.getPresence(requireSession(), staffId = contactId).presence
+                    if (_binding == null) return@launch
+                    val isOnline = presence?.status == "online"
+                    binding.tvHeaderSubtitle.text = if (isOnline) {
+                        "Online"
+                    } else {
+                        formatLastSeen(presence?.lastSeenAt)
+                    }
+                    binding.statusDot.visibility = if (isOnline) View.VISIBLE else View.GONE
+                }
+            }
+        } else {
+            binding.tvHeaderSubtitle.text = "Last seen recently"
+            binding.statusDot.visibility = View.GONE
+        }
 
         val about = staff?.department
             ?: "Start a conversation and keep your project communication in one place."
         render(title, about)
+    }
+
+    private fun otherStaffId(): String? {
+        return arguments?.getString("otherStaffId")
+    }
+
+    private fun formatLastSeen(timestamp: Long?): String {
+        if (timestamp == null || timestamp <= 0L) return "Last seen recently"
+        val now = System.currentTimeMillis()
+        val diff = now - timestamp
+        if (diff < 60_000L) return "Last seen just now"
+        
+        val calNow = java.util.Calendar.getInstance()
+        val calThen = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+        val sameDay = calNow.get(java.util.Calendar.YEAR) == calThen.get(java.util.Calendar.YEAR) &&
+                calNow.get(java.util.Calendar.DAY_OF_YEAR) == calThen.get(java.util.Calendar.DAY_OF_YEAR)
+                
+        val time = java.text.SimpleDateFormat("h:mma", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        return if (sameDay) "Last seen Today $time" else {
+            val day = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+            "Last seen $day $time"
+        }
     }
 
     private fun render(title: String, about: String) {
@@ -234,6 +318,7 @@ class ChatContactInfoFragment : Fragment() {
 
         binding.tvAvatar.text = initials
         binding.tvTitle.text = title
+        binding.tvHeaderTitle.text = title
         binding.tvAbout.text = about
     }
 

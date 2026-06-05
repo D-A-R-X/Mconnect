@@ -12,7 +12,7 @@
             <solid android:color="@android:color/transparent" />
             <stroke
                 android:width="2dp"
-                android:color="#1BCA0B" />
+                android:color="#004EEB" />
         </shape>
     </item>
     <!-- Inner filled circle inset by 3dp so a 1dp white gap shows between
@@ -25,8 +25,8 @@
         <shape android:shape="oval">
             <gradient
                 android:angle="270"
-                android:endColor="#3D9D02"
-                android:startColor="#1BCA0B" />
+                android:endColor="#004EEB"
+                android:startColor="#3B82F6" />
         </shape>
     </item>
 </layer-list>

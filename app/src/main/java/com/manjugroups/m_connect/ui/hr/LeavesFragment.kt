@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -25,6 +26,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
 import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -35,19 +37,6 @@ class LeavesFragment : Fragment() {
 
     private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
     private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
-    // Top-level scope in History mode for higher-role users:
-    //   • MY    – the user's own leaves (default; only option for
-    //             regular employees, chip is hidden)
-    //   • TEAM  – leaves submitted by the user's reporting team
-    //             (pendingApprovals, surfaces Approve/Reject buttons)
-    //   • ALL   – every leave across the org (admin / HR view; for
-    //             now reuses myLeaves as a passthrough since the
-    //             mobile API doesn't yet ship an "all-leaves" feed)
-    private enum class Scope(val label: String) {
-        MY("My Leaves"),
-        TEAM("Team Leaves"),
-        ALL("All Leaves"),
-    }
 
     private var _binding: FragmentLeavesBinding? = null
     private val binding get() = _binding!!
@@ -56,7 +45,6 @@ class LeavesFragment : Fragment() {
     private var screenMode: String = MODE_HISTORY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
-    private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
@@ -94,7 +82,7 @@ class LeavesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnApplyLeave.setOnClickListener {
@@ -121,13 +109,6 @@ class LeavesFragment : Fragment() {
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
             updateFilterUi()
-            // Higher-role scope chip — visible only when the user can
-            // approve leaves. Regular employees never see the chip and
-            // stay on the My Leaves view by default.
-            val canApprove = session.hasPermission("leaves.approve")
-            binding.scopeChip.visibility = if (canApprove) View.VISIBLE else View.GONE
-            if (canApprove) setupScopeChip()
-            updateScopeUi()
         }
 
         collectState()
@@ -160,44 +141,7 @@ class LeavesFragment : Fragment() {
         }
     }
 
-    private fun setupScopeChip() {
-        binding.scopeChip.setOnClickListener { anchor ->
-            val popup = android.widget.PopupMenu(requireContext(), anchor)
-            // Stable menu ids — Scope.ordinal lines up with menu order
-            // so we can map back without a separate switch.
-            popup.menu.add(0, Scope.MY.ordinal, 0, Scope.MY.label)
-            popup.menu.add(0, Scope.TEAM.ordinal, 1, Scope.TEAM.label)
-            popup.menu.add(0, Scope.ALL.ordinal, 2, Scope.ALL.label)
-            popup.setOnMenuItemClickListener { item ->
-                val picked = Scope.values()
-                    .firstOrNull { it.ordinal == item.itemId } ?: return@setOnMenuItemClickListener false
-                if (picked != scope) {
-                    scope = picked
-                    updateScopeUi()
-                    renderState(viewModel.uiState.value)
-                }
-                true
-            }
-            popup.show()
-        }
-    }
 
-    private fun updateScopeUi() {
-        binding.tvScopeLabel.text = scope.label
-        // Switch the header title so the screen self-labels (matches
-        // the design — "Total Leave" for My, "Team Leaves" for Team).
-        binding.tvBalanceTitle.text = when (scope) {
-            Scope.MY -> "Total Leave"
-            Scope.TEAM -> "Team Leaves"
-            Scope.ALL -> "All Leaves"
-        }
-        // Status filter chips (Review / Approved / Rejected) are only
-        // meaningful for the My scope today — Team scope ships the
-        // pending pile straight through (server returns pending only),
-        // and All scope reuses My data so chips still apply there.
-        binding.filterRow.visibility =
-            if (scope == Scope.TEAM) View.GONE else View.VISIBLE
-    }
 
     private fun updateFilterUi() {
         styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
@@ -233,12 +177,15 @@ class LeavesFragment : Fragment() {
         //            a dedicated "all-leaves" endpoint exists)
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
-        } else when (scope) {
-            Scope.MY -> filterHistoryLeaves(state.myLeaves)
-            Scope.TEAM -> state.pendingApprovals
-            Scope.ALL -> filterHistoryLeaves(state.myLeaves)
+        } else {
+            filterHistoryLeaves(state.myLeaves)
         }
         val isLoading = state.isLoading
+
+        if (screenMode == MODE_HISTORY) {
+            binding.filterRow.visibility = View.VISIBLE
+        }
+
         // Clear the pull-refresh spinner as soon as a non-loading state
         // arrives — regardless of whether it's success or error.
         if (!isLoading) binding.leavesRefresh.dismissRefresh()
@@ -271,23 +218,17 @@ class LeavesFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayLeaves.isEmpty())
-        // Approve/Reject inline on rows in:
-        //   • approval mode (notification deep-link), AND
-        //   • history mode with Team scope (manager reviewing pending
-        //     team leaves from the chip dropdown)
-        val showApprovalActions = canApprove && (
-            screenMode == MODE_APPROVAL
-                || (screenMode == MODE_HISTORY && scope == Scope.TEAM)
-        )
-        renderLeaves(displayLeaves, showApprovalActions)
+        val isApprovalForRender = canApprove && screenMode == MODE_APPROVAL
+        renderLeaves(displayLeaves, isApprovalForRender)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
-        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
+        val isTeamScope = screenMode == MODE_APPROVAL
+        val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
         binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
         binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
 
-        if (screenMode == MODE_APPROVAL) {
+        if (isTeamScope) {
             binding.tvSectionTitle.text = "Leave Approvals"
             binding.tvSectionSubtitle.visibility = View.GONE
         } else {
@@ -426,6 +367,13 @@ class LeavesFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvLeaveType).text = rangeText
             card.findViewById<TextView>(R.id.tvLeaveStatus).text = "$days Day${if (days > 1) "s" else ""}"
 
+            // Dynamic labels matching Figma: reason as left label, leave type as right label
+            val reasonLabel = card.findViewById<TextView>(R.id.tvLeaveReasonLabel)
+            val typeLabel = card.findViewById<TextView>(R.id.tvLeaveTypeLabel)
+            reasonLabel.text = leave.reason?.trim()?.takeIf { it.isNotBlank() } ?: "Leave Date"
+            val leaveTypeDisplay = leave.leaveType?.replaceFirstChar { it.uppercaseChar() }?.let { "$it Leave" } ?: "Total Leave"
+            typeLabel.text = leaveTypeDisplay
+
             val reasonText = card.findViewById<TextView>(R.id.tvLeaveReason)
             reasonText.text = statusNote
             reasonText.setTextColor(statusColor)
@@ -495,36 +443,15 @@ class LeavesFragment : Fragment() {
                 actionRow.visibility = View.GONE
             }
 
-            // Per-row cancel affordance — visible ONLY on the user's
-            // own pending requests in History mode (My Leaves view).
-            // Mirrors the Permissions screen's trash icon. Hidden on
-            // approver-mode rows (those already get Approve/Reject)
-            // and on Approved/Rejected buckets (terminal states).
-            val cancelIcon = card.findViewById<android.widget.ImageView>(R.id.ivLeaveCancel)
-            val canCancel = !approvalMode
-                && screenMode == MODE_HISTORY
-                && scope == Scope.MY
-                && bucket == StatusBucket.REVIEW
-                && leave.id != null
-            cancelIcon.visibility = if (canCancel) View.VISIBLE else View.GONE
-            if (canCancel) {
-                cancelIcon.setOnClickListener {
-                    val id = leave.id ?: return@setOnClickListener
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Cancel leave request?")
-                        .setMessage("This will withdraw your pending request.")
-                        .setPositiveButton("Cancel Request") { _, _ ->
-                            viewModel.cancelLeave(
-                                session.bearerToken,
-                                id,
-                                session.hasPermission("leaves.approve"),
-                            )
-                        }
-                        .setNegativeButton("Keep", null)
-                        .show()
+            // Show delete icon on the user's own leave cards (history mode only)
+            val deleteBtn = card.findViewById<View>(R.id.btnDeleteLeave)
+            if (!approvalMode && leave.id != null) {
+                deleteBtn.visibility = View.VISIBLE
+                deleteBtn.setOnClickListener {
+                    showCancelLeaveDialog(leave.id)
                 }
             } else {
-                cancelIcon.setOnClickListener(null)
+                deleteBtn.visibility = View.GONE
             }
 
             if (leave.id == focusedEntityId) {
@@ -615,6 +542,32 @@ class LeavesFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showCancelLeaveDialog(leaveId: String) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+
+        // Set the background transparent so the rounded corners of bg_dialog_card show perfectly
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        // Wire up buttons
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            viewModel.cancelLeave(
+                session.bearerToken,
+                leaveId,
+                session.hasPermission("leaves.approve")
+            )
+        }
+
+        dialog.show()
     }
 
     private fun resolveColor(attr: Int): Int {

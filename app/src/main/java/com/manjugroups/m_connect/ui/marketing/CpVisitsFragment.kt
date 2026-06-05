@@ -34,6 +34,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -69,7 +70,7 @@ class CpVisitsFragment : Fragment() {
         rootView = view
 
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnCreateCpVisit).setOnClickListener { showCreateDialog() }
 
@@ -252,15 +253,42 @@ class CpVisitsFragment : Fragment() {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load CP visits")
+                    Toast.makeText(
+                        requireContext(),
+                        "CP fetch failed: ${resp.error ?: "unknown"}",
+                        Toast.LENGTH_LONG,
+                    ).show()
                     return@launch
                 }
                 allVisits = resp.visits
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedByDescending { it.scheduledDate }
+                // Diagnostic: surface server-reported count alongside
+                // the client-mapped count so the user can tell "0 from
+                // server" apart from "server returned N but mapper
+                // dropped them all".
+                if (resp.visits.isEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "CP /my: server returned 0 visits for your account",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else if (allVisits.isEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "CP /my: server sent ${resp.visits.size} but mapper dropped all",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
+                Toast.makeText(
+                    requireContext(),
+                    "CP network error: ${e.message ?: "unknown"}",
+                    Toast.LENGTH_LONG,
+                ).show()
             } finally {
                 root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
                     R.id.cpvRefresh
@@ -786,11 +814,12 @@ class CpVisitsFragment : Fragment() {
             .ifBlank { "User" }
 
     /**
-     * Renders "MM/dd/yy hh:mm a" — matches design "12/12/26 09:30 AM".
-     * Uses scheduledStartTime if provided, otherwise the date-only field.
+     * Renders "dd/MM/yyyy hh:mm a" — matches the rest of the app's
+     * date convention (Indian dd/MM/yyyy, not US MM/dd/yy). Uses
+     * scheduledStartTime if provided, otherwise the date-only field.
      */
     private fun formatDateTime(visit: TodayVisit): String? {
-        val dateOut = SimpleDateFormat("MM/dd/yy", Locale.US)
+        val dateOut = SimpleDateFormat("dd/MM/yyyy", Locale.US)
         val timeOut = SimpleDateFormat("hh:mm a", Locale.US)
 
         val isoCandidates = listOf(visit.scheduledStartTime, visit.scheduledDate)

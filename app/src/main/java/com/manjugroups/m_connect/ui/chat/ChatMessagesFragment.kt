@@ -48,6 +48,7 @@ import com.manjugroups.m_connect.network.TypingRequest
 import com.manjugroups.m_connect.network.ReactionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.DeleteMessageRequest
+import com.manjugroups.m_connect.ui.common.navigateUp
 import android.graphics.Bitmap
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +87,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var chatMuted: Boolean = false
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
+    private var otherStaffPhone: String? = null
     private var latestMessageTime: Double = 0.0
     private var currentTypingText: String? = null
     private var presencePollCounter = 0
@@ -133,6 +135,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (uris.isEmpty()) return@registerForActivityResult
             handlePickedAttachments(uris)
         }
+
+    private val storagePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            loadLocalMediaList()
+        }
+
+    private var localMediaAdapter: LocalMediaAdapter? = null
 
     companion object {
         private const val MAX_ATTACHMENT_COUNT = 5
@@ -204,9 +213,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.rvMessages.visibility = View.VISIBLE
             renderMessages(scrollToBottom = true)
         }
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.titleGroup.setOnClickListener { openContactInfo() }
         binding.btnSearch.setOnClickListener { showInlineSearch() }
+        binding.btnPhone.setOnClickListener {
+            val phone = otherStaffPhone
+            if (!phone.isNullOrBlank()) {
+                dialPhone(phone)
+            } else {
+                toast("Call feature unavailable (no phone number found)")
+            }
+        }
+        binding.btnPhone.visibility = if (channelId != null) View.GONE else View.VISIBLE
         setupInlineSearch()
         binding.btnChatHeaderMenu.setOnClickListener { showChatHeaderMenu(it) }
         
@@ -1698,6 +1716,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         binding.emojiPanel.visibility = View.GONE
         wireAttachTiles()
+        checkStoragePermissionsAndLoadMedia()
 
         val panel = binding.attachPanel
         panel.animate().cancel()
@@ -2045,6 +2064,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
                             photoUrl = staffResp.staff?.photo
+                            otherStaffPhone = staffResp.staff?.phone
                         }
                     }
                 }
@@ -2270,6 +2290,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             )
         }
+        syncLocalMediaSelection()
     }
 
     private fun createPendingAttachmentView(attachment: PendingAttachment): LinearLayout {
@@ -2921,6 +2942,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun markRead() {
+        if (view == null) return
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 when {
@@ -2946,6 +2968,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         if ((channel == null && conversation == null) || binding.etMessage.text.isNullOrBlank()) {
             return
         }
+        if (view == null) return
 
         typingDebounceJob?.cancel()
         typingDebounceJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -3277,4 +3300,319 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (_binding != null) toast(if (ok) "Saved to gallery" else "Couldn't save")
         }
     }
+
+    private fun dialPhone(phone: String) {
+        val digits = phone.filter { it.isDigit() || it == '+' }
+        if (digits.isBlank()) return
+        val intent = Intent(Intent.ACTION_DIAL).apply {
+            data = Uri.parse("tel:$digits")
+        }
+        runCatching { startActivity(intent) }
+    }
+
+    private data class LocalMediaItem(
+        val uri: android.net.Uri,
+        val name: String,
+        val size: Long,
+        val mimeType: String,
+        val isVideo: Boolean,
+        val durationStr: String? = null,
+        val isMock: Boolean = false,
+        val mockUrl: String? = null
+    )
+
+    private inner class LocalMediaAdapter(
+        val items: List<LocalMediaItem>,
+        private val onSelectionChanged: (LocalMediaItem, Boolean) -> Unit
+    ) : androidx.recyclerview.widget.RecyclerView.Adapter<LocalMediaAdapter.ViewHolder>() {
+
+        val selectedItems = mutableSetOf<LocalMediaItem>()
+
+        inner class ViewHolder(view: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
+            val borderContainer: View = view.findViewById(R.id.borderContainer)
+            val imageContainer: View = view.findViewById(R.id.imageContainer)
+            val ivThumbnail: ImageView = view.findViewById(R.id.ivThumbnail)
+            val badgeSelected: View = view.findViewById(R.id.badgeSelected)
+            val videoBadge: View = view.findViewById(R.id.videoBadge)
+            val tvVideoDuration: TextView = view.findViewById(R.id.tvVideoDuration)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_chat_local_media, parent, false)
+            val imageContainer = view.findViewById<View>(R.id.imageContainer)
+            imageContainer.background = androidx.core.content.ContextCompat.getDrawable(parent.context, R.drawable.bg_chat_local_media_thumbnail_shape)
+            imageContainer.clipToOutline = true
+            return ViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val item = items[position]
+            val isSelected = selectedItems.contains(item)
+
+            if (item.isMock) {
+                holder.ivThumbnail.load(item.mockUrl)
+            } else {
+                holder.ivThumbnail.load(item.uri)
+            }
+
+            if (isSelected) {
+                holder.borderContainer.background = androidx.core.content.ContextCompat.getDrawable(
+                    holder.itemView.context, R.drawable.bg_chat_local_media_border
+                )
+                holder.badgeSelected.visibility = View.VISIBLE
+            } else {
+                holder.borderContainer.background = null
+                holder.badgeSelected.visibility = View.GONE
+            }
+
+            if (item.isVideo) {
+                holder.videoBadge.visibility = View.VISIBLE
+                holder.tvVideoDuration.text = item.durationStr ?: "0:00"
+            } else {
+                holder.videoBadge.visibility = View.GONE
+            }
+
+            holder.itemView.setOnClickListener {
+                val currentlySelected = selectedItems.contains(item)
+                if (currentlySelected) {
+                    selectedItems.remove(item)
+                } else {
+                    selectedItems.add(item)
+                }
+                notifyItemChanged(position)
+                onSelectionChanged(item, !currentlySelected)
+            }
+        }
+
+        override fun getItemCount() = items.size
+
+        fun clearSelection() {
+            selectedItems.clear()
+            notifyDataSetChanged()
+        }
+    }
+
+    private fun checkStoragePermissionsAndLoadMedia() {
+        val context = context ?: return
+        val permissions = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            arrayOf(
+                android.Manifest.permission.READ_MEDIA_IMAGES,
+                android.Manifest.permission.READ_MEDIA_VIDEO,
+                android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            )
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(
+                android.Manifest.permission.READ_MEDIA_IMAGES,
+                android.Manifest.permission.READ_MEDIA_VIDEO
+            )
+        } else {
+            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+        val hasAnyPermission = permissions.any {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+        if (hasAnyPermission) {
+            loadLocalMediaList()
+        } else {
+            storagePermissionLauncher.launch(permissions)
+        }
+    }
+
+    private fun loadLocalMediaList() {
+        val list = mutableListOf<LocalMediaItem>()
+        list.addAll(queryLocalMedia())
+
+        val mockItems = listOf(
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_1.jpg",
+                size = 102400L,
+                mimeType = "image/jpeg",
+                isVideo = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/82/300/300"
+            ),
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_2.jpg",
+                size = 204800L,
+                mimeType = "image/jpeg",
+                isVideo = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1016/300/300"
+            ),
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_3.jpg",
+                size = 307200L,
+                mimeType = "image/jpeg",
+                isVideo = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1015/300/300"
+            ),
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_Video.mp4",
+                size = 1536000L,
+                mimeType = "video/mp4",
+                isVideo = true,
+                durationStr = "0:54",
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1018/300/300"
+            ),
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_4.jpg",
+                size = 409600L,
+                mimeType = "image/jpeg",
+                isVideo = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1043/300/300"
+            ),
+            LocalMediaItem(
+                uri = android.net.Uri.EMPTY,
+                name = "Sample_5.jpg",
+                size = 512000L,
+                mimeType = "image/jpeg",
+                isVideo = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1025/300/300"
+            )
+        )
+        list.addAll(mockItems)
+
+        val recyclerView = binding.attachPanel.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvLocalMedia)
+        if (recyclerView != null) {
+            recyclerView.layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, 5)
+            recyclerView.isNestedScrollingEnabled = false
+            val adapter = LocalMediaAdapter(list) { item, selected ->
+                handleLocalMediaSelection(item, selected)
+            }
+            localMediaAdapter = adapter
+            recyclerView.adapter = adapter
+        }
+    }
+
+    private fun queryLocalMedia(): List<LocalMediaItem> {
+        val list = mutableListOf<LocalMediaItem>()
+        val context = context ?: return list
+
+        val imagesUri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val imagesProjection = arrayOf(
+            android.provider.MediaStore.Images.Media._ID,
+            android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+            android.provider.MediaStore.Images.Media.SIZE,
+            android.provider.MediaStore.Images.Media.MIME_TYPE
+        )
+
+        val sortOrder = "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
+
+        runCatching {
+            context.contentResolver.query(imagesUri, imagesProjection, null, null, sortOrder)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                val nameCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.SIZE)
+                val mimeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.MIME_TYPE)
+
+                var count = 0
+                while (cursor.moveToNext() && count < 20) {
+                    val id = cursor.getLong(idCol)
+                    val name = cursor.getString(nameCol)
+                    val size = cursor.getLong(sizeCol)
+                    val mime = cursor.getString(mimeCol)
+                    val contentUri = android.content.ContentUris.withAppendedId(imagesUri, id)
+                    list.add(LocalMediaItem(uri = contentUri, name = name, size = size, mimeType = mime, isVideo = false))
+                    count++
+                }
+            }
+        }.onFailure { e ->
+            android.util.Log.e("ChatMessages", "Error querying images", e)
+        }
+
+        val videosUri = android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val videosProjection = arrayOf(
+            android.provider.MediaStore.Video.Media._ID,
+            android.provider.MediaStore.Video.Media.DISPLAY_NAME,
+            android.provider.MediaStore.Video.Media.SIZE,
+            android.provider.MediaStore.Video.Media.MIME_TYPE,
+            android.provider.MediaStore.Video.Media.DURATION
+        )
+
+        runCatching {
+            context.contentResolver.query(videosUri, videosProjection, null, null, sortOrder)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+                val nameCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.SIZE)
+                val mimeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.MIME_TYPE)
+                val durationCol = cursor.getColumnIndex(android.provider.MediaStore.Video.Media.DURATION)
+
+                var count = 0
+                while (cursor.moveToNext() && count < 20) {
+                    val id = cursor.getLong(idCol)
+                    val name = cursor.getString(nameCol)
+                    val size = cursor.getLong(sizeCol)
+                    val mime = cursor.getString(mimeCol)
+                    val durationMs = if (durationCol != -1) cursor.getLong(durationCol) else 0L
+                    val durationStr = formatDuration(durationMs)
+                    val contentUri = android.content.ContentUris.withAppendedId(videosUri, id)
+                    list.add(LocalMediaItem(uri = contentUri, name = name, size = size, mimeType = mime, isVideo = true, durationStr = durationStr))
+                    count++
+                }
+            }
+        }.onFailure { e ->
+            android.util.Log.e("ChatMessages", "Error querying videos", e)
+        }
+
+        return list.sortedByDescending { it.uri.hashCode() }
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val sec = (ms / 1000) % 60
+        val min = (ms / (1000 * 60)) % 60
+        val hr = (ms / (1000 * 60 * 60))
+        return if (hr > 0) {
+            String.format("%d:%02d:%02d", hr, min, sec)
+        } else {
+            String.format("%d:%02d", min, sec)
+        }
+    }
+
+    private fun handleLocalMediaSelection(item: LocalMediaItem, selected: Boolean) {
+        val uriStr = if (item.isMock) item.mockUrl.orEmpty() else item.uri.toString()
+        if (selected) {
+            if (pendingAttachments.none { it.uri.toString() == uriStr }) {
+                val uri = if (item.isMock) android.net.Uri.parse(item.mockUrl) else item.uri
+                val pending = PendingAttachment(
+                    uri = uri,
+                    fileName = item.name,
+                    fileType = item.mimeType,
+                    fileSize = item.size
+                )
+                pendingAttachments.add(pending)
+                renderPendingAttachments()
+            }
+        } else {
+            val toRemove = pendingAttachments.find { it.uri.toString() == uriStr }
+            if (toRemove != null) {
+                pendingAttachments.remove(toRemove)
+                renderPendingAttachments()
+            }
+        }
+    }
+
+    private fun syncLocalMediaSelection() {
+        val adapter = localMediaAdapter ?: return
+        val currentUris = pendingAttachments.map { it.uri.toString() }.toSet()
+        val adapterItemsToRemove = adapter.selectedItems.filter { item ->
+            val uriStr = if (item.isMock) item.mockUrl.orEmpty() else item.uri.toString()
+            !currentUris.contains(uriStr)
+        }
+        if (adapterItemsToRemove.isNotEmpty()) {
+            adapter.selectedItems.removeAll(adapterItemsToRemove)
+            adapter.notifyDataSetChanged()
+        }
+    }
 }
+

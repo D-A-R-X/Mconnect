@@ -26,6 +26,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentSelfieCameraBinding
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -119,11 +120,11 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
         binding.mapViewSelfieLocation.getMapAsync(this)
 
         binding.btnBackCamera.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnCloseCamera.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnCapture.setOnClickListener {

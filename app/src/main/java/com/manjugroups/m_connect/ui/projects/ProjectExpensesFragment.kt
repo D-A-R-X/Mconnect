@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -100,7 +101,7 @@ class ProjectExpensesFragment : Fragment() {
         androidx.core.view.ViewCompat.requestApplyInsets(expenseHeader)
 
         view.findViewById<ImageView>(R.id.btnBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         btnProjectPicker = view.findViewById(R.id.btnProjectPicker)

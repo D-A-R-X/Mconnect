@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ChatAttachmentItem
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,7 +50,7 @@ class ChatMediaFragment : Fragment() {
         conversationId = arguments?.getString(ARG_CONVERSATION_ID)
 
         view.findViewById<View>(R.id.btnMediaBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         loadAttachments(view)

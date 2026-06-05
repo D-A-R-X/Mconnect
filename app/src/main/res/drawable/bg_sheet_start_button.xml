@@ -5,5 +5,5 @@
         android:angle="270"
         android:startColor="@color/chat_green_top"
         android:endColor="@color/chat_green_bottom" />
-    <corners android:radius="24dp" />
+    <corners android:radius="100dp" />
 </shape>

@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TodayShiftDay
 import com.manjugroups.m_connect.network.TodayShiftResponse
 import com.manjugroups.m_connect.network.TodayShiftSchedule
+import com.manjugroups.m_connect.ui.common.navigateUp
 import java.util.Calendar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -174,7 +175,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         binding.mapViewClockIn.getMapAsync(this)
 
         binding.btnBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnRefresh.setOnClickListener {

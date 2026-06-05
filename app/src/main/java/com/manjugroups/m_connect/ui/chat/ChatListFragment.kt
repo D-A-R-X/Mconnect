@@ -663,8 +663,10 @@ class ChatListFragment : Fragment() {
                 it.layoutParams = params
                 it.setBackgroundResource(android.R.color.transparent)
                 BottomSheetBehavior.from(it).apply {
-                    state = BottomSheetBehavior.STATE_EXPANDED
-                    skipCollapsed = true
+                    val peekHeightPx = (resources.displayMetrics.heightPixels * 0.65f).toInt()
+                    peekHeight = peekHeightPx
+                    state = BottomSheetBehavior.STATE_COLLAPSED
+                    skipCollapsed = false
                     isDraggable = true
                 }
             }
@@ -685,6 +687,7 @@ class ChatListFragment : Fragment() {
 
         var people: List<StaffData> = emptyList()
         var selectedStaff: StaffData? = null
+        var onlineStaffIds: Set<String> = emptySet()
 
         fun bindStartButton() {
             val enabled = selectedStaff != null
@@ -749,6 +752,10 @@ class ChatListFragment : Fragment() {
                 )
                 avatarCheck.visibility = if (isSelected) View.VISIBLE else View.GONE
 
+                val onlineDot = row.findViewById<View>(R.id.onlineDot)
+                val isOnline = onlineStaffIds.contains(member.id)
+                onlineDot.visibility = if (isOnline) View.VISIBLE else View.GONE
+
                 row.setOnClickListener {
                     selectedStaff = if (selectedStaff?.id == member.id) null else member
                     renderPeople()
@@ -804,6 +811,14 @@ class ChatListFragment : Fragment() {
             }
         ) { staff ->
             people = staff
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching {
+                    api.getOnlineStaff(session.bearerToken)
+                }.onSuccess { resp ->
+                    onlineStaffIds = resp.online?.mapNotNull { it?.staffId }?.toSet().orEmpty()
+                    renderPeople()
+                }
+            }
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             skeletonContainer.visibility = View.GONE
             emptyState.text = "No people match your search."

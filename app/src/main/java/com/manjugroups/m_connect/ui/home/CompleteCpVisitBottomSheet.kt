@@ -1249,10 +1249,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
             etFormDistrict, etFormLocation,
         ).forEach { f ->
-            f?.isEnabled = enabled
+            // CRITICAL: do NOT use isEnabled=false here. Many Material
+            // text themes pipe state_enabled=false through to a
+            // near-transparent disabled colour on the EditText text,
+            // which made the prefilled lead data invisible until the
+            // user tapped Edit (which restored isEnabled=true). The
+            // text was always in the field — just rendered in a
+            // colour the user couldn't read.
+            //
+            // Lock editability via focus + click suppression instead.
+            // The text stays in its normal #101828 colour, the cursor
+            // can't enter the field, and key/touch events on the
+            // field don't bring up the IME or change the value.
             f?.isFocusable = enabled
             f?.isFocusableInTouchMode = enabled
-            f?.alpha = if (enabled) 1f else 0.7f
+            f?.isClickable = enabled
+            f?.isLongClickable = enabled
+            f?.isCursorVisible = enabled
+            // Drop alpha only slightly so the locked state still reads
+            // as "look but don't touch" without dimming the data into
+            // unreadability (the previous 0.7 with isEnabled=false
+            // compounded into near-transparency on some devices).
+            f?.alpha = if (enabled) 1f else 0.95f
         }
     }
 
@@ -1298,18 +1316,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      */
     private fun lookupAndPrefillClientByPhone(phone: String) {
         viewLifecycleOwner.lifecycleScope.launch {
+            // Track a user-friendly reason if the lead lookup misses or
+            // fails. We don't early-return on miss because the same
+            // phone might still match in the clients master — the
+            // function's contract is "lead first, then client". Only
+            // surface this toast if BOTH lookups end up empty.
+            var leadLookupError: String? = null
             val lead = try {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
                 if (!resp.success) {
                     android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    // Server-side rejection (FORBIDDEN, scope, etc.) —
+                    // record the message but still fall through to the
+                    // client master in case that returns something.
+                    leadLookupError = resp.error ?: "Lead lookup failed"
                     null
                 } else {
                     resp.leads.firstOrNull().also {
-                        if (it == null) android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                        if (it == null) {
+                            android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                            leadLookupError = "No existing lead for $phone"
+                        }
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                // Prefer parsed server message; otherwise the exception
+                // string. Convex 500s carry the thrown reason in the body.
+                val serverMsg = extractHttpErrorMessage(e)
+                leadLookupError = serverMsg ?: e.message ?: "Lead lookup network error"
                 null
             }
             val client = try {
@@ -1326,7 +1361,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 android.util.Log.w(LOG_TAG, "client lookup failed", e)
                 null
             }
-            if (lead == null && client == null) return@launch
+            if (lead == null && client == null) {
+                // Both lookups missed — only show the captured lead
+                // error if we're still on screen. Helps the user
+                // distinguish "no record yet" from a real fetch
+                // failure (FORBIDDEN, network, etc.). Falls back to a
+                // generic message when the lead miss was a clean
+                // "no match" and the client miss was also clean.
+                if (isAdded) {
+                    val msg = leadLookupError ?: "No existing record for $phone — fill the form"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             if (!isAdded) return@launch
 
             fun fill(field: EditText?, value: String?) {
@@ -2043,6 +2090,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         projectId = project.id,
                         scheduledDate = date,
                         scheduledTime = time,
+                        // Stamp the current user as BOTH the
+                        // convertedBy slot and the telecaller. Without
+                        // these the server falls back to the CP visit's
+                        // assignedStaffId (which is often a different
+                        // field staff) — and then the freshly-created
+                        // SV never shows up in this user's mobile feed
+                        // because `listForViewerAsMobileVisits` keys
+                        // off telecallerId / convertedByStaffId /
+                        // inchargeStaffId.
+                        telecallerId = session.staffId,
+                        convertedByStaffId = session.staffId,
                         inchargeStaffId = svIncharge?.id,
                         hodStaffId = svHod?.id,
                         avpStaffId = svAvp?.id,
@@ -2859,6 +2917,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         !visit.foodPreferences.isNullOrBlank() ||
                         !visit.vehiclePreference.isNullOrBlank()
 
+                // Always seed the SV-form caches from CP context so
+                // the visitor row, project picker and pickup address
+                // pre-fill even on a *manually*-created CP with no
+                // SV-lock signal. Locked-SV mode (below) layers on
+                // top of these defaults.
+                seedSvDefaultsFromCpVisit(visit)
+
                 // Lock the sheet if ANY signal fires:
                 //   1. proposedSiteVisit has at least one populated field
                 //   2. The lead's followUpStatus is already "sv_fixed"
@@ -2866,7 +2931,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode",
+                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode (defaults seeded)",
                     )
                     return@launch
                 }
@@ -2908,6 +2973,57 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             !avpStaffId.isNullOrBlank() ||
             !gmStaffId.isNullOrBlank() ||
             !seniorManagerStaffId.isNullOrBlank()
+    }
+
+    /**
+     * Seed the SV outcome form with whatever the CP visit already
+     * knows — client name (first visitor = client / Self), attendees
+     * the telecaller pre-set, the CP's project, and the place's
+     * pickup address. Fires unconditionally on every CP detail load
+     * so a manually-created CP gets the same head-start the
+     * locked-SV path enjoys. applyLockedSvMode runs AFTER this and
+     * can layer telecaller-pre-fixed overrides on top.
+     */
+    private suspend fun seedSvDefaultsFromCpVisit(visit: CpVisitDetail) {
+        if (!isAdded) return
+
+        // Client display name → first visitor name + "Self" relation.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+
+        // Telecaller-pre-set attendees (rare on a pure manual CP,
+        // common on the SV-fixed path) — used by renderVisitorRows.
+        cachedPrefilledAttendees = visit.attendees
+
+        // Visitor count: prefer the field the telecaller set, then
+        // attendees.size, then default to 1 so the user always sees
+        // at least the client/Self card pre-filled.
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        val effectiveCount = if (visitorCount > 0) visitorCount else 1
+        // Only stamp the field if it's blank — preserves user edits
+        // when they reopen the sheet.
+        if (etSvVisitorCount?.text?.toString().isNullOrBlank()) {
+            etSvVisitorCount?.setText(effectiveCount.toString())
+        }
+
+        // Pickup address: pull from the resolved clientPlace row.
+        if (etSvPickupAddress?.text?.toString().isNullOrBlank()) {
+            etSvPickupAddress?.setText(
+                visit.clientPlace?.address
+                    ?: visit.clientPlace?.formattedAddress
+                    ?: visit.lead?.preferredArea
+                    ?: "",
+            )
+        }
+
+        // Project picker: prefer the CP's own projectId (set by the
+        // mobile/web Create CP form's Project picker), then fall back
+        // to the proposedSiteVisit.projectId path that
+        // applyLockedSvMode also uses. Lets a manually-created CP
+        // arrive at the SV form with the project already selected.
+        val cpProjectId = visit.projectId ?: visit.proposedSiteVisit?.projectId
+        prefillProjectIfPossible(cpProjectId)
     }
 
     private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {

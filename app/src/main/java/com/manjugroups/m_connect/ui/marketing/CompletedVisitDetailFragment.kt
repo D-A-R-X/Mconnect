@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,7 +59,7 @@ class CompletedVisitDetailFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnCvdBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         bindContent(view)
@@ -574,8 +575,11 @@ class CompletedVisitDetailFragment : Fragment() {
         }
 
         // ---- People card ----
-        val fieldStaffName = visit.assignedStaff?.staffName
-        val telecallerName = visit.telecaller?.staffName
+        // Convex returns staff rows with `name`; the legacy enrichment
+        // used `staffName`. Read both so we display whichever the
+        // current API contract emits.
+        val fieldStaffName = visit.assignedStaff?.name ?: visit.assignedStaff?.staffName
+        val telecallerName = visit.telecaller?.name ?: visit.telecaller?.staffName
         if (!fieldStaffName.isNullOrBlank() || !telecallerName.isNullOrBlank()) {
             root.findViewById<View>(R.id.cvdPeopleCard).visibility = View.VISIBLE
             if (!fieldStaffName.isNullOrBlank()) {

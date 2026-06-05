@@ -21,6 +21,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSelfieClockInDetailBinding
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -80,15 +81,15 @@ class SelfieClockInDetailFragment : Fragment() {
         collectEvents()
 
         binding.btnBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnHeaderRefresh.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnRetakePhoto.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnClockInAction.setOnClickListener {
@@ -236,7 +237,7 @@ class SelfieClockInDetailFragment : Fragment() {
                                 // dashboard, which will refresh and show the
                                 // right button.
                                 if (event.message.contains("No active punch-in", ignoreCase = true)) {
-                                    parentFragmentManager.popBackStack()
+                                    navigateUp()
                                 }
                             }
                         }

@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -86,7 +87,7 @@ class QueriesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnQueriesBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnQueriesBack.setOnClickListener { navigateUp() }
         applyStatusBarInset()
 
         binding.chipQueriesAll.setOnClickListener { setFilter(Filter.ALL) }
