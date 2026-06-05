@@ -844,6 +844,12 @@ data class CpVisitDetail(
     // Site Visit tab and pre-fill the form with the telecaller's plan.
     val proposedSiteVisit: ProposedSiteVisit? = null,
     val attendees: List<CpVisitAttendee>? = null,
+    // CP-level projectId picked when the CP was created (see the
+    // mobile / web CP create form's Project field). Used by the SV
+    // outcome form to pre-fill the project picker when the CP was
+    // manually created (no proposedSiteVisit) instead of forcing
+    // the field staff to re-pick the same project.
+    val projectId: String? = null,
     // Joined references the web `enrichVisit` helper attaches:
     val lead: CpVisitLead? = null,
     val client: CpVisitClient? = null,
@@ -852,6 +858,13 @@ data class CpVisitDetail(
     val clientPlace: CpVisitPlace? = null,
     val fieldVisit: CpVisitFieldVisit? = null,
     val arrivalProof: CpVisitArrivalProof? = null,
+    /** Resolved project row from `enrichVisit` — used to label the SV picker. */
+    val project: CpVisitProject? = null,
+)
+
+data class CpVisitProject(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
 )
 
 /**

@@ -2917,6 +2917,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         !visit.foodPreferences.isNullOrBlank() ||
                         !visit.vehiclePreference.isNullOrBlank()
 
+                // Always seed the SV-form caches from CP context so
+                // the visitor row, project picker and pickup address
+                // pre-fill even on a *manually*-created CP with no
+                // SV-lock signal. Locked-SV mode (below) layers on
+                // top of these defaults.
+                seedSvDefaultsFromCpVisit(visit)
+
                 // Lock the sheet if ANY signal fires:
                 //   1. proposedSiteVisit has at least one populated field
                 //   2. The lead's followUpStatus is already "sv_fixed"
@@ -2924,7 +2931,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
                     android.util.Log.d(
                         LOG_TAG,
-                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode",
+                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode (defaults seeded)",
                     )
                     return@launch
                 }
@@ -2966,6 +2973,57 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             !avpStaffId.isNullOrBlank() ||
             !gmStaffId.isNullOrBlank() ||
             !seniorManagerStaffId.isNullOrBlank()
+    }
+
+    /**
+     * Seed the SV outcome form with whatever the CP visit already
+     * knows — client name (first visitor = client / Self), attendees
+     * the telecaller pre-set, the CP's project, and the place's
+     * pickup address. Fires unconditionally on every CP detail load
+     * so a manually-created CP gets the same head-start the
+     * locked-SV path enjoys. applyLockedSvMode runs AFTER this and
+     * can layer telecaller-pre-fixed overrides on top.
+     */
+    private suspend fun seedSvDefaultsFromCpVisit(visit: CpVisitDetail) {
+        if (!isAdded) return
+
+        // Client display name → first visitor name + "Self" relation.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+
+        // Telecaller-pre-set attendees (rare on a pure manual CP,
+        // common on the SV-fixed path) — used by renderVisitorRows.
+        cachedPrefilledAttendees = visit.attendees
+
+        // Visitor count: prefer the field the telecaller set, then
+        // attendees.size, then default to 1 so the user always sees
+        // at least the client/Self card pre-filled.
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        val effectiveCount = if (visitorCount > 0) visitorCount else 1
+        // Only stamp the field if it's blank — preserves user edits
+        // when they reopen the sheet.
+        if (etSvVisitorCount?.text?.toString().isNullOrBlank()) {
+            etSvVisitorCount?.setText(effectiveCount.toString())
+        }
+
+        // Pickup address: pull from the resolved clientPlace row.
+        if (etSvPickupAddress?.text?.toString().isNullOrBlank()) {
+            etSvPickupAddress?.setText(
+                visit.clientPlace?.address
+                    ?: visit.clientPlace?.formattedAddress
+                    ?: visit.lead?.preferredArea
+                    ?: "",
+            )
+        }
+
+        // Project picker: prefer the CP's own projectId (set by the
+        // mobile/web Create CP form's Project picker), then fall back
+        // to the proposedSiteVisit.projectId path that
+        // applyLockedSvMode also uses. Lets a manually-created CP
+        // arrive at the SV form with the project already selected.
+        val cpProjectId = visit.projectId ?: visit.proposedSiteVisit?.projectId
+        prefillProjectIfPossible(cpProjectId)
     }
 
     private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
