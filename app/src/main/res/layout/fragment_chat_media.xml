@@ -1,71 +1,349 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurfacePrimary">
+    android:background="#F8F9FC">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <LinearLayout
+        <!-- Header -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/headerContainer"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp">
 
-            <ImageView
+            <FrameLayout
                 android:id="@+id/btnMediaBack"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:contentDescription="Back"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_home_new_action_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:src="@drawable/ic_arrow_left"
-                app:tint="?attr/colorForegroundPrimary" />
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
-            <TextView
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_arrow_left"
+                    app:tint="#004EEB" />
+            </FrameLayout>
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:fontFamily="@font/inter_bold"
-                android:text="Media, Links, and Docs"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="18sp" />
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:layout_marginHorizontal="8dp"
+                app:layout_constraintStart_toEndOf="@id/btnMediaBack"
+                app:layout_constraintEnd_toStartOf="@id/btnMediaSearch"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <TextView
+                    android:id="@+id/tvMediaHeaderTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:textColor="#101828"
+                    android:textSize="17sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    tools:text="Alicia Rochefort" />
+
+                <TextView
+                    android:id="@+id/tvMediaHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:textColor="#667085"
+                    android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    tools:text="Last seen Today 11:30AM" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/btnMediaSearch"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_home_new_action_circle"
+                android:clickable="true"
+                android:focusable="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_chat_search"
+                    app:tint="#004EEB" />
+            </FrameLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Segmented Tab Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_chat_input_pill"
+                android:backgroundTint="#F1F3F8"
+                android:orientation="horizontal"
+                android:padding="4dp">
+
+                <TextView
+                    android:id="@+id/btnTabMedia"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_welcome_button_chip"
+                    android:backgroundTint="#FFFFFF"
+                    android:elevation="1dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:gravity="center"
+                    android:text="Media"
+                    android:textColor="#101828"
+                    android:textSize="13sp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/btnTabLinks"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:text="Links"
+                    android:textColor="#667085"
+                    android:textSize="13sp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/btnTabDocs"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:text="Docs"
+                    android:textColor="#667085"
+                    android:textSize="13sp"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tvMediaEmpty"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="40dp"
-            android:fontFamily="@font/inter_regular"
-            android:gravity="center"
-            android:text="No shared media yet"
-            android:textColor="?attr/colorForegroundMuted"
-            android:textSize="13sp"
-            android:visibility="gone" />
-
+        <!-- Main Scrollable Content -->
         <androidx.core.widget.NestedScrollView
+            android:id="@+id/mediaScrollView"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:fillViewport="true">
+            android:fillViewport="true"
+            android:overScrollMode="never">
 
             <LinearLayout
-                android:id="@+id/mediaList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingHorizontal="12dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="16dp" />
+                android:paddingBottom="32dp">
+
+                <!-- Media Section -->
+                <LinearLayout
+                    android:id="@+id/sectionMedia"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="16dp"
+                    android:paddingBottom="8dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="16dp"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_bold"
+                            android:text="Media"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/btnSeeAllMedia"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="See All"
+                            android:textColor="#0B61CA"
+                            android:textSize="14sp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </RelativeLayout>
+
+                    <!-- Horizontal scroll for media previews -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvMediaHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="16dp"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                        tools:listitem="@layout/item_chat_media_horizontal" />
+                </LinearLayout>
+
+                <!-- Links Section -->
+                <LinearLayout
+                    android:id="@+id/sectionLinks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="8dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="16dp"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_bold"
+                            android:text="Links"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/btnSeeAllLinks"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="See All"
+                            android:textColor="#0B61CA"
+                            android:textSize="14sp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </RelativeLayout>
+
+                    <!-- Vertical list for link items -->
+                    <LinearLayout
+                        android:id="@+id/listLinks"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp" />
+                </LinearLayout>
+
+                <!-- Docs Section -->
+                <LinearLayout
+                    android:id="@+id/sectionDocs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="8dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="16dp"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_bold"
+                            android:text="Docs"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/btnSeeAllDocs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="See All"
+                            android:textColor="#0B61CA"
+                            android:textSize="14sp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </RelativeLayout>
+
+                    <!-- Vertical list for doc items -->
+                    <LinearLayout
+                        android:id="@+id/listDocs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvMediaEmpty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="40dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:gravity="center"
+                    android:text="No shared media, links, or docs yet"
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
         </androidx.core.widget.NestedScrollView>
+
+        <!-- Full View Mode (Grid/List when "See All" or tab is selected) -->
+        <FrameLayout
+            android:id="@+id/fullViewContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvFullList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="16dp"
+                android:clipToPadding="false" />
+        </FrameLayout>
+
     </LinearLayout>
 
     <LinearLayout
@@ -73,7 +351,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="?attr/colorSurfacePrimary"
+        android:background="#F8F9FC"
         android:visibility="gone">
 
         <include layout="@layout/skeleton_list_item"/>

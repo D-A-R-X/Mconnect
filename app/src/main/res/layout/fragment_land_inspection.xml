@@ -89,14 +89,14 @@
     </LinearLayout>
 
     <!-- Rounded-top content panel — overlaps the bottom of the blue header
-         by -20dp so the page-bg curve cuts smoothly into the blue, matching
-         the reference design. Background = page bg, with 24dp rounded top
+         by -28dp so the page-bg curve cuts smoothly into the blue, matching
+         the reference design. Background = page bg, with 30dp rounded top
          corners only. -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/inspectionRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="0dp"
+        android:layout_marginTop="-28dp"
         android:layout_weight="1"
         android:background="@android:color/transparent"
         android:clipChildren="false"

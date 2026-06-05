@@ -169,13 +169,13 @@
                  the card alongside Accept (see the action row below). -->
             <FrameLayout
                 android:id="@+id/btnInspectionArrow"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="@drawable/bg_inspection_arrow_circle">
 
                 <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="center"
                     android:contentDescription="Open"
                     android:src="@drawable/ic_arrow_right_sm"
@@ -189,6 +189,7 @@
              after a date change is requested. Equal weights match the
              reference design pixel-for-pixel. -->
         <LinearLayout
+            android:id="@+id/layoutInspectionActions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="4dp"
@@ -232,7 +233,7 @@
                 android:layout_height="48dp"
                 android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_inspection_next_button"
+                android:background="@drawable/bg_inspection_accept_button"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"

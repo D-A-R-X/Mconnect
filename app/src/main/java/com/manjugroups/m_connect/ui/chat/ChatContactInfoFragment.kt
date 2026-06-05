@@ -72,10 +72,11 @@ class ChatContactInfoFragment : Fragment() {
         setupMuteRow(channelId, conversationId)
         
         binding.rowMedia.setOnClickListener {
+            val subtitle = binding.tvHeaderSubtitle.text?.toString().orEmpty()
             parentFragmentManager.beginTransaction()
                 .replace(
                     R.id.fragmentContainer,
-                    ChatMediaFragment.newInstance(channelId, conversationId, title)
+                    ChatMediaFragment.newInstance(channelId, conversationId, title, subtitle)
                 )
                 .addToBackStack(null)
                 .commit()

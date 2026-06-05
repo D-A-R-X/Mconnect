@@ -1,6 +1,9 @@
-<!-- 36dp light-blue circle for the "open detail" arrow button on each
-     inspection card. -->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Circular blue arrow button background with a light blue solid fill and stroke border. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#E0EBFB" />
+    <solid android:color="#D1E9FF" />
+    <stroke
+        android:width="1dp"
+        android:color="#93C5FD" />
 </shape>

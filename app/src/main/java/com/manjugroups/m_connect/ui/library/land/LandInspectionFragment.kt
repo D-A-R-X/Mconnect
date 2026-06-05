@@ -380,6 +380,13 @@ class LandInspectionFragment : Fragment() {
                 ?: village?.takeIf { it.isNotBlank() },
             district?.takeIf { it.isNotBlank() } ?: taluk?.takeIf { it.isNotBlank() },
         ).joinToString(", ").ifBlank { fullAddress.orEmpty() }
+
+        val finalStatus = if (!reportId.isNullOrBlank()) {
+            Status.COMPLETED
+        } else {
+            Status.fromKey(derivedInspectionStatus)
+        }
+
         return InspectionRow(
             propertyId = propertyId,
             title = referenceNo ?: "LP-${propertyId.take(8)}",
@@ -388,7 +395,7 @@ class LandInspectionFragment : Fragment() {
             date = formatInspectionDate(inspectionDate),
             rawInspectionDate = inspectionDate?.takeIf { it.isNotBlank() },
             place = place,
-            status = Status.fromKey(derivedInspectionStatus),
+            status = finalStatus,
             acceptanceStatus = inspectionAcceptanceStatus,
         )
     }
@@ -450,7 +457,7 @@ class LandInspectionFragment : Fragment() {
      */
     private fun setupInspectionScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
-        val maxPanelRadiusPx = 24f * density
+        val maxPanelRadiusPx = 30f * density
 
         // Header stays a flat-bottomed solid blue rectangle.
         val headerBg = binding.inspectionHeader.applyShrinkableBlueHeaderBackground()
@@ -525,8 +532,10 @@ class LandInspectionFragment : Fragment() {
 
             val acceptBtn = card.findViewById<View>(R.id.btnInspectionAccept)
             val acceptLabel = card.findViewById<TextView>(R.id.tvInspectionAcceptLabel)
+            val acceptIcon = card.findViewById<View>(R.id.ivInspectionAcceptIcon)
             val rescheduleBtn = card.findViewById<View>(R.id.btnInspectionReschedule)
             val arrowBtn = card.findViewById<View>(R.id.btnInspectionArrow)
+            val actionsLayout = card.findViewById<View>(R.id.layoutInspectionActions)
 
             // Mobile-only one-shot reschedule. Once the inspector has
             // requested a date change on this property, the Reschedule
@@ -552,16 +561,28 @@ class LandInspectionFragment : Fragment() {
             }
 
             when {
+                item.status == Status.COMPLETED -> {
+                    // Completed -> show only the arrow button
+                    actionsLayout.visibility = View.GONE
+                    acceptBtn.visibility = View.GONE
+                    rescheduleBtn.visibility = View.GONE
+                    arrowBtn.visibility = View.VISIBLE
+                    val openForm = View.OnClickListener {
+                        SiteInspectionBottomSheet
+                            .newInstance(item.propertyId, item.title)
+                            .show(parentFragmentManager, "site_inspection")
+                    }
+                    card.setOnClickListener(openForm)
+                    arrowBtn.setOnClickListener(openForm)
+                }
                 rescheduleInFlight -> {
                     // Reschedule pending VP approval → show a single
                     // full-width locked "Reschedule Requested" pill.
-                    // The standalone Reschedule button is hidden
-                    // entirely (no one-shot escape hatch, no parallel
-                    // entry point) so the UI never reads as "you can
-                    // still re-request" while one's already in flight.
+                    actionsLayout.visibility = View.VISIBLE
                     arrowBtn.visibility = View.GONE
                     rescheduleBtn.visibility = View.GONE
                     acceptBtn.visibility = View.VISIBLE
+                    acceptIcon.visibility = View.GONE
                     acceptLabel.text = "Reschedule Requested"
                     acceptBtn.alpha = 0.7f
                     acceptBtn.isClickable = false
@@ -574,40 +595,38 @@ class LandInspectionFragment : Fragment() {
                         ).show()
                     }
                 }
-                item.canOpenForm -> {
-                    // Openable → show the arrow; both the card and the arrow
-                    // open the Site Inspection sheet, which prefills from any
-                    // existing report.
-                    acceptBtn.visibility = View.GONE
-                    rescheduleBtn.visibility = View.GONE
-                    arrowBtn.visibility = View.VISIBLE
-                    val openForm = View.OnClickListener {
-                        SiteInspectionBottomSheet
-                            .newInstance(item.propertyId, item.title)
-                            .show(parentFragmentManager, "site_inspection")
-                    }
-                    card.setOnClickListener(openForm)
-                    arrowBtn.setOnClickListener(openForm)
-                }
                 else -> {
-                    // Pending acceptance → Accept always available. Show
-                    // Reschedule only if the inspector hasn't used their
-                    // one-shot on this property yet.
-                    acceptBtn.visibility = View.VISIBLE
-                    rescheduleBtn.visibility = if (rescheduledOnce) View.GONE else View.VISIBLE
+                    // Pending acceptance (NOT_STARTED) or IN_PROGRESS -> show Reschedule and Accept buttons
+                    actionsLayout.visibility = View.VISIBLE
                     arrowBtn.visibility = View.GONE
+                    acceptBtn.visibility = View.VISIBLE
+                    acceptIcon.visibility = View.VISIBLE
+                    rescheduleBtn.visibility = if (rescheduledOnce) View.GONE else View.VISIBLE
                     acceptLabel.text = "Accept"
                     acceptBtn.alpha = 1f
                     acceptBtn.isClickable = true
-                    acceptBtn.setOnClickListener { acceptInspection(item.propertyId) }
-                    rescheduleBtn.setOnClickListener { openRescheduleDatePicker(item.propertyId, item.rawInspectionDate) }
-                    card.setOnClickListener {
-                        android.widget.Toast.makeText(
-                            requireContext(),
-                            "Accept the inspection before filling the form.",
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
+
+                    if (item.status == Status.IN_PROGRESS || item.acceptanceStatus == "accepted") {
+                        // Already accepted or in progress: clicking accept or card opens the form
+                        val openForm = View.OnClickListener {
+                            SiteInspectionBottomSheet
+                                .newInstance(item.propertyId, item.title)
+                                .show(parentFragmentManager, "site_inspection")
+                        }
+                        acceptBtn.setOnClickListener(openForm)
+                        card.setOnClickListener(openForm)
+                    } else {
+                        // Pending acceptance: click accept accepts, click card shows warning toast
+                        acceptBtn.setOnClickListener { acceptInspection(item.propertyId) }
+                        card.setOnClickListener {
+                            android.widget.Toast.makeText(
+                                requireContext(),
+                                "Accept the inspection before filling the form.",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     }
+                    rescheduleBtn.setOnClickListener { openRescheduleDatePicker(item.propertyId, item.rawInspectionDate) }
                 }
             }
             list.addView(card)

@@ -147,15 +147,14 @@
                     android:layout_height="160dp"
                     android:layout_marginTop="4dp"
                     android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="20dp"
-                    android:paddingBottom="16dp">
+                    android:clipToPadding="false">
 
                     <LinearLayout
                         android:id="@+id/bannerTextContent"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="8dp"
                         android:orientation="vertical"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/guidelineIllustration"
@@ -170,7 +169,7 @@
                             android:letterSpacing="-0.02"
                             android:text="Plan, Visit \u0026 Achieve"
                             android:textColor="#FFFFFF"
-                            android:textSize="20sp" />
+                            android:textSize="17sp" />
 
                         <TextView
                             android:id="@+id/tvSummarySubtitle"
@@ -181,7 +180,7 @@
                             android:letterSpacing="-0.01"
                             android:text="Track your tasks, visits and\nattendance in one place."
                             android:textColor="#EDEAFF"
-                            android:textSize="13sp" />
+                            android:textSize="11.5sp" />
 
                         <LinearLayout
                             android:id="@+id/btnViewSummary"
@@ -206,10 +205,10 @@
                                 android:textSize="10sp" />
 
                             <ImageView
-                                android:layout_width="12dp"
-                                android:layout_height="12dp"
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
                                 android:layout_marginStart="4dp"
-                                android:src="@drawable/ic_chevron_right"
+                                android:src="@drawable/ic_triple_chevron_right"
                                 app:tint="#0B61CA" />
                         </LinearLayout>
                     </LinearLayout>
@@ -219,12 +218,13 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        app:layout_constraintGuide_percent="0.50" />
+                        app:layout_constraintGuide_percent="0.58" />
 
                     <FrameLayout
                         android:id="@+id/bannerIllustrationContainer"
                         android:layout_width="0dp"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginEnd="16dp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@id/guidelineIllustration"

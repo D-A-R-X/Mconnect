@@ -228,56 +228,59 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         setupInlineSearch()
         binding.btnChatHeaderMenu.setOnClickListener { showChatHeaderMenu(it) }
         
+        binding.btnSend.setOnClickListener {
+            if (canSendNow()) {
+                sendMessage()
+            }
+        }
+
         binding.btnSend.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    recordTouchStartX = event.rawX
-                    recordCancelRequested = false
-                    if (!canSendNow()) {
+            if (canSendNow()) {
+                false
+            } else {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        recordTouchStartX = event.rawX
+                        recordCancelRequested = false
                         checkRecordingPermission()
                         true
-                    } else {
-                        false
                     }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (isRecording) {
-                        val deltaX = recordTouchStartX - event.rawX
-                        val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
-                        if (deltaX > threshold && !recordCancelRequested) {
-                            recordCancelRequested = true
-                            updateRecordingHintCancel()
-                        } else if (deltaX <= threshold && recordCancelRequested) {
-                            recordCancelRequested = false
-                            updateRecordingHintNormal()
+                    MotionEvent.ACTION_MOVE -> {
+                        if (isRecording) {
+                            val deltaX = recordTouchStartX - event.rawX
+                            val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
+                            if (deltaX > threshold && !recordCancelRequested) {
+                                recordCancelRequested = true
+                                updateRecordingHintCancel()
+                            } else if (deltaX <= threshold && recordCancelRequested) {
+                                recordCancelRequested = false
+                                updateRecordingHintNormal()
+                            }
+                            true
+                        } else {
+                            false
                         }
-                        true
-                    } else {
-                        false
                     }
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (isRecording) {
-                        stopRecording(send = !recordCancelRequested)
-                        recordCancelRequested = false
-                        true
-                    } else if (canSendNow()) {
-                        sendMessage()
-                        true
-                    } else {
-                        false
+                    MotionEvent.ACTION_UP -> {
+                        if (isRecording) {
+                            stopRecording(send = !recordCancelRequested)
+                            recordCancelRequested = false
+                            true
+                        } else {
+                            false
+                        }
                     }
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (isRecording) {
-                        stopRecording(send = false)
-                        recordCancelRequested = false
-                        true
-                    } else {
-                        false
+                    MotionEvent.ACTION_CANCEL -> {
+                        if (isRecording) {
+                            stopRecording(send = false)
+                            recordCancelRequested = false
+                            true
+                        } else {
+                            false
+                        }
                     }
+                    else -> false
                 }
-                else -> false
             }
         }
         
@@ -978,11 +981,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.emojiPanel.visibility = View.VISIBLE
         val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun hideEmojiPanel() {
         isEmojiPanelVisible = false
         binding.emojiPanel.visibility = View.GONE
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun showReactionPopup(message: MessageData, anchor: View) {
@@ -1734,6 +1739,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             .setInterpolator(android.view.animation.DecelerateInterpolator())
             .start()
         binding.ivAttachIcon.setImageResource(R.drawable.ic_sheet_close)
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun hideAttachPanel() {
@@ -1754,10 +1760,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     panel.visibility = View.GONE
                     panel.translationY = 0f
                     panel.alpha = 1f
+                    ViewCompat.requestApplyInsets(binding.root)
                 }
             }
             .start()
         binding.ivAttachIcon.setImageResource(R.drawable.ic_chat_plus)
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun wireAttachTiles() {
@@ -3024,33 +3032,51 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottomInset = ime.bottom.coerceAtLeast(sys.bottom)
-
-            binding.bottomBar.setPadding(
-                dpToPx(12),
-                dpToPx(12),
-                dpToPx(12),
-                dpToPx(12) + bottomInset
+            
+            val isPanelVisible = _binding != null && (
+                binding.attachPanel.visibility == View.VISIBLE || 
+                binding.emojiPanel.visibility == View.VISIBLE
             )
 
-            binding.rvMessages.setPadding(
-                binding.rvMessages.paddingLeft,
-                binding.rvMessages.paddingTop,
-                binding.rvMessages.paddingRight,
+            val bottomInset = if (isPanelVisible) {
                 0
-            )
+            } else {
+                ime.bottom.coerceAtLeast(sys.bottom)
+            }
 
-            if (ime.bottom > sys.bottom) {
-                binding.rvMessages.post {
-                    binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+            if (_binding != null) {
+                binding.bottomBar.setPadding(
+                    dpToPx(12),
+                    dpToPx(12),
+                    dpToPx(12),
+                    dpToPx(12) + bottomInset
+                )
+
+                val sysBottom = sys.bottom
+                binding.attachPanel.setPadding(0, 0, 0, sysBottom)
+                binding.emojiPanel.setPadding(0, 0, 0, sysBottom)
+
+                binding.rvMessages.setPadding(
+                    binding.rvMessages.paddingLeft,
+                    binding.rvMessages.paddingTop,
+                    binding.rvMessages.paddingRight,
+                    0
+                )
+
+                if (ime.bottom > sys.bottom) {
+                    binding.rvMessages.post {
+                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                    }
                 }
             }
             insets
         }
         root.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, oldBottom ->
             if (bottom < oldBottom) {
-                binding.rvMessages.post {
-                    binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                if (_binding != null) {
+                    binding.rvMessages.post {
+                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                    }
                 }
             }
         }
@@ -3592,12 +3618,14 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
                 pendingAttachments.add(pending)
                 renderPendingAttachments()
+                updateSendIcon()
             }
         } else {
             val toRemove = pendingAttachments.find { it.uri.toString() == uriStr }
             if (toRemove != null) {
                 pendingAttachments.remove(toRemove)
                 renderPendingAttachments()
+                updateSendIcon()
             }
         }
     }
