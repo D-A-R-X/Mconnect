@@ -247,12 +247,10 @@ class HrDashboardFragment : Fragment() {
      */
     private fun setupAttendanceScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
-        val maxBottomRadiusPx = 24f * density
-        val maxPanelRadiusPx = 24f * density
+        val maxPanelRadiusPx = 30f * density
 
-        // Blue header — rounded BOTTOM corners.
-        val headerBg = binding.attendanceHeader.applyShrinkableBlueHeaderBackground()
-        headerBg.setBottomCornerRadius(maxBottomRadiusPx)
+        // Blue header — full rectangular background (no rounded bottom corners).
+        binding.attendanceHeader.applyShrinkableBlueHeaderBackground()
 
         // White card — rounded TOP corners + white bg applied to
         // `hrWhitePanel`, which lives INSIDE the NestedScrollView. The
