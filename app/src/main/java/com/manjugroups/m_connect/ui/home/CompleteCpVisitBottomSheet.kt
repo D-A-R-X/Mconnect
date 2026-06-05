@@ -2090,6 +2090,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         projectId = project.id,
                         scheduledDate = date,
                         scheduledTime = time,
+                        // Stamp the current user as BOTH the
+                        // convertedBy slot and the telecaller. Without
+                        // these the server falls back to the CP visit's
+                        // assignedStaffId (which is often a different
+                        // field staff) — and then the freshly-created
+                        // SV never shows up in this user's mobile feed
+                        // because `listForViewerAsMobileVisits` keys
+                        // off telecallerId / convertedByStaffId /
+                        // inchargeStaffId.
+                        telecallerId = session.staffId,
+                        convertedByStaffId = session.staffId,
                         inchargeStaffId = svIncharge?.id,
                         hodStaffId = svHod?.id,
                         avpStaffId = svAvp?.id,
