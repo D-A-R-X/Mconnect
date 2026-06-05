@@ -103,14 +103,21 @@
 
             <TextView
                 android:id="@+id/tabBasicLabel"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_semibold"
                 android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
                 android:text="Basic"
-                android:textColor="#0B61CA"
-                android:textSize="11sp" />
+                android:textColor="#0B61CA" />
 
             <View
                 android:id="@+id/tabBasicIndicator"
@@ -119,6 +126,13 @@
                 android:layout_marginTop="2dp"
                 android:background="#0B61CA" />
         </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
 
         <LinearLayout
             android:id="@+id/tabArea"
@@ -135,6 +149,7 @@
                 android:id="@+id/tabAreaIcon"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
                 android:contentDescription="@null"
                 android:padding="7dp"
                 android:src="@drawable/ic_inspection_field_location_tick"
@@ -142,14 +157,21 @@
 
             <TextView
                 android:id="@+id/tabAreaLabel"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_medium"
                 android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
                 android:text="Area"
-                android:textColor="#6A6D78"
-                android:textSize="11sp" />
+                android:textColor="#6A6D78" />
 
             <View
                 android:id="@+id/tabAreaIndicator"
@@ -159,6 +181,13 @@
                 android:background="#0B61CA"
                 android:visibility="invisible" />
         </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
 
         <LinearLayout
             android:id="@+id/tabMarket"
@@ -175,6 +204,7 @@
                 android:id="@+id/tabMarketIcon"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
                 android:contentDescription="@null"
                 android:padding="7dp"
                 android:src="@drawable/ic_inspection_tab_market"
@@ -182,14 +212,21 @@
 
             <TextView
                 android:id="@+id/tabMarketLabel"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_medium"
                 android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
                 android:text="Market"
-                android:textColor="#6A6D78"
-                android:textSize="11sp" />
+                android:textColor="#6A6D78" />
 
             <View
                 android:id="@+id/tabMarketIndicator"
@@ -199,6 +236,13 @@
                 android:background="#0B61CA"
                 android:visibility="invisible" />
         </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
 
         <LinearLayout
             android:id="@+id/tabConclusions"
@@ -215,6 +259,7 @@
                 android:id="@+id/tabConclusionsIcon"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
                 android:contentDescription="@null"
                 android:padding="7dp"
                 android:src="@drawable/ic_inspection_tab_conclusions"
@@ -222,14 +267,21 @@
 
             <TextView
                 android:id="@+id/tabConclusionsLabel"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_medium"
                 android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
                 android:text="Conclusions"
-                android:textColor="#6A6D78"
-                android:textSize="11sp" />
+                android:textColor="#6A6D78" />
 
             <View
                 android:id="@+id/tabConclusionsIndicator"
@@ -239,6 +291,13 @@
                 android:background="#0B61CA"
                 android:visibility="invisible" />
         </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
 
         <LinearLayout
             android:id="@+id/tabCompetitors"
@@ -255,6 +314,7 @@
                 android:id="@+id/tabCompetitorsIcon"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
                 android:contentDescription="@null"
                 android:padding="7dp"
                 android:src="@drawable/ic_inspection_tab_competitors"
@@ -262,14 +322,21 @@
 
             <TextView
                 android:id="@+id/tabCompetitorsLabel"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_medium"
                 android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
                 android:text="Competitors"
-                android:textColor="#6A6D78"
-                android:textSize="11sp" />
+                android:textColor="#6A6D78" />
 
             <View
                 android:id="@+id/tabCompetitorsIndicator"
