@@ -226,7 +226,11 @@ class AppLibraryFragment : Fragment() {
         val hsvLp = ViewGroup.MarginLayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             (79 * density).toInt(),
-        )
+        ).apply {
+            leftMargin = (12 * density).toInt()
+            rightMargin = (12 * density).toInt()
+            topMargin = (16 * density).toInt()
+        }
         scrollColumn.addView(hsv, 0, hsvLp)
 
         // After layout, size each pill to exactly 1/5 of the visible HSV
@@ -286,17 +290,17 @@ class AppLibraryFragment : Fragment() {
             .applyShrinkableBlueHeaderBackground()
         headerBg.setBottomCornerRadius(maxBottomRadiusPx)
 
-        // White card — rounded TOP corners + white bg applied to
+        // Grey background card — rounded TOP corners + grey bg applied to
         // `libraryWhitePanel`, which lives INSIDE the NestedScrollView.
-        // The white card IS the scrolling content, so it moves up at
+        // The panel IS the scrolling content, so it moves up at
         // exactly 1× rate (no parallax, no shrinking, no separate
         // translation). The ancestors all set clipChildren=false in
         // XML so the rounded top edge can draw OUTSIDE the panel into
-        // the blue header's area — that's how the white visually
+        // the blue header's area — that's how the panel visually
         // "overlays" the blue as it scrolls up.
         val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            setColor(android.graphics.Color.WHITE)
+            setColor(android.graphics.Color.parseColor("#F1F3F8"))
             cornerRadii = floatArrayOf(
                 maxPanelRadiusPx, maxPanelRadiusPx, // top-left
                 maxPanelRadiusPx, maxPanelRadiusPx, // top-right
