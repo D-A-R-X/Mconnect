@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/sheetContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -612,7 +613,8 @@
                                 android:ellipsize="end"
                                 android:fontFamily="@font/inter_bold"
                                 android:maxLines="1"
-                                android:text="AKASH.B"
+                                android:text=""
+                                tools:text="Staff Name"
                                 android:textColor="#1D2939"
                                 android:textSize="13sp" />
                         </LinearLayout>
@@ -727,7 +729,8 @@
                                 android:ellipsize="end"
                                 android:fontFamily="@font/inter_bold"
                                 android:maxLines="1"
-                                android:text="1 Expected"
+                                android:text=""
+                                tools:text="2 Expected"
                                 android:textColor="#1D2939"
                                 android:textSize="13sp" />
                         </LinearLayout>
@@ -781,7 +784,8 @@
                                 android:ellipsize="end"
                                 android:fontFamily="@font/inter_bold"
                                 android:maxLines="1"
-                                android:text="EVANGELINE PRINCY.S"
+                                android:text=""
+                                tools:text="Site Incharge"
                                 android:textColor="#1D2939"
                                 android:textSize="13sp" />
                         </LinearLayout>
@@ -855,7 +859,8 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:fontFamily="@font/inter_medium"
-                            android:text="Self • 22 yrs • Veg"
+                            android:text=""
+                            tools:text="Self • 30 yrs • Veg"
                             android:textColor="#475467"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -909,7 +914,8 @@
                             android:layout_marginTop="10dp"
                             android:fontFamily="@font/inter_medium"
                             android:lineSpacingExtra="2dp"
-                            android:text="Call summary is not available yet."
+                            android:text=""
+                            tools:text="Telecaller call summary will appear here."
                             android:textColor="#594435"
                             android:textSize="11sp" />
                     </LinearLayout>

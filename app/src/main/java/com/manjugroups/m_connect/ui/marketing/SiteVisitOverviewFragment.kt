@@ -318,12 +318,25 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
 
-        tvTitle?.text = placeName ?: "Site Visit"
-        tvClientName?.text = formatPersonName(leadName ?: "Client")
-        tvPhone?.text = leadPhone ?: "—"
-        tvProject?.text = placeName ?: "—"
-        tvPickupAddress?.text = placeAddress ?: "Address not available"
-        tvVisitorName?.text = formatPersonName(leadName ?: "Client")
+        // First-frame bind from list-row arguments. Real values land
+        // shortly after via bindEnriched() once the detail fetch
+        // returns; until then prefer em-dashes over fake values so the
+        // sheet never displays seeded mock data even for a flash.
+        tvTitle?.text = placeName?.takeIf { it.isNotBlank() } ?: "Site Visit"
+        val initialName = leadName?.takeIf { it.isNotBlank() }
+        tvClientName?.text = initialName?.let { formatPersonName(it) } ?: "—"
+        tvVisitorName?.text = initialName?.let { formatPersonName(it) } ?: "—"
+        tvPhone?.text = leadPhone?.takeIf { it.isNotBlank() } ?: "—"
+        tvProject?.text = placeName?.takeIf { it.isNotBlank() } ?: "—"
+        tvPickupAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "—"
+        // Clear the BDO / incharge / attendees / visitor-details slots
+        // up front so any stale text from a layout default disappears
+        // before the network call lands.
+        tvBdo?.text = "—"
+        tvIncharge?.text = "—"
+        tvAttendees?.text = "—"
+        tvVisitorDetails?.text = "—"
+        tvNotes?.text = "Loading…"
 
         // Schedule label
         val dateLabel = schedDate?.let { formatDateOnly(it) } ?: schedDate ?: ""
@@ -379,6 +392,55 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "assigned" -> 1
             else -> 0
         }
+    }
+
+    /**
+     * Web-parity stepper computation. Mirrors `cabProgressState` +
+     * `cabDriverProgressBoost` from `app/marketing/site-visits/[id]/page.tsx`
+     * so the mobile bottom sheet shows the SAME progress as the web SV
+     * detail.
+     *
+     * Mapping (mobile step indices on the right):
+     *   0  Scheduled            — status="scheduled" AND no vehicle yet
+     *   1  Assigned             — status="scheduled" AND vehicleId/agency set
+     *   2  Picked Up            — status="picked_up" / "client_started"
+     *                             OR driver tapped "Start trip" (travelDeskStartedAt)
+     *   3  On Site              — status="on_site"
+     *                             OR driver tapped "Arrived" (travelDeskOnSiteAt)
+     *   4  Dropped              — status="dropped"
+     *                             OR driver tapped "Ended" (travelDeskEndedAt)
+     *   5  Done                 — status="completed" (or any "done" alias)
+     *
+     * Falling back to bare `mapStatusToStepIndex` when no snapshot is
+     * available keeps the legacy initial-args path working before the
+     * detail fetch resolves.
+     */
+    private fun computeWebParityStepIndex(
+        status: String,
+        snapshot: com.manjugroups.m_connect.network.ProposedSiteVisit?,
+    ): Int {
+        val baseFromStatus = mapStatusToStepIndex(status)
+
+        // Driver-side boosts: explicit timestamps trump status when
+        // they're ahead. Identical precedence to the web's
+        // mergeVisitProgress(base, boost) helper.
+        val driverBoost = when {
+            snapshot?.travelDeskEndedAt != null -> 4
+            snapshot?.travelDeskOnSiteAt != null -> 3
+            snapshot?.travelDeskStartedAt != null -> 2
+            else -> -1
+        }
+
+        // Vehicle assignment auto-advances Scheduled → Assigned without
+        // any status change on the SV row.
+        val hasVehicleAssigned =
+            snapshot != null && (
+                !snapshot.vehicleId.isNullOrBlank() ||
+                !snapshot.travelAgencyId.isNullOrBlank()
+            )
+        val vehicleBoost = if (baseFromStatus == 0 && hasVehicleAssigned) 1 else -1
+
+        return maxOf(baseFromStatus, driverBoost, vehicleBoost)
     }
 
     private fun updateStepper(activeIndex: Int) {
@@ -484,31 +546,43 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     }
 
     private fun bindEnriched(visit: CpVisitDetail) {
-        // Enriched Lead details
-        val displayName = formatPersonName(
-            visit.client?.clientName
-                ?: visit.lead?.contactName
-                ?: visit.clientPlace?.name
-                ?: "Client"
-        )
+        // --- Customer name + phone -------------------------------------
+        // Precedence: CP-level client → lead → clientPlace label. Show
+        // an em-dash only when the backend has nothing — the previous
+        // "Client" / "AKASH.B" / "22 yrs Veg" fallbacks made empty
+        // records look populated and indistinguishable from real ones.
+        val rawDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        val displayName = rawDisplayName?.let { formatPersonName(it) } ?: "—"
         tvClientName?.text = displayName
         tvVisitorName?.text = displayName
 
-        val phone = visit.client?.mobileNumber ?: visit.lead?.mobileNumber
-        if (!phone.isNullOrBlank()) {
-            tvPhone?.text = phone
+        val phone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
+        tvPhone?.text = phone ?: "—"
+
+        // --- Project / title ------------------------------------------
+        // Use the enriched project name when present; fall back to the
+        // clientPlace label (some CPs are place-only and don't carry a
+        // project picker). Keep the existing tvTitle behaviour but
+        // render "—" instead of the generic "Site Visit" placeholder
+        // when there is truly nothing to show.
+        val projectName = visit.project?.name?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        tvProject?.text = projectName ?: "—"
+        if (!projectName.isNullOrBlank()) {
+            tvTitle?.text = projectName
         }
 
-        // Project / plot name
-        val projectName = visit.clientPlace?.name ?: visit.proposedSiteVisit?.projectId ?: "Site Visit"
-        tvProject?.text = projectName
-        tvTitle?.text = projectName
+        // --- Staff assigned (BDO) -------------------------------------
+        // Convex returns staff.name; older code stuffed it into staffName.
+        // Read both so we land the right field regardless of envelope shape.
+        val staffName = (visit.assignedStaff?.name ?: visit.assignedStaff?.staffName)
+            ?.takeIf { it.isNotBlank() }
+        tvBdo?.text = staffName?.let { formatPersonName(it) } ?: "—"
 
-        // Staff assigned (BDO)
-        val staffName = visit.assignedStaff?.staffName ?: "AKASH.B"
-        tvBdo?.text = formatPersonName(staffName)
-
-        // Pickup / Site Address
+        // --- Pickup / Site Address ------------------------------------
         val addressStr = listOfNotNull(
             visit.clientPlace?.address?.takeIf { it.isNotBlank() },
             visit.clientPlace?.landmark?.takeIf { it.isNotBlank() },
@@ -516,46 +590,75 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             visit.clientPlace?.state?.takeIf { it.isNotBlank() },
             visit.clientPlace?.pincode?.takeIf { it.isNotBlank() },
         ).joinToString(", ").ifBlank { visit.clientPlace?.formattedAddress.orEmpty() }
-        if (addressStr.isNotBlank()) {
-            tvPickupAddress?.text = addressStr
-        }
+        tvPickupAddress?.text = addressStr.ifBlank { "—" }
 
-        // Expected attendees
-        val count = visit.expectedAttendeeCount ?: 1
-        tvAttendees?.text = "$count Expected"
+        // --- Expected attendees ---------------------------------------
+        // Don't invent "1 Expected" when the field is null — that
+        // masks unspecified parties as a confirmed solo visit.
+        val count = visit.expectedAttendeeCount
+        tvAttendees?.text = if (count != null && count > 0) "$count Expected" else "—"
 
-        // Site Incharge resolution
+        // --- Site Incharge --------------------------------------------
+        // 1. Pure-SV envelopes from getForMobileId pre-resolve the
+        //    incharge into visit.inchargeStaff — use it directly.
+        // 2. CP-converted SVs need a staff-list lookup against
+        //    proposedSiteVisit.inchargeStaffId.
+        // 3. No incharge set → "—" (no more fake "EVANGELINE PRINCY.S").
+        val preresolvedIncharge = (visit.inchargeStaff?.name ?: visit.inchargeStaff?.staffName)
+            ?.takeIf { it.isNotBlank() }
         val proposed = visit.proposedSiteVisit
-        if (proposed?.inchargeStaffId != null) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                runCatching {
-                    val staffResp = api.getStaff(session.bearerToken, status = "active")
-                    val matching = staffResp.staff.firstOrNull { it.id == proposed.inchargeStaffId }
-                    if (matching != null) {
-                        tvIncharge?.text = formatPersonName(matching.name ?: "EVANGELINE PRINCY.S")
-                    } else {
-                        tvIncharge?.text = "EVANGELINE PRINCY.S"
+        when {
+            !preresolvedIncharge.isNullOrBlank() -> {
+                tvIncharge?.text = formatPersonName(preresolvedIncharge)
+            }
+            proposed?.inchargeStaffId != null -> {
+                tvIncharge?.text = "—"
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching {
+                        val staffResp = api.getStaff(session.bearerToken, status = "active")
+                        val matching = staffResp.staff.firstOrNull { it.id == proposed.inchargeStaffId }
+                        val name = matching?.name?.takeIf { it.isNotBlank() }
+                        tvIncharge?.text = name?.let { formatPersonName(it) } ?: "—"
                     }
                 }
             }
-        } else {
-            tvIncharge?.text = "EVANGELINE PRINCY.S"
+            else -> tvIncharge?.text = "—"
         }
 
-        // Visitors Card info
-        tvVisitorName?.text = displayName
-        val age = visit.attendees?.firstOrNull()?.age ?: "22"
-        val diet = if (visit.attendees?.firstOrNull()?.isVeg == true) "Veg" else "Non-Veg"
-        val relation = visit.attendees?.firstOrNull()?.relation ?: "Self"
-        tvVisitorDetails?.text = "$relation • $age yrs • $diet"
+        // --- Visitors card --------------------------------------------
+        // Only render demographic detail when the backend actually has
+        // the attendee record. The previous "Self • 22 yrs • Veg"
+        // fallback synthesized three values out of nothing.
+        val firstAttendee = visit.attendees?.firstOrNull()
+        val parts = mutableListOf<String>()
+        firstAttendee?.relation?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+        firstAttendee?.age?.takeIf { it.isNotBlank() }?.let { parts.add("$it yrs") }
+        firstAttendee?.isVeg?.let { parts.add(if (it) "Veg" else "Non-Veg") }
+        tvVisitorDetails?.text = if (parts.isEmpty()) "—" else parts.joinToString(" • ")
 
-        // Notes card info
-        tvNotes?.text = visit.notes?.takeIf { it.isNotBlank() } ?: "Call summary is not available yet."
+        // --- Notes card -----------------------------------------------
+        tvNotes?.text = visit.notes?.takeIf { it.isNotBlank() }
+            ?: "No notes recorded yet."
 
-        // Sync stepper state from enriched fieldVisit status if newer
-        val effStatus = visit.fieldVisit?.status ?: visit.status ?: ""
+        // Sync stepper from the SV's OWN status, with the same
+        // vehicle-assignment + driver-timestamp boosts the web SV
+        // detail uses. We deliberately do NOT consult
+        // visit.fieldVisit.status — that's the CP visit's field-trip
+        // status, which is unrelated to the SV's lifecycle and made
+        // fresh SVs light up every stage as "completed" because the
+        // CP trip that spawned them was already done.
+        //
+        // Both the web and mobile derive the stepper from these
+        // identical SV-row fields (`status`, `vehicleId`,
+        // `travelAgencyId`, `travelDeskStartedAt`, etc.), so a status
+        // change on either side reflects on the other after the next
+        // detail fetch.
+        val effStatus = visit.status ?: ""
         if (effStatus.isNotEmpty()) {
-            val stepIndex = mapStatusToStepIndex(effStatus)
+            val stepIndex = computeWebParityStepIndex(
+                status = effStatus,
+                snapshot = visit.proposedSiteVisit,
+            )
             updateStepper(stepIndex)
             bindStatusHeader(effStatus)
         }

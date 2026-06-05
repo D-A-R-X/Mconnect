@@ -220,9 +220,21 @@ class SiteVisitsFragment : Fragment() {
                 }
                 // Exclude CP visits (which live in CpVisitsFragment) — keep only
                 // proper site visits where tripType is null/"site_visit"/etc.
+                //
+                // Sort by creationTime descending so the most recently
+                // CREATED SV shows up at the top (matches the server's
+                // own ordering and what the user reads as "latest").
+                // The previous sortedByDescending { it.scheduledDate }
+                // ordered by FUTURE-most planned visit instead, which
+                // pushed brand-new conversions below older-but-later-
+                // scheduled entries. Fall back to scheduledDate when
+                // creationTime is missing (legacy rows).
                 allVisits = resp.visits
                     .filter { it.tripType != "client_place" && it.clientPlaceVisitId == null }
-                    .sortedByDescending { it.scheduledDate }
+                    .sortedWith(
+                        compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                            .thenByDescending { it.scheduledDate }
+                    )
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
@@ -314,14 +326,21 @@ class SiteVisitsFragment : Fragment() {
         val destination = itemView.findViewById<TextView>(R.id.tvVisitItemDestination)
         val destinationLabel = itemView.findViewById<TextView>(R.id.tvVisitItemDestinationLabel)
 
-        // Customer Name
-        val displayName = visit.leadName ?: "Client"
+        // Customer Name — backend now falls back through
+        // lead → CP.client → CP.clientPlace, so a real name almost
+        // always lands here. Render the em-dash placeholder only when
+        // the backend genuinely has nothing.
+        val displayName = visit.leadName?.takeIf { it.isNotBlank() } ?: "—"
         name.text = displayName
 
-        // Phone
-        phone.text = visit.leadPhone ?: "916379556429"
+        // Phone — show em-dash when missing instead of a fake
+        // hardcoded number (the previous "916379556429" looked like
+        // real data and confused users into thinking every SV had it).
+        phone.text = visit.leadPhone?.takeIf { it.isNotBlank() } ?: "—"
 
-        // Date Parsing
+        // Date — leave the date chip blank when scheduledDate is
+        // unparseable. The fake "THU 07 MAY" fallback masked malformed
+        // dates as if they were real ones.
         try {
             val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(visit.scheduledDate)
             if (dateObj != null) {
@@ -329,25 +348,33 @@ class SiteVisitsFragment : Fragment() {
                 dateView.text = SimpleDateFormat("dd", Locale.US).format(dateObj)
                 monthView.text = SimpleDateFormat("MMM", Locale.US).format(dateObj).uppercase(Locale.US)
             } else {
-                dayView.text = "THU"
-                dateView.text = "07"
-                monthView.text = "MAY"
+                dayView.text = ""
+                dateView.text = "—"
+                monthView.text = ""
             }
         } catch (e: Exception) {
-            dayView.text = "THU"
-            dateView.text = "07"
-            monthView.text = "MAY"
+            dayView.text = ""
+            dateView.text = "—"
+            monthView.text = ""
         }
 
-        // Time
-        timeView.text = visit.scheduledStartTime ?: "11:00 AM"
+        // Time — blank when not set rather than a synthetic "11:00 AM".
+        timeView.text = visit.scheduledStartTime?.takeIf { it.isNotBlank() } ?: ""
 
-        // BDO Details (Logged-in Staff details)
-        bdoName.text = session.userName?.uppercase(Locale.US) ?: "AKASH.B"
+        // BDO Details — the logged-in staff name is the right value to
+        // show on rows assigned to the viewer; the prior "AKASH.B"
+        // fallback was leftover seed data. Em-dash when the session
+        // hasn't yet hydrated a user name.
+        bdoName.text = session.userName?.uppercase(Locale.US)?.takeIf { it.isNotBlank() } ?: "—"
         bdoRole.text = "BDO"
 
-        // Destination details
-        destination.text = visit.placeName ?: visit.placeAddress ?: "Client Place Visit"
+        // Destination details — prefer the project/place name, fall
+        // back to the pickup address, and finally an em-dash. "Client
+        // Place Visit" was a generic label that was indistinguishable
+        // from real titles.
+        destination.text = visit.placeName?.takeIf { it.isNotBlank() }
+            ?: visit.placeAddress?.takeIf { it.isNotBlank() }
+            ?: "—"
         destinationLabel.text = "ORIGIN"
 
         // Status pill binding

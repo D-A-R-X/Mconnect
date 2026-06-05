@@ -860,6 +860,14 @@ data class CpVisitDetail(
     val arrivalProof: CpVisitArrivalProof? = null,
     /** Resolved project row from `enrichVisit` — used to label the SV picker. */
     val project: CpVisitProject? = null,
+    /**
+     * Pre-resolved site-incharge staff row. Only the pure-SV detail
+     * path populates this (`getForMobileId` synthesizes it when there
+     * is no linked CP). For CP-converted SVs the incharge still has to
+     * be looked up via `proposedSiteVisit.inchargeStaffId` against the
+     * staff list endpoint.
+     */
+    val inchargeStaff: CpVisitStaff? = null,
 )
 
 data class CpVisitProject(
@@ -873,6 +881,7 @@ data class CpVisitProject(
  * surfaces these fields as read-only with Reject / Confirm buttons.
  */
 data class ProposedSiteVisit(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
     val projectId: String? = null,
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
@@ -882,6 +891,21 @@ data class ProposedSiteVisit(
     val avpStaffId: String? = null,
     val gmStaffId: String? = null,
     val seniorManagerStaffId: String? = null,
+    // SV status + the surrounding signals the stepper needs to mirror
+    // the web's progress logic. Without these, mobile only reads
+    // `status` and misses the "vehicle assigned" auto-advance + the
+    // driver-side timestamp boosts (travelDeskStartedAt etc.).
+    val status: String? = null,
+    val travelMode: String? = null,
+    val vehicleId: String? = null,
+    val travelAgencyId: String? = null,
+    val pickedUpAt: Long? = null,
+    val arrivedSiteAt: Long? = null,
+    val droppedAt: Long? = null,
+    val completedAt: Long? = null,
+    val travelDeskStartedAt: Long? = null,
+    val travelDeskOnSiteAt: Long? = null,
+    val travelDeskEndedAt: Long? = null,
 )
 
 data class CpVisitAttendee(
@@ -910,6 +934,13 @@ data class CpVisitClient(
 
 data class CpVisitStaff(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // The Convex `staff` row stores the display label as `name`. The
+    // enrichVisit helper returns the raw row, so the wire field really
+    // is `name` — not `staffName`. Previously we only declared
+    // `staffName`, which meant assignedStaff/telecaller/incharge reads
+    // were silently null (mobile BDO showed "AKASH.B" forever because
+    // the real value was hiding behind the wrong field name).
+    val name: String? = null,
     val staffName: String? = null,
     val staffCode: String? = null,
 )
