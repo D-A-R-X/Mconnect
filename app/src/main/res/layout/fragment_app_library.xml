@@ -410,7 +410,7 @@
         android:id="@+id/libraryRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="0dp"
+        android:layout_marginTop="-28dp"
         android:layout_weight="1"
         android:background="@android:color/transparent"
         android:clipChildren="false"

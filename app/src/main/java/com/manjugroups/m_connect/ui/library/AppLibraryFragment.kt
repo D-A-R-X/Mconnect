@@ -226,11 +226,7 @@ class AppLibraryFragment : Fragment() {
         val hsvLp = ViewGroup.MarginLayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             (79 * density).toInt(),
-        ).apply {
-            leftMargin = (12 * density).toInt()
-            rightMargin = (12 * density).toInt()
-            topMargin = (16 * density).toInt()
-        }
+        )
         scrollColumn.addView(hsv, 0, hsvLp)
 
         // After layout, size each pill to exactly 1/5 of the visible HSV
@@ -283,7 +279,7 @@ class AppLibraryFragment : Fragment() {
     private fun setupScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
         val maxBottomRadiusPx = 24f * density
-        val maxPanelRadiusPx = 24f * density
+        val maxPanelRadiusPx = 30f * density
 
         // Blue header — rounded BOTTOM corners.
         val headerBg = binding.libraryHeaderFrame
