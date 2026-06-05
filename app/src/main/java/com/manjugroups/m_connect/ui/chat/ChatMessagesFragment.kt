@@ -2238,7 +2238,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
             }
 
-            accepted += meta
+            // Override MIME type for image/video/audio files picked via Document Picker
+            // so they are sent and rendered as document cards instead of inline media
+            val mime = meta.fileType.lowercase(Locale.US)
+            val finalMeta = if (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")) {
+                meta.copy(fileType = "application/octet-stream")
+            } else {
+                meta
+            }
+
+            accepted += finalMeta
             existingKeys += key
         }
 
