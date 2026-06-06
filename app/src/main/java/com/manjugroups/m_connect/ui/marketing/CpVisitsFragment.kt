@@ -261,9 +261,22 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
+                // Sort by creationTime descending so the most recently
+                // ASSIGNED / created CP lands at the top — which is what
+                // "newest" means to the field staff opening the app. The
+                // previous sortedByDescending { scheduledDate } ordered
+                // by FUTURE-most planned visit instead, pushing brand-
+                // new assignments below older-but-later-scheduled ones.
+                // Falls back to scheduledDate when creationTime is
+                // missing (legacy rows from before the Convex
+                // auto-populated _creationTime got threaded through to
+                // the mobile envelope).
                 allVisits = resp.visits
                     .mapNotNull { it.toCpListVisitOrNull() }
-                    .sortedByDescending { it.scheduledDate }
+                    .sortedWith(
+                        compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                            .thenByDescending { it.scheduledDate }
+                    )
                 // Diagnostic: surface server-reported count alongside
                 // the client-mapped count so the user can tell "0 from
                 // server" apart from "server returned N but mapper
@@ -383,6 +396,18 @@ class CpVisitsFragment : Fragment() {
             leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
             scheduledStartTime = this.scheduledTime,
             cpVisit = cpState,
+            // Thread the CP's `createdAt` ms timestamp into the
+            // envelope's `creationTime` slot so the CP list's
+            // newest-first sort (in renderList / loadCpVisits) has
+            // something to order by. Without this the mapper dropped
+            // the field, every row landed with creationTime=null, and
+            // the sort silently fell back to scheduledDate — which
+            // is what made the user see future-most-scheduled CPs at
+            // the top instead of most-recently-assigned ones.
+            // Convex auto-populates createdAt to the same value as
+            // _creationTime at insert time, so this stays consistent
+            // with the SV list's _creationTime-based sort.
+            creationTime = this.createdAt?.toDouble(),
         )
     }
 

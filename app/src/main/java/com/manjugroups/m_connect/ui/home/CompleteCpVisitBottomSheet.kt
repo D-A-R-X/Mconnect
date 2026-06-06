@@ -70,6 +70,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
+    /**
+     * Booking-form auto-save. Pushes the serialised form state to a
+     * Convex draft row + a local SharedPreferences mirror on a
+     * debounced timer (2s). Restores on dialog open so an app
+     * crash, kill-from-recent-apps, or login from another phone all
+     * resume the operator's typing instead of throwing it away.
+     * See BookingDraftManager.kt for the persistence details.
+     */
+    private var draftManager: BookingDraftManager? = null
+    private var draftRestoreApplied: Boolean = false
+    private var draftSuppressSave: Boolean = false
+
     // ---- Enums ----------------------------------------------------------
     private enum class Outcome { BOOKING, SITE_VISIT, POSTPONE, NOT_INTERESTED }
     private enum class BookingSub {
@@ -82,6 +94,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var activeOutcome: Outcome = Outcome.BOOKING
     private var bookingSub: BookingSub = BookingSub.CLIENT
     private var bookingStep: BookingStep = BookingStep.FIND_MOBILE
+    /**
+     * The deepest sub-tab the user has progressed THROUGH via the
+     * Next button. Sub-tap navigation is gated on this — the user can
+     * tap a previously-visited tab to jump back and edit, but cannot
+     * tap a tab ahead of where they've validated up to. Forward
+     * navigation must still go through Next so the per-step
+     * validation runs (required fields, etc.).
+     */
+    private var maxVisitedBookingSub: BookingSub = BookingSub.CLIENT
 
     // Form state for radio/checkbox rows
     private var bookIsAgainstVisit: YesNo = YesNo.YES
@@ -353,10 +374,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // found. Drives whether the edit-push fires on submit.
     private var prefilledLeadId: String? = null
     private var lastLookedUpBookingPhone: String? = null
+
+    // Last 6-digit pincode we successfully enriched. Without this the
+    // TextWatcher would re-fire `/api/pincode` on every keystroke past
+    // digit 6 (and on view-restore), spamming the proxy and racing the
+    // user. Reset when the sheet recycles.
+    private var lastEnrichedBookingPincode: String? = null
     private var btnSubmit: TextView? = null
     private var tvError: TextView? = null
 
     // ---- Lifecycle ------------------------------------------------------
+    // Tracks whether the host MainActivity's bottom tab bar was visible
+    // when this sheet opened. We hide the tab bar for the entire sheet
+    // lifetime so the bottom 56dp of the form (Save / Reject buttons,
+    // last fields) don't get clipped by the tab strip and so the slide-up
+    // animation doesn't briefly composite tab-bar pixels through the
+    // sheet's translucent background. Restored on dismiss to whatever
+    // state the host had — works correctly both from root tabs (Marketing
+    // → CP Visits, where the tab bar is visible) and from secondary
+    // screens like CompletedVisitDetailFragment (where it's already
+    // hidden and should stay that way).
+    private var hostTabBarWasVisible: Boolean? = null
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
         // Resize the dialog window when the IME comes up so the input
@@ -387,8 +426,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 behavior.isDraggable = false
                 isCancelable = true
             }
+            // Hide the host activity's bottom tab bar for the sheet's
+            // lifetime. Without this the tab bar shows through the
+            // translucent scrim during the slide-up animation (visible
+            // glitch) and stays peeking under the sheet's rounded bottom
+            // corners. Caching the prior state means we restore exactly
+            // what was there on dismiss, even if the sheet was opened
+            // from a secondary screen where the bar was already hidden.
+            (activity as? com.manjugroups.m_connect.MainActivity)?.let { host ->
+                if (hostTabBarWasVisible == null) {
+                    hostTabBarWasVisible = host.isTabBarVisible()
+                }
+                host.setTabBarVisible(false)
+            }
         }
         return dialog
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        // Restore the host's tab bar to whatever it was before we opened.
+        // Runs on Reject / Confirm / Save / system-back / programmatic
+        // dismiss — every exit path funnels through here.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { host ->
+            val previous = hostTabBarWasVisible
+            if (previous != null) {
+                host.setTabBarVisible(previous)
+            }
+        }
+        hostTabBarWasVisible = null
+        super.onDismiss(dialog)
     }
 
     override fun onCreateView(
@@ -431,6 +497,33 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         btnSubmit = view.findViewById(R.id.btnCpSubmit)
         tvError = view.findViewById(R.id.tvCpError)
+
+        // Make the trailing " *" on every required-field label render
+        // in destructive red so it visually pops the same way the
+        // web's `<span className="text-destructive">*</span>` does.
+        // The label texts in XML already carry the asterisk (e.g.
+        // "Client Name *", "Booking Date *", "Client Phone Number *",
+        // "Client Mobile Number *") — we just need to colour just the
+        // star, not the whole label, on view bind.
+        colorizeRequiredStarsRedRecursively(view as android.view.ViewGroup)
+
+        // Wire booking-form draft auto-save AFTER all findViewById
+        // calls so every EditText reference is non-null. Order:
+        //   1. Build the manager with the bottom sheet's coroutine
+        //      scope so debounced flushes survive a dismiss-and-
+        //      reopen by tying lifetime to viewLifecycleOwner.
+        //   2. Attach TextWatchers on every form EditText.
+        //   3. Async fetch the most-recent draft (cloud OR local,
+        //      whichever's newer) and apply it before the AI prefill
+        //      from lookup runs so the operator's manual edits win
+        //      the priority slot.
+        draftManager = BookingDraftManager(
+            context = requireContext(),
+            api = api,
+            scope = viewLifecycleOwner.lifecycleScope,
+        )
+        attachDraftWatchers()
+        restoreDraftIfAny()
         cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
         btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
         btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
@@ -589,6 +682,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etFormState = view.findViewById(R.id.etFormState)
         etFormDistrict = view.findViewById(R.id.etFormDistrict)
         etFormLocation = view.findViewById(R.id.etFormLocation)
+        // Pincode → Location/District/State auto-fill. Mirrors the web's
+        // usePincodeLocationEnrichment effect in mms-external-leads.tsx.
+        // The post-office Name from India Post IS the locality (e.g.
+        // 600083 → "Ashok Nagar"). We only ever fill blank fields, so a
+        // manual entry from the operator always wins. The lookup itself
+        // is throttled inside PincodeLookup (60s cache + dedup), but we
+        // ALSO guard here with lastEnrichedBookingPincode so the same
+        // pin doesn't re-fire as the user keeps typing or re-opens the
+        // sheet.
+        etFormPincode?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val pin = s?.toString()?.trim().orEmpty().filter { it.isDigit() }
+                if (pin.length != 6) return
+                if (pin == lastEnrichedBookingPincode) return
+                lastEnrichedBookingPincode = pin
+                enrichBookingPincode(pin)
+            }
+        })
         (tvFormPhone as? EditText)?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -737,18 +850,39 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tabPostpone.cell?.setOnClickListener { switchOutcome(Outcome.POSTPONE) }
         tabNotInterested.cell?.setOnClickListener { switchOutcome(Outcome.NOT_INTERESTED) }
 
-        // Sub-tabs are read-only progress indicators driven by the bottom
-        // CTA — no click listeners are wired here intentionally. The
-        // user advances through Client → Professional → Office → Booking
-        // → Charges → Payment → Staff via Next, and the active pill auto-
-        // scrolls into view (see renderState).
-        listOf(
-            subTabClient, subTabProfessional, subTabOffice, subTabBooking,
-            subTabCharges, subTabPayment, subTabStaff,
-        ).forEach { tab ->
-            tab?.isClickable = false
-            tab?.isFocusable = false
+        // Sub-tab navigation: forward must still go through Next so
+        // per-step validation runs (required fields, etc.). BACKWARD
+        // and re-visiting an already-seen sub-tab is allowed via tap
+        // — the operator often realises they typed something wrong on
+        // an earlier tab while filling a later one. Gating is on
+        // `maxVisitedBookingSub` so an unvisited future tab can't be
+        // tap-skipped past validation.
+        fun wireSubTabJump(pill: TextView?, target: BookingSub) {
+            pill?.isClickable = true
+            pill?.isFocusable = true
+            pill?.setOnClickListener {
+                if (activeOutcome != Outcome.BOOKING) return@setOnClickListener
+                if (target.ordinal > maxVisitedBookingSub.ordinal) {
+                    // Forward jump beyond what's been validated — not
+                    // allowed silently. Toast tells the operator why.
+                    Toast.makeText(
+                        requireContext(),
+                        "Finish this step first — tap Next to continue",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@setOnClickListener
+                }
+                if (target == bookingSub) return@setOnClickListener
+                switchBookingSub(target)
+            }
         }
+        wireSubTabJump(subTabClient, BookingSub.CLIENT)
+        wireSubTabJump(subTabProfessional, BookingSub.PROFESSIONAL)
+        wireSubTabJump(subTabOffice, BookingSub.OFFICE)
+        wireSubTabJump(subTabBooking, BookingSub.BOOKING)
+        wireSubTabJump(subTabCharges, BookingSub.CHARGES)
+        wireSubTabJump(subTabPayment, BookingSub.PAYMENT)
+        wireSubTabJump(subTabStaff, BookingSub.STAFF)
 
         // Client-form date / dropdown pickers
         view?.findViewById<View>(R.id.rowFormTitle)?.setOnClickListener {
@@ -767,12 +901,34 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
-        // Booking sub-tab pickers
+        // Booking sub-tab pickers.
+        //
+        // Each list mirrors the web's option set in
+        // `app/marketing/bookings/new/page.tsx` so the values the
+        // mobile sends match what the backend booking-mutation
+        // validator + downstream reports expect. Any drift here
+        // shows up as either a validation reject ("X is required")
+        // or — worse — a row that silently lands with a value no
+        // other surface can filter on (a CP/SV-tab list of bookings
+        // with bookingType="Direct" disappears from the web's
+        // bookingType=NEW filter).
         view?.findViewById<View>(R.id.rowBookType)?.setOnClickListener {
-            picker("Select Booking Type", listOf("Direct", "Channel Partner", "Online")) { tvBookType?.text = it }
+            // Web: ["NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"]
+            picker(
+                "Select Booking Type",
+                listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"),
+            ) { tvBookType?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookSource)?.setOnClickListener {
-            picker("Select Source", listOf("Walk-in", "Referral", "Marketing", "Online")) { tvBookSource?.text = it }
+            // Web auto-derives sourceType from context (cp_visit /
+            // site_visit / walk_in) without exposing a picker. Mobile
+            // still surfaces a picker — restrict the visible options
+            // to the same three valid strings so an operator override
+            // can never desync from the backend's accepted set.
+            picker(
+                "Select Source",
+                listOf("walk_in", "cp_visit", "site_visit"),
+            ) { tvBookSource?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener {
             pickDate(tvBookDate) { loadBookingPlotPrefill(force = true) }
@@ -784,10 +940,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             pickBookingUnit()
         }
         view?.findViewById<View>(R.id.rowBookProperty)?.setOnClickListener {
-            picker("Select Property Type", listOf("Plot", "Apartment", "Villa")) { tvBookProperty?.text = it }
+            // Web: ["Plot", "Apartment", "Villa", "Commercial"] —
+            // mobile was missing "Commercial".
+            picker(
+                "Select Property Type",
+                listOf("Plot", "Apartment", "Villa", "Commercial"),
+            ) { tvBookProperty?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookMode)?.setOnClickListener {
-            picker("Select Booking Mode", listOf("Cash", "Cheque", "Online Transfer")) { tvBookMode?.text = it }
+            // Web: ["Cash", "Cheque", "NEFT", "Online", "Loan"] —
+            // mobile had "Online Transfer" (non-matching) and was
+            // missing NEFT + Loan entirely.
+            picker(
+                "Select Booking Mode",
+                listOf("Cash", "Cheque", "NEFT", "Online", "Loan"),
+            ) { tvBookMode?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookVisitYes)?.setOnClickListener {
             bookIsAgainstVisit = YesNo.YES; refreshBookingRadios()
@@ -984,6 +1151,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (o == Outcome.BOOKING) {
             bookingSub = BookingSub.CLIENT
             bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
+            // Switching back to Booking from another outcome resets
+            // the visited-watermark — the user starts at CLIENT and
+            // must Next-through again.
+            maxVisitedBookingSub = BookingSub.CLIENT
         }
         renderState()
     }
@@ -1177,6 +1348,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             return
         }
         bookingSub = nextSubTab(bookingSub)
+        // Bump the watermark so the tap-back navigation can let the
+        // user jump straight to this sub-tab on a return trip.
+        if (bookingSub.ordinal > maxVisitedBookingSub.ordinal) {
+            maxVisitedBookingSub = bookingSub
+        }
         renderState()
     }
 
@@ -1231,46 +1407,82 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (editEnabled) {
             pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_active)
             pill.setTextColor(Color.WHITE)
+            pill.text = "Done"
+            // Tap-through feedback so the operator knows the lock
+            // really did flip — the previous chip-only colour change
+            // was easy to miss in bright sunlight.
+            Toast.makeText(
+                requireContext(),
+                "Fields unlocked — edit and tap Done when finished",
+                Toast.LENGTH_SHORT,
+            ).show()
         } else {
             pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
             pill.setTextColor(Color.parseColor("#2DAE12"))
+            pill.text = "Edit"
         }
     }
 
+    // Cached original key listeners so the lock toggle can fully
+    // disable typing (setKeyListener(null) is the only universally
+    // reliable way to keep the IME from accepting input on Samsung /
+    // Xiaomi keyboards — focus + clickable alone leaves a soft IME
+    // entry path in some skins) and restore proper input behaviour
+    // on unlock. One entry per EditText pointer-identity.
+    private val cachedKeyListeners = mutableMapOf<android.widget.EditText, android.text.method.KeyListener?>()
+
     /**
-     * Lock / unlock the client-form EditTexts + selector rows in one
-     * pass. Kept narrow to the prefilled identity fields; the
-     * professional / office / booking sub-tabs aren't touched (those
-     * are visit-specific, not lead-cached).
+     * Lock / unlock all PREFILLED form fields in one pass. Covers the
+     * Client identity fields AND the Professional/Office groups since
+     * any of those can be prefilled from the lead lookup or the
+     * clients-master row. Visit-specific fields (Booking / Charges /
+     * Payment / Staff) are NOT touched — those are always editable
+     * because they're new per booking, not lead-cached.
      */
     private fun applyEditModeToFields(enabled: Boolean) {
-        listOf(
+        val fields = listOf(
+            // Client identity
             etFormName, etFormFather, etFormAltNumber, etFormWhatsApp,
             etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
             etFormDistrict, etFormLocation,
-        ).forEach { f ->
+            // Professional
+            etProfDesignation, etProfIncome,
+            // Office
+            etOfficeName, etOfficeEmail, etOfficeMobile, etOfficePhone,
+            etOfficeAddress,
+        )
+        fields.forEach { f ->
+            f ?: return@forEach
             // CRITICAL: do NOT use isEnabled=false here. Many Material
             // text themes pipe state_enabled=false through to a
             // near-transparent disabled colour on the EditText text,
             // which made the prefilled lead data invisible until the
-            // user tapped Edit (which restored isEnabled=true). The
-            // text was always in the field — just rendered in a
-            // colour the user couldn't read.
+            // user tapped Edit (which restored isEnabled=true).
             //
-            // Lock editability via focus + click suppression instead.
-            // The text stays in its normal #101828 colour, the cursor
-            // can't enter the field, and key/touch events on the
-            // field don't bring up the IME or change the value.
-            f?.isFocusable = enabled
-            f?.isFocusableInTouchMode = enabled
-            f?.isClickable = enabled
-            f?.isLongClickable = enabled
-            f?.isCursorVisible = enabled
-            // Drop alpha only slightly so the locked state still reads
-            // as "look but don't touch" without dimming the data into
-            // unreadability (the previous 0.7 with isEnabled=false
-            // compounded into near-transparency on some devices).
-            f?.alpha = if (enabled) 1f else 0.95f
+            // Lock editability via focus + click suppression + a null
+            // keyListener so the IME literally has no input target.
+            // Focus alone isn't enough on some OEM keyboards — they
+            // re-grant focus on long-press / soft-paste.
+            f.isFocusable = enabled
+            f.isFocusableInTouchMode = enabled
+            f.isClickable = enabled
+            f.isLongClickable = enabled
+            f.isCursorVisible = enabled
+            f.alpha = if (enabled) 1f else 0.95f
+            if (!enabled) {
+                // Lock: cache the original key listener (only on the
+                // FIRST lock so we don't accidentally cache the null
+                // we just set) and detach.
+                if (!cachedKeyListeners.containsKey(f)) {
+                    cachedKeyListeners[f] = f.keyListener
+                }
+                f.keyListener = null
+            } else {
+                // Unlock: restore whichever key listener the field had
+                // before we touched it. If we never cached one (i.e.
+                // the field was created in unlock mode), leave alone.
+                cachedKeyListeners[f]?.let { f.keyListener = it }
+            }
         }
     }
 
@@ -1314,6 +1526,48 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * onto the Client form fields. Telecaller lead data is used first,
      * then the clients master fills anything still blank.
      */
+    /**
+     * Fires the India Post `/api/pincode` proxy (same one the web hits)
+     * and fills Location, District, State from the result — but ONLY
+     * when those fields are still blank, so manual entries always win.
+     *
+     * Locality (stored visually in the Location field on the mobile
+     * booking form) maps to the post-office `Name` returned by India
+     * Post — see PincodeLookup for the suffix-cleaning and dedup logic.
+     * Mirrors mms-external-leads.tsx::usePincodeLocationEnrichment on
+     * the web so a pincode typed into the mobile sheet produces the
+     * exact same Location/District/State the web would.
+     */
+    private fun enrichBookingPincode(pin: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val enriched = try {
+                com.manjugroups.m_connect.network.PincodeLookup.lookup(pin)
+            } catch (_: Throwable) {
+                null
+            } ?: return@launch
+            // Field-blank checks live INSIDE the post-coroutine block so
+            // values the operator typed while the network round-trip was
+            // in flight aren't trampled. Same anti-overwrite policy as
+            // the web's enrichment effect.
+            fun isBlank(et: EditText?): Boolean =
+                et?.text?.toString()?.trim().isNullOrEmpty()
+            if (isBlank(etFormLocation) && !enriched.locality.isNullOrBlank()) {
+                etFormLocation?.setText(enriched.locality)
+            }
+            if (isBlank(etFormDistrict) && !enriched.district.isNullOrBlank()) {
+                etFormDistrict?.setText(enriched.district)
+            }
+            if (isBlank(etFormState) && !enriched.state.isNullOrBlank()) {
+                etFormState?.setText(enriched.state)
+            }
+            // Treat the enrichment as a meaningful form-state change so
+            // the auto-save scratchpad picks it up on the next debounce
+            // window — without this the user could close the sheet and
+            // come back to a pincode without its enriched locality.
+            scheduleDraftPushIfActive()
+        }
+    }
+
     private fun lookupAndPrefillClientByPhone(phone: String) {
         viewLifecycleOwner.lifecycleScope.launch {
             // Track a user-friendly reason if the lead lookup misses or
@@ -1383,14 +1637,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
 
             lead?.let {
-                val profile = it.latestAnalysisProfile
-                fill(etFormName, it.contactName ?: profile?.clientName)
+                // Prefer the operator-edited manualProfile over the
+                // AI-derived latestAnalysisProfile. The web's Edit
+                // Live Profile dialog writes to lead.manualProfile,
+                // and when the operator typed pincode/state/district
+                // there, those values reflect their explicit intent
+                // (often verified via the pincode-lookup auto-fill).
+                // The AI analysis is a fallback for fields the
+                // operator hasn't touched yet — fall through with `?:`
+                // so an empty manualProfile entry still hits the AI
+                // value without forcing the operator to re-type.
+                val manual = it.manualProfile
+                val ai = it.latestAnalysisProfile
+                fill(etFormName, it.contactName ?: manual?.clientName ?: ai?.clientName)
                 fill(etFormEmail, it.emailId)
-                fill(etFormAltNumber, profile?.alternateMobileNumber)
-                fill(etFormHomeAddress, profile?.address ?: it.suggestedVisitAddress)
-                fill(etFormPincode, profile?.pincode)
-                fill(etFormState, profile?.state)
-                fill(etFormDistrict, profile?.district)
+                fill(etFormAltNumber, manual?.alternateMobileNumber ?: ai?.alternateMobileNumber)
+                fill(etFormHomeAddress, manual?.address ?: ai?.address ?: it.suggestedVisitAddress)
+                fill(etFormPincode, manual?.pincode ?: ai?.pincode)
+                fill(etFormState, manual?.state ?: ai?.state)
+                fill(etFormDistrict, manual?.district ?: ai?.district)
                 fill(etFormLocation, it.locationPreferred ?: it.clientCity)
             }
             client?.let { prefillFromClient(it, ::fill) }
@@ -1455,6 +1720,317 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         fill(etStaffRefProf2, client.referenceProfession2)
     }
 
+    /**
+     * Walks the inflated view tree and re-styles the trailing " *" on
+     * any TextView whose text ends with it, painting just the star in
+     * the destructive red used by the rest of the app. Idempotent —
+     * safe to call multiple times because the SpannableString
+     * replacement preserves the underlying characters byte-for-byte;
+     * a re-run just re-applies the same span on the same characters.
+     *
+     * We intentionally only colour the LAST trailing asterisk after
+     * trimming, not arbitrary "*" inside the label, so a label like
+     * "Promo Offers T&C" stays untouched and a label like "Booking
+     * Date *" gets only its tail star reddened.
+     *
+     * Color choice (#D92D20) mirrors the web's `var(--bad)` / Tailwind
+     * destructive token so the visual cue is consistent across
+     * surfaces — the web booking form renders its required-field
+     * asterisks in the same red.
+     */
+    private fun colorizeRequiredStarsRedRecursively(root: android.view.ViewGroup) {
+        val redColor = Color.parseColor("#D92D20")
+        fun visit(group: android.view.ViewGroup) {
+            for (i in 0 until group.childCount) {
+                val child = group.getChildAt(i)
+                if (child is android.view.ViewGroup) {
+                    visit(child)
+                } else if (child is android.widget.TextView) {
+                    val raw = child.text?.toString() ?: continue
+                    if (!raw.trimEnd().endsWith("*")) continue
+                    val starIdx = raw.lastIndexOf('*')
+                    if (starIdx < 0) continue
+                    val styled = android.text.SpannableString(raw)
+                    styled.setSpan(
+                        android.text.style.ForegroundColorSpan(redColor),
+                        starIdx,
+                        starIdx + 1,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                    child.text = styled
+                }
+            }
+        }
+        visit(root)
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Booking-form draft auto-save helpers. Three pieces:
+    //   1. collectFormState() — snapshot every captured field into a
+    //      map<String, String?> that round-trips through Gson.
+    //   2. applyFormState(map) — restore those values into the
+    //      EditTexts / TextViews on dialog re-open. Wrapped in
+    //      `draftSuppressSave` so the TextWatcher pulse this kicks
+    //      off doesn't immediately push the same blob back to the
+    //      server (would be a no-op but burns network).
+    //   3. attachDraftWatchers() — attach a single TextWatcher to
+    //      every form EditText that schedules a debounced push().
+    //
+    // The picker rows (Title, Project, Plot, Booking Type, etc.)
+    // update their TextView text directly in the existing onClick
+    // handlers — those call scheduleDraftPushIfActive() as well so
+    // dropdowns are captured too.
+    // ──────────────────────────────────────────────────────────────
+
+    private fun collectFormState(): Map<String, String?> {
+        fun et(field: android.widget.EditText?) = field?.text?.toString()
+        fun tv(field: android.widget.TextView?) = field?.text?.toString()
+        return mapOf(
+            // Client tab
+            "etClientMobile" to et(etClientMobile),
+            "tvFormClientPhone" to tv(tvFormPhone),
+            "tvFormClientTitle" to tv(tvFormTitle),
+            "etFormName" to et(etFormName),
+            "etFormFather" to et(etFormFather),
+            "tvFormDob" to tv(tvFormDob),
+            "tvFormAnniversary" to tv(tvFormAnniversary),
+            "tvFormNationality" to tv(tvFormNationality),
+            "etFormAltNumber" to et(etFormAltNumber),
+            "etFormWhatsApp" to et(etFormWhatsApp),
+            "etFormEmail" to et(etFormEmail),
+            "etFormHomeAddress" to et(etFormHomeAddress),
+            "etFormPincode" to et(etFormPincode),
+            "etFormState" to et(etFormState),
+            "etFormDistrict" to et(etFormDistrict),
+            "etFormLocation" to et(etFormLocation),
+            // Professional
+            "tvProfProfession" to tv(tvProfProfession),
+            "etProfDesignation" to et(etProfDesignation),
+            "etProfIncome" to et(etProfIncome),
+            // Office
+            "etOfficeName" to et(etOfficeName),
+            "etOfficeEmail" to et(etOfficeEmail),
+            "etOfficeMobile" to et(etOfficeMobile),
+            "etOfficePhone" to et(etOfficePhone),
+            "etOfficeAddress" to et(etOfficeAddress),
+            // Booking
+            "tvBookType" to tv(tvBookType),
+            "tvBookSource" to tv(tvBookSource),
+            "etBookCef" to et(etBookCef),
+            "tvBookDate" to tv(tvBookDate),
+            "tvBookProject" to tv(tvBookProject),
+            "tvBookPlot" to tv(tvBookPlot),
+            "tvBookProperty" to tv(tvBookProperty),
+            "tvBookMode" to tv(tvBookMode),
+            // Charges
+            "etChargeBookingCost" to et(etChargeBookingCost),
+            "etChargeGuidelineValue" to et(etChargeGuidelineValue),
+            "etChargeSpecialConsideration" to et(etChargeSpecialConsideration),
+            "etChargeDiscountApprovedBy" to et(etChargeDiscountApprovedBy),
+            "etChargeScReason" to et(etChargeScReason),
+            "etChargeScValidity" to et(etChargeScValidity),
+            "etChargePromoOffers" to et(etChargePromoOffers),
+            "tvChargePromoTnc" to tv(tvChargePromoTnc),
+            "etChargePromoValue" to et(etChargePromoValue),
+            "etChargeOfferValidity" to et(etChargeOfferValidity),
+            // Payment
+            "tvPayPaymentMode" to tv(tvPayPaymentMode),
+            "etPayRegCharges" to et(etPayRegCharges),
+            "etPayGstAmount" to et(etPayGstAmount),
+            "etPayDocCharges" to et(etPayDocCharges),
+            "etPayPattaCharges" to et(etPayPattaCharges),
+            "etPayOtherCharges" to et(etPayOtherCharges),
+            "etPayAdvanceAmount" to et(etPayAdvanceAmount),
+            "tvPayAllotDate" to tv(tvPayAllotDate),
+            "etPayAllotDue" to et(etPayAllotDue),
+            "tvPay2Date" to tv(tvPay2Date),
+            "etPay2Mode" to et(etPay2Mode),
+            "tvPay3Date" to tv(tvPay3Date),
+            "etPay3Mode" to et(etPay3Mode),
+            "tvPay4Date" to tv(tvPay4Date),
+            "etPay4Mode" to et(etPay4Mode),
+            "tvPayPrefReg" to tv(tvPayPrefReg),
+            // Staff
+            "tvStaffAvp" to tv(tvStaffAvp),
+            "tvStaffGm" to tv(tvStaffGm),
+            "tvStaffSm" to tv(tvStaffSm),
+            "tvStaffBdo" to tv(tvStaffBdo),
+            "tvStaffTelecaller" to tv(tvStaffTelecaller),
+            "etStaffAadhar" to et(etStaffAadhar),
+            "etStaffPancard" to et(etStaffPancard),
+            "tvStaffDocPrep" to tv(tvStaffDocPrep),
+            // References
+            "etStaffRefName1" to et(etStaffRefName1),
+            "etStaffRefMobile1" to et(etStaffRefMobile1),
+            "etStaffRefProf1" to et(etStaffRefProf1),
+            "etStaffRefName2" to et(etStaffRefName2),
+            "etStaffRefMobile2" to et(etStaffRefMobile2),
+            "etStaffRefProf2" to et(etStaffRefProf2),
+        )
+    }
+
+    private fun applyFormState(map: Map<String, String?>) {
+        if (map.isEmpty()) return
+        draftSuppressSave = true
+        try {
+            fun et(field: android.widget.EditText?, key: String) {
+                map[key]?.takeIf { it.isNotBlank() }?.let { field?.setText(it) }
+            }
+            fun tv(field: android.widget.TextView?, key: String) {
+                map[key]?.takeIf { it.isNotBlank() }?.let { field?.text = it }
+            }
+            et(etClientMobile, "etClientMobile")
+            tv(tvFormPhone, "tvFormClientPhone")
+            tv(tvFormTitle, "tvFormClientTitle")
+            et(etFormName, "etFormName")
+            et(etFormFather, "etFormFather")
+            tv(tvFormDob, "tvFormDob")
+            tv(tvFormAnniversary, "tvFormAnniversary")
+            tv(tvFormNationality, "tvFormNationality")
+            et(etFormAltNumber, "etFormAltNumber")
+            et(etFormWhatsApp, "etFormWhatsApp")
+            et(etFormEmail, "etFormEmail")
+            et(etFormHomeAddress, "etFormHomeAddress")
+            et(etFormPincode, "etFormPincode")
+            et(etFormState, "etFormState")
+            et(etFormDistrict, "etFormDistrict")
+            et(etFormLocation, "etFormLocation")
+            tv(tvProfProfession, "tvProfProfession")
+            et(etProfDesignation, "etProfDesignation")
+            et(etProfIncome, "etProfIncome")
+            et(etOfficeName, "etOfficeName")
+            et(etOfficeEmail, "etOfficeEmail")
+            et(etOfficeMobile, "etOfficeMobile")
+            et(etOfficePhone, "etOfficePhone")
+            et(etOfficeAddress, "etOfficeAddress")
+            tv(tvBookType, "tvBookType")
+            tv(tvBookSource, "tvBookSource")
+            et(etBookCef, "etBookCef")
+            tv(tvBookDate, "tvBookDate")
+            tv(tvBookProject, "tvBookProject")
+            tv(tvBookPlot, "tvBookPlot")
+            tv(tvBookProperty, "tvBookProperty")
+            tv(tvBookMode, "tvBookMode")
+            et(etChargeBookingCost, "etChargeBookingCost")
+            et(etChargeGuidelineValue, "etChargeGuidelineValue")
+            et(etChargeSpecialConsideration, "etChargeSpecialConsideration")
+            et(etChargeDiscountApprovedBy, "etChargeDiscountApprovedBy")
+            et(etChargeScReason, "etChargeScReason")
+            et(etChargeScValidity, "etChargeScValidity")
+            et(etChargePromoOffers, "etChargePromoOffers")
+            tv(tvChargePromoTnc, "tvChargePromoTnc")
+            et(etChargePromoValue, "etChargePromoValue")
+            et(etChargeOfferValidity, "etChargeOfferValidity")
+            tv(tvPayPaymentMode, "tvPayPaymentMode")
+            et(etPayRegCharges, "etPayRegCharges")
+            et(etPayGstAmount, "etPayGstAmount")
+            et(etPayDocCharges, "etPayDocCharges")
+            et(etPayPattaCharges, "etPayPattaCharges")
+            et(etPayOtherCharges, "etPayOtherCharges")
+            et(etPayAdvanceAmount, "etPayAdvanceAmount")
+            tv(tvPayAllotDate, "tvPayAllotDate")
+            et(etPayAllotDue, "etPayAllotDue")
+            tv(tvPay2Date, "tvPay2Date")
+            et(etPay2Mode, "etPay2Mode")
+            tv(tvPay3Date, "tvPay3Date")
+            et(etPay3Mode, "etPay3Mode")
+            tv(tvPay4Date, "tvPay4Date")
+            et(etPay4Mode, "etPay4Mode")
+            tv(tvPayPrefReg, "tvPayPrefReg")
+            tv(tvStaffAvp, "tvStaffAvp")
+            tv(tvStaffGm, "tvStaffGm")
+            tv(tvStaffSm, "tvStaffSm")
+            tv(tvStaffBdo, "tvStaffBdo")
+            tv(tvStaffTelecaller, "tvStaffTelecaller")
+            et(etStaffAadhar, "etStaffAadhar")
+            et(etStaffPancard, "etStaffPancard")
+            tv(tvStaffDocPrep, "tvStaffDocPrep")
+            et(etStaffRefName1, "etStaffRefName1")
+            et(etStaffRefMobile1, "etStaffRefMobile1")
+            et(etStaffRefProf1, "etStaffRefProf1")
+            et(etStaffRefName2, "etStaffRefName2")
+            et(etStaffRefMobile2, "etStaffRefMobile2")
+            et(etStaffRefProf2, "etStaffRefProf2")
+        } finally {
+            draftSuppressSave = false
+        }
+    }
+
+    private fun currentBookingSourceKey(): String =
+        BookingDraftManager.buildSourceKey(
+            cpVisitId = arguments?.getString(ARG_CP_VISIT_ID),
+            siteVisitId = arguments?.getString(ARG_SITE_VISIT_ID),
+            staffId = session.staffId,
+        )
+
+    private fun scheduleDraftPushIfActive() {
+        if (draftSuppressSave) return
+        val manager = draftManager ?: return
+        if (!isAdded) return
+        val sourceKey = currentBookingSourceKey()
+        val state = collectFormState()
+        if (state.values.all { it.isNullOrBlank() }) return
+        manager.push(
+            bearerToken = session.bearerToken,
+            sourceKey = sourceKey,
+            sourceCpVisitId = arguments?.getString(ARG_CP_VISIT_ID),
+            sourceSiteVisitId = arguments?.getString(ARG_SITE_VISIT_ID),
+            draftJson = manager.encode(state),
+        )
+    }
+
+    private fun attachDraftWatchers() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                scheduleDraftPushIfActive()
+            }
+        }
+        val editTexts = listOf(
+            etClientMobile, etFormName, etFormFather, etFormAltNumber,
+            etFormWhatsApp, etFormEmail, etFormHomeAddress, etFormPincode,
+            etFormState, etFormDistrict, etFormLocation, etProfDesignation,
+            etProfIncome, etOfficeName, etOfficeEmail, etOfficeMobile,
+            etOfficePhone, etOfficeAddress, etBookCef, etChargeBookingCost,
+            etChargeGuidelineValue, etChargeSpecialConsideration,
+            etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
+            etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
+            etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
+            etPayOtherCharges, etPayAdvanceAmount, etPayAllotDue, etPay2Mode,
+            etPay3Mode, etPay4Mode, etStaffAadhar, etStaffPancard,
+            etStaffRefName1, etStaffRefMobile1, etStaffRefProf1,
+            etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
+        )
+        editTexts.forEach { it?.addTextChangedListener(watcher) }
+    }
+
+    private fun restoreDraftIfAny() {
+        val manager = draftManager ?: return
+        val sourceKey = currentBookingSourceKey()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val snapshot = manager.restore(session.bearerToken, sourceKey) ?: return@launch
+            if (!isAdded || draftRestoreApplied) return@launch
+            draftRestoreApplied = true
+            applyFormState(manager.decode(snapshot.draftJson))
+            // Bump the "AI prefill already happened" flag so the AI
+            // analysis prefill that runs after lookup doesn't overwrite
+            // the operator's saved typing.
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Resumed your draft from " +
+                    java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                        .format(java.util.Date(snapshot.updatedAt)),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun clearDraftAfterSubmit() {
+        val manager = draftManager ?: return
+        manager.clear(session.bearerToken, currentBookingSourceKey())
+    }
+
     private fun nextSubTab(current: BookingSub): BookingSub = when (current) {
         BookingSub.CLIENT -> BookingSub.BOOKING
         BookingSub.PROFESSIONAL, BookingSub.OFFICE -> BookingSub.BOOKING
@@ -1517,6 +2093,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bookingStaffTelecaller = null
         prefilledLeadId = null
         lastLookedUpBookingPhone = null
+        lastEnrichedBookingPincode = null
         lastBookingPrefillKey = null
         bookingGstPercent = null
         bookIsAgainstVisit = YesNo.YES
@@ -1543,7 +2120,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             title = title,
             options = items.map { SearchableOption(item = it, title = it) },
             emptyMessage = "No options found",
-        ) { onPicked(it) }
+        ) {
+            onPicked(it)
+            // Every picker selection contributes to the draft so the
+            // booking form survives an app crash mid-flow. Centralised
+            // here so we don't have to wire each rowBookType /
+            // rowBookProperty / rowChargePromoTnc / etc. individually.
+            scheduleDraftPushIfActive()
+        }
     }
 
     private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy", afterPicked: (() -> Unit)? = null) {
@@ -1558,6 +2142,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 cal.set(year, month, day)
                 target?.text = SimpleDateFormat(format, Locale.US).format(cal.time)
                 afterPicked?.invoke()
+                // Same draft-capture story as picker() above — date
+                // edits land in the snapshot without per-callsite
+                // wiring.
+                scheduleDraftPushIfActive()
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -2397,38 +2985,32 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         cpVisitId: String? = null,
         siteVisitId: String? = null,
     ): CreateBookingRequest? {
+        // Match web's /marketing/bookings/new — only 3 hard requirements:
+        // Mobile Number, Client Name, Booking Date. Everything else is
+        // optional and the row lands in `bookings` with whatever the
+        // operator filled. Project / Plot / staff routing / charges are
+        // all encouraged (the labels still hint placeholder text) but
+        // not enforced — same as the web. Operators on the field can
+        // capture a booking with partial info and the office completes
+        // it later.
         val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text)
         val name = textOrNull(etFormName?.text)
         val project = bookingProject
         val unit = bookingUnit
         if (phone.isNullOrBlank()) {
-            finishCta(error = "Client phone number is required")
+            finishCta(error = "Mobile Number is required")
             return null
         }
         if (name.isNullOrBlank()) {
-            finishCta(error = "Client name is required")
+            finishCta(error = "Client Name is required")
             return null
         }
-        if (project == null) {
-            finishCta(error = "Select project")
-            return null
-        }
-        if (unit == null) {
-            finishCta(error = "Select plot")
+        if (bookingDateForApi() == null) {
+            finishCta(error = "Booking Date is required")
             return null
         }
         val bookingCost = numberOrNull(etChargeBookingCost?.text)
         val advanceAmount = numberOrNull(etPayAdvanceAmount?.text)
-        if (staffSaveAs == SaveAs.CONFIRMED) {
-            val missing = confirmationMissingFields(bookingCost, advanceAmount)
-            if (missing.isNotEmpty()) {
-                finishCta(
-                    error = "Fill required approval fields or save as Draft: ${missing.take(6).joinToString(", ")}" +
-                        if (missing.size > 6) "…" else ""
-                )
-                return null
-            }
-        }
         return CreateBookingRequest(
             clientName = name,
             mobileNumber = phone,
@@ -2456,9 +3038,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             officePhone = textOrNull(etOfficePhone?.text),
             officeEmail = textOrNull(etOfficeEmail?.text),
             nationality = textOrNull(tvFormNationality?.text),
-            projectId = project.id,
-            plotId = unit.id,
-            plotNo = unit.unitNumber,
+            projectId = project?.id,
+            plotId = unit?.id,
+            plotNo = unit?.unitNumber,
             bookingType = textOrNull(tvBookType?.text),
             cefNo = textOrNull(etBookCef?.text),
             isDuplicateBooking = bookDuplicate,
@@ -2587,6 +3169,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     // client form back to the lead so the next person
                     // sees the corrected profile.
                     pushClientEditsToLeadIfAny()
+                    // Booking row landed — wipe the auto-save scratchpad
+                    // so the next time this operator opens a booking
+                    // form for a DIFFERENT source they start with a
+                    // clean slate instead of inheriting these values.
+                    clearDraftAfterSubmit()
                     setFragmentResult(
                         RESULT_KEY,
                         bundleOf(
@@ -2622,6 +3209,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     // Mirror the CP-mode lead push for SV-mode too —
                     // same Edit-toggle semantics, same target lead row.
                     pushClientEditsToLeadIfAny()
+                    clearDraftAfterSubmit()
                     setFragmentResult(
                         RESULT_KEY,
                         bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
@@ -2662,6 +3250,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // the user didn't tap Edit. Best-effort — booking
                 // already saved, so failures here just get logged.
                 pushClientEditsToLeadIfAny()
+                clearDraftAfterSubmit()
 
                 setFragmentResult(
                     RESULT_KEY,
@@ -2672,8 +3261,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCta(error = e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
+                // Both surfaces (the inline tvError row and the Toast)
+                // are fed the SAME pre-humanized message so the operator
+                // doesn't see the raw stack trace anywhere. showError
+                // runs humanizeServerError internally; we mirror that
+                // for the Toast which writes its text directly.
+                val raw = e.message ?: "Network error"
+                finishCta(error = raw)
+                Toast.makeText(requireContext(), humanizeServerError(raw), Toast.LENGTH_LONG)
                     .show()
             }
         }
@@ -2805,12 +3400,75 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showError(msg: String) {
-        tvError?.text = msg
+        tvError?.text = humanizeServerError(msg)
         tvError?.visibility = View.VISIBLE
     }
 
     private fun clearError() {
         tvError?.visibility = View.GONE
+    }
+
+    /**
+     * Cleans up server-side error messages before showing them to the
+     * operator. Convex throws a single big string that includes:
+     *   • An "Uncaught Error: " prefix
+     *   • The actual human-readable message
+     *   • A stack trace ("at fnName (../convex/file.ts:LINE:COL)")
+     *
+     * Showing the whole blob — with code paths, line numbers, and the
+     * scary "Uncaught Error" header — looks like a crash to a field
+     * operator. This helper strips the noise, keeps the message, and
+     * reformats the most common "missing fields" case as something a
+     * non-technical user can act on.
+     *
+     * If the input doesn't match any known noise pattern (e.g. a
+     * straightforward "Network error" Toast), it's returned unchanged.
+     */
+    private fun humanizeServerError(raw: String): String {
+        if (raw.isBlank()) return "Something went wrong. Please try again."
+
+        // 1) Drop everything from the first stack-trace marker onwards.
+        //    Convex stack lines look like:  at name (../convex/x.ts:1:2)
+        //    Splitting on a newline followed by whitespace + "at " strips
+        //    them in one shot without nibbling at legitimate "at "
+        //    occurrences in the message body.
+        val noStack = raw.split(Regex("(?m)\\n\\s*at\\s")).firstOrNull()?.trim().orEmpty()
+
+        // 2) Strip the "Uncaught Error:" / "Error:" / "ConvexError:" prefix.
+        val noPrefix = noStack
+            .replace(Regex("^(Uncaught\\s+)?(Convex)?Error:\\s*", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        // 3) Strip trailing punctuation noise so the next sentence we
+        //    might append doesn't look weird.
+        val clean = noPrefix.trimEnd('.', ' ', '\n')
+
+        if (clean.isEmpty()) return "Something went wrong. Please try again."
+
+        // 4) Reformat the most common case — "Cannot submit booking for
+        //    confirmation. Missing: A, B, C." — into a clearer two-line
+        //    message so the operator sees the gap at a glance instead of
+        //    parsing a comma-soup string.
+        val missingMatch = Regex(
+            "^Cannot submit booking for confirmation\\.\\s*Missing:\\s*(.+)$",
+            RegexOption.IGNORE_CASE,
+        ).find(clean)
+        if (missingMatch != null) {
+            val fields = missingMatch.groupValues[1]
+                .trimEnd('.', ' ')
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            // These fields aren't actually required to SAVE the row —
+            // they're approval-workflow asks the office can fill in
+            // later. Frame it that way so the operator doesn't think
+            // the booking failed entirely.
+            val list = if (fields.size <= 4) fields.joinToString(", ")
+            else fields.take(4).joinToString(", ") + " +" + (fields.size - 4) + " more"
+            return "Save the booking as Draft, or fill in: $list. The office can add these during approval."
+        }
+
+        return clean
     }
 
     private fun outcomeFromArg(value: String): Outcome? = when (value) {

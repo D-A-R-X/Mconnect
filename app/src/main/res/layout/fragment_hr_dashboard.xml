@@ -140,6 +140,82 @@
                     android:textColor="#475467"
                     android:textSize="13sp" />
 
+                <!--
+                  Today's clock-in / clock-out summary. Surfaces the
+                  exact times so the operator sees "today's attendance"
+                  on the same card as the Hrs totals, instead of
+                  having to scroll down to the history section. Hidden
+                  by default; the fragment makes it visible the moment
+                  the user has clocked in today (firstPunchInIso set).
+                -->
+                <LinearLayout
+                    android:id="@+id/todayPunchSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_metric_box"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="Clocked in"
+                            android:textColor="#475467"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvTodayClockedInAt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="—"
+                            android:textColor="#101828"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="Clocked out"
+                            android:textColor="#475467"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvTodayClockedOutAt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="—"
+                            android:textColor="#101828"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

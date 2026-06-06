@@ -650,7 +650,14 @@ data class ArrivalOtpVerifyBody(
     val visitId: String,
     val otp: String,
     val lat: Double? = null,
-    val lng: Double? = null
+    val lng: Double? = null,
+    // Storage id of the arrival photo we just uploaded. Sending it
+    // along with OTP verify links the photo to the fieldVisit row
+    // immediately, instead of having to wait for completeVisit to
+    // fire at trip-end. The web admin CP visit detail page was
+    // showing "No arrival photo yet" for that whole window — this
+    // closes the gap.
+    val arrivalPhotoStorageId: String? = null,
 )
 
 data class ArrivalOtpVerifyResponse(

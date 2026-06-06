@@ -52,6 +52,10 @@ data class AttendanceFlowState(
     val latestRange: String = "--",
     /** ISO timestamp of the first punch-in today, used to drive a live ticker. */
     val firstPunchInIso: String? = null,
+    /** ISO timestamp of the most recent punch-out today. Surfaced on the
+     *  attendance card so the operator sees both ends of today's session
+     *  without scrolling into the history list below. */
+    val lastPunchOutIso: String? = null,
     /** Sum of today's already-closed session minutes. While clocked-in we
      *  still tick `now - firstPunchIn` for live display, but on punch-out
      *  this becomes the source of truth. */
@@ -128,6 +132,7 @@ class AttendanceFlowViewModel(
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
                     latestRange = range,
                     firstPunchInIso = firstPunchIn,
+                    lastPunchOutIso = lastPunchOut,
                     closedTodayMinutes = totalMinutes,
                     payPeriodLabel = periodLabel,
                     payPeriodMinutes = periodMinutes,
@@ -488,7 +493,7 @@ class AttendanceFlowViewModel(
             return AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
         }
 
-        private fun formatIsoToTime(iso: String): String {
+        internal fun formatIsoToTime(iso: String): String {
             val millis = parseMillis(iso) ?: return "--"
             val formatter = SimpleDateFormat("hh:mm a", Locale.getDefault())
             return formatter.format(Date(millis))

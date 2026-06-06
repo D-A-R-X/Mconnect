@@ -772,6 +772,29 @@ interface ApiService {
         @Body body: CreateBookingRequest,
     ): CreateBookingResponse
 
+    // ── Booking-form auto-save scratchpad. CompleteCpVisitBottomSheet
+    // pushes the in-progress form state to /save on a debounced timer
+    // so a crash / kill / re-login on a different phone doesn't lose
+    // the operator's typing. Resumes the form via /get on dialog open
+    // and wipes the row via /clear after a successful createBooking.
+    @POST("api/bookings/draft/save")
+    suspend fun saveBookingDraft(
+        @Header("Authorization") token: String,
+        @Body body: BookingDraftSaveRequest,
+    ): BookingDraftSaveResponse
+
+    @GET("api/bookings/draft/get")
+    suspend fun getBookingDraft(
+        @Header("Authorization") token: String,
+        @Query("sourceKey") sourceKey: String,
+    ): BookingDraftGetResponse
+
+    @POST("api/bookings/draft/clear")
+    suspend fun clearBookingDraft(
+        @Header("Authorization") token: String,
+        @Body body: BookingDraftClearRequest,
+    ): BookingDraftClearResponse
+
     // GET /api/marketing/bookings/my — bookings the caller is involved in.
     // `status` is one of draft|pending_confirmation|confirmed|cancelled or
     // null for "All". Backend gates on marketing.bookings.view and returns
@@ -2097,6 +2120,11 @@ data class TelecallerLeadSearchData(
     val locationPreferred: String? = null,
     val suggestedVisitAddress: String? = null,
     val latestAnalysisProfile: LeadAnalysisProfile? = null,
+    // Operator-edited manual profile (from the web Edit Live Profile
+    // dialog). When present, prefer these values over the AI-derived
+    // latestAnalysisProfile — they reflect explicit corrections the
+    // operator typed, not the AI's best guess at parsing the call.
+    val manualProfile: ManualProfilePatch? = null,
 )
 
 data class LeadAnalysisProfile(
@@ -2349,6 +2377,50 @@ data class CreateBookingRequest(
 data class CreateBookingResponse(
     val success: Boolean,
     val id: String? = null,
+    val error: String? = null,
+)
+
+// ── Booking draft wire types ─────────────────────────────────────
+// `sourceKey` is the stable string the backend uses to dedupe the
+// per-staff scratchpad: stringified CP id, SV id, or "standalone".
+
+data class BookingDraftSaveRequest(
+    val sourceKey: String,
+    val sourceCpVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
+    /** Opaque blob — the mobile owns the schema. */
+    val draftJson: String,
+)
+
+data class BookingDraftSaveResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val updatedAt: Long? = null,
+    val created: Boolean? = null,
+    val error: String? = null,
+)
+
+data class BookingDraftPayload(
+    @SerializedName("_id") val id: String? = null,
+    val staffId: String? = null,
+    val sourceKey: String? = null,
+    val sourceCpVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
+    val draftJson: String? = null,
+    val updatedAt: Long? = null,
+)
+
+data class BookingDraftGetResponse(
+    val success: Boolean = false,
+    val draft: BookingDraftPayload? = null,
+    val error: String? = null,
+)
+
+data class BookingDraftClearRequest(val sourceKey: String)
+
+data class BookingDraftClearResponse(
+    val success: Boolean = false,
+    val deleted: Boolean? = null,
     val error: String? = null,
 )
 

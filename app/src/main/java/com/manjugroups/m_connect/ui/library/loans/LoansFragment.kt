@@ -194,77 +194,20 @@ class LoansFragment : Fragment() {
         active.clear()
         previous.clear()
 
+        // Filter the staff's real loans into this tab's bucket.
+        // The dummy-fallback block that previously seeded "Home Loan
+        // LN00123" / "Medical Expenses LN00115" entries here has been
+        // removed — those values looked like real disbursements and
+        // confused employees into thinking they had outstanding debt
+        // they hadn't taken. When both buckets are empty, the proper
+        // "No Loans Yet" / "No Advances Yet" empty state (below) takes
+        // over instead.
         if (selectedTab == TAB_LOANS) {
             active.addAll(allActive.filter { !it.isAdvance })
             previous.addAll(allPrevious.filter { !it.isAdvance })
-
-            if (active.isEmpty() && previous.isEmpty()) {
-                active.add(Loan(
-                    id = "dummy_active_loan",
-                    title = "Home Loan",
-                    loanId = "LN00123",
-                    type = LoanType.HOME,
-                    status = LoanStatus.ACTIVE,
-                    outstandingBalance = 625000L,
-                    nextEmiAmount = 15000L,
-                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
-                    principal = 1500000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = false
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_loan",
-                    title = "Home Loan",
-                    loanId = "LN00123",
-                    type = LoanType.HOME,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 1500000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = false
-                ))
-            }
         } else {
             active.addAll(allActive.filter { it.isAdvance })
             previous.addAll(allPrevious.filter { it.isAdvance })
-
-            if (active.isEmpty() && previous.isEmpty()) {
-                active.add(Loan(
-                    id = "dummy_active_advance",
-                    title = "Medical Expenses",
-                    loanId = "LN00123",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.ACTIVE,
-                    outstandingBalance = 25000L,
-                    nextEmiAmount = 0L,
-                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
-                    principal = 25000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = true
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_advance_1",
-                    title = "Medical Expenses",
-                    loanId = "LN00123",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 15000L,
-                    disbursedMillis = 1641772800000L, // 10 Jan 2022
-                    isAdvance = true
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_advance_2",
-                    title = "Medical Expenses",
-                    loanId = "LN00115",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 15000L,
-                    disbursedMillis = 1616025600000L, // 18 Mar 2021
-                    isAdvance = true
-                ))
-            }
         }
 
         if (active.isEmpty() && previous.isEmpty()) {

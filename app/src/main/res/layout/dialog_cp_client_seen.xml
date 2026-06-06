@@ -51,13 +51,22 @@
             android:textColor="#475467"
             android:textSize="12sp" />
 
+        <!--
+          Yes / No buttons. Each button is a horizontal LinearLayout
+          with its own icon + label so the icon stays a fixed inset
+          from the text and the whole content block centers as a unit.
+          The previous version used a single TextView with
+          drawableStart, which left the icon flush against the
+          start edge while only the text re-centered — making the
+          buttons look lopsided.
+        -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="20dp"
             android:orientation="horizontal">
 
-            <TextView
+            <LinearLayout
                 android:id="@+id/btnCpSeenYes"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -65,16 +74,28 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_cp_seen_yes"
                 android:clickable="true"
-                android:drawableStart="@drawable/ic_cp_seen_check"
-                android:drawablePadding="10dp"
                 android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
-                android:text="Yes , I saw"
-                android:textColor="@android:color/white"
-                android:textSize="14sp" />
+                android:orientation="horizontal">
 
-            <TextView
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cp_seen_check" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Yes, I saw"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/btnCpSeenNo"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -82,14 +103,26 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_cp_seen_no"
                 android:clickable="true"
-                android:drawableStart="@drawable/ic_cp_seen_x"
-                android:drawablePadding="10dp"
                 android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
-                android:text="No i didn't"
-                android:textColor="#2DAE12"
-                android:textSize="14sp" />
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cp_seen_x" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="No, I didn't"
+                    android:textColor="#2DAE12"
+                    android:textSize="14sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 

@@ -1255,6 +1255,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
                 lat = otpLat,
                 lng = otpLng,
+                // Hand the already-uploaded photo's storage id to the
+                // OTP sheet so it can attach the photo to the
+                // fieldVisit row at OTP-verify time. Without this the
+                // photo only got linked at completeVisit (trip-end),
+                // which left the web admin showing "No arrival photo
+                // yet" for the entire in-flight window.
+                arrivalPhotoStorageId = pendingArrivalStorageId,
             ).show(parentFragmentManager, "arrival_otp")
         }
     }

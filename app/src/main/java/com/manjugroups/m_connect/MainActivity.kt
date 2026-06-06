@@ -342,6 +342,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Lets transient overlays (e.g. CompleteCpVisitBottomSheet) snapshot the
+     * tab-bar state before hiding it, so they can restore *exactly* what
+     * was there on dismiss — root tabs leave the bar visible, secondary
+     * screens leave it hidden. Without this they'd have to assume one or
+     * the other and would re-show the bar on screens that intentionally
+     * hide it.
+     */
+    fun isTabBarVisible(): Boolean {
+        if (!::tabBarContainer.isInitialized) return false
+        return tabBarContainer.visibility == android.view.View.VISIBLE
+    }
+
     fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
         val wasFullBleed = statusBarFullBleed

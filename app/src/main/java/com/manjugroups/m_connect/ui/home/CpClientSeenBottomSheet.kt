@@ -54,11 +54,13 @@ class CpClientSeenBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<TextView>(R.id.btnCpSeenYes).setOnClickListener {
+        // Buttons are now LinearLayouts (icon + label centered as one
+        // block) so we look them up as View, not TextView.
+        view.findViewById<View>(R.id.btnCpSeenYes).setOnClickListener {
             setFragmentResult(RESULT_KEY, bundleOf(KEY_CLIENT_SEEN to true))
             dismissAllowingStateLoss()
         }
-        view.findViewById<TextView>(R.id.btnCpSeenNo).setOnClickListener {
+        view.findViewById<View>(R.id.btnCpSeenNo).setOnClickListener {
             setFragmentResult(RESULT_KEY, bundleOf(KEY_CLIENT_SEEN to false))
             dismissAllowingStateLoss()
         }

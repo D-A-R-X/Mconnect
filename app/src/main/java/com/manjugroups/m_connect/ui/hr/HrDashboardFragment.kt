@@ -375,6 +375,32 @@ class HrDashboardFragment : Fragment() {
                     binding.tvPayPeriodLabel.text = state.payPeriodLabel
                         .ifBlank { binding.tvPayPeriodLabel.text }
                     binding.tvPayPeriodHours.text = state.payPeriodHours
+
+                    // Today's clock-in/out summary on the main card.
+                    // Visible the moment the user has clocked in at
+                    // least once today, so the operator sees actual
+                    // times alongside the Today / Pay Period hour
+                    // counters instead of having to scroll into the
+                    // history strip below for that info.
+                    val firstPunchIso = state.firstPunchInIso
+                    val lastPunchIso = state.lastPunchOutIso
+                    if (!firstPunchIso.isNullOrBlank()) {
+                        binding.todayPunchSummary.visibility = View.VISIBLE
+                        binding.tvTodayClockedInAt.text =
+                            AttendanceFlowViewModel.formatIsoToTime(firstPunchIso)
+                        binding.tvTodayClockedOutAt.text = when {
+                            !lastPunchIso.isNullOrBlank() ->
+                                AttendanceFlowViewModel.formatIsoToTime(lastPunchIso)
+                            // While the session is still open we show
+                            // a dash for clock-out — the live ticker
+                            // on tvTodayHours already conveys "still
+                            // running". Showing "Now" or current time
+                            // here would be misleading.
+                            else -> "—"
+                        }
+                    } else {
+                        binding.todayPunchSummary.visibility = View.GONE
+                    }
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
