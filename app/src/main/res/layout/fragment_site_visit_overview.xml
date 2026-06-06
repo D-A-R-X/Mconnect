@@ -30,15 +30,54 @@
                 android:paddingHorizontal="20dp"
                 android:paddingTop="16dp">
 
-                <!-- Header Name -->
-                <TextView
-                    android:id="@+id/tvOverviewTitle"
+                <!-- Header Title + Dropdown -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_bold"
-                    android:text="Blue Spot ECR"
-                    android:textColor="#1D2939"
-                    android:textSize="20sp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvOverviewTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="Blue Spot ECR"
+                        android:textColor="#1D2939"
+                        android:textSize="20sp" />
+
+                    <!-- Dropdown Spinner/Button -->
+                    <LinearLayout
+                        android:id="@+id/layoutVehicleDropdown"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/bg_vehicle_dropdown"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:id="@+id/tvSelectedVehicleType"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Cab Vehicle"
+                            android:textColor="#344054"
+                            android:textSize="12sp" />
+
+                        <ImageView
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginStart="6dp"
+                            android:src="@drawable/ic_chevron_down"
+                            app:tint="#667085" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <!-- Status Badge -->
                 <LinearLayout
@@ -129,10 +168,12 @@
 
                 <!-- Custom 6-Step Stepper -->
                 <FrameLayout
+                    android:id="@+id/layoutCabStepper"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:layout_marginBottom="16dp">
+                    android:layout_marginBottom="16dp"
+                    android:visibility="visible">
 
                     <!-- Connector Line Segments -->
                     <LinearLayout
@@ -377,6 +418,189 @@
 
                             <TextView
                                 android:id="@+id/tvStepDone"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="DONE"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Custom 4-Step Stepper (Own Vehicle) -->
+                <FrameLayout
+                    android:id="@+id/layoutOwnStepper"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="16dp"
+                    android:visibility="gone">
+
+                    <!-- Connector Line Segments -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="2dp"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginStart="44dp"
+                        android:layout_marginEnd="44dp"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/stepLineOwn1"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
+                        <View
+                            android:id="@+id/stepLineOwn2"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
+                        <View
+                            android:id="@+id/stepLineOwn3"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
+                    </LinearLayout>
+
+                    <!-- Step Circles and Text -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <!-- SCHEDULED -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepOwnScheduled"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepOwnScheduled"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_check_white" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepOwnScheduled"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="SCHEDULED"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
+                        <!-- CLIENT DEPARTURE -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepOwnClientDeparture"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepOwnClientDeparture"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_car_outline" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepOwnClientDeparture"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="CLIENT DEPARTURE"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
+                        <!-- ON SITE -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepOwnOnSite"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepOwnOnSite"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_task_building" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepOwnOnSite"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="ON SITE"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
+                        <!-- DONE -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepOwnDone"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepOwnDone"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_check_circle" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepOwnDone"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"

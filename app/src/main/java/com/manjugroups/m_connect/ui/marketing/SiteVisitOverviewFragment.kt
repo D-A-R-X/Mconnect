@@ -50,6 +50,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // Lock for the lifecycle-transition button so a double-tap doesn't
     // fire two markPickedUp calls back-to-back.
     private var transitioning: Boolean = false
+    private var isOwnVehicleSelected: Boolean = false
 
     // UI elements
     private var tvTitle: TextView? = null
@@ -69,6 +70,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var tvVisitorName: TextView? = null
     private var tvVisitorDetails: TextView? = null
     private var tvNotes: TextView? = null
+
+    // Dropdown views
+    private var layoutVehicleDropdown: LinearLayout? = null
+    private var tvSelectedVehicleType: TextView? = null
+
+    // Stepper layouts
+    private var layoutCabStepper: View? = null
+    private var layoutOwnStepper: View? = null
 
     // Stepper views
     private var stepLine1: View? = null
@@ -97,6 +106,29 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var labelOnSite: TextView? = null
     private var labelDropped: TextView? = null
     private var labelDone: TextView? = null
+
+    // Own Stepper lines
+    private var stepLineOwn1: View? = null
+    private var stepLineOwn2: View? = null
+    private var stepLineOwn3: View? = null
+
+    // Own Stepper circles
+    private var circleOwnScheduled: FrameLayout? = null
+    private var circleOwnClientDeparture: FrameLayout? = null
+    private var circleOwnOnSite: FrameLayout? = null
+    private var circleOwnDone: FrameLayout? = null
+
+    // Own Stepper icons
+    private var ivOwnScheduled: ImageView? = null
+    private var ivOwnClientDeparture: ImageView? = null
+    private var ivOwnOnSite: ImageView? = null
+    private var ivOwnDone: ImageView? = null
+
+    // Own Stepper labels
+    private var labelOwnScheduled: TextView? = null
+    private var labelOwnClientDeparture: TextView? = null
+    private var labelOwnOnSite: TextView? = null
+    private var labelOwnDone: TextView? = null
 
     // Outcome Buttons
     private var btnBooking: LinearLayout? = null
@@ -182,10 +214,67 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         labelDropped = view.findViewById(R.id.tvStepDropped)
         labelDone = view.findViewById(R.id.tvStepDone)
 
+        // Dropdown views
+        layoutVehicleDropdown = view.findViewById(R.id.layoutVehicleDropdown)
+        tvSelectedVehicleType = view.findViewById(R.id.tvSelectedVehicleType)
+
+        // Stepper layouts
+        layoutCabStepper = view.findViewById(R.id.layoutCabStepper)
+        layoutOwnStepper = view.findViewById(R.id.layoutOwnStepper)
+
+        // Own Stepper lines
+        stepLineOwn1 = view.findViewById(R.id.stepLineOwn1)
+        stepLineOwn2 = view.findViewById(R.id.stepLineOwn2)
+        stepLineOwn3 = view.findViewById(R.id.stepLineOwn3)
+
+        // Own Stepper circles
+        circleOwnScheduled = view.findViewById(R.id.frameStepOwnScheduled)
+        circleOwnClientDeparture = view.findViewById(R.id.frameStepOwnClientDeparture)
+        circleOwnOnSite = view.findViewById(R.id.frameStepOwnOnSite)
+        circleOwnDone = view.findViewById(R.id.frameStepOwnDone)
+
+        // Own Stepper icons
+        ivOwnScheduled = view.findViewById(R.id.ivStepOwnScheduled)
+        ivOwnClientDeparture = view.findViewById(R.id.ivStepOwnClientDeparture)
+        ivOwnOnSite = view.findViewById(R.id.ivStepOwnOnSite)
+        ivOwnDone = view.findViewById(R.id.ivStepOwnDone)
+
+        // Own Stepper labels
+        labelOwnScheduled = view.findViewById(R.id.tvStepOwnScheduled)
+        labelOwnClientDeparture = view.findViewById(R.id.tvStepOwnClientDeparture)
+        labelOwnOnSite = view.findViewById(R.id.tvStepOwnOnSite)
+        labelOwnDone = view.findViewById(R.id.tvStepOwnDone)
+
         // Outcome buttons
         btnBooking = view.findViewById(R.id.btnOutcomeBooking)
         btnNotInterested = view.findViewById(R.id.btnOutcomeNotInterested)
         btnPostponed = view.findViewById(R.id.btnOutcomePostponed)
+
+        // Dropdown click listener
+        layoutVehicleDropdown?.setOnClickListener {
+            val context = it.context
+            val popup = androidx.appcompat.widget.PopupMenu(context, it)
+            popup.menu.add("Cab Vehicle")
+            popup.menu.add("Own Vehicle")
+            popup.setOnMenuItemClickListener { item ->
+                val selectedType = item.title.toString()
+                tvSelectedVehicleType?.text = selectedType
+                val newOwnSelection = selectedType == "Own Vehicle"
+                if (isOwnVehicleSelected != newOwnSelection) {
+                    isOwnVehicleSelected = newOwnSelection
+                    toggleStepperVisibility()
+                    val currentStatus = tvStatus?.text?.toString() ?: ""
+                    val stepIndex = if (isOwnVehicleSelected) {
+                        computeOwnStepIndex(currentStatus, null)
+                    } else {
+                        computeWebParityStepIndex(currentStatus, null)
+                    }
+                    updateStepper(stepIndex)
+                }
+                true
+            }
+            popup.show()
+        }
 
         // Bind initial arguments
         bindInitialArgs()
@@ -212,6 +301,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         //   onSite          → markArrivedSite
         //   dropped         → markDropped
         // Index 5 (Done) lands automatically when setOutcome fires.
+        
+        // Cab vehicle stepper
         circlePickedUp?.setOnClickListener {
             advanceTo(stepIndex = 2, label = "Picked Up")
         }
@@ -220,6 +311,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
         circleDropped?.setOnClickListener {
             advanceTo(stepIndex = 4, label = "Dropped")
+        }
+
+        // Own vehicle stepper
+        circleOwnClientDeparture?.setOnClickListener {
+            advanceTo(stepIndex = 2, label = "Client Departure")
+        }
+        circleOwnOnSite?.setOnClickListener {
+            advanceTo(stepIndex = 3, label = "On Site")
         }
     }
 
@@ -231,20 +330,31 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
      */
     private fun advanceTo(stepIndex: Int, label: String) {
         if (transitioning) return
-        if (stepIndex <= currentStepIndex) {
-            Toast.makeText(
-                requireContext(),
-                "Already at or past '$label'",
-                Toast.LENGTH_SHORT,
-            ).show()
-            return
+        
+        val isAllowed = if (isOwnVehicleSelected) {
+            when (stepIndex) {
+                2 -> currentStepIndex < 2
+                3 -> currentStepIndex == 2
+                else -> false
+            }
+        } else {
+            stepIndex == currentStepIndex + 1
         }
-        if (stepIndex != currentStepIndex + 1) {
-            Toast.makeText(
-                requireContext(),
-                "Finish the previous step first before marking '$label'",
-                Toast.LENGTH_SHORT,
-            ).show()
+
+        if (!isAllowed) {
+            if (stepIndex <= currentStepIndex) {
+                Toast.makeText(
+                    requireContext(),
+                    "Already at or past '$label'",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                Toast.makeText(
+                    requireContext(),
+                    "Finish the previous step first before marking '$label'",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
             return
         }
         val svId = visitId
@@ -351,12 +461,28 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             else -> "Site Visit"
         }
 
+        // Default to Cab Vehicle initially
+        isOwnVehicleSelected = false
+        toggleStepperVisibility()
+
         // Stepper state mapping
         val stepIndex = mapStatusToStepIndex(rawStatus)
         updateStepper(stepIndex)
 
         // Bind status text and dot color
         bindStatusHeader(rawStatus)
+    }
+
+    private fun toggleStepperVisibility() {
+        if (isOwnVehicleSelected) {
+            layoutCabStepper?.visibility = View.GONE
+            layoutOwnStepper?.visibility = View.VISIBLE
+            tvSelectedVehicleType?.text = "Own Vehicle"
+        } else {
+            layoutCabStepper?.visibility = View.VISIBLE
+            layoutOwnStepper?.visibility = View.GONE
+            tvSelectedVehicleType?.text = "Cab Vehicle"
+        }
     }
 
     private fun bindStatusHeader(status: String) {
@@ -392,6 +518,34 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "assigned" -> 1
             else -> 0
         }
+    }
+
+    private fun mapStatusToOwnStepIndex(status: String): Int {
+        val lower = status.lowercase(Locale.US)
+        return when (lower) {
+            "completed", "complete", "done", "closed" -> 3
+            "dropped" -> 2
+            "on_site", "on site", "arrived" -> 2
+            "picked_up", "picked up", "client_started", "client started" -> 1
+            "assigned" -> 1
+            else -> 0
+        }
+    }
+
+    private fun computeOwnStepIndex(
+        status: String,
+        snapshot: com.manjugroups.m_connect.network.ProposedSiteVisit?,
+    ): Int {
+        val baseFromStatus = mapStatusToOwnStepIndex(status)
+
+        val driverBoost = when {
+            snapshot?.travelDeskEndedAt != null -> 2
+            snapshot?.travelDeskOnSiteAt != null -> 2
+            snapshot?.travelDeskStartedAt != null -> 1
+            else -> -1
+        }
+
+        return maxOf(baseFromStatus, driverBoost)
     }
 
     /**
@@ -449,86 +603,175 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val blueColor = Color.parseColor("#004EEB")
         val grayColor = Color.parseColor("#98A2B3")
 
-        // Helper to update each step circle and label
-        fun setStep(
-            circle: FrameLayout?,
-            icon: ImageView?,
-            label: TextView?,
-            stepIdx: Int,
-            activeIconRes: Int
-        ) {
-            val state = when {
-                stepIdx < activeIndex -> "done"
-                stepIdx == activeIndex -> "active"
-                else -> "inactive"
+        if (isOwnVehicleSelected) {
+            // Translate status-parity activeIndex (0..5) to Own activeIndex (0..3)
+            val ownActiveIndex = when {
+                activeIndex <= 1 -> 0
+                activeIndex == 2 -> 1
+                activeIndex in 3..4 -> 2
+                else -> 3
             }
-            when (state) {
-                "done" -> {
-                    circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active)
-                    icon?.setImageResource(R.drawable.ic_check_white)
-                    label?.setTextColor(blueColor)
-                    label?.typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+
+            // Helper to update each step circle and label
+            fun setOwnStep(
+                circle: FrameLayout?,
+                icon: ImageView?,
+                label: TextView?,
+                stepIdx: Int,
+                activeIconRes: Int
+            ) {
+                val state = when {
+                    stepIdx < ownActiveIndex -> "done"
+                    stepIdx == ownActiveIndex -> "active"
+                    else -> "inactive"
                 }
-                "active" -> {
-                    circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active_current)
-                    icon?.setImageResource(activeIconRes)
-                    icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-                    label?.setTextColor(blueColor)
-                    label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
-                }
-                "inactive" -> {
-                    circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
-                    icon?.setImageResource(activeIconRes)
-                    icon?.imageTintList = android.content.res.ColorStateList.valueOf(grayColor)
-                    label?.setTextColor(grayColor)
-                    label?.typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
+                when (state) {
+                    "done" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active)
+                        icon?.setImageResource(R.drawable.ic_check_white)
+                        label?.setTextColor(blueColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+                    }
+                    "active" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active_current)
+                        icon?.setImageResource(activeIconRes)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                        label?.setTextColor(blueColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
+                    }
+                    "inactive" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
+                        icon?.setImageResource(activeIconRes)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(grayColor)
+                        label?.setTextColor(grayColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
+                    }
                 }
             }
-        }
 
-        // Apply circle states
-        setStep(circleScheduled, ivScheduled, labelScheduled, 0, R.drawable.ic_check_white)
-        setStep(circleAssigned, ivAssigned, labelAssigned, 1, R.drawable.ic_car_outline)
-        setStep(circlePickedUp, ivPickedUp, labelPickedUp, 2, R.drawable.ic_nav_home)
-        setStep(circleOnSite, ivOnSite, labelOnSite, 3, R.drawable.ic_task_building)
-        setStep(circleDropped, ivDropped, labelDropped, 4, R.drawable.ic_map_pin)
-        setStep(circleDone, ivDone, labelDone, 5, R.drawable.ic_check_circle)
+            // Apply circle states for Own Stepper
+            setOwnStep(circleOwnScheduled, ivOwnScheduled, labelOwnScheduled, 0, R.drawable.ic_check_white)
+            setOwnStep(circleOwnClientDeparture, ivOwnClientDeparture, labelOwnClientDeparture, 1, R.drawable.ic_car_outline)
+            setOwnStep(circleOwnOnSite, ivOwnOnSite, labelOwnOnSite, 2, R.drawable.ic_task_building)
+            setOwnStep(circleOwnDone, ivOwnDone, labelOwnDone, 3, R.drawable.ic_check_circle)
 
-        // Connector lines progress state
-        stepLine1?.setBackgroundColor(if (activeIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
-        stepLine2?.setBackgroundColor(if (activeIndex >= 2) blueColor else Color.parseColor("#EAECF0"))
-        stepLine3?.setBackgroundColor(if (activeIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
-        stepLine4?.setBackgroundColor(if (activeIndex >= 4) blueColor else Color.parseColor("#EAECF0"))
-        stepLine5?.setBackgroundColor(if (activeIndex >= 5) blueColor else Color.parseColor("#EAECF0"))
+            // Connector lines progress state for Own Stepper
+            stepLineOwn1?.setBackgroundColor(if (ownActiveIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
+            stepLineOwn2?.setBackgroundColor(if (ownActiveIndex >= 2) blueColor else Color.parseColor("#EAECF0"))
+            stepLineOwn3?.setBackgroundColor(if (ownActiveIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
 
-        // Outcome buttons activation gate
-        val onSiteReached = activeIndex >= 3
-        if (onSiteReached) {
-            btnBooking?.isEnabled = true
-            btnBooking?.alpha = 1.0f
-            btnNotInterested?.isEnabled = true
-            btnNotInterested?.alpha = 1.0f
-            btnPostponed?.isEnabled = true
-            btnPostponed?.alpha = 1.0f
+            // Outcome buttons activation gate
+            val onSiteReached = ownActiveIndex >= 2
+            if (onSiteReached) {
+                btnBooking?.isEnabled = true
+                btnBooking?.alpha = 1.0f
+                btnNotInterested?.isEnabled = true
+                btnNotInterested?.alpha = 1.0f
+                btnPostponed?.isEnabled = true
+                btnPostponed?.alpha = 1.0f
 
-            // Wire outcome click actions
-            btnBooking?.setOnClickListener { saveOutcome("converted_to_booking", "Converted as Booking") }
-            btnNotInterested?.setOnClickListener { saveOutcome("not_interested", "Client Not Interested") }
-            btnPostponed?.setOnClickListener { saveOutcome("postponed", "Its Been Postponed") }
+                // Wire outcome click actions
+                btnBooking?.setOnClickListener { saveOutcome("converted_to_booking", "Converted as Booking") }
+                btnNotInterested?.setOnClickListener { saveOutcome("not_interested", "Client Not Interested") }
+                btnPostponed?.setOnClickListener { saveOutcome("postponed", "Its Been Postponed") }
+            } else {
+                btnBooking?.isEnabled = false
+                btnBooking?.alpha = 0.4f
+                btnNotInterested?.isEnabled = false
+                btnNotInterested?.alpha = 0.4f
+                btnPostponed?.isEnabled = false
+                btnPostponed?.alpha = 0.4f
+
+                val lockedToast: (View) -> Unit = {
+                    Toast.makeText(context, "Outcome buttons will activate once you reach on site.", Toast.LENGTH_SHORT).show()
+                }
+                btnBooking?.setOnClickListener(lockedToast)
+                btnNotInterested?.setOnClickListener(lockedToast)
+                btnPostponed?.setOnClickListener(lockedToast)
+            }
         } else {
-            btnBooking?.isEnabled = false
-            btnBooking?.alpha = 0.4f
-            btnNotInterested?.isEnabled = false
-            btnNotInterested?.alpha = 0.4f
-            btnPostponed?.isEnabled = false
-            btnPostponed?.alpha = 0.4f
-
-            val lockedToast: (View) -> Unit = {
-                Toast.makeText(context, "Outcome buttons will activate once you reach on site.", Toast.LENGTH_SHORT).show()
+            // Cab Vehicle: 6 steps (original implementation)
+            // Helper to update each step circle and label
+            fun setStep(
+                circle: FrameLayout?,
+                icon: ImageView?,
+                label: TextView?,
+                stepIdx: Int,
+                activeIconRes: Int
+            ) {
+                val state = when {
+                    stepIdx < activeIndex -> "done"
+                    stepIdx == activeIndex -> "active"
+                    else -> "inactive"
+                }
+                when (state) {
+                    "done" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active)
+                        icon?.setImageResource(R.drawable.ic_check_white)
+                        label?.setTextColor(blueColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+                    }
+                    "active" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active_current)
+                        icon?.setImageResource(activeIconRes)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                        label?.setTextColor(blueColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
+                    }
+                    "inactive" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
+                        icon?.setImageResource(activeIconRes)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(grayColor)
+                        label?.setTextColor(grayColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
+                    }
+                }
             }
-            btnBooking?.setOnClickListener(lockedToast)
-            btnNotInterested?.setOnClickListener(lockedToast)
-            btnPostponed?.setOnClickListener(lockedToast)
+
+            // Apply circle states
+            setStep(circleScheduled, ivScheduled, labelScheduled, 0, R.drawable.ic_check_white)
+            setStep(circleAssigned, ivAssigned, labelAssigned, 1, R.drawable.ic_car_outline)
+            setStep(circlePickedUp, ivPickedUp, labelPickedUp, 2, R.drawable.ic_nav_home)
+            setStep(circleOnSite, ivOnSite, labelOnSite, 3, R.drawable.ic_task_building)
+            setStep(circleDropped, ivDropped, labelDropped, 4, R.drawable.ic_map_pin)
+            setStep(circleDone, ivDone, labelDone, 5, R.drawable.ic_check_circle)
+
+            // Connector lines progress state
+            stepLine1?.setBackgroundColor(if (activeIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
+            stepLine2?.setBackgroundColor(if (activeIndex >= 2) blueColor else Color.parseColor("#EAECF0"))
+            stepLine3?.setBackgroundColor(if (activeIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
+            stepLine4?.setBackgroundColor(if (activeIndex >= 4) blueColor else Color.parseColor("#EAECF0"))
+            stepLine5?.setBackgroundColor(if (activeIndex >= 5) blueColor else Color.parseColor("#EAECF0"))
+
+            // Outcome buttons activation gate
+            val onSiteReached = activeIndex >= 3
+            if (onSiteReached) {
+                btnBooking?.isEnabled = true
+                btnBooking?.alpha = 1.0f
+                btnNotInterested?.isEnabled = true
+                btnNotInterested?.alpha = 1.0f
+                btnPostponed?.isEnabled = true
+                btnPostponed?.alpha = 1.0f
+
+                // Wire outcome click actions
+                btnBooking?.setOnClickListener { saveOutcome("converted_to_booking", "Converted as Booking") }
+                btnNotInterested?.setOnClickListener { saveOutcome("not_interested", "Client Not Interested") }
+                btnPostponed?.setOnClickListener { saveOutcome("postponed", "Its Been Postponed") }
+            } else {
+                btnBooking?.isEnabled = false
+                btnBooking?.alpha = 0.4f
+                btnNotInterested?.isEnabled = false
+                btnNotInterested?.alpha = 0.4f
+                btnPostponed?.isEnabled = false
+                btnPostponed?.alpha = 0.4f
+
+                val lockedToast: (View) -> Unit = {
+                    Toast.makeText(context, "Outcome buttons will activate once you reach on site.", Toast.LENGTH_SHORT).show()
+                }
+                btnBooking?.setOnClickListener(lockedToast)
+                btnNotInterested?.setOnClickListener(lockedToast)
+                btnPostponed?.setOnClickListener(lockedToast)
+            }
         }
     }
 
@@ -640,24 +883,16 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvNotes?.text = visit.notes?.takeIf { it.isNotBlank() }
             ?: "No notes recorded yet."
 
-        // Sync stepper from the SV's OWN status, with the same
-        // vehicle-assignment + driver-timestamp boosts the web SV
-        // detail uses. We deliberately do NOT consult
-        // visit.fieldVisit.status — that's the CP visit's field-trip
-        // status, which is unrelated to the SV's lifecycle and made
-        // fresh SVs light up every stage as "completed" because the
-        // CP trip that spawned them was already done.
-        //
-        // Both the web and mobile derive the stepper from these
-        // identical SV-row fields (`status`, `vehicleId`,
-        // `travelAgencyId`, `travelDeskStartedAt`, etc.), so a status
-        // change on either side reflects on the other after the next
-        // detail fetch.
         val effStatus = visit.status ?: ""
+        
+        // Detect vehicle type and toggle layout visibility
+        isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
+        toggleStepperVisibility()
+
         if (effStatus.isNotEmpty()) {
             val stepIndex = computeWebParityStepIndex(
                 status = effStatus,
-                snapshot = visit.proposedSiteVisit,
+                snapshot = proposed,
             )
             updateStepper(stepIndex)
             bindStatusHeader(effStatus)
