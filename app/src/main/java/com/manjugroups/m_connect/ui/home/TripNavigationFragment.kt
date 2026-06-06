@@ -52,6 +52,7 @@ import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.CreateVisitRequest
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.ui.common.navigateUp
@@ -360,11 +361,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // there's no flicker where the detail page disagrees with the list.
         val incomingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
         when (incomingStatus) {
-            "arrived", "arrival_verified", "arrival-verified" -> {
+            "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
                 visitStarted = true
                 arrivalConfirmedForProgress = true
                 showTripStartTime()
-                applyStatusPill("Reaching")
+                applyStatusPill(if (session.isDriverMode) "On Site" else "Reaching")
                 btnOpenMaps?.visibility = View.GONE
                 renderArrivalPhase(alreadyArrived = true)
             }
@@ -461,11 +462,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val effective = (cp.fieldVisit?.status ?: cp.status).orEmpty()
                     .lowercase(Locale.getDefault())
                 when (effective) {
-                    "arrived", "arrival_verified", "arrival-verified" -> {
+                    "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
                         visitStarted = true
                         arrivalConfirmedForProgress = true
                         showTripStartTime()
-                        applyStatusPill("Reaching")
+                        applyStatusPill(if (session.isDriverMode) "On Site" else "Reaching")
                         btnOpenMaps?.visibility = View.GONE
                         renderArrivalPhase(alreadyArrived = true)
                     }
@@ -771,9 +772,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val existingVisit = visitId
         val existingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
         val alreadyInFlight = existingStatus in setOf(
-            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived", "on_site", "on-site"
         )
-        val alreadyArrived = existingStatus in setOf("arrived", "arrival_verified", "arrival-verified")
+        val alreadyArrived = existingStatus in setOf("arrived", "arrival_verified", "arrival-verified", "on_site", "on-site")
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -833,6 +834,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 btnOpenMaps?.visibility = View.GONE
                 btnOpenMaps?.isEnabled = true
                 applyStatusPill(when {
+                    alreadyArrived && session.isDriverMode -> "On Site"
                     alreadyArrived && !cpVisitDecisionCaptured -> "Reaching"
                     alreadyInFlight -> "Enroute"
                     else -> "Enroute"
@@ -1056,12 +1058,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         arrivalInProgress = true
 
         if (session.isDriverMode) {
-            arrivalInProgress = false
-            arrivalConfirmedForProgress = true
-            session.saveDriverTripArrival(visitId!!)
-            applyStatusPill("Reaching")
-            renderArrivalPhase(alreadyArrived = true)
-            Toast.makeText(requireContext(), "On Site Reached", Toast.LENGTH_SHORT).show()
+            markDriverOnSite()
             return
         }
 
@@ -1079,6 +1076,41 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             return
         }
         requestArrivalOtpThenOpenCamera()
+    }
+
+    private fun markDriverOnSite() {
+        val id = visitId ?: run {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            return
+        }
+        swipeArrived?.lockAsBusy("Updating on-site…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoApi.markMmsFleetDriverOnSite(
+                    session.bearerToken,
+                    MmsFleetDriverSiteVisitRequest(id),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(response.error ?: "Failed to mark on-site")
+                }
+                arrivalConfirmedForProgress = true
+                session.saveDriverTripArrival(id)
+                applyStatusPill("On Site")
+                renderArrivalPhase(alreadyArrived = true)
+                Toast.makeText(requireContext(), "On Site Reached", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+                Toast.makeText(
+                    requireContext(),
+                    "Failed to mark on-site: ${e.message ?: "Network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                arrivalInProgress = false
+            }
+        }
     }
 
     private fun checkReachingAndAskClientSeen() {

@@ -30,6 +30,7 @@ import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 // markSiteVisitPickedUp / markSiteVisitArrivedSite / markSiteVisitDropped.
 // Trip-state advancement is web-only now (see wireStepperReadOnlyHint).
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,6 +57,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // markSiteVisitDropped. The web is the single source of truth for
     // trip progress; mobile re-reads it on every loadEnrichedDetail.
     private var isOwnVehicleSelected: Boolean = false
+    private var isOutcomeLocked: Boolean = false
 
     // UI elements
     private var tvTitle: TextView? = null
@@ -278,6 +280,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // operator's only writable surface is the Outcome buttons,
         // which unlock once the web pushes status >= on_site.
         wireStepperReadOnlyHint()
+        wireBookingResult()
 
         // Load enriched details
         val id = visitId
@@ -327,6 +330,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedDate = args.getString(ARG_SCHEDULED_DATE)
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
+        isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
 
         // First-frame bind from list-row arguments. Real values land
         // shortly after via bindEnriched() once the detail fetch
@@ -562,7 +566,9 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
             // Outcome buttons activation gate
             val onSiteReached = ownActiveIndex >= 2
-            if (onSiteReached) {
+            if (isOutcomeLocked) {
+                lockOutcomeButtons("This site visit outcome is already completed.")
+            } else if (onSiteReached) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -570,10 +576,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.isEnabled = true
                 btnPostponed?.alpha = 1.0f
 
-                // Wire outcome click actions
-                btnBooking?.setOnClickListener { saveOutcome("converted_to_booking", "Converted as Booking") }
-                btnNotInterested?.setOnClickListener { saveOutcome("not_interested", "Client Not Interested") }
-                btnPostponed?.setOnClickListener { saveOutcome("postponed", "Its Been Postponed") }
+                // Wire each outcome to the shared CP completion sheet,
+                // locked to the chosen form so field staff do not see
+                // unrelated Booking / Postpone / Not Interested tabs.
+                btnBooking?.setOnClickListener { openSiteVisitOutcomeSheet("converted_to_booking") }
+                btnNotInterested?.setOnClickListener { openSiteVisitOutcomeSheet("not_interested") }
+                btnPostponed?.setOnClickListener { openSiteVisitOutcomeSheet("postponed") }
             } else {
                 btnBooking?.isEnabled = false
                 btnBooking?.alpha = 0.4f
@@ -645,7 +653,9 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
             // Outcome buttons activation gate
             val onSiteReached = activeIndex >= 3
-            if (onSiteReached) {
+            if (isOutcomeLocked) {
+                lockOutcomeButtons("This site visit outcome is already completed.")
+            } else if (onSiteReached) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -653,10 +663,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.isEnabled = true
                 btnPostponed?.alpha = 1.0f
 
-                // Wire outcome click actions
-                btnBooking?.setOnClickListener { saveOutcome("converted_to_booking", "Converted as Booking") }
-                btnNotInterested?.setOnClickListener { saveOutcome("not_interested", "Client Not Interested") }
-                btnPostponed?.setOnClickListener { saveOutcome("postponed", "Its Been Postponed") }
+                // Wire each outcome to the shared CP completion sheet,
+                // locked to the chosen form so field staff do not see
+                // unrelated Booking / Postpone / Not Interested tabs.
+                btnBooking?.setOnClickListener { openSiteVisitOutcomeSheet("converted_to_booking") }
+                btnNotInterested?.setOnClickListener { openSiteVisitOutcomeSheet("not_interested") }
+                btnPostponed?.setOnClickListener { openSiteVisitOutcomeSheet("postponed") }
             } else {
                 btnBooking?.isEnabled = false
                 btnBooking?.alpha = 0.4f
@@ -673,6 +685,66 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.setOnClickListener(lockedToast)
             }
         }
+    }
+
+    private fun lockOutcomeButtons(message: String) {
+        btnBooking?.isEnabled = false
+        btnBooking?.alpha = 0.4f
+        btnNotInterested?.isEnabled = false
+        btnNotInterested?.alpha = 0.4f
+        btnPostponed?.isEnabled = false
+        btnPostponed?.alpha = 0.4f
+
+        val lockedToast: (View) -> Unit = {
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        }
+        btnBooking?.setOnClickListener(lockedToast)
+        btnNotInterested?.setOnClickListener(lockedToast)
+        btnPostponed?.setOnClickListener(lockedToast)
+    }
+
+    private fun wireBookingResult() {
+        parentFragmentManager.setFragmentResultListener(
+            CompleteCpVisitBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val outcome = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME)
+            val label = when (outcome) {
+                "converted_to_booking" -> "Converted as Booking"
+                "not_interested" -> "Client Not Interested"
+                "postponed" -> "Its Been Postponed"
+                else -> return@setFragmentResultListener
+            }
+
+            updateStepper(5)
+            bindStatusHeader("completed")
+            visitId?.takeIf { it.isNotBlank() }?.let(::loadEnrichedDetail)
+            Toast.makeText(
+                requireContext(),
+                "$label ✓ Outcome saved.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            dismissAllowingStateLoss()
+        }
+    }
+
+    private fun openSiteVisitOutcomeSheet(outcome: String) {
+        if (isOutcomeLocked) {
+            Toast.makeText(
+                requireContext(),
+                "This site visit outcome is already completed.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val targetVisitId = visitId
+        if (targetVisitId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Site visit id is missing", Toast.LENGTH_SHORT).show()
+            return
+        }
+        CompleteCpVisitBottomSheet
+            .forSiteVisit(targetVisitId, outcome)
+            .show(parentFragmentManager, "site_visit_${outcome}_outcome")
     }
 
     private fun loadEnrichedDetail(id: String) {
@@ -784,6 +856,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             ?: "No notes recorded yet."
 
         val effStatus = visit.status ?: ""
+        isOutcomeLocked = isTerminalOutcome(visit)
         
         // Detect vehicle type and toggle layout visibility
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
@@ -801,6 +874,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private fun saveOutcome(outcomeValue: String, label: String) {
         val targetVisitId = visitId ?: return
+        if (isOutcomeLocked) {
+            Toast.makeText(
+                requireContext(),
+                "This site visit outcome is already completed.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
 
         btnBooking?.isEnabled = false
         btnNotInterested?.isEnabled = false
@@ -892,6 +973,30 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             .filter { it.isNotBlank() }
             .joinToString(" ") { it.replaceFirstChar { c -> c.titlecase() } }
             .ifBlank { "Client" }
+
+    private fun isTerminalOutcome(visit: CpVisitDetail): Boolean =
+        isTerminalOutcomeStatus(visit.status) ||
+            isTerminalOutcomeStatus(visit.outcome) ||
+            visit.convertedBookingId != null ||
+            visit.completedAt != null ||
+            visit.cancelledAt != null
+
+    private fun isTerminalOutcomeStatus(value: String?): Boolean {
+        val lower = value?.trim()?.lowercase(Locale.US).orEmpty()
+        return lower in setOf(
+            "completed",
+            "complete",
+            "done",
+            "closed",
+            "cancelled",
+            "canceled",
+            "no_show",
+            "converted_to_booking",
+            "not_interested",
+            "postponed",
+            "other",
+        )
+    }
 
     private fun formatDateOnly(scheduledDate: String): String {
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)

@@ -2,7 +2,7 @@
 <project version="4">
   <component name="deploymentTargetSelector">
     <selectionStates>
-      <SelectionState runConfigName="app">
+      <SelectionState runConfigName="M-Connect">
         <option name="selectionMode" value="DROPDOWN" />
         <DropdownSelection timestamp="2026-04-09T08:22:22.606279Z">
           <Target type="DEFAULT_BOOT">

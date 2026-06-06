@@ -156,6 +156,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val argSiteVisitId: String?
         get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
 
+    private val siteVisitLockedOutcome: Outcome?
+        get() = arguments?.getString(ARG_SITE_VISIT_LOCKED_OUTCOME)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::outcomeFromArg)
+
     /**
      * Standalone booking mode. Set when the sheet is opened from the
      * Bookings list (+ button) — no CP visit and no SV row behind it.
@@ -633,11 +638,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tabSiteVisit.cell?.isClickable = false
         tabSiteVisit.cell?.alpha = 0.35f
 
-        // Default to Booking on entry — the most common SV outcome and
-        // the one the user is most likely to tap from "Complete Outcome".
-        // The user can still flip to Postpone / Not Interested from the
-        // top tabs.
-        activeOutcome = Outcome.BOOKING
+        // When launched from a specific SV outcome button, keep the
+        // same shared form UI but remove the outcome switcher so the
+        // operator only sees the form they chose.
+        val lockedOutcome = siteVisitLockedOutcome
+        if (lockedOutcome != null) {
+            view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
+            view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
+                Outcome.BOOKING -> "Converted as Booking"
+                Outcome.POSTPONE -> "Its Been Postponed"
+                Outcome.NOT_INTERESTED -> "Client Not Interested"
+                Outcome.SITE_VISIT -> "Site Visit"
+            }
+            view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = when (lockedOutcome) {
+                Outcome.BOOKING -> "Booking form"
+                Outcome.POSTPONE -> "Postponed reason"
+                Outcome.NOT_INTERESTED -> "Not interested reason"
+                Outcome.SITE_VISIT -> "Site visit form"
+            }
+        }
+
+        activeOutcome = lockedOutcome ?: Outcome.BOOKING
         renderState()
     }
 
@@ -2955,7 +2976,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- Postpone -------------------------------------------------------
     private fun persistPostpone() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
-            ?: return showError("Missing CP visit id")
+        if (!isSiteVisitMode && cpVisitId.isNullOrBlank()) {
+            return showError("Missing CP visit id")
+        }
         // Match the web's Postpone dialog: at least one reason must be
         // ticked; notes are optional. The backend's
         // clientPlaceVisits.setOutcome rejects an empty postponeReasons
@@ -2968,7 +2991,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val notes = etPostNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
         finalizeTerminalOutcome(
-            cpVisitId = cpVisitId,
+            cpVisitId = cpVisitId.orEmpty(),
             outcomeEnum = OUTCOME_POSTPONED,
             // Notes payload stays human-readable. Web stores `notes`
             // as the operator typed; we do the same so a postponed
@@ -2981,7 +3004,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- Not Interested -------------------------------------------------
     private fun persistNotInterested() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
-            ?: return showError("Missing CP visit id")
+        if (!isSiteVisitMode && cpVisitId.isNullOrBlank()) {
+            return showError("Missing CP visit id")
+        }
         // Same web validation: at least one reason must be ticked.
         val picks = niPicksFromForm()
         if (picks.isEmpty()) {
@@ -2998,7 +3023,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // finalizeTerminalOutcome).
         val serializedForCp = buildNotInterestedNotesForCp(picks, notes)
         finalizeTerminalOutcome(
-            cpVisitId = cpVisitId,
+            cpVisitId = cpVisitId.orEmpty(),
             outcomeEnum = OUTCOME_NOT_INTERESTED,
             notes = serializedForCp,
         )
@@ -4192,6 +4217,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Mutually exclusive with the CP path; presence of this arg
         // flips isSiteVisitMode true.
         private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
+        private const val ARG_SITE_VISIT_LOCKED_OUTCOME = "arg_site_visit_locked_outcome"
         // Standalone booking creation mode — set by [forStandaloneBooking]
         // when the sheet is opened from the Bookings list + button.
         // No visit to attach to; persistBooking POSTs to /api/bookings
@@ -4235,10 +4261,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
          * Site Visit tab (this row IS already a site visit), and all
          * persistence routes to /api/marketing/siteVisits/... endpoints.
          */
-        fun forSiteVisit(siteVisitId: String): CompleteCpVisitBottomSheet =
+        fun forSiteVisit(
+            siteVisitId: String,
+            initialOutcome: String? = null,
+        ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_SITE_VISIT_ID, siteVisitId)
+                    if (!initialOutcome.isNullOrBlank()) {
+                        putString(ARG_SITE_VISIT_LOCKED_OUTCOME, initialOutcome)
+                    }
                 }
             }
 

@@ -11,6 +11,7 @@ import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
@@ -157,7 +158,7 @@ class HomeViewModel : ViewModel() {
                 }
 
                 // Load today's visits
-                loadTodayVisitsInternal(bearerToken)
+                loadTodayVisitsInternal(bearerToken, context)
             } catch (e: Exception) {
                 _uiState.value = HomeUiState.Error(e.message ?: "Failed to load")
             }
@@ -233,9 +234,12 @@ class HomeViewModel : ViewModel() {
 
     // ── Trip / Visit Selection ──
 
-    private suspend fun loadTodayVisitsInternal(bearerToken: String) {
+    private suspend fun loadTodayVisitsInternal(bearerToken: String, context: Context? = null) {
         _isVisitsLoading.value = true
         try {
+            val session = context?.let { SessionManager(it) }
+            val isDriverMode = session?.isDriverMode == true
+
             // Load assigned places
             val placesResp = geoApi.getAssignedPlaces(bearerToken)
             val places = placesResp.data ?: emptyList()
@@ -258,51 +262,75 @@ class HomeViewModel : ViewModel() {
             var cpFetched: Int = -1            // -1 = never returned; 0+ = real count
             var cpKept: Int = 0
             var cpError: String? = null
-            try {
-                val cpResp = geoApi.getMyMarketingCpVisits(
-                    bearerToken,
-                    fromDate = null,
-                    toDate = null,
-                )
-                Log.d(
-                    TAG,
-                    "CP merge: success=${cpResp.success} total=${cpResp.visits.size} " +
-                        "error=${cpResp.error}",
-                )
-                if (cpResp.success) {
-                    cpFetched = cpResp.visits.size
-                    val legacyCpIds = legacyVisits.mapNotNull { it.clientPlaceVisitId }.toHashSet()
-                    // Keep every CP visit the server returned, dedup'd
-                    // against the legacy list. We deliberately do NOT
-                    // filter by scheduledDate here: the previous
-                    // today-only / today-or-overdue clamps dropped
-                    // every visit on the test backend because they
-                    // were all dated for future days. The trip card's
-                    // own status pill ("Start", "Enroute", "Reaching",
-                    // "Complete") tells the user where each visit is
-                    // in its lifecycle; the date is just metadata.
-                    // Only "cancelled" and "completed" are hard
-                    // exclusions — cancelled visits aren't actionable,
-                    // and completed ones already lived their day.
-                    val extras = cpResp.visits
-                        .filter { detail ->
-                            val id = detail.id ?: return@filter false
-                            if (id in legacyCpIds) return@filter false
-                            val status = detail.status?.lowercase(Locale.getDefault())
-                            if (status == "cancelled") return@filter false
-                            if (status == "completed") return@filter false
-                            true
-                        }
-                        .mapNotNull { detail -> detail.toTodayVisitOrNull() }
-                    cpKept = extras.size
-                    Log.d(TAG, "Today visits (CP merge): +${extras.size}")
-                    merged.addAll(extras)
-                } else {
-                    cpError = cpResp.error ?: "success=false"
+            if (!isDriverMode) {
+                try {
+                    val cpResp = geoApi.getMyMarketingCpVisits(
+                        bearerToken,
+                        fromDate = null,
+                        toDate = null,
+                    )
+                    Log.d(
+                        TAG,
+                        "CP merge: success=${cpResp.success} total=${cpResp.visits.size} " +
+                            "error=${cpResp.error}",
+                    )
+                    if (cpResp.success) {
+                        cpFetched = cpResp.visits.size
+                        val legacyCpIds = legacyVisits.mapNotNull { it.clientPlaceVisitId }.toHashSet()
+                        // Keep every CP visit the server returned, dedup'd
+                        // against the legacy list. We deliberately do NOT
+                        // filter by scheduledDate here: the previous
+                        // today-only / today-or-overdue clamps dropped
+                        // every visit on the test backend because they
+                        // were all dated for future days. The trip card's
+                        // own status pill ("Start", "Enroute", "Reaching",
+                        // "Complete") tells the user where each visit is
+                        // in its lifecycle; the date is just metadata.
+                        // Only "cancelled" and "completed" are hard
+                        // exclusions — cancelled visits aren't actionable,
+                        // and completed ones already lived their day.
+                        val extras = cpResp.visits
+                            .filter { detail ->
+                                val id = detail.id ?: return@filter false
+                                if (id in legacyCpIds) return@filter false
+                                val status = detail.status?.lowercase(Locale.getDefault())
+                                if (status == "cancelled") return@filter false
+                                if (status == "completed") return@filter false
+                                true
+                            }
+                            .mapNotNull { detail -> detail.toTodayVisitOrNull() }
+                        cpKept = extras.size
+                        Log.d(TAG, "Today visits (CP merge): +${extras.size}")
+                        merged.addAll(extras)
+                    } else {
+                        cpError = cpResp.error ?: "success=false"
+                    }
+                } catch (e: Exception) {
+                    cpError = e.message ?: e.javaClass.simpleName
+                    Log.w(TAG, "CP visit merge failed: ${e.message}")
                 }
-            } catch (e: Exception) {
-                cpError = e.message ?: e.javaClass.simpleName
-                Log.w(TAG, "CP visit merge failed: ${e.message}")
+            } else {
+                Log.d(TAG, "CP merge skipped for driver mode")
+            }
+
+            if (isDriverMode) {
+                try {
+                    val driverResp = geoApi.getMmsFleetDriverTrips(bearerToken)
+                    if (driverResp.success) {
+                        val existingIds = merged.map { it.id }.toHashSet()
+                        val driverTrips = driverResp.trips
+                            .mapNotNull { it.toTodayVisitOrNull() }
+                            .filter { it.id !in existingIds }
+                        if (driverTrips.isNotEmpty()) {
+                            Log.d(TAG, "Today visits (MMS fleet driver): +${driverTrips.size}")
+                            merged.addAll(driverTrips)
+                        }
+                    } else {
+                        Log.w(TAG, "MMS fleet driver trips failed: ${driverResp.error}")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "MMS fleet driver trips failed: ${e.message}")
+                }
             }
 
             // Sort newest-first so a freshly-fixed SV-cum-CP lands at
@@ -445,6 +473,36 @@ class HomeViewModel : ViewModel() {
             // it lets the Home sort treat legacy and CP-merge rows the
             // same way — newest first.
             creationTime = this.createdAt?.toDouble(),
+        )
+    }
+
+    private fun MmsFleetDriverTrip.toTodayVisitOrNull(): TodayVisit? {
+        val tripId = this.id ?: return null
+        val scheduled = this.scheduledDate ?: return null
+        if (this.canOperateToday == false) return null
+        val status = when (this.phase?.lowercase(Locale.getDefault())) {
+            "completed" -> "completed"
+            "on_site" -> "on_site"
+            "in_progress" -> "in-progress"
+            else -> "scheduled"
+        }
+        val title = this.project?.name
+            ?: this.vehicle?.vehicleNumber
+            ?: "Driver trip"
+        return TodayVisit(
+            id = tripId,
+            clientPlaceId = this.project?.id ?: tripId,
+            scheduledDate = scheduled,
+            status = status,
+            mobileStatus = status,
+            placeName = title,
+            placeAddress = this.pickupAddress,
+            placeType = "project",
+            tripType = "site_visit",
+            visitCategory = "site_visit",
+            scheduledStartTime = this.scheduledTime ?: this.pickupTime,
+            travelMode = "cab",
+            vehicleAssigned = true,
         )
     }
 

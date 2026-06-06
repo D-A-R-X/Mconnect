@@ -121,6 +121,35 @@ interface GeoTrackApi {
         @Body body: CompleteVisitRequest
     ): GeoTrackResponse
 
+    @GET("api/mms-fleet/driver/trips")
+    suspend fun getMmsFleetDriverTrips(
+        @Header("Authorization") token: String
+    ): MmsFleetDriverTripsResponse
+
+    @POST("api/mms-fleet/driver/arrive")
+    suspend fun markMmsFleetDriverArrived(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverSiteVisitRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/start")
+    suspend fun startMmsFleetDriverTrip(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverStartRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/on-site")
+    suspend fun markMmsFleetDriverOnSite(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverSiteVisitRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/end")
+    suspend fun endMmsFleetDriverTrip(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverEndRequest
+    ): MmsFleetDriverActionResponse
+
     @POST("api/geotrack/route")
     suspend fun getRoute(
         @Header("Authorization") token: String,
@@ -914,6 +943,68 @@ data class ProposedSiteVisit(
     val travelDeskStartedAt: Long? = null,
     val travelDeskOnSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
+)
+
+data class MmsFleetDriverTripsResponse(
+    val success: Boolean = false,
+    val trips: List<MmsFleetDriverTrip> = emptyList(),
+    val error: String? = null,
+)
+
+data class MmsFleetDriverActionResponse(
+    val success: Boolean = false,
+    val trip: MmsFleetDriverTrip? = null,
+    val error: String? = null,
+)
+
+data class MmsFleetDriverSiteVisitRequest(
+    val siteVisitId: String,
+)
+
+data class MmsFleetDriverStartRequest(
+    val siteVisitId: String,
+    val photoIds: List<String>,
+    val startKm: Double? = null,
+)
+
+data class MmsFleetDriverEndRequest(
+    val siteVisitId: String,
+    val photoIds: List<String>,
+    val endKm: Double? = null,
+)
+
+data class MmsFleetDriverTrip(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val pickupAddress: String? = null,
+    val pickupTime: String? = null,
+    val driverName: String? = null,
+    val driverPhone: String? = null,
+    val travelDeskArrivedAt: Long? = null,
+    val travelDeskStartedAt: Long? = null,
+    val travelDeskOnSiteAt: Long? = null,
+    val travelDeskEndedAt: Long? = null,
+    val travelDeskStartKm: Double? = null,
+    val travelDeskEndKm: Double? = null,
+    val travelDeskStartPhotoIds: List<String> = emptyList(),
+    val travelDeskEndPhotoIds: List<String> = emptyList(),
+    val phase: String? = null,
+    val canOperateToday: Boolean? = null,
+    val km: Double? = null,
+    val project: MmsFleetDriverProject? = null,
+    val vehicle: MmsFleetDriverVehicle? = null,
+)
+
+data class MmsFleetDriverProject(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+)
+
+data class MmsFleetDriverVehicle(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val vehicleNumber: String? = null,
+    val type: String? = null,
 )
 
 data class CpVisitAttendee(

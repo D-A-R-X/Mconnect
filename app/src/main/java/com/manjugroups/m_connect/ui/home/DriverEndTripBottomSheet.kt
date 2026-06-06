@@ -30,9 +30,15 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.network.CompleteVisitRequest
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.MmsFleetDriverEndRequest
+import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
+import org.json.JSONObject
+import retrofit2.HttpException
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,6 +47,7 @@ import java.util.Locale
 class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
 
     private val geoApi = GeoTrackApi.create()
+    private val api = ApiService.create()
     private lateinit var session: SessionManager
     private var visitId: String = ""
     private var currentPhotoFile: File? = null
@@ -197,11 +204,22 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         btnSubmit.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Call complete visit API on backend to conclude trip
-                geoApi.completeVisit(
+                val storageId = uploadOdometerPhoto(file)
+                geoApi.markMmsFleetDriverOnSite(
                     session.bearerToken,
-                    CompleteVisitRequest(visitId, null, null, "Completed by driver")
+                    MmsFleetDriverSiteVisitRequest(visitId),
                 )
+                val response = geoApi.endMmsFleetDriverTrip(
+                    session.bearerToken,
+                    MmsFleetDriverEndRequest(
+                        siteVisitId = visitId,
+                        photoIds = listOf(storageId),
+                        endKm = endKmVal,
+                    ),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(response.error ?: "Failed to complete trip")
+                }
                 
                 // Save details locally
                 val timeStr = SimpleDateFormat("hh:mm a | dd MMM yyyy", Locale.getDefault()).format(Date())
@@ -216,9 +234,25 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
                 btnSubmit.isEnabled = true
-                Toast.makeText(requireContext(), "Failed to complete trip: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Failed to complete trip: ${readApiError(e)}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private suspend fun uploadOdometerPhoto(file: File): String {
+        val body = file.asRequestBody("image/jpeg".toMediaType())
+        val response = api.uploadStorageFile(session.bearerToken, body)
+        return response.storageId
+            ?: throw IllegalStateException(response.error ?: "Failed to upload odometer photo")
+    }
+
+    private fun readApiError(error: Throwable): String {
+        val httpError = error as? HttpException
+        val raw = runCatching { httpError?.response()?.errorBody()?.string() }.getOrNull()
+        val serverMessage = raw?.let {
+            runCatching { JSONObject(it).optString("error").takeIf { msg -> msg.isNotBlank() } }.getOrNull()
+        }
+        return serverMessage ?: error.message ?: "Network error"
     }
 
     companion object {

@@ -51,7 +51,7 @@ class SiteVisitsFragment : Fragment() {
     private enum class Filter { ALL, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
 
     private var allVisits: List<TodayVisit> = emptyList()
-    private var currentFilter: Filter = Filter.SCHEDULED
+    private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
 

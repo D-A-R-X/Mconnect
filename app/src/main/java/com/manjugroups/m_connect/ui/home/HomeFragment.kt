@@ -635,7 +635,7 @@ class HomeFragment : Fragment() {
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
         val needsCpDetails = isCpVisit && status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         val isInProgress = status in setOf(
-            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived", "on_site", "on-site"
         )
 
         when {
@@ -650,14 +650,26 @@ class HomeFragment : Fragment() {
                 eta.text = "Within ${visit.reachingRadiusMeters ?: 500}m"
             }
             isInProgress -> {
-                statusText.text = if (status == "arrived") "Reaching" else "Enroute"
+                statusText.text = when (status) {
+                    "arrived" -> "Reaching"
+                    "on_site", "on-site" -> "On Site"
+                    else -> "Enroute"
+                }
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
                 statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
-                action.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                action.text = when (status) {
+                    "arrived" -> "Complete Trip"
+                    "on_site", "on-site" -> "End Trip"
+                    else -> "Enroute"
+                }
                 actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_progress)
                 action.setTextColor(android.graphics.Color.parseColor("#B54708"))
                 actionIcon.visibility = View.GONE
-                eta.text = if (status == "arrived") "At client place" else "Tracking"
+                eta.text = when (status) {
+                    "arrived" -> "At client place"
+                    "on_site", "on-site" -> "At site"
+                    else -> "Tracking"
+                }
             }
             isCompleted -> {
                 statusText.text = "Complete"
