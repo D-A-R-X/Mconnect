@@ -412,18 +412,54 @@ class SiteVisitsFragment : Fragment() {
             }
         }
 
-        // Vehicle Assignment Pill binding
-        val vehicleAssigned = !visit.visitCategory.isNullOrBlank() && visit.visitCategory != "direct_cp" && visit.visitCategory != "site_visit"
-        if (vehicleAssigned) {
-            vehicleStatus.text = "Vehicle Assigned"
-            vehiclePill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_green)
-            vehicleStatus.setTextColor(Color.parseColor("#027A48"))
-            vehicleIcon?.setColorFilter(Color.parseColor("#027A48"))
-        } else {
-            vehicleStatus.text = "No Vehicle Assigned"
-            vehiclePill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_red)
-            vehicleStatus.setTextColor(Color.parseColor("#F04438"))
-            vehicleIcon?.setColorFilter(Color.parseColor("#F04438"))
+        // Vehicle Assignment Pill binding.
+        //
+        // Precedence — matches what the web SV list shows in the same
+        // slot, with the travelMode field driving the read:
+        //   1. travelMode == "own_vehicle" → "Own Vehicle" pill (info
+        //      blue). The customer is driving themselves; there's
+        //      nothing for the office to allocate.
+        //   2. vehicleAssigned == true (siteVisits.vehicleId set, OR
+        //      the legacy visitCategory heuristic for older /today-
+        //      visits rows) → "Vehicle Assigned" pill (green).
+        //   3. Otherwise → "No Vehicle Assigned" pill (red) — cab SV
+        //      awaiting fleet allocation.
+        //
+        // The legacy heuristic on visitCategory stays as a fallback
+        // because /api/sitevisits/my merges legacy fieldVisits rows
+        // that don't carry travelMode/vehicleAssigned fields.
+        val isOwnVehicle = visit.travelMode == "own_vehicle" ||
+            visit.vehiclePreference == "own_vehicle"
+        val vehicleAssigned = visit.vehicleAssigned == true ||
+            (visit.vehicleAssigned == null &&
+                !visit.visitCategory.isNullOrBlank() &&
+                visit.visitCategory != "direct_cp" &&
+                visit.visitCategory != "site_visit")
+        when {
+            isOwnVehicle -> {
+                vehicleStatus.text = "Own Vehicle"
+                vehiclePill.background = ContextCompat.getDrawable(
+                    requireContext(), R.drawable.bg_sv_status_blue,
+                )
+                vehicleStatus.setTextColor(Color.parseColor("#175CD3"))
+                vehicleIcon?.setColorFilter(Color.parseColor("#175CD3"))
+            }
+            vehicleAssigned -> {
+                vehicleStatus.text = "Vehicle Assigned"
+                vehiclePill.background = ContextCompat.getDrawable(
+                    requireContext(), R.drawable.bg_sv_status_green,
+                )
+                vehicleStatus.setTextColor(Color.parseColor("#027A48"))
+                vehicleIcon?.setColorFilter(Color.parseColor("#027A48"))
+            }
+            else -> {
+                vehicleStatus.text = "No Vehicle Assigned"
+                vehiclePill.background = ContextCompat.getDrawable(
+                    requireContext(), R.drawable.bg_sv_status_red,
+                )
+                vehicleStatus.setTextColor(Color.parseColor("#F04438"))
+                vehicleIcon?.setColorFilter(Color.parseColor("#F04438"))
+            }
         }
 
         // Click actions: Open details on card tap

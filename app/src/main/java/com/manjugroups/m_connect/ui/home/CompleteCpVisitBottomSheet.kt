@@ -40,6 +40,7 @@ import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.ManualProfilePatch
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.SvNotInterestedDetail
 import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
@@ -316,20 +317,50 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etSvVisitorCount: EditText? = null
     private var siteVisitorRows: LinearLayout? = null
 
-    // Postpone body
+    // Postpone body — aligned with the web's Postpone dialog
+    // (POSTPONE_REASONS in app/marketing/cp-visits/[id]/page.tsx):
+    // checkbox list of fixed reasons plus an optional notes field.
+    // Submits to the same `clientPlaceVisits.setOutcome` mutation the
+    // web uses, with the checked reason labels as `postponeReasons`.
     private var bodyPostpone: View? = null
-    private var etPostBudget: EditText? = null
-    private var etPostTiming: EditText? = null
-    private var etPostProject: EditText? = null
-    private var etPostOther: EditText? = null
-    private var tvPostDateTime: TextView? = null
+    private var cbPostClientUnavailable: android.widget.CheckBox? = null
+    private var cbPostWeather: android.widget.CheckBox? = null
+    private var cbPostVehicle: android.widget.CheckBox? = null
+    private var cbPostDocument: android.widget.CheckBox? = null
+    private var cbPostRescheduledByClient: android.widget.CheckBox? = null
+    private var cbPostOtherCommitment: android.widget.CheckBox? = null
+    private var etPostNotes: EditText? = null
 
-    // Not Interested body
+    // Not Interested body — mirrors the web's SV "Mark not interested"
+    // dialog (NOT_INTERESTED_REASONS in app/marketing/site-visits/[id]/page.tsx):
+    // 8 reason checkboxes, each with an inline per-reason detail input,
+    // plus a general optional notes textarea.
+    //
+    // Each (checkbox, detail) pair is a paired view — the detail input
+    // is GONE until the checkbox is ticked. Storage of the picked
+    // values:
+    //   - notInterestedReasons: List<String> of the web-canonical labels
+    //   - notInterestedDetails: List<{reason, detail?}> aligned with
+    //     the checked reasons (omits unchecked ones)
+    //   - notes: optional general context
     private var bodyNotInterested: View? = null
-    private var etNiBudget: EditText? = null
-    private var etNiTiming: EditText? = null
-    private var etNiProject: EditText? = null
-    private var etNiOther: EditText? = null
+    private var cbNiPrice: android.widget.CheckBox? = null
+    private var etNiPriceDetail: EditText? = null
+    private var cbNiDistance: android.widget.CheckBox? = null
+    private var etNiDistanceDetail: EditText? = null
+    private var cbNiLocation: android.widget.CheckBox? = null
+    private var etNiLocationDetail: EditText? = null
+    private var cbNiDevelopment: android.widget.CheckBox? = null
+    private var etNiDevelopmentDetail: EditText? = null
+    private var cbNiPlot: android.widget.CheckBox? = null
+    private var etNiPlotDetail: EditText? = null
+    private var cbNiLoan: android.widget.CheckBox? = null
+    private var etNiLoanDetail: EditText? = null
+    private var cbNiStaffApproach: android.widget.CheckBox? = null
+    private var etNiStaffApproachDetail: EditText? = null
+    private var cbNiDriverApproach: android.widget.CheckBox? = null
+    private var etNiDriverApproachDetail: EditText? = null
+    private var etNiNotes: EditText? = null
 
     // Site Visit selections + cache
     private var svProject: MarketingProject? = null
@@ -810,20 +841,87 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun bindPostponeFields(view: View) {
         bodyPostpone = view.findViewById(R.id.bodyPostpone)
-        etPostBudget = view.findViewById(R.id.etPostBudget)
-        etPostTiming = view.findViewById(R.id.etPostTiming)
-        etPostProject = view.findViewById(R.id.etPostProject)
-        etPostOther = view.findViewById(R.id.etPostOther)
-        tvPostDateTime = view.findViewById(R.id.tvPostDateTime)
+        cbPostClientUnavailable = view.findViewById(R.id.cbPostClientUnavailable)
+        cbPostWeather = view.findViewById(R.id.cbPostWeather)
+        cbPostVehicle = view.findViewById(R.id.cbPostVehicle)
+        cbPostDocument = view.findViewById(R.id.cbPostDocument)
+        cbPostRescheduledByClient = view.findViewById(R.id.cbPostRescheduledByClient)
+        cbPostOtherCommitment = view.findViewById(R.id.cbPostOtherCommitment)
+        etPostNotes = view.findViewById(R.id.etPostNotes)
     }
 
     private fun bindNotInterestedFields(view: View) {
         bodyNotInterested = view.findViewById(R.id.bodyNotInterested)
-        etNiBudget = view.findViewById(R.id.etNiBudget)
-        etNiTiming = view.findViewById(R.id.etNiTiming)
-        etNiProject = view.findViewById(R.id.etNiProject)
-        etNiOther = view.findViewById(R.id.etNiOther)
+        cbNiPrice = view.findViewById(R.id.cbNiPrice)
+        etNiPriceDetail = view.findViewById(R.id.etNiPriceDetail)
+        cbNiDistance = view.findViewById(R.id.cbNiDistance)
+        etNiDistanceDetail = view.findViewById(R.id.etNiDistanceDetail)
+        cbNiLocation = view.findViewById(R.id.cbNiLocation)
+        etNiLocationDetail = view.findViewById(R.id.etNiLocationDetail)
+        cbNiDevelopment = view.findViewById(R.id.cbNiDevelopment)
+        etNiDevelopmentDetail = view.findViewById(R.id.etNiDevelopmentDetail)
+        cbNiPlot = view.findViewById(R.id.cbNiPlot)
+        etNiPlotDetail = view.findViewById(R.id.etNiPlotDetail)
+        cbNiLoan = view.findViewById(R.id.cbNiLoan)
+        etNiLoanDetail = view.findViewById(R.id.etNiLoanDetail)
+        cbNiStaffApproach = view.findViewById(R.id.cbNiStaffApproach)
+        etNiStaffApproachDetail = view.findViewById(R.id.etNiStaffApproachDetail)
+        cbNiDriverApproach = view.findViewById(R.id.cbNiDriverApproach)
+        etNiDriverApproachDetail = view.findViewById(R.id.etNiDriverApproachDetail)
+        etNiNotes = view.findViewById(R.id.etNiNotes)
+        // Toggle each per-reason detail input as its checkbox is
+        // ticked — matches the web pattern where the detail input
+        // only appears AFTER the reason is selected. Same behaviour
+        // for both modes (CP serialises into notes; SV ships them
+        // as notInterestedDetails to the backend).
+        wireNotInterestedDetailVisibility()
     }
+
+    private fun wireNotInterestedDetailVisibility() {
+        val pairs = niReasonPairs()
+        pairs.forEach { (cb, detail) ->
+            // Initial sync — sheet may be re-opened with prior state
+            // restored elsewhere later, but for now nothing pre-checks.
+            detail?.visibility = if (cb?.isChecked == true) View.VISIBLE else View.GONE
+            cb?.setOnCheckedChangeListener { _, isChecked ->
+                detail?.visibility = if (isChecked) View.VISIBLE else View.GONE
+                if (!isChecked) detail?.setText("")
+            }
+        }
+    }
+
+    /**
+     * Returns the (checkbox, detail-input) pairs in the SAME order as
+     * the web's NOT_INTERESTED_REASONS so labels and array indices stay
+     * aligned across the two surfaces.
+     */
+    private fun niReasonPairs(): List<Pair<android.widget.CheckBox?, EditText?>> = listOf(
+        cbNiPrice to etNiPriceDetail,
+        cbNiDistance to etNiDistanceDetail,
+        cbNiLocation to etNiLocationDetail,
+        cbNiDevelopment to etNiDevelopmentDetail,
+        cbNiPlot to etNiPlotDetail,
+        cbNiLoan to etNiLoanDetail,
+        cbNiStaffApproach to etNiStaffApproachDetail,
+        cbNiDriverApproach to etNiDriverApproachDetail,
+    )
+
+    /**
+     * The 8 web-canonical reason labels in display order. Must match
+     * NOT_INTERESTED_REASONS in
+     * app/marketing/site-visits/[id]/page.tsx byte-for-byte so a row
+     * saved by mobile reads identically from the web admin.
+     */
+    private val NI_REASON_LABELS = listOf(
+        "Price",
+        "Distance",
+        "Location",
+        "Development in sourcing area",
+        "Preferred plot not choice",
+        "Loan eligibility",
+        "Internal staff approach or behaviour",
+        "Driver approach or behaviour",
+    )
 
     private fun bindSiteVisitFields(view: View) {
         bodySiteVisit = view.findViewById(R.id.bodySiteVisit)
@@ -1043,19 +1141,39 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
 
         view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
-            pickSvStaff("Select Site Incharge") { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
+            pickSvStaff("Select Site Incharge") {
+                svIncharge = it
+                tvSvIncharge?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.INCHARGE)
+            }
         }
         view?.findViewById<View>(R.id.rowSvHod)?.setOnClickListener {
-            pickSvStaff("Select HOD") { svHod = it; tvSvHod?.text = it.name ?: "Selected" }
+            pickSvStaff("Select HOD") {
+                svHod = it
+                tvSvHod?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.HOD)
+            }
         }
         view?.findViewById<View>(R.id.rowSvAvp)?.setOnClickListener {
-            pickSvStaff("Select AVP") { svAvp = it; tvSvAvp?.text = it.name ?: "Selected" }
+            pickSvStaff("Select AVP") {
+                svAvp = it
+                tvSvAvp?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.AVP)
+            }
         }
         view?.findViewById<View>(R.id.rowSvGm)?.setOnClickListener {
-            pickSvStaff("Select GM") { svGm = it; tvSvGm?.text = it.name ?: "Selected" }
+            pickSvStaff("Select GM") {
+                svGm = it
+                tvSvGm?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.GM)
+            }
         }
         view?.findViewById<View>(R.id.rowSvSm)?.setOnClickListener {
-            pickSvStaff("Select Senior Manager") { svSm = it; tvSvSm?.text = it.name ?: "Selected" }
+            // SM is the top of the chain — nothing above to auto-fill.
+            pickSvStaff("Select Senior Manager") {
+                svSm = it
+                tvSvSm?.text = it.name ?: "Selected"
+            }
         }
 
         btnSvTravelOwn?.setOnClickListener { setTravelMode("own_vehicle") }
@@ -1070,43 +1188,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun afterTextChanged(s: android.text.Editable?) = Unit
         })
 
-        // ---- Postpone interactions ----
-        // The Date & Time row opens a date picker first, then a time
-        // picker, and renders the combined "dd/MM/yyyy hh:mm" string back
-        // into the row label.
-        view?.findViewById<View>(R.id.rowPostDateTime)?.setOnClickListener { pickPostponeDateTime() }
-    }
-
-    private fun pickPostponeDateTime() {
-        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val today = ymd.format(Calendar.getInstance().time)
-        setFragmentResultListener(RESULT_KEY_POSTPONE_DATE) { _, bundle ->
-            val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
-            val pickedCal = Calendar.getInstance().apply {
-                time = runCatching { ymd.parse(date) }.getOrNull() ?: return@setFragmentResultListener
-            }
-            android.app.TimePickerDialog(
-                requireContext(),
-                { _, hour, minute ->
-                    pickedCal.set(Calendar.HOUR_OF_DAY, hour)
-                    pickedCal.set(Calendar.MINUTE, minute)
-                    tvPostDateTime?.text = SimpleDateFormat(
-                        "dd/MM/yyyy hh:mm a", Locale.US
-                    ).format(pickedCal.time)
-                },
-                pickedCal.get(Calendar.HOUR_OF_DAY),
-                pickedCal.get(Calendar.MINUTE),
-                false,
-            ).show()
-        }
-        CalendarRangePickerSheet.newInstance(
-            title = "Postpone Date",
-            subtitle = "Select Date",
-            initialFrom = today,
-            initialTo = today,
-            minDate = today,
-            resultKey = RESULT_KEY_POSTPONE_DATE,
-        ).show(parentFragmentManager, "cp_visit_postpone_calendar")
+        // Postpone tab no longer has interactive rows — the layout is a
+        // pure checkbox list (matching the web's Postpone dialog) plus
+        // a notes textarea. The previous Date & Time picker for a
+        // follow-up was dropped because the web equivalent doesn't
+        // carry one; the office tracks rescheduling from the
+        // approval/timeline view, not from the field-staff sheet.
     }
 
     private fun refreshBookingRadios() {
@@ -2514,6 +2601,117 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * The Sales-Ownership hierarchy levels in ascending order.
+     * INCHARGE → HOD → AVP → GM → SM. When the operator picks a staff
+     * at level N, we walk up the reportingTo chain and fill any EMPTY
+     * slots above. Already-filled slots are never overwritten — that
+     * preserves any manual override the operator made above the level
+     * they're currently editing.
+     */
+    private enum class SvHierarchyLevel { INCHARGE, HOD, AVP, GM, SM }
+
+    /**
+     * Auto-fills the Sales-Ownership pickers above `startLevel` by
+     * walking up the picked staff's reportingTo chain. Mirrors the
+     * web's effect in `app/marketing/site-visits/page.tsx:419-426`
+     * (HOD = Incharge.reportingTo) and extends it the rest of the way
+     * up (HOD → AVP → GM → SM) so the operator only has to pick the
+     * bottom of the chain and the rest snaps into place.
+     *
+     * Resolution order for each step:
+     *   1. svStaffCache (already loaded by the SV picker) — instant
+     *   2. api.getStaffDetail(reportingToId) — for senior staff that
+     *      fall outside the sales/telesales department filter and
+     *      aren't in the cache
+     *
+     * The chain stops at the first link with no reportingToId OR when
+     * a senior detail fetch fails (best-effort — operator can still
+     * fill any remaining levels manually).
+     */
+    private fun autoFillSvHierarchyFrom(picked: StaffData, startLevel: SvHierarchyLevel) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            var current: StaffData = picked
+            var level = startLevel
+            while (true) {
+                val nextLevel = when (level) {
+                    SvHierarchyLevel.INCHARGE -> SvHierarchyLevel.HOD
+                    SvHierarchyLevel.HOD -> SvHierarchyLevel.AVP
+                    SvHierarchyLevel.AVP -> SvHierarchyLevel.GM
+                    SvHierarchyLevel.GM -> SvHierarchyLevel.SM
+                    SvHierarchyLevel.SM -> return@launch
+                }
+                val reportingToId = current.reportingToId?.takeIf { it.isNotBlank() }
+                    ?: current.reportingTo?.takeIf { it.isNotBlank() }
+                    ?: return@launch
+                // Already filled at this level — chain still continues
+                // upward FROM the existing pick (so manual overrides
+                // propagate too).
+                val existing = svStaffAtLevel(nextLevel)
+                val resolved = existing ?: resolveSvStaff(reportingToId) ?: return@launch
+                if (existing == null) {
+                    assignSvStaffAtLevel(nextLevel, resolved)
+                }
+                current = resolved
+                level = nextLevel
+            }
+        }
+    }
+
+    private fun svStaffAtLevel(level: SvHierarchyLevel): StaffData? = when (level) {
+        SvHierarchyLevel.INCHARGE -> svIncharge
+        SvHierarchyLevel.HOD -> svHod
+        SvHierarchyLevel.AVP -> svAvp
+        SvHierarchyLevel.GM -> svGm
+        SvHierarchyLevel.SM -> svSm
+    }
+
+    private fun assignSvStaffAtLevel(level: SvHierarchyLevel, staff: StaffData) {
+        val label = staff.name ?: "Selected"
+        when (level) {
+            SvHierarchyLevel.INCHARGE -> { svIncharge = staff; tvSvIncharge?.text = label }
+            SvHierarchyLevel.HOD -> { svHod = staff; tvSvHod?.text = label }
+            SvHierarchyLevel.AVP -> { svAvp = staff; tvSvAvp?.text = label }
+            SvHierarchyLevel.GM -> { svGm = staff; tvSvGm?.text = label }
+            SvHierarchyLevel.SM -> { svSm = staff; tvSvSm?.text = label }
+        }
+    }
+
+    /**
+     * Resolves a staff id to a StaffData object. Hits the in-memory
+     * svStaffCache first (zero-RTT for sales/telesales rows the picker
+     * already loaded), then falls back to /api/staff/get/{id} for
+     * senior management rows that aren't in the cache. Returns null on
+     * network error so the chain just stops cleanly.
+     */
+    private suspend fun resolveSvStaff(staffId: String): StaffData? {
+        svStaffCache.firstOrNull { it.id == staffId }?.let { return it }
+        return runCatching {
+            val resp = api.getStaffDetail(session.bearerToken, staffId)
+            // StaffFullData → StaffData. The reporting chain is the
+            // only field we need beyond identity; everything else gets
+            // best-effort filled from the detail response. We populate
+            // BOTH reportingTo and reportingToId from the detail's
+            // single `reportingTo` field (it's the staff id at this
+            // layer — see SessionManager.bootstrap saving
+            // `staff.reportingTo` into `session.reportingToId`).
+            resp.staff?.let { full ->
+                StaffData(
+                    id = full.id,
+                    name = full.name,
+                    phone = full.phone,
+                    role = full.role,
+                    designation = full.designation,
+                    status = full.status,
+                    employeeId = full.employeeId,
+                    department = full.department,
+                    reportingTo = full.reportingTo,
+                    reportingToId = full.reportingTo,
+                )
+            }
+        }.getOrNull()
+    }
+
     private fun showSvStaffPicker(
         title: String,
         items: List<StaffData>,
@@ -2758,30 +2956,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun persistPostpone() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        // At least one field should be filled so the back office knows why
-        // the visit is being held.
-        val budget = etPostBudget?.text?.toString()?.trim().orEmpty()
-        val timing = etPostTiming?.text?.toString()?.trim().orEmpty()
-        val project = etPostProject?.text?.toString()?.trim().orEmpty()
-        val other = etPostOther?.text?.toString()?.trim().orEmpty()
-        val dateTime = tvPostDateTime?.text?.toString()?.trim().orEmpty()
-        if (budget.isEmpty() && timing.isEmpty() && project.isEmpty() &&
-            other.isEmpty() && dateTime.isEmpty()
-        ) {
-            showError("Please share at least one reason for the postpone")
+        // Match the web's Postpone dialog: at least one reason must be
+        // ticked; notes are optional. The backend's
+        // clientPlaceVisits.setOutcome rejects an empty postponeReasons
+        // array when outcome="postponed", so we mirror that check here
+        // and show the same gist message as the web's toast.
+        val reasons = postponedReasonsFromForm()
+        if (reasons.isEmpty()) {
+            showError("Select at least one postpone reason")
             return
         }
+        val notes = etPostNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
         finalizeTerminalOutcome(
             cpVisitId = cpVisitId,
             outcomeEnum = OUTCOME_POSTPONED,
-            notes = buildString {
-                appendLine("[Postponed]")
-                if (budget.isNotEmpty()) appendLine("Budget concern: $budget")
-                if (timing.isNotEmpty()) appendLine("Timing: $timing")
-                if (project.isNotEmpty()) appendLine("Project details: $project")
-                if (other.isNotEmpty()) appendLine("Other: $other")
-                if (dateTime.isNotEmpty()) appendLine("Follow-up: $dateTime")
-            }.trimEnd(),
+            // Notes payload stays human-readable. Web stores `notes`
+            // as the operator typed; we do the same so a postponed
+            // visit looks identical regardless of which surface saved
+            // it. Reasons travel separately via postponeReasons.
+            notes = notes.orEmpty(),
         )
     }
 
@@ -2789,26 +2982,77 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun persistNotInterested() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        val budget = etNiBudget?.text?.toString()?.trim().orEmpty()
-        val timing = etNiTiming?.text?.toString()?.trim().orEmpty()
-        val project = etNiProject?.text?.toString()?.trim().orEmpty()
-        val other = etNiOther?.text?.toString()?.trim().orEmpty()
-        if (budget.isEmpty() && timing.isEmpty() && project.isEmpty() && other.isEmpty()) {
-            showError("Please share at least one reason")
+        // Same web validation: at least one reason must be ticked.
+        val picks = niPicksFromForm()
+        if (picks.isEmpty()) {
+            showError("Select at least one reason")
             return
         }
+        val notes = etNiNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+        // For the CP path the backend's setOutcome doesn't accept
+        // notInterestedReasons / notInterestedDetails — only `notes`.
+        // We serialize the structured picks into the notes blob so the
+        // web admin opening the row still sees what the operator
+        // selected and any per-reason detail they typed. The SV path
+        // ships them as structured fields (handled in
+        // finalizeTerminalOutcome).
+        val serializedForCp = buildNotInterestedNotesForCp(picks, notes)
         finalizeTerminalOutcome(
             cpVisitId = cpVisitId,
             outcomeEnum = OUTCOME_NOT_INTERESTED,
-            notes = buildString {
-                appendLine("[Not interested]")
-                if (budget.isNotEmpty()) appendLine("Budget concern: $budget")
-                if (timing.isNotEmpty()) appendLine("Timing: $timing")
-                if (project.isNotEmpty()) appendLine("Project details: $project")
-                if (other.isNotEmpty()) appendLine("Other: $other")
-            }.trimEnd(),
+            notes = serializedForCp,
         )
     }
+
+    private data class NotInterestedPick(val reason: String, val detail: String?)
+
+    /**
+     * Walks the (checkbox, detail-input) pairs in display order and
+     * returns one entry per ticked reason. Detail is null when the
+     * inline input is empty — matches the web's
+     * `notInterestedDetails.map(r => ({ reason, detail: trim() || undefined }))`
+     * shape so the rows that land in the DB are isomorphic.
+     */
+    private fun niPicksFromForm(): List<NotInterestedPick> {
+        val pairs = niReasonPairs()
+        val picks = mutableListOf<NotInterestedPick>()
+        pairs.forEachIndexed { index, (cb, detailInput) ->
+            if (cb?.isChecked == true) {
+                val detail = detailInput?.text?.toString()?.trim().orEmpty()
+                picks += NotInterestedPick(
+                    reason = NI_REASON_LABELS[index],
+                    detail = detail.takeIf { it.isNotBlank() },
+                )
+            }
+        }
+        return picks
+    }
+
+    /**
+     * Mobile-only serializer: turns the structured picks into a
+     * human-readable notes blob for CP visits, since the CP backend
+     * doesn't have notInterestedReasons / notInterestedDetails
+     * columns. Keeps general notes after a blank line so the web
+     * admin can distinguish "what was selected" from "what was
+     * typed". Returns just the general notes when picks is empty
+     * (never expected — persistNotInterested gates on picks first).
+     */
+    private fun buildNotInterestedNotesForCp(
+        picks: List<NotInterestedPick>,
+        generalNotes: String?,
+    ): String = buildString {
+        if (picks.isNotEmpty()) {
+            append("Reasons: ")
+            append(picks.joinToString(", ") { it.reason })
+            picks.filter { !it.detail.isNullOrBlank() }.forEach {
+                append("\n• ").append(it.reason).append(": ").append(it.detail)
+            }
+        }
+        if (!generalNotes.isNullOrBlank()) {
+            if (isNotEmpty()) append("\n\n")
+            append(generalNotes)
+        }
+    }.trim()
 
     /**
      * Shared persistence path for the terminal outcomes (Postpone /
@@ -2845,6 +3089,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                                 postponedReasonsFromForm() else null,
                             notInterestedReasons = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
                                 notInterestedReasonsFromForm() else null,
+                            // SV backend's setOutcome stores notInterestedDetails
+                            // alongside notInterestedReasons — same shape the
+                            // web SV detail page reads from. Per-reason detail
+                            // strings come from the inline inputs that
+                            // appear under each checked reason.
+                            notInterestedDetails = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
+                                notInterestedDetailsFromForm() else null,
                             notes = notes,
                         ),
                     )
@@ -2873,7 +3124,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     SetOutcomeRequest(
                         id = cpVisitId,
                         outcome = outcomeEnum,
-                        postponeReasons = null,
+                        // Backend's setOutcome throws when outcome="postponed"
+                        // and postponeReasons is empty/null. We now drive the
+                        // CP path off the same checkbox set the SV path uses,
+                        // so the row that lands in `clientPlaceVisits` looks
+                        // identical no matter which surface saved it.
+                        postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
+                            postponedReasonsFromForm() else null,
                         notes = notes,
                     ),
                 )
@@ -2902,41 +3159,44 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * present. The SV backend requires a non-empty array for
      * outcome=postponed.
      */
+    /**
+     * Pulls the currently-checked postpone reason labels in the SAME
+     * order and SAME wording as the web's POSTPONE_REASONS list — so
+     * the row that lands in `clientPlaceVisits.postponeReasons` is
+     * byte-identical whether the operator saved from web or mobile.
+     * No fallback synthesis: an empty result is a real signal that
+     * the operator hit Save without ticking anything, and the caller
+     * (persistPostpone) shows the same gist error the web shows.
+     */
     private fun postponedReasonsFromForm(): List<String> {
-        val budget = etPostBudget?.text?.toString()?.trim().orEmpty()
-        val timing = etPostTiming?.text?.toString()?.trim().orEmpty()
-        val project = etPostProject?.text?.toString()?.trim().orEmpty()
-        val other = etPostOther?.text?.toString()?.trim().orEmpty()
-        val labels = listOf(
-            "Budget" to budget,
-            "Timing" to timing,
-            "Project" to project,
-            "Other" to other,
-        ).filter { it.second.isNotBlank() }.map { it.first }
-        // Backend rejects an empty array — fall back to "other" so the
-        // mutation still lands even when the user hits Save without
-        // ticking specific reasons.
-        return labels.ifEmpty { listOf("other") }
+        val picked = mutableListOf<String>()
+        if (cbPostClientUnavailable?.isChecked == true) picked += "Client unavailable"
+        if (cbPostWeather?.isChecked == true) picked += "Weather"
+        if (cbPostVehicle?.isChecked == true) picked += "Vehicle issue"
+        if (cbPostDocument?.isChecked == true) picked += "Document pending"
+        if (cbPostRescheduledByClient?.isChecked == true) picked += "Rescheduled by client"
+        if (cbPostOtherCommitment?.isChecked == true) picked += "Other commitment"
+        return picked
     }
 
     /**
-     * Same pattern for the Not Interested tab. The CP path also sends
-     * just notes, so SV mode collapses to a generic "other" reason
-     * when no structured fields are present.
+     * SV-path version of the picker — returns just the checked reason
+     * labels (no details). Web-canonical strings; same order as
+     * NOT_INTERESTED_REASONS. The SV backend's setOutcome rejects an
+     * empty array when outcome="not_interested" so the caller gates
+     * on picks first in persistNotInterested.
      */
-    private fun notInterestedReasonsFromForm(): List<String> {
-        val budget = etNiBudget?.text?.toString()?.trim().orEmpty()
-        val timing = etNiTiming?.text?.toString()?.trim().orEmpty()
-        val project = etNiProject?.text?.toString()?.trim().orEmpty()
-        val other = etNiOther?.text?.toString()?.trim().orEmpty()
-        val labels = listOf(
-            "Budget" to budget,
-            "Timing" to timing,
-            "Project" to project,
-            "Other" to other,
-        ).filter { it.second.isNotBlank() }.map { it.first }
-        return labels.ifEmpty { listOf("other") }
-    }
+    private fun notInterestedReasonsFromForm(): List<String> =
+        niPicksFromForm().map { it.reason }
+
+    /**
+     * Companion to notInterestedReasonsFromForm — returns the
+     * { reason, detail } pairs for the SV mutation. The backend stores
+     * this on siteVisits.notInterestedDetails so the web admin's
+     * detail-display reads identically.
+     */
+    private fun notInterestedDetailsFromForm(): List<SvNotInterestedDetail> =
+        niPicksFromForm().map { SvNotInterestedDetail(reason = it.reason, detail = it.detail) }
 
     private fun finishCtaSave(error: String) {
         btnSubmit?.isClickable = true
@@ -3918,7 +4178,6 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
-        private const val RESULT_KEY_POSTPONE_DATE = "cp_visit_postpone_date"
         private const val RESULT_KEY_GENERIC_DATE = "cp_visit_generic_date"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"

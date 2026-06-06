@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Outcome · Postpone — captures the four "tell me why we're delaying"
-  free-text fields plus the planned follow-up date/time, then submits
-  via setCpVisitOutcome(outcome="postponed", notes=<serialized form>).
+  Outcome · Postpone — checkbox list of postpone reasons plus an
+  optional notes field. Matches the web's `/marketing/cp-visits/[id]`
+  Postpone dialog (POSTPONE_REASONS in app/marketing/cp-visits/[id]/page.tsx).
+  Submits via setCpVisitOutcome(outcome="postponed",
+  postponeReasons=<checked>, notes=<optional>) — same shape the web
+  POSTs to clientPlaceVisits.setOutcome.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bodyPostpone"
@@ -11,8 +14,114 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <!-- Budget concern (multiline textarea with a leading rupee icon) -->
-    <TextView style="@style/OutcomeFieldLabel" android:text="Please specify the budget concern" />
+    <TextView style="@style/OutcomeFieldLabel" android:text="Reasons for postponement" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:text="Select one or more — the visit moves to Postponed."
+        android:textColor="#94A3B8"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="6dp">
+
+        <CheckBox
+            android:id="@+id/cbPostClientUnavailable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Client unavailable"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPostWeather"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Weather"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPostVehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Vehicle issue"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPostDocument"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Document pending"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPostRescheduledByClient"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Rescheduled by client"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPostOtherCommitment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Other commitment"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="16dp"
+        android:text="Additional notes" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:text="Optional — any context the office should see."
+        android:textColor="#94A3B8"
+        android:textSize="11sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -27,10 +136,10 @@
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_outcome_rupee" />
+            android:src="@drawable/ic_outcome_doc" />
 
         <EditText
-            android:id="@+id/etPostBudget"
+            android:id="@+id/etPostNotes"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
@@ -38,47 +147,12 @@
             android:background="@android:color/transparent"
             android:fontFamily="@font/inter_medium"
             android:gravity="top"
-            android:hint="Enter Details"
+            android:hint="Additional context"
             android:includeFontPadding="false"
             android:inputType="textMultiLine|textCapSentences"
-            android:minLines="3"
+            android:minLines="2"
             android:textColor="#101828"
             android:textColorHint="#94A3B8"
             android:textSize="13sp" />
-    </LinearLayout>
-
-    <!-- Timing -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="What's the timing?" />
-
-    <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
-        <EditText android:id="@+id/etPostTiming" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
-    </LinearLayout>
-
-    <!-- Project details -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Tell the Project Details" />
-
-    <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
-        <EditText android:id="@+id/etPostProject" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
-    </LinearLayout>
-
-    <!-- Other details -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Tell Other Details" />
-
-    <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
-        <EditText android:id="@+id/etPostOther" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapSentences" />
-    </LinearLayout>
-
-    <!-- Date & Time for the follow-up -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Date &amp; Time" />
-
-    <LinearLayout android:id="@+id/rowPostDateTime" style="@style/OutcomeFieldPillClickable">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
-        <TextView
-            android:id="@+id/tvPostDateTime"
-            style="@style/OutcomeFieldValue"
-            android:hint="Enter Date &amp; Time for postpone" />
     </LinearLayout>
 </LinearLayout>

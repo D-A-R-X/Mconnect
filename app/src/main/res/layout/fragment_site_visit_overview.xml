@@ -47,15 +47,24 @@
                         android:textColor="#1D2939"
                         android:textSize="20sp" />
 
-                    <!-- Dropdown Spinner/Button -->
+                    <!--
+                      Vehicle type badge — read-only display of the
+                      travel mode the WEB selected on this SV. The
+                      mobile app no longer flips Own ↔ Cab; the field
+                      staff just sees whichever flow the office chose
+                      so the stepper below renders the matching layout.
+                      Chevron + click handler removed (this is no
+                      longer a dropdown). The id is kept so existing
+                      `tvSelectedVehicleType?.text = ...` bindings in
+                      Kotlin continue to update the badge label.
+                    -->
                     <LinearLayout
-                        android:id="@+id/layoutVehicleDropdown"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:background="@drawable/bg_vehicle_dropdown"
-                        android:clickable="true"
-                        android:focusable="true"
+                        android:clickable="false"
+                        android:focusable="false"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
                         android:paddingHorizontal="12dp"
@@ -69,13 +78,6 @@
                             android:text="Cab Vehicle"
                             android:textColor="#344054"
                             android:textSize="12sp" />
-
-                        <ImageView
-                            android:layout_width="12dp"
-                            android:layout_height="12dp"
-                            android:layout_marginStart="6dp"
-                            android:src="@drawable/ic_chevron_down"
-                            app:tint="#667085" />
                     </LinearLayout>
                 </LinearLayout>
 

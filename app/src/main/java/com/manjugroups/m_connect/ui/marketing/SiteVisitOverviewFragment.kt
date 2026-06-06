@@ -26,7 +26,9 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
-import com.manjugroups.m_connect.network.SiteVisitIdRequest
+// SiteVisitIdRequest import removed — the mobile no longer fires
+// markSiteVisitPickedUp / markSiteVisitArrivedSite / markSiteVisitDropped.
+// Trip-state advancement is web-only now (see wireStepperReadOnlyHint).
 import com.manjugroups.m_connect.network.TodayVisit
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -49,7 +51,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var currentStepIndex: Int = 0
     // Lock for the lifecycle-transition button so a double-tap doesn't
     // fire two markPickedUp calls back-to-back.
-    private var transitioning: Boolean = false
+    // `transitioning` flag removed — mobile no longer advances the SV
+    // through markSiteVisitPickedUp / markSiteVisitArrivedSite /
+    // markSiteVisitDropped. The web is the single source of truth for
+    // trip progress; mobile re-reads it on every loadEnrichedDetail.
     private var isOwnVehicleSelected: Boolean = false
 
     // UI elements
@@ -71,8 +76,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var tvVisitorDetails: TextView? = null
     private var tvNotes: TextView? = null
 
-    // Dropdown views
-    private var layoutVehicleDropdown: LinearLayout? = null
+    // Read-only vehicle-type badge. Mobile no longer flips the travel
+    // mode — the WEB owns that decision; mobile just renders whichever
+    // flow (Own Vehicle / Cab Vehicle) the office picked so the stepper
+    // below matches. The id stays so existing label-set calls keep
+    // working — the LinearLayout that used to be a dropdown is no
+    // longer click-bound and the chevron is gone from the layout.
     private var tvSelectedVehicleType: TextView? = null
 
     // Stepper layouts
@@ -215,7 +224,6 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         labelDone = view.findViewById(R.id.tvStepDone)
 
         // Dropdown views
-        layoutVehicleDropdown = view.findViewById(R.id.layoutVehicleDropdown)
         tvSelectedVehicleType = view.findViewById(R.id.tvSelectedVehicleType)
 
         // Stepper layouts
@@ -250,40 +258,26 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnNotInterested = view.findViewById(R.id.btnOutcomeNotInterested)
         btnPostponed = view.findViewById(R.id.btnOutcomePostponed)
 
-        // Dropdown click listener
-        layoutVehicleDropdown?.setOnClickListener {
-            val context = it.context
-            val popup = androidx.appcompat.widget.PopupMenu(context, it)
-            popup.menu.add("Cab Vehicle")
-            popup.menu.add("Own Vehicle")
-            popup.setOnMenuItemClickListener { item ->
-                val selectedType = item.title.toString()
-                tvSelectedVehicleType?.text = selectedType
-                val newOwnSelection = selectedType == "Own Vehicle"
-                if (isOwnVehicleSelected != newOwnSelection) {
-                    isOwnVehicleSelected = newOwnSelection
-                    toggleStepperVisibility()
-                    val currentStatus = tvStatus?.text?.toString() ?: ""
-                    val stepIndex = if (isOwnVehicleSelected) {
-                        computeOwnStepIndex(currentStatus, null)
-                    } else {
-                        computeWebParityStepIndex(currentStatus, null)
-                    }
-                    updateStepper(stepIndex)
-                }
-                true
-            }
-            popup.show()
-        }
+        // Vehicle-type dropdown removed — the badge above is now
+        // read-only. The travel mode is set by the WEB (Own Vehicle
+        // or Cab Vehicle) and mirrored down via loadEnrichedDetail
+        // → isOwnVehicleSelected, which then toggles which stepper
+        // layout is visible. No click handler here on purpose.
 
         // Bind initial arguments
         bindInitialArgs()
 
-        // Wire stepper circle taps to fire the next-state mutation.
-        // Each circle only acts if it represents the IMMEDIATE next
-        // step from current — out-of-order taps no-op with a toast so
-        // the user can't skip past an unfinished phase.
-        wireStepperTaps()
+        // Stepper is READ-ONLY on mobile — the web is the only surface
+        // that advances a Site Visit through scheduled → client_started
+        // / picked_up → on_site → dropped. Mobile mirrors the current
+        // step via updateStepper(...) inside loadEnrichedDetail, and
+        // taps on the step circles do nothing (apart from a friendly
+        // hint toast). The previous wireStepperTaps() + advanceTo(...)
+        // path that fired markSiteVisitPickedUp / markSiteVisitArrivedSite
+        // / markSiteVisitDropped from mobile has been gated off — the
+        // operator's only writable surface is the Outcome buttons,
+        // which unlock once the web pushes status >= on_site.
+        wireStepperReadOnlyHint()
 
         // Load enriched details
         val id = visitId
@@ -292,128 +286,34 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
     }
 
-    private fun wireStepperTaps() {
-        // Index 0 (Scheduled) is the initial state — no tap needed.
-        // Index 1 (Assigned) auto-progresses server-side when staff is
-        // attached, so we don't wire it as a manual transition.
-        // Index 2..4 are the user-driven transitions:
-        //   pickedUp        → markPickedUp / markClientStarted
-        //   onSite          → markArrivedSite
-        //   dropped         → markDropped
-        // Index 5 (Done) lands automatically when setOutcome fires.
-        
-        // Cab vehicle stepper
-        circlePickedUp?.setOnClickListener {
-            advanceTo(stepIndex = 2, label = "Picked Up")
-        }
-        circleOnSite?.setOnClickListener {
-            advanceTo(stepIndex = 3, label = "On Site")
-        }
-        circleDropped?.setOnClickListener {
-            advanceTo(stepIndex = 4, label = "Dropped")
-        }
-
-        // Own vehicle stepper
-        circleOwnClientDeparture?.setOnClickListener {
-            advanceTo(stepIndex = 2, label = "Client Departure")
-        }
-        circleOwnOnSite?.setOnClickListener {
-            advanceTo(stepIndex = 3, label = "On Site")
-        }
-    }
-
     /**
-     * Fires the mutation that takes the SV from currentStepIndex up
-     * to [stepIndex]. Out-of-order taps (jumping multiple steps OR
-     * tapping a step already passed) show a toast and no-op so the
-     * server's assertTransition rules don't reject us with a 500.
+     * Replaces the old wireStepperTaps() that fired markSiteVisitPickedUp
+     * / markSiteVisitArrivedSite / markSiteVisitDropped from mobile.
+     * Now each step circle just shows a hint toast — the WEB is the
+     * single source of truth for progress, and the SV row's status
+     * field rebinds here on every loadEnrichedDetail pass. Tapping a
+     * step never triggers a state transition.
+     *
+     * Operators interact with the SV through the Outcome buttons
+     * below (Booking / Not Interested / Postponed), which only become
+     * active once the web has advanced the SV to on_site.
      */
-    private fun advanceTo(stepIndex: Int, label: String) {
-        if (transitioning) return
-        
-        val isAllowed = if (isOwnVehicleSelected) {
-            when (stepIndex) {
-                2 -> currentStepIndex < 2
-                3 -> currentStepIndex == 2
-                else -> false
-            }
-        } else {
-            stepIndex == currentStepIndex + 1
+    private fun wireStepperReadOnlyHint() {
+        val hint: (View) -> Unit = {
+            Toast.makeText(
+                requireContext(),
+                "Trip progress is managed from the web admin.",
+                Toast.LENGTH_SHORT,
+            ).show()
         }
-
-        if (!isAllowed) {
-            if (stepIndex <= currentStepIndex) {
-                Toast.makeText(
-                    requireContext(),
-                    "Already at or past '$label'",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            } else {
-                Toast.makeText(
-                    requireContext(),
-                    "Finish the previous step first before marking '$label'",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-            return
-        }
-        val svId = visitId
-        if (svId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Site visit id missing", Toast.LENGTH_SHORT).show()
-            return
-        }
-        transitioning = true
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = when (stepIndex) {
-                    2 -> geoApi.markSiteVisitPickedUp(
-                        session.bearerToken,
-                        SiteVisitIdRequest(svId),
-                    )
-                    3 -> geoApi.markSiteVisitArrivedSite(
-                        session.bearerToken,
-                        SiteVisitIdRequest(svId),
-                    )
-                    4 -> geoApi.markSiteVisitDropped(
-                        session.bearerToken,
-                        SiteVisitIdRequest(svId),
-                    )
-                    else -> {
-                        transitioning = false
-                        return@launch
-                    }
-                }
-                if (!resp.success) {
-                    throw Exception(resp.error ?: "Transition failed")
-                }
-                // Optimistically advance the local stepper; the
-                // server's authoritative status will rebind on the
-                // next loadEnrichedDetail pass (e.g. when the sheet
-                // re-opens). For the in-session UX this is enough.
-                updateStepper(stepIndex)
-                bindStatusHeader(when (stepIndex) {
-                    2 -> "picked_up"
-                    3 -> "on_site"
-                    4 -> "dropped"
-                    else -> ""
-                })
-                Toast.makeText(
-                    requireContext(),
-                    "$label ✓",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    e.message ?: "Couldn't advance to '$label'",
-                    Toast.LENGTH_LONG,
-                ).show()
-            } finally {
-                transitioning = false
-            }
-        }
+        // Cab vehicle circles
+        circlePickedUp?.setOnClickListener(hint)
+        circleOnSite?.setOnClickListener(hint)
+        circleDropped?.setOnClickListener(hint)
+        // Own vehicle circles
+        circleOwnClientDeparture?.setOnClickListener(hint)
+        circleOwnOnSite?.setOnClickListener(hint)
     }
-
 
     private fun bindInitialArgs() {
         val args = arguments ?: return

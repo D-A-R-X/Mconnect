@@ -108,9 +108,28 @@ class SessionManager(context: Context) {
         get() = prefs.getBoolean(KEY_SHOULD_TRACK_NOW, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOULD_TRACK_NOW, value).apply()
 
-    var isDriverMode: Boolean
-        get() = prefs.getBoolean(KEY_IS_DRIVER_MODE, false)
-        set(value) = prefs.edit().putBoolean(KEY_IS_DRIVER_MODE, value).apply()
+    /**
+     * Staff designation cached on login bootstrap (from `getStaffDetail`).
+     * Source of truth for role-aware UI gates like the driver/executive
+     * branch on the Home screen — mirrors the web's `hasDriverDesignation`
+     * check in `convex/lib/mmsFleetDriverSessionLib.ts`, which does the
+     * same case-insensitive "Driver" match against `staff.designation`.
+     */
+    var designation: String?
+        get() = prefs.getString(KEY_DESIGNATION, null)
+        set(value) = prefs.edit().putString(KEY_DESIGNATION, value).apply()
+
+    /**
+     * True when the logged-in staff is a Driver — derived from
+     * designation, NOT a user-toggled preference. The old Executive /
+     * Driver dropdown on the Home tab let any operator flip this
+     * flag, which broke the audit story (a Site Supervisor could
+     * impersonate the driver view) and didn't match the web, where
+     * the driver UI shows only when the staff record's designation
+     * is "Driver". Read-only by design.
+     */
+    val isDriverMode: Boolean
+        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true)
 
     var isNotificationEnabled: Boolean
         get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
@@ -336,7 +355,13 @@ class SessionManager(context: Context) {
         private const val KEY_USER_PHOTO_URL = "user_photo_url"
         private const val KEY_REPORTING_TO_ID = "reporting_to_id"
         private const val KEY_REPORTING_TO_NAME = "reporting_to_name"
+        // KEY_IS_DRIVER_MODE retained on purpose — older installs may
+        // have a stale "true" cached from the dropdown era. The current
+        // getter no longer reads it; the next bootstrap re-derives
+        // driver mode from `designation`. Leave the constant here so
+        // the migration path stays grep-able.
         private const val KEY_IS_DRIVER_MODE = "is_driver_mode"
+        private const val KEY_DESIGNATION = "designation"
         private const val KEY_DRIVER_TRIPS = "driver_trips"
         private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
     }

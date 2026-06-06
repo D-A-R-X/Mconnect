@@ -144,6 +144,10 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                     resp.staff?.let { staff ->
                         session.reportingToId = staff.reportingTo
                         session.reportingToName = staff.reportingToName
+                        // Designation drives SessionManager.isDriverMode —
+                        // see the SessionManager comment for the broader
+                        // rationale (auto-detect, no user toggle).
+                        session.designation = staff.designation
                     }
                 }
             }

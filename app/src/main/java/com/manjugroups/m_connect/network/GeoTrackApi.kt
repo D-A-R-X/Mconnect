@@ -1041,6 +1041,17 @@ data class TodayVisit(
     //   "site_visit" → direct site visit (no CP intermediary)
     //   null         → unknown
     val visitCategory: String? = null,
+    // Travel-mode metadata for the SV list pill. Populated by the new
+    // siteVisits query (`marketing.siteVisits.listForViewerAsMobileVisits`)
+    // so the Android list can show "Own Vehicle" for SVs that the
+    // office fixed on the client's own vehicle instead of falling
+    // through to "No Vehicle Assigned". Legacy /today-visits rows
+    // leave these as null and the renderer falls back to the prior
+    // visitCategory heuristic. Values mirror the backend's
+    // travelModeValidator: "own_vehicle" | "cab" | "external".
+    val travelMode: String? = null,
+    val vehiclePreference: String? = null,
+    val vehicleAssigned: Boolean? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the

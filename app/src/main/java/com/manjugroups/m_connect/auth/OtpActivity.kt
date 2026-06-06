@@ -277,6 +277,11 @@ class OtpActivity : AppCompatActivity() {
                     resp.staff?.let { staff ->
                         session.reportingToId = staff.reportingTo
                         session.reportingToName = staff.reportingToName
+                        // Cache designation so SessionManager.isDriverMode
+                        // can derive role automatically (matches the web's
+                        // hasDriverDesignation check). Replaces the old
+                        // user-toggled Executive/Driver dropdown on Home.
+                        session.designation = staff.designation
                     }
                 }
             }

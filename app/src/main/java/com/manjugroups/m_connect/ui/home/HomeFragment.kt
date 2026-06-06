@@ -72,7 +72,7 @@ class HomeFragment : Fragment() {
         loadUnreadNotifications()
         startBannerAnimation()
 
-        setupRoleDropdown()
+        setupRoleAdaptiveView()
         setupDriverTabs()
 
         setFragmentResultListener(DriverStartTripBottomSheet.RESULT_KEY) { _, bundle ->
@@ -379,6 +379,26 @@ class HomeFragment : Fragment() {
                     staff.department?.takeIf { it.isNotBlank() },
                 ).joinToString(" • ")
                 if (role.isNotBlank()) binding.tvHeaderRole.text = role
+                // Backfill designation for sessions that pre-date the
+                // designation cache (older installs that logged in
+                // before this field existed). SessionManager.isDriverMode
+                // reads this directly, so refreshing on Home open keeps
+                // the driver/executive view aligned with the staff
+                // record without forcing a re-login.
+                staff.designation?.takeIf { it.isNotBlank() }?.let {
+                    val previous = session.isDriverMode
+                    session.designation = it
+                    // If this is the first time we learnt the user is a
+                    // Driver (or stopped being one), re-apply the tab
+                    // visibility right away so the screen reshapes
+                    // without waiting for a tab switch.
+                    if (previous != session.isDriverMode) {
+                        setupRoleAdaptiveView()
+                        (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
+                            renderVisitCard(state)
+                        }
+                    }
+                }
                 staff.photo?.takeIf { it.isNotBlank() }?.let { photo ->
                     session.userPhotoUrl = photo
                     applyAvatarPhoto(photo)
@@ -971,27 +991,17 @@ class HomeFragment : Fragment() {
         )
     }
 
-    private fun setupRoleDropdown() {
-        val isDriver = session.isDriverMode
-        binding.tvSelectedRole.text = if (isDriver) "Driver Login" else "Executive Login"
-        binding.layoutDriverTabs.visibility = if (isDriver) View.VISIBLE else View.GONE
-
-        binding.layoutRoleDropdown.setOnClickListener {
-            val popup = androidx.appcompat.widget.PopupMenu(requireContext(), binding.layoutRoleDropdown)
-            popup.menu.add("Executive Login")
-            popup.menu.add("Driver Login")
-            popup.setOnMenuItemClickListener { item ->
-                val selected = item.title.toString()
-                session.isDriverMode = (selected == "Driver Login")
-                binding.tvSelectedRole.text = selected
-                binding.layoutDriverTabs.visibility = if (session.isDriverMode) View.VISIBLE else View.GONE
-                
-                // Refresh list display
-                (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
-                true
-            }
-            popup.show()
-        }
+    /**
+     * Driver / Executive view is auto-selected from the logged-in
+     * staff's designation — see SessionManager.isDriverMode (mirrors
+     * the web's `hasDriverDesignation` check). The old Executive /
+     * Driver dropdown that let any operator flip this manually is
+     * gone; this helper just shows the driver-only filter pills
+     * when the current account actually IS a driver.
+     */
+    private fun setupRoleAdaptiveView() {
+        binding.layoutDriverTabs.visibility =
+            if (session.isDriverMode) View.VISIBLE else View.GONE
     }
 
     override fun onDestroyView() {
