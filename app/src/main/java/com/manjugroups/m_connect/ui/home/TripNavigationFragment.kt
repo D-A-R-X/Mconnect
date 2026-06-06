@@ -396,6 +396,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (!cpVisitId.isNullOrBlank()) {
             reconcileCpVisitStatusFromServer()
         }
+
+        setFragmentResultListener(DriverEndTripBottomSheet.RESULT_KEY) { _, bundle ->
+            val success = bundle.getBoolean("success")
+            if (success) {
+                Toast.makeText(requireContext(), "Trip completed successfully", Toast.LENGTH_SHORT).show()
+                navigateUp()
+            }
+        }
     }
 
     private fun reconcileCpVisitStatusFromServer() {
@@ -1047,6 +1055,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (arrivalInProgress) return
         arrivalInProgress = true
 
+        if (session.isDriverMode) {
+            arrivalInProgress = false
+            arrivalConfirmedForProgress = true
+            session.saveDriverTripArrival(visitId!!)
+            applyStatusPill("Reaching")
+            renderArrivalPhase(alreadyArrived = true)
+            Toast.makeText(requireContext(), "On Site Reached", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         if (isCpVisit()) {
             checkReachingAndAskClientSeen()
             return
@@ -1286,6 +1304,25 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {
+        if (alreadyArrived) arrivalConfirmedForProgress = true
+
+        if (session.isDriverMode) {
+            if (alreadyArrived) {
+                swipeArrived?.visibility = View.GONE
+                btnCompleteCpDetails?.visibility = View.VISIBLE
+                btnCompleteCpDetails?.text = "End Trip"
+                btnCompleteCpDetails?.setOnClickListener {
+                    DriverEndTripBottomSheet.newInstance(visitId!!)
+                        .show(parentFragmentManager, "driver_end_trip")
+                }
+            } else {
+                btnCompleteCpDetails?.visibility = View.GONE
+                swipeArrived?.visibility = View.VISIBLE
+                swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+            }
+            return
+        }
+
         // Use cpVisitId presence (not the stricter tripType check in
         // isCpVisit()) as the gate for showing the outcome-sheet CTA.
         // Stale Home cache, older Home merge code, or a missing
@@ -1313,8 +1350,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 "cpVisitDecisionCaptured=$cpVisitDecisionCaptured " +
                 "-> showCpButton=$shouldFillCpDetails",
         )
-
-        if (alreadyArrived) arrivalConfirmedForProgress = true
 
         if (shouldFillCpDetails) {
             arrivalInProgress = false

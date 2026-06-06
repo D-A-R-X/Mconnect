@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -70,6 +71,24 @@ class HomeFragment : Fragment() {
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
         startBannerAnimation()
+
+        setupRoleDropdown()
+        setupDriverTabs()
+
+        setFragmentResultListener(DriverStartTripBottomSheet.RESULT_KEY) { _, bundle ->
+            val success = bundle.getBoolean("success")
+            if (success) {
+                val visitId = bundle.getString("visitId").orEmpty()
+                viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+                val state = viewModel.uiState.value
+                if (state is HomeUiState.Loaded) {
+                    state.todayVisits.firstOrNull { it.id == visitId }?.let { visit ->
+                        val startedVisit = visit.copy(status = "in-progress")
+                        openTripNavigationForVisit(startedVisit)
+                    }
+                }
+            }
+        }
     }
 
     private fun setupPullToRefresh() {
@@ -503,7 +522,22 @@ class HomeFragment : Fragment() {
 
     private fun renderVisitCard(state: HomeUiState.Loaded) {
         // Home shows today's visits only.
-        val visits = state.todayVisits.filter { it.status != "cancelled" }
+        val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
+        val visits = if (session.isDriverMode) {
+            when (selectedTab) {
+                "upcoming" -> unfilteredVisits.filter {
+                    val s = it.status.lowercase(Locale.getDefault())
+                    s !in setOf("completed", "complete", "done", "closed")
+                }
+                "completed" -> unfilteredVisits.filter {
+                    val s = it.status.lowercase(Locale.getDefault())
+                    s in setOf("completed", "complete", "done", "closed")
+                }
+                else -> unfilteredVisits
+            }
+        } else {
+            unfilteredVisits
+        }
         val displayCount = visits.size
 
         if (displayCount > 0) {
@@ -637,21 +671,52 @@ class HomeFragment : Fragment() {
             }
         }
 
-        if (isCompleted) {
-            // Completed visits open a read-only summary instead of the trip flow.
-            val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
-            itemView.isClickable = true
-            itemView.isFocusable = true
-            itemView.setOnClickListener(openDetail)
-            actionBtn.isClickable = true
-            actionBtn.setOnClickListener(openDetail)
+        if (session.isDriverMode) {
+            if (isCompleted) {
+                val openDetail: (View) -> Unit = {
+                    DriverTripCompletedBottomSheet.newInstance(visit.id)
+                        .show(parentFragmentManager, "driver_trip_completed")
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openDetail)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openDetail)
+            } else if (!isInProgress && canStartTrip) {
+                val startTrip: (View) -> Unit = {
+                    DriverStartTripBottomSheet.newInstance(visit.id)
+                        .show(parentFragmentManager, "driver_start_trip")
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(startTrip)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(startTrip)
+            } else {
+                val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
+            }
         } else {
-            val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
-            itemView.isClickable = true
-            itemView.isFocusable = true
-            itemView.setOnClickListener(openNav)
-            actionBtn.isClickable = true
-            actionBtn.setOnClickListener(openNav)
+            if (isCompleted) {
+                // Completed visits open a read-only summary instead of the trip flow.
+                val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openDetail)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openDetail)
+            } else {
+                val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
+            }
         }
 
         applyItemSpacing(itemView, index, total)
@@ -857,6 +922,75 @@ class HomeFragment : Fragment() {
                 binding.tvBellBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
                 binding.tvBellBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
             }
+        }
+    }
+
+    private var selectedTab = "all"
+
+    private fun setupDriverTabs() {
+        val clickListener = View.OnClickListener { v ->
+            selectedTab = when (v.id) {
+                R.id.tabUpcoming -> "upcoming"
+                R.id.tabCompleted -> "completed"
+                else -> "all"
+            }
+            updateTabSelectionVisuals()
+            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+        }
+        binding.tabAll.setOnClickListener(clickListener)
+        binding.tabUpcoming.setOnClickListener(clickListener)
+        binding.tabCompleted.setOnClickListener(clickListener)
+        updateTabSelectionVisuals()
+    }
+
+    private fun updateTabSelectionVisuals() {
+        val activeBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_active)
+        val inactiveBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_inactive)
+        val white = android.graphics.Color.WHITE
+        val grayText = android.graphics.Color.parseColor("#344054")
+
+        binding.tabAll.background = if (selectedTab == "all") activeBg else inactiveBg
+        binding.tabAll.setTextColor(if (selectedTab == "all") white else grayText)
+        binding.tabAll.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "all") R.font.inter_semibold else R.font.inter_medium
+        )
+
+        binding.tabUpcoming.background = if (selectedTab == "upcoming") activeBg else inactiveBg
+        binding.tabUpcoming.setTextColor(if (selectedTab == "upcoming") white else grayText)
+        binding.tabUpcoming.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "upcoming") R.font.inter_semibold else R.font.inter_medium
+        )
+
+        binding.tabCompleted.background = if (selectedTab == "completed") activeBg else inactiveBg
+        binding.tabCompleted.setTextColor(if (selectedTab == "completed") white else grayText)
+        binding.tabCompleted.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "completed") R.font.inter_semibold else R.font.inter_medium
+        )
+    }
+
+    private fun setupRoleDropdown() {
+        val isDriver = session.isDriverMode
+        binding.tvSelectedRole.text = if (isDriver) "Driver Login" else "Executive Login"
+        binding.layoutDriverTabs.visibility = if (isDriver) View.VISIBLE else View.GONE
+
+        binding.layoutRoleDropdown.setOnClickListener {
+            val popup = androidx.appcompat.widget.PopupMenu(requireContext(), binding.layoutRoleDropdown)
+            popup.menu.add("Executive Login")
+            popup.menu.add("Driver Login")
+            popup.setOnMenuItemClickListener { item ->
+                val selected = item.title.toString()
+                session.isDriverMode = (selected == "Driver Login")
+                binding.tvSelectedRole.text = selected
+                binding.layoutDriverTabs.visibility = if (session.isDriverMode) View.VISIBLE else View.GONE
+                
+                // Refresh list display
+                (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+                true
+            }
+            popup.show()
         }
     }
 

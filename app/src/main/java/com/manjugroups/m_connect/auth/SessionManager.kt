@@ -7,6 +7,17 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.util.UUID
 
+data class DriverTrip(
+    val startKm: String,
+    val startImage: String,
+    val startTime: String,
+    val endKm: String,
+    val endImage: String,
+    val endTime: String,
+    val status: String, // "started", "reached", "completed"
+    val totalDistance: String
+)
+
 class SessionManager(context: Context) {
 
     private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
@@ -96,6 +107,93 @@ class SessionManager(context: Context) {
     var shouldTrackNow: Boolean
         get() = prefs.getBoolean(KEY_SHOULD_TRACK_NOW, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOULD_TRACK_NOW, value).apply()
+
+    var isDriverMode: Boolean
+        get() = prefs.getBoolean(KEY_IS_DRIVER_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_DRIVER_MODE, value).apply()
+
+    var isNotificationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_IS_NOTIFICATION_ENABLED, value).apply()
+
+    fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("startKm", startKm)
+            trip.put("startImage", startImagePath)
+            trip.put("startTime", startTime)
+            trip.put("status", "started")
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun saveDriverTripArrival(visitId: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("status", "reached")
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun saveDriverTripEnd(visitId: String, endKm: String, endImagePath: String, endTime: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("endKm", endKm)
+            trip.put("endImage", endImagePath)
+            trip.put("endTime", endTime)
+            trip.put("status", "completed")
+            
+            // Calculate total distance if both readings are numeric
+            val startKmStr = trip.optString("startKm", "")
+            val startVal = startKmStr.toDoubleOrNull()
+            val endVal = endKm.toDoubleOrNull()
+            if (startVal != null && endVal != null) {
+                val diff = endVal - startVal
+                trip.put("totalDistance", String.format(java.util.Locale.getDefault(), "%.1f", diff))
+            } else {
+                trip.put("totalDistance", "0.0")
+            }
+            
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getDriverTrip(visitId: String): DriverTrip? {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            if (!obj.has(visitId)) return null
+            val trip = obj.getJSONObject(visitId)
+            return DriverTrip(
+                startKm = trip.optString("startKm", ""),
+                startImage = trip.optString("startImage", ""),
+                startTime = trip.optString("startTime", ""),
+                endKm = trip.optString("endKm", ""),
+                endImage = trip.optString("endImage", ""),
+                endTime = trip.optString("endTime", ""),
+                status = trip.optString("status", ""),
+                totalDistance = trip.optString("totalDistance", "")
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
 
 
     val isLoggedIn: Boolean
@@ -238,5 +336,8 @@ class SessionManager(context: Context) {
         private const val KEY_USER_PHOTO_URL = "user_photo_url"
         private const val KEY_REPORTING_TO_ID = "reporting_to_id"
         private const val KEY_REPORTING_TO_NAME = "reporting_to_name"
+        private const val KEY_IS_DRIVER_MODE = "is_driver_mode"
+        private const val KEY_DRIVER_TRIPS = "driver_trips"
+        private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
     }
 }
