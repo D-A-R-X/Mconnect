@@ -584,7 +584,7 @@ interface ApiService {
         @Body body: PresenceHeartbeatRequest
     ): SimpleResponse
 
-    @POST("api/staff/me/update")
+    @POST("api/hr/staff/update")
     suspend fun updateMyProfile(
         @Header("Authorization") token: String,
         @Body body: UpdateMyProfileRequest
@@ -1661,7 +1661,10 @@ data class PresenceHeartbeatRequest(val status: String? = null)
 // ── Staff self-edit (personal + family fields) ─────────────────────────────
 
 data class UpdateMyProfileRequest(
+    val id: String? = null,
     val name: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
     val dateOfBirth: String? = null,
     val gender: String? = null,
     val maritalStatus: String? = null,

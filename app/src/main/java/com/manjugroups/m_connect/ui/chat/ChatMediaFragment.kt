@@ -26,7 +26,6 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.ChatAttachmentItem
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
@@ -35,9 +34,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Lists all attachments shared in a channel or DM. Hits
- * GET /api/chat/messages/attachments and loads message history to extract links.
- * Tapping an item opens the URL.
+ * Lists all attachments and links shared in a channel or DM. Hits the message list endpoint
+ * to extract images, videos, files, and URLs directly from conversation message history.
  */
 class ChatMediaFragment : Fragment() {
 
@@ -181,75 +179,73 @@ class ChatMediaFragment : Fragment() {
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
 
         viewLifecycleOwner.lifecycleScope.launch {
-            var apiMedia = emptyList<MediaItem>()
-            var apiLinks = emptyList<LinkItem>()
-            var apiDocs = emptyList<DocItem>()
+            val parsedMedia = mutableListOf<MediaItem>()
+            val parsedLinks = mutableListOf<LinkItem>()
+            val parsedDocs = mutableListOf<DocItem>()
 
             try {
-                // 1. Fetch file attachments from GET api/chat/messages/attachments
-                val resp = api.listChatAttachments(
-                    session.bearerToken,
-                    channelId = channelId,
-                    conversationId = conversationId
-                )
-                
-                val timeFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-                
-                if (resp.success) {
-                    val flat = resp.messages.flatMap { msg ->
-                        msg.attachments.map { att ->
-                            Triple(att, msg.senderName, msg.sentAt)
-                        }
-                    }
-
-                    // Parse Media items (Images and Videos)
-                    apiMedia = flat.filter { (att, _, _) ->
-                        val mime = att.fileType?.lowercase(Locale.US).orEmpty()
-                        mime.startsWith("image/") || mime.startsWith("video/")
-                    }.map { (att, sender, sentAt) ->
-                        val mime = att.fileType?.lowercase(Locale.US).orEmpty()
-                        MediaItem(
-                            id = att.id ?: "",
-                            url = att.url ?: "",
-                            isVideo = mime.startsWith("video/"),
-                            duration = if (mime.startsWith("video/")) "0:05" else null,
-                            senderName = sender,
-                            sentAt = sentAt?.toLong()
-                        )
-                    }
-
-                    // Parse Doc items (PDF, Word, Excel, etc.)
-                    apiDocs = flat.filter { (att, _, _) ->
-                        val mime = att.fileType?.lowercase(Locale.US).orEmpty()
-                        !mime.startsWith("image/") && !mime.startsWith("video/")
-                    }.map { (att, _, sentAt) ->
-                        val dateStr = sentAt?.let { timeFmt.format(Date(it.toLong())) } ?: ""
-                        val ext = att.fileName?.substringAfterLast('.', "")?.uppercase(Locale.US) ?: "FILE"
-                        DocItem(
-                            title = att.fileName ?: "File",
-                            fileType = ext,
-                            fileSize = formatBytes(att.fileSize),
-                            date = dateStr,
-                            url = att.url
-                        )
-                    }
-                }
-
-                // 2. Fetch message history to extract text links (max 100 messages)
+                // 1. Fetch message history to extract both attachments and text links
                 val messagesResp = if (channelId != null) {
-                    api.getChannelMessages(session.bearerToken, channelId!!, numItems = 100)
+                    api.getChannelMessages(session.bearerToken, channelId!!, numItems = 150)
                 } else if (conversationId != null) {
-                    api.getConversationMessages(session.bearerToken, conversationId!!, numItems = 100)
+                    api.getConversationMessages(session.bearerToken, conversationId!!, numItems = 150)
                 } else {
                     null
                 }
 
                 if (messagesResp?.success == true) {
                     val page = messagesResp.page ?: messagesResp.messages ?: emptyList()
-                    apiLinks = page.flatMap { msg ->
+                    val timeFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+
+                    for (msg in page) {
+                        // Skip deleted messages
+                        if (msg.isDeleted == true) continue
+
+                        // Extract file attachments
+                        msg.attachments?.forEach { att ->
+                            val mime = att.fileType?.lowercase(Locale.US).orEmpty()
+                            val isMedia = mime.startsWith("image/") || mime.startsWith("video/")
+                            
+                            // Resolve the storage URL dynamically if the direct url is blank
+                            val resolvedUrl = att.url?.takeIf { it.isNotBlank() } ?: runCatching {
+                                val storageId = att.storageId
+                                if (storageId != null) {
+                                    api.getStorageUrl(session.bearerToken, storageId).url
+                                } else null
+                            }.getOrNull()
+
+                            if (!resolvedUrl.isNullOrBlank()) {
+                                if (isMedia) {
+                                    parsedMedia.add(
+                                        MediaItem(
+                                            id = att.id ?: att.storageId ?: "",
+                                            url = resolvedUrl,
+                                            isVideo = mime.startsWith("video/"),
+                                            duration = if (mime.startsWith("video/")) "0:05" else null,
+                                            senderName = msg.senderName,
+                                            sentAt = msg.creationTime?.toLong()
+                                        )
+                                    )
+                                } else {
+                                    val dateStr = msg.creationTime?.let { timeFmt.format(Date(it.toLong())) } ?: ""
+                                    val ext = att.fileName?.substringAfterLast('.', "")?.uppercase(Locale.US) ?: "FILE"
+                                    parsedDocs.add(
+                                        DocItem(
+                                            title = att.fileName ?: "File",
+                                            fileType = ext,
+                                            fileSize = formatBytes(att.fileSize),
+                                            date = dateStr,
+                                            url = resolvedUrl
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        // Extract text links from message body
                         val urls = extractUrls(msg.body)
                         val dateStr = msg.creationTime?.let { timeFmt.format(Date(it.toLong())) } ?: ""
-                        urls.map { url ->
+                        urls.forEach { url ->
                             val uri = Uri.parse(url)
                             val host = uri.host?.removePrefix("www.") ?: "Link"
                             val title = when {
@@ -257,7 +253,7 @@ class ChatMediaFragment : Fragment() {
                                 host.contains("google", ignoreCase = true) -> "Google Link"
                                 else -> host.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
                             }
-                            LinkItem(title, url, dateStr)
+                            parsedLinks.add(LinkItem(title, url, dateStr))
                         }
                     }
                 }
@@ -266,15 +262,15 @@ class ChatMediaFragment : Fragment() {
             } finally {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
 
-                // Set data list (no mock/hardcoded items to show real-time user-exchanged data)
+                // Populate final lists
                 mediaItems.clear()
-                mediaItems.addAll(apiMedia)
+                mediaItems.addAll(parsedMedia)
 
                 linkItems.clear()
-                linkItems.addAll(apiLinks)
+                linkItems.addAll(parsedLinks)
 
                 docItems.clear()
-                docItems.addAll(apiDocs)
+                docItems.addAll(parsedDocs)
 
                 // Setup views
                 setupOverviewViews()

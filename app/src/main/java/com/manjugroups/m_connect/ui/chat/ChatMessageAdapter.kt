@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -912,11 +914,32 @@ class ChatMessageAdapter(
             )
         }
 
-        // Red PDF badge (40×40). For non-PDF docs we still show the badge with
-        // the extension uppercased (e.g. DOCX, XLSX) so the visual remains clean.
+        val ext = inferDocBadgeLabel(attachment.fileName, mime).uppercase(Locale.US)
+        
+        // Dynamic badge colors matching Media tab
+        val badgeBgColor = when (ext) {
+            "PDF" -> "#FFECEB"
+            "DOC", "DOCX" -> "#EFF8FF"
+            "XLS", "XLSX" -> "#ECFDF3"
+            "MP4", "AVI", "MKV", "MOV", "WEBM" -> "#F5F3FF" // Video purple
+            "MP3", "WAV", "M4A", "AAC", "OGG" -> "#FEF0C7" // Audio orange
+            "JPG", "JPEG", "PNG", "GIF", "WEBP" -> "#FFF2F2" // Red-pink for image doc
+            else -> "#F2F4F7"
+        }
+        val badgeTextColor = when (ext) {
+            "PDF" -> "#F04438"
+            "DOC", "DOCX" -> "#175CD3"
+            "XLS", "XLSX" -> "#027A48"
+            "MP4", "AVI", "MKV", "MOV", "WEBM" -> "#7C3AED"
+            "MP3", "WAV", "M4A", "AAC", "OGG" -> "#D97706"
+            "JPG", "JPEG", "PNG", "GIF", "WEBP" -> "#DF1C41"
+            else -> "#667085"
+        }
+
         val badge = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(dp(context, 40), dp(context, 40))
-            setBackgroundResource(R.drawable.bg_chat_pdf_badge)
+            setBackgroundResource(R.drawable.bg_home_new_action_circle)
+            backgroundTintList = ColorStateList.valueOf(Color.parseColor(badgeBgColor))
         }
         val badgeLabel = TextView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -924,8 +947,8 @@ class ChatMessageAdapter(
                 FrameLayout.LayoutParams.MATCH_PARENT,
             )
             gravity = android.view.Gravity.CENTER
-            text = inferDocBadgeLabel(attachment.fileName, mime)
-            setTextColor(android.graphics.Color.parseColor("#B42318"))
+            text = ext
+            setTextColor(Color.parseColor(badgeTextColor))
             textSize = 10f
             typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
             includeFontPadding = false
