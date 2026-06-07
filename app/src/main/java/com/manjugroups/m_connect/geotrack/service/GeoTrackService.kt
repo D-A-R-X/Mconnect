@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.LocationPointEntity
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -112,6 +113,7 @@ class GeoTrackService : Service() {
     private val pointsSynced = AtomicInteger(0)
     private val firstLocationReceived = AtomicBoolean(false)
     private val lastProcessedTime = AtomicLong(0L)
+    private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
 
     private var locationThread: HandlerThread? = null
@@ -200,6 +202,10 @@ class GeoTrackService : Service() {
         else true
         Log.i(TAG, "Permissions: FINE_LOCATION=$hasFine BACKGROUND_LOCATION=$hasBackground")
         if (!hasFine) Log.e(TAG, "FINE_LOCATION NOT GRANTED — GPS will NOT work!")
+        serviceScope.launch { queuePermissionHealthEvents(hasFine, hasBackground) }
+        if (!isGpsEnabled()) {
+            serviceScope.launch { reportTamper("GPS_DISABLED") }
+        }
 
         try { requestLocationUpdates() } catch (e: Exception) { Log.e(TAG, "Location registration failed: ${e.message}", e) }
         try { requestActivityRecognition() } catch (e: Exception) { Log.e(TAG, "Activity recognition failed: ${e.message}") }
@@ -256,6 +262,7 @@ class GeoTrackService : Service() {
         runBlocking(Dispatchers.IO) {
             try {
                 syncPoints()
+                syncEvents()
             } catch (e: Exception) {
                 Log.w(TAG, "Final sync failed: ${e.message}")
             }
@@ -520,8 +527,11 @@ class GeoTrackService : Service() {
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
                 if (hasNetwork()) {
+                    markNetworkOnlineIfNeeded()
                     syncPoints()
+                    syncEvents()
                 } else {
+                    markNetworkOfflineIfNeeded()
                     Log.d(TAG, "Sync: no network, skipping")
                 }
                 // Adaptive delay: back off if failing
@@ -532,6 +542,15 @@ class GeoTrackService : Service() {
                 } else SYNC_INTERVAL_MS
                 delay(delay)
             }
+        }
+    }
+
+    private suspend fun syncEvents() {
+        try {
+            val flushed = GeoTrackEventQueue.flush(this, api, session)
+            if (flushed > 0) Log.i(TAG, "Event sync OK: $flushed pushed")
+        } catch (e: Exception) {
+            Log.w(TAG, "Event sync failed: ${e.message}")
         }
     }
 
@@ -573,9 +592,10 @@ class GeoTrackService : Service() {
 
             if (resp.success) {
                 dao.deleteByIds(unsent.map { it.id })
-                pointsSynced.addAndGet(unsent.size)
+                val inserted = resp.inserted ?: unsent.size
+                pointsSynced.addAndGet(inserted)
                 consecutiveSyncFailures = 0
-                Log.i(TAG, "Sync OK: ${unsent.size} pushed (total synced: ${pointsSynced.get()})")
+                Log.i(TAG, "Sync OK: $inserted/${unsent.size} saved (total saved: ${pointsSynced.get()})")
             } else {
                 consecutiveSyncFailures++
                 Log.e(TAG, "Sync FAILED — server said: ${resp.error} (failures=$consecutiveSyncFailures)")
@@ -641,6 +661,7 @@ class GeoTrackService : Service() {
                     // Delete points older than 7 days that are still stuck
                     val cutoff = System.currentTimeMillis() - MAX_POINT_AGE_MS
                     db.locationPointDao().deleteOlderThan(cutoff)
+                    db.pendingGeoTrackEventDao().deleteOlderThan(cutoff)
                     Log.d(TAG, "Cleanup: purged points older than 7 days")
                 } catch (e: Exception) {
                     Log.w(TAG, "Cleanup failed: ${e.message}")
@@ -657,8 +678,9 @@ class GeoTrackService : Service() {
             while (isActive) {
                 delay(10_000)
                 val pending = try { db.locationPointDao().getUnsentCount() } catch (_: Exception) { 0 }
+                val pendingEvents = try { db.pendingGeoTrackEventDao().getPendingCount() } catch (_: Exception) { 0 }
                 val battery = getBatteryLevel()
-                updateNotif("${pointsCaptured.get()} captured | ${pointsSynced.get()} synced | $pending pending | ${battery}%")
+                updateNotif("${pointsCaptured.get()} captured | ${pointsSynced.get()} saved | $pending pending GPS | $pendingEvents pending alerts | ${battery}%")
             }
         }
     }
@@ -668,31 +690,106 @@ class GeoTrackService : Service() {
     @SuppressLint("MissingPermission")
     private suspend fun reportTamper(eventType: String) {
         try {
-            val metadata = mutableMapOf<String, Any?>(
-                "ts" to System.currentTimeMillis(),
-                "batteryPct" to getBatteryLevel(),
-                "networkType" to getNetworkType(),
-                "gpsEnabled" to isGpsEnabled(),
-                "airplaneMode" to isAirplaneModeOn()
-            )
-            // Attach last known location
-            try {
-                val loc = suspendCancellableCoroutine<Location?> { cont ->
-                    fusedClient.lastLocation
-                        .addOnSuccessListener { loc -> cont.resume(loc, null) }
-                        .addOnFailureListener { cont.resume(null, null) }
-                }
-                if (loc != null) {
-                    metadata["lat"] = loc.latitude
-                    metadata["lng"] = loc.longitude
-                    metadata["accuracy"] = loc.accuracy
-                }
-            } catch (_: Exception) {}
-            api.reportTamper(session.bearerToken, TamperReportRequest(eventType, metadata))
-            Log.i(TAG, "Tamper reported: $eventType")
+            val throttled = eventType == "GPS_DISABLED" ||
+                eventType == "AIRPLANE_MODE_ON" ||
+                eventType == "GPS_ENABLED" ||
+                eventType == "AIRPLANE_MODE_OFF"
+            val queued = if (throttled) {
+                GeoTrackEventQueue.enqueueDistinct(
+                    this,
+                    eventType,
+                    buildEventMetadata(),
+                    signature = "tamper_$eventType",
+                    minIntervalMs = 6 * 60 * 60 * 1000L,
+                )
+            } else {
+                GeoTrackEventQueue.enqueue(this, eventType, buildEventMetadata())
+                true
+            }
+            Log.i(TAG, "Tamper queued=$queued: $eventType")
+            if (queued && hasNetwork()) syncEvents()
         } catch (e: Exception) {
-            Log.w(TAG, "Tamper report failed: ${e.message}")
+            Log.w(TAG, "Tamper queue failed: ${e.message}")
         }
+    }
+
+    private suspend fun queuePermissionHealthEvents(hasFine: Boolean, hasBackground: Boolean) {
+        val missing = mutableListOf<String>()
+        if (!hasFine) missing.add("fine_location")
+        if (!hasBackground) missing.add("background_location")
+        if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
+        if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+        if (missing.isEmpty()) return
+
+        val missingKey = missing.sorted().joinToString("_")
+        val queued = GeoTrackEventQueue.enqueueDistinct(
+            this,
+            "PERMISSION_MISSING",
+            buildEventMetadata() + ("missingPermissions" to missing.joinToString(",")),
+            signature = "permission_missing_$missingKey",
+        )
+        if (queued && hasNetwork()) syncEvents()
+    }
+
+    private suspend fun buildEventMetadata(): Map<String, Any?> {
+        val metadata = mutableMapOf<String, Any?>(
+            "batteryPct" to getBatteryLevel(),
+            "networkType" to getNetworkType(),
+            "gpsEnabled" to isGpsEnabled(),
+            "airplaneMode" to isAirplaneModeOn(),
+            "backgroundLocationPermission" to hasBackgroundLocationPermission(),
+            "activityRecognitionPermission" to hasActivityRecognitionPermission(),
+            "batteryOptimizationIgnored" to isIgnoringBatteryOptimizations(),
+        )
+        try {
+            val loc = suspendCancellableCoroutine<Location?> { cont ->
+                fusedClient.lastLocation
+                    .addOnSuccessListener { loc -> cont.resume(loc, null) }
+                    .addOnFailureListener { cont.resume(null, null) }
+            }
+            if (loc != null) {
+                metadata["lat"] = loc.latitude
+                metadata["lng"] = loc.longitude
+                metadata["accuracy"] = loc.accuracy
+            }
+        } catch (_: Exception) {}
+        return metadata
+    }
+
+    private suspend fun markNetworkOfflineIfNeeded() {
+        val now = System.currentTimeMillis()
+        if (!offlineStartedAt.compareAndSet(0L, now)) return
+        GeoTrackEventQueue.enqueueDistinct(
+            this,
+            "NETWORK_OFFLINE",
+            mapOf(
+                "batteryPct" to getBatteryLevel(),
+                "gpsEnabled" to isGpsEnabled(),
+                "airplaneMode" to isAirplaneModeOn(),
+            ),
+            signature = "network_offline",
+            minIntervalMs = 30 * 60 * 1000L,
+            occurredAt = now,
+        )
+    }
+
+    private suspend fun markNetworkOnlineIfNeeded() {
+        val startedAt = offlineStartedAt.getAndSet(0L)
+        if (startedAt <= 0L) return
+        val now = System.currentTimeMillis()
+        GeoTrackEventQueue.enqueue(
+            this,
+            "NETWORK_ONLINE",
+            mapOf(
+                "offlineStartedAt" to startedAt,
+                "offlineEndedAt" to now,
+                "offlineDurationMs" to (now - startedAt),
+                "batteryPct" to getBatteryLevel(),
+                "gpsEnabled" to isGpsEnabled(),
+                "airplaneMode" to isAirplaneModeOn(),
+            ),
+            occurredAt = now,
+        )
     }
 
     // ── Receivers ──
@@ -754,6 +851,23 @@ class GeoTrackService : Service() {
 
     private fun isGpsEnabled(): Boolean =
         (getSystemService(LOCATION_SERVICE) as LocationManager).isProviderEnabled(LocationManager.GPS_PROVIDER)
+
+    private fun hasBackgroundLocationPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            checkSelfPermission(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+    private fun hasActivityRecognitionPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean =
+        (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
 
     private fun getNetworkType(): String {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager

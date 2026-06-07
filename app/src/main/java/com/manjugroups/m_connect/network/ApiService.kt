@@ -1001,7 +1001,18 @@ data class StaffData(
     val employeeId: String?,
     val department: String?,
     val reportingTo: String? = null,
-    val reportingToId: String? = null
+    val reportingToId: String? = null,
+    val geoTrackingEnabled: Boolean = false,
+    val trackingDeviceHealth: TrackingDeviceHealth? = null
+)
+
+data class TrackingDeviceHealth(
+    val status: String? = null,
+    val lastSyncedAt: Long? = null,
+    val missing: List<String> = emptyList(),
+    val manufacturer: String? = null,
+    val model: String? = null,
+    val appVersion: String? = null,
 )
 
 // Attendance models

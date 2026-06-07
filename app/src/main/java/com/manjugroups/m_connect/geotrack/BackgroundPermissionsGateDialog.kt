@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Dialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -80,6 +81,9 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         view.findViewById<View>(R.id.btnFixBgLocation).setOnClickListener {
             openBackgroundLocationSettings()
         }
+        view.findViewById<View>(R.id.btnFixDeviceLocation).setOnClickListener {
+            openDeviceLocationSettings()
+        }
         view.findViewById<View>(R.id.btnFixBatteryOpt).setOnClickListener {
             openBatteryOptimizationSettings()
         }
@@ -134,10 +138,13 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     }
 
     private fun missingReasonMessage(ctx: android.content.Context): String {
+        val deviceLocationOk = isDeviceLocationEnabled(ctx)
         val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         return when {
+            !deviceLocationOk ->
+                "Turn on Location/GPS in phone settings to continue."
             !fgOk ->
                 "Open the location toggle and select \"Allow all the time\" for Mconnect."
             !bgOk && !batOk ->
@@ -152,17 +159,23 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
 
     private fun refreshStatus(root: View) {
         val ctx = requireContext()
+        val deviceLocationOk = isDeviceLocationEnabled(ctx)
         val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         val needsAutostart = isAutostartManaged()
 
+        val deviceLocBtn = root.findViewById<TextView>(R.id.btnFixDeviceLocation)
         val locBtn = root.findViewById<TextView>(R.id.btnFixBgLocation)
         val batBtn = root.findViewById<TextView>(R.id.btnFixBatteryOpt)
         val autoRow = root.findViewById<View>(R.id.rowAutostart)
         val autoBtn = root.findViewById<TextView>(R.id.btnFixAutostart)
         val autoHint = root.findViewById<TextView>(R.id.tvAutostartHint)
         val status = root.findViewById<TextView>(R.id.tvGateStatus)
+
+        deviceLocBtn.text = if (deviceLocationOk) "Enabled" else "Open"
+        deviceLocBtn.alpha = if (deviceLocationOk) 0.5f else 1f
+        deviceLocBtn.isEnabled = !deviceLocationOk
 
         // Foreground location is the prerequisite for "Allow all the
         // time" being available at all — when the user denied at the
@@ -199,6 +212,7 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         }
 
         status.text = when {
+            !deviceLocationOk -> "Phone Location/GPS is off. Turn it on to continue."
             !fgOk -> "Tap Open and select \"Allow all the time\" under Location for Mconnect."
             !bgOk && !batOk -> "Background location + battery optimisation both need attention."
             !bgOk -> "Background location still needs \"Allow all the time\"."
@@ -218,6 +232,19 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             data = Uri.fromParts("package", requireContext().packageName, null)
         }
         runCatching { startActivity(intent) }
+    }
+
+    private fun openDeviceLocationSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            .onFailure {
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", requireContext().packageName, null)
+                        },
+                    )
+                }
+            }
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -357,8 +384,20 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             return pm.isIgnoringBatteryOptimizations(ctx.packageName)
         }
 
+        fun isDeviceLocationEnabled(ctx: android.content.Context): Boolean {
+            val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as LocationManager
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                lm.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }
+        }
+
         fun allGranted(ctx: android.content.Context): Boolean =
-            hasForegroundLocation(ctx) &&
+            isDeviceLocationEnabled(ctx) &&
+                hasForegroundLocation(ctx) &&
                 hasBackgroundLocation(ctx) &&
                 hasBatteryOptIgnored(ctx)
 

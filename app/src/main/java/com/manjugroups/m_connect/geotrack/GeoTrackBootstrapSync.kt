@@ -25,26 +25,41 @@ object GeoTrackBootstrapSync {
         if (!session.isLoggedIn) return false
 
         val deviceSync = runCatching {
+            val notificationPermission = PushTokenManager.hasNotificationPermission(appContext)
+            val fineLocationPermission = hasPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
+            val backgroundLocationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                hasPermission(appContext, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            } else {
+                true
+            }
+            val activityRecognitionPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                hasPermission(appContext, Manifest.permission.ACTIVITY_RECOGNITION)
+            } else {
+                true
+            }
+            val batteryOptimizationIgnored = (appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager)
+                ?.isIgnoringBatteryOptimizations(appContext.packageName)
+
+            queueMissingPermissionEvent(
+                appContext,
+                notificationPermission = notificationPermission,
+                fineLocationPermission = fineLocationPermission,
+                backgroundLocationPermission = backgroundLocationPermission,
+                activityRecognitionPermission = activityRecognitionPermission,
+                batteryOptimizationIgnored = batteryOptimizationIgnored,
+            )
+
             api.syncTrackingDevice(
                 session.bearerToken,
                 TrackingDeviceSyncRequest(
                     deviceId = session.trackingDeviceId,
                     appVersion = BuildConfig.VERSION_NAME,
                     pushToken = session.pushToken,
-                    notificationPermission = PushTokenManager.hasNotificationPermission(appContext),
-                    fineLocationPermission = hasPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION),
-                    backgroundLocationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        hasPermission(appContext, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                    } else {
-                        true
-                    },
-                    activityRecognitionPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        hasPermission(appContext, Manifest.permission.ACTIVITY_RECOGNITION)
-                    } else {
-                        true
-                    },
-                    batteryOptimizationIgnored = (appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager)
-                        ?.isIgnoringBatteryOptimizations(appContext.packageName),
+                    notificationPermission = notificationPermission,
+                    fineLocationPermission = fineLocationPermission,
+                    backgroundLocationPermission = backgroundLocationPermission,
+                    activityRecognitionPermission = activityRecognitionPermission,
+                    batteryOptimizationIgnored = batteryOptimizationIgnored,
                     manufacturer = Build.MANUFACTURER,
                     model = Build.MODEL,
                 )
@@ -56,6 +71,7 @@ object GeoTrackBootstrapSync {
         }.getOrNull()
 
         apply(context, bootstrap, allowPromptConsent)
+        runCatching { GeoTrackEventQueue.flush(appContext, api, session) }
         return session.shouldTrackNow
     }
 
@@ -99,5 +115,38 @@ object GeoTrackBootstrapSync {
             context,
             permission,
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private suspend fun queueMissingPermissionEvent(
+        context: Context,
+        notificationPermission: Boolean,
+        fineLocationPermission: Boolean,
+        backgroundLocationPermission: Boolean,
+        activityRecognitionPermission: Boolean,
+        batteryOptimizationIgnored: Boolean?,
+    ) {
+        val missing = mutableListOf<String>()
+        if (!notificationPermission) missing.add("notification")
+        if (!fineLocationPermission) missing.add("fine_location")
+        if (!backgroundLocationPermission) missing.add("background_location")
+        if (!activityRecognitionPermission) missing.add("activity_recognition")
+        if (batteryOptimizationIgnored == false) missing.add("battery_optimization")
+        if (missing.isEmpty()) return
+
+        GeoTrackEventQueue.enqueueDistinct(
+            context,
+            "PERMISSION_MISSING",
+            mapOf(
+                "missingPermissions" to missing.joinToString(","),
+                "notificationPermission" to notificationPermission,
+                "fineLocationPermission" to fineLocationPermission,
+                "backgroundLocationPermission" to backgroundLocationPermission,
+                "activityRecognitionPermission" to activityRecognitionPermission,
+                "batteryOptimizationIgnored" to batteryOptimizationIgnored,
+                "manufacturer" to Build.MANUFACTURER,
+                "model" to Build.MODEL,
+            ),
+            signature = "permission_missing_${missing.sorted().joinToString("_")}",
+        )
     }
 }

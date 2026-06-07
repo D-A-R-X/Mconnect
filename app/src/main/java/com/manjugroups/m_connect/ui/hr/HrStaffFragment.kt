@@ -121,6 +121,7 @@ class HrStaffFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvStaffName).text = staff.name
             card.findViewById<TextView>(R.id.tvStaffRole).text = "${staff.designation} · ${staff.role}"
             card.findViewById<TextView>(R.id.tvStaffPhone).text = "+91 ${formatPhone(staff.phone)}"
+            renderGeoTrackHealth(card, staff)
 
             val badge = card.findViewById<TextView>(R.id.tvStaffStatus)
             badge.text = staff.status.replaceFirstChar { it.uppercase() }
@@ -203,6 +204,46 @@ class HrStaffFragment : Fragment() {
 
     private fun formatPhone(phone: String): String {
         return if (phone.length == 10) "${phone.substring(0, 5)} ${phone.substring(5)}" else phone
+    }
+
+    private fun renderGeoTrackHealth(card: View, staff: StaffItem) {
+        val health = card.findViewById<TextView>(R.id.tvStaffGeoTrackHealth)
+        if (!staff.geoTrackingEnabled) {
+            health.visibility = View.GONE
+            return
+        }
+
+        val status = staff.trackingHealthStatus.orEmpty()
+        val message = when {
+            status == "not_installed" ->
+                "GeoTrack setup missing: app/device not synced"
+            status == "stale" ->
+                "GeoTrack alert: device stale"
+            staff.trackingHealthMissing.isNotEmpty() ->
+                "GeoTrack alert: ${staff.trackingHealthMissing.joinToString(", ") { trackingMissingLabel(it) }}"
+            status == "healthy" -> {
+                health.visibility = View.GONE
+                return
+            }
+            else ->
+                "GeoTrack setup needs review"
+        }
+
+        health.text = message
+        health.visibility = View.VISIBLE
+        health.setBackgroundResource(R.drawable.bg_badge_error)
+        health.setTextColor(resolveColor(R.attr.colorError))
+    }
+
+    private fun trackingMissingLabel(key: String): String {
+        return when (key) {
+            "background_location" -> "background location missing"
+            "battery_optimization" -> "battery optimization not disabled"
+            "notification" -> "notification permission missing"
+            "activity_recognition" -> "activity permission missing"
+            "device" -> "device not synced"
+            else -> key.replace("_", " ")
+        }
     }
 
     private fun resolveColor(attr: Int): Int {
