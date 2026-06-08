@@ -16,7 +16,9 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InventoryUnit
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -53,7 +55,7 @@ class ProjectInventoryFragment : Fragment() {
             visibility = if (projectScope.isNullOrBlank()) View.GONE else View.VISIBLE
         }
         view.findViewById<View>(R.id.btnProjectInventoryBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnOpenLayoutMap).setOnClickListener {
             openLayoutMap()
@@ -76,6 +78,11 @@ class ProjectInventoryFragment : Fragment() {
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#FEFEFE"), true)
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onPause()
+    }
+
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
     }
 
     private fun setupTypeChips(group: ChipGroup) {
@@ -144,12 +151,12 @@ class ProjectInventoryFragment : Fragment() {
     }
 
     private fun loadUnits(root: View) {
-        val loading = root.findViewById<View>(R.id.projectInventoryLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvProjectInventoryEmpty)
         val list = root.findViewById<LinearLayout>(R.id.projectInventoryList)
         val count = root.findViewById<TextView>(R.id.tvProjectInventoryCount)
 
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         list.removeAllViews()
         count.text = ""
@@ -163,7 +170,7 @@ class ProjectInventoryFragment : Fragment() {
                     facing = facingFilter,
                     status = statusFilter,
                 )
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load units"
                     empty.visibility = View.VISIBLE
@@ -178,7 +185,7 @@ class ProjectInventoryFragment : Fragment() {
                 }
                 units.forEach { u -> list.addView(createUnitRow(u, list)) }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

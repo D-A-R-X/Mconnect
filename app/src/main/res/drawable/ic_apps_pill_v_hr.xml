@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Converted from Downloads/png/HR.svg — head + shoulders outline. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="17"
+    android:viewportHeight="20">
+    <path
+        android:pathData="M12.874,16.5 v-1.333 a2.668,2.668 0 0 0 -2.666,-2.667 h-4 a2.668,2.668 0 0 0 -2.667,2.667 V16.5 M5.666,5.167 A2.668,2.668 0 1 0 8.333,2.5 a2.668,2.668 0 0 0 -2.667,2.667 v0"
+        android:strokeWidth="1.333"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

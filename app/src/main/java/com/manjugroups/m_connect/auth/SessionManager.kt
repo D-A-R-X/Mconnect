@@ -2,23 +2,25 @@ package com.manjugroups.m_connect.auth
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.util.UUID
 
+data class DriverTrip(
+    val startKm: String,
+    val startImage: String,
+    val startTime: String,
+    val endKm: String,
+    val endImage: String,
+    val endTime: String,
+    val status: String, // "started", "reached", "completed"
+    val totalDistance: String
+)
+
 class SessionManager(context: Context) {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "mconnect_session",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
 
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)
@@ -32,6 +34,18 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_USER_PHONE, null)
         set(value) = prefs.edit().putString(KEY_USER_PHONE, value).apply()
 
+    var employeeId: String?
+        get() = prefs.getString(KEY_EMPLOYEE_ID, null)
+        set(value) = prefs.edit().putString(KEY_EMPLOYEE_ID, value).apply()
+
+    var mustChangePassword: Boolean
+        get() = prefs.getBoolean(KEY_MUST_CHANGE_PASSWORD, false)
+        set(value) = prefs.edit().putBoolean(KEY_MUST_CHANGE_PASSWORD, value).apply()
+
+    var userPhotoUrl: String?
+        get() = prefs.getString(KEY_USER_PHOTO_URL, null)
+        set(value) = prefs.edit().putString(KEY_USER_PHOTO_URL, value).apply()
+
     var iamPermissions: Set<String>
         get() = prefs.getStringSet(KEY_IAM_PERMISSIONS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_IAM_PERMISSIONS, value).apply()
@@ -39,6 +53,17 @@ class SessionManager(context: Context) {
     var isAdmin: Boolean
         get() = prefs.getBoolean(KEY_IS_ADMIN, false)
         set(value) = prefs.edit().putBoolean(KEY_IS_ADMIN, value).apply()
+
+    // Reporting officer (manager) — sent in leave/permission apply requests so
+    // the backend can route the approval to the right person. Populated from
+    // the user's staff record on bootstrap and on every profile refresh.
+    var reportingToId: String?
+        get() = prefs.getString(KEY_REPORTING_TO_ID, null)
+        set(value) = prefs.edit().putString(KEY_REPORTING_TO_ID, value).apply()
+
+    var reportingToName: String?
+        get() = prefs.getString(KEY_REPORTING_TO_NAME, null)
+        set(value) = prefs.edit().putString(KEY_REPORTING_TO_NAME, value).apply()
 
     var pushToken: String?
         get() = prefs.getString(KEY_PUSH_TOKEN, null)
@@ -83,11 +108,122 @@ class SessionManager(context: Context) {
         get() = prefs.getBoolean(KEY_SHOULD_TRACK_NOW, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOULD_TRACK_NOW, value).apply()
 
+    /**
+     * Staff designation cached on login bootstrap (from `getStaffDetail`).
+     * Source of truth for role-aware UI gates like the driver/executive
+     * branch on the Home screen — mirrors the web's `hasDriverDesignation`
+     * check in `convex/lib/mmsFleetDriverSessionLib.ts`, which does the
+     * same case-insensitive "Driver" match against `staff.designation`.
+     */
+    var designation: String?
+        get() = prefs.getString(KEY_DESIGNATION, null)
+        set(value) = prefs.edit().putString(KEY_DESIGNATION, value).apply()
+
+    /**
+     * True when the logged-in staff is a Driver — derived from
+     * designation, NOT a user-toggled preference. The old Executive /
+     * Driver dropdown on the Home tab let any operator flip this
+     * flag, which broke the audit story (a Site Supervisor could
+     * impersonate the driver view) and didn't match the web, where
+     * the driver UI shows only when the staff record's designation
+     * is "Driver". Read-only by design.
+     */
+    val isDriverMode: Boolean
+        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true)
+
+    var isNotificationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_IS_NOTIFICATION_ENABLED, value).apply()
+
+    fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("startKm", startKm)
+            trip.put("startImage", startImagePath)
+            trip.put("startTime", startTime)
+            trip.put("status", "started")
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun saveDriverTripArrival(visitId: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("status", "reached")
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun saveDriverTripEnd(visitId: String, endKm: String, endImagePath: String, endTime: String) {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("endKm", endKm)
+            trip.put("endImage", endImagePath)
+            trip.put("endTime", endTime)
+            trip.put("status", "completed")
+            
+            // Calculate total distance if both readings are numeric
+            val startKmStr = trip.optString("startKm", "")
+            val startVal = startKmStr.toDoubleOrNull()
+            val endVal = endKm.toDoubleOrNull()
+            if (startVal != null && endVal != null) {
+                val diff = endVal - startVal
+                trip.put("totalDistance", String.format(java.util.Locale.getDefault(), "%.1f", diff))
+            } else {
+                trip.put("totalDistance", "0.0")
+            }
+            
+            obj.put(visitId, trip)
+            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getDriverTrip(visitId: String): DriverTrip? {
+        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            if (!obj.has(visitId)) return null
+            val trip = obj.getJSONObject(visitId)
+            return DriverTrip(
+                startKm = trip.optString("startKm", ""),
+                startImage = trip.optString("startImage", ""),
+                startTime = trip.optString("startTime", ""),
+                endKm = trip.optString("endKm", ""),
+                endImage = trip.optString("endImage", ""),
+                endTime = trip.optString("endTime", ""),
+                status = trip.optString("status", ""),
+                totalDistance = trip.optString("totalDistance", "")
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+
     val isLoggedIn: Boolean
         get() = token != null
 
     val bearerToken: String
         get() = "Bearer $token"
+
+    var boundBaseUrl: String?
+        get() = prefs.getString(KEY_BOUND_BASE_URL, null)
+        set(value) = prefs.edit().putString(KEY_BOUND_BASE_URL, value).apply()
 
     fun hasPermission(perm: String): Boolean = isAdmin || iamPermissions.contains(perm)
 
@@ -95,16 +231,115 @@ class SessionManager(context: Context) {
         this.token = token
         this.userName = name
         this.userPhone = phone
+        this.mustChangePassword = false
+        this.boundBaseUrl = com.manjugroups.m_connect.BuildConfig.BASE_URL
     }
 
     fun clearSession() {
         prefs.edit().clear().apply()
     }
 
+    /**
+     * Wipes the session if the BuildConfig BASE_URL has changed since the
+     * token was minted. Prevents data from a previous backend (e.g., old
+     * Convex deployment) from showing through after switching the URL.
+     * Returns true if the session was purged.
+     */
+    fun purgeIfBaseUrlChanged(): Boolean {
+        val current = com.manjugroups.m_connect.BuildConfig.BASE_URL
+        val bound = boundBaseUrl
+        // Wipe when (a) the bound URL no longer matches the current build, or
+        // (b) the session predates this guard (no bound URL recorded). The
+        // second case treats legacy tokens as untrusted because we can't be
+        // sure which backend they were minted against — safer to re-auth.
+        if (token != null && bound != current) {
+            clearSession()
+            return true
+        }
+        return false
+    }
+
     companion object {
+        private const val TAG = "SessionManager"
+        private const val PREFS_NAME = "mconnect_session"
+
+        /**
+         * Open the encrypted prefs, recovering automatically if the keystore
+         * master key can no longer decrypt the stored blob.
+         *
+         * `EncryptedSharedPreferences.create` throws `AEADBadTagException`
+         * (wrapped in `GeneralSecurityException` / `IOException`) when the
+         * Android Keystore master key was rotated, invalidated, or the
+         * encrypted prefs file came from a backup whose key no longer
+         * matches. Without recovery the app FCs on every launch — every
+         * SplashActivity → MconnectApp.onCreate → SessionManager(…) crashes
+         * before any UI renders, the user can't even reach Login to start
+         * over.
+         *
+         * Recovery: delete the corrupt prefs file + clear the master key
+         * alias so the next open mints fresh credentials. Cost is one
+         * forced re-login; benefit is the app actually starts.
+         */
+        private fun openEncryptedPrefs(context: Context): SharedPreferences {
+            return try {
+                buildEncryptedPrefs(context)
+            } catch (first: Throwable) {
+                // AEADBadTagException + its KeyStoreException cause sit
+                // under GeneralSecurityException / IOException; catch the
+                // widest net so OEM-specific subclass leaks don't slip
+                // past us.
+                Log.w(
+                    TAG,
+                    "EncryptedSharedPreferences open failed; wiping and retrying.",
+                    first,
+                )
+                // 1. Drop the on-disk prefs file (this is the cipher blob
+                //    that no longer decrypts).
+                try {
+                    context.deleteSharedPreferences(PREFS_NAME)
+                } catch (deleteErr: Throwable) {
+                    Log.w(TAG, "deleteSharedPreferences failed", deleteErr)
+                }
+                // 2. Rebuild — MasterKey.Builder will re-create the
+                //    keystore alias if it was missing/invalid, and the
+                //    empty prefs file gets a fresh encrypted header.
+                try {
+                    buildEncryptedPrefs(context)
+                } catch (second: Throwable) {
+                    // Last-resort fallback: plaintext prefs. We surrender
+                    // the at-rest encryption to keep the app launchable.
+                    // The session token still lives behind the user's
+                    // OTP login, and any subsequent successful
+                    // MasterKey rotation will let us flip back to
+                    // encrypted on the next clean install.
+                    Log.e(
+                        TAG,
+                        "EncryptedSharedPreferences still failing — falling back to plaintext prefs.",
+                        second,
+                    )
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                }
+            }
+        }
+
+        private fun buildEncryptedPrefs(context: Context): SharedPreferences {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            return EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        }
+
         private const val KEY_TOKEN = "session_token"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_PHONE = "user_phone"
+        private const val KEY_EMPLOYEE_ID = "employee_id"
+        private const val KEY_MUST_CHANGE_PASSWORD = "must_change_password"
         private const val KEY_IAM_PERMISSIONS = "iam_permissions"
         private const val KEY_IS_ADMIN = "is_admin"
         private const val KEY_PUSH_TOKEN = "push_token"
@@ -116,5 +351,18 @@ class SessionManager(context: Context) {
         private const val KEY_TRACKING_DEVICE_ID = "tracking_device_id"
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
+        private const val KEY_BOUND_BASE_URL = "bound_base_url"
+        private const val KEY_USER_PHOTO_URL = "user_photo_url"
+        private const val KEY_REPORTING_TO_ID = "reporting_to_id"
+        private const val KEY_REPORTING_TO_NAME = "reporting_to_name"
+        // KEY_IS_DRIVER_MODE retained on purpose — older installs may
+        // have a stale "true" cached from the dropdown era. The current
+        // getter no longer reads it; the next bootstrap re-derives
+        // driver mode from `designation`. Leave the constant here so
+        // the migration path stays grep-able.
+        private const val KEY_IS_DRIVER_MODE = "is_driver_mode"
+        private const val KEY_DESIGNATION = "designation"
+        private const val KEY_DRIVER_TRIPS = "driver_trips"
+        private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
     }
 }

@@ -20,19 +20,17 @@
         android:clipChildren="false"
         android:clipToPadding="false">
 
-        <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/mainViewPager"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
         <FrameLayout
             android:id="@+id/fragmentContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#F1F3F8"
-            android:visibility="gone" />
+            android:background="#F1F3F8" />
 
-        <!-- Floating pill bottom nav -->
+        <!-- Floating pill bottom nav. Transparent background so the
+             scrolling page content (the panel grey, or the cards
+             themselves) shows through behind the pill's side / top
+             margins. The pill itself carries its own white rounded
+             background, so it still reads as floating. -->
         <FrameLayout
             android:id="@+id/tabBarContainer"
             android:layout_width="match_parent"

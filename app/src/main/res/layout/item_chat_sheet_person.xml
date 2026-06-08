@@ -33,10 +33,16 @@
 
         <View
             android:id="@+id/avatarCheck"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/onlineDot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
             android:layout_gravity="bottom|end"
-            android:background="@drawable/bg_sheet_avatar_check"
+            android:background="@drawable/bg_chat_online_dot"
             android:visibility="gone" />
     </FrameLayout>
 

@@ -1,0 +1,6 @@
+<!-- "Next" CTA pill — vivid green, fully rounded. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#19B900" />
+    <corners android:radius="999dp" />
+</shape>

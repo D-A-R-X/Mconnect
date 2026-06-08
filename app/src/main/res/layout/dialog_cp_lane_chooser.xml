@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SV-Fix lane chooser (KOS-XX). Shown when the user taps "+" on the
+  CP Visits screen. Three cards, one per lane the web telecaller surface
+  exposes:
+    • Same Area      — CP staff visits client's place (legacy field-visit
+                       flow with arrival proof + OTP)
+    • Out of Station — Out-of-area prospect: GM handles by phone, no
+                       physical visit, no arrival proof
+    • Immediate Pickup — Urgent GM call: GM gets pushed to the top of
+                         their handoffs queue, telecaller doesn't dispatch
+                         field staff at all
+
+  Each card routes to a tailored creation sheet on tap. Same-area opens
+  `dialog_create_cp_visit.xml` (the legacy form); the two GM-handoff
+  lanes open `dialog_create_cp_gm_handoff.xml`.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_apply_leave_sheet"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Where is this prospect?"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="18sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Pick the lane that matches what they told you on the call."
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="13sp" />
+
+    <!-- Same Area card -->
+    <LinearLayout
+        android:id="@+id/cardLaneSameArea"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_stat_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Same Area"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="CP staff visits the client's place. Arrival proof + OTP captured on site."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Out of Station card -->
+    <LinearLayout
+        android:id="@+id/cardLaneOutOfStation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_stat_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Out of Station"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="GM handles the call by phone — no field visit. Routes into the GM queue."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Immediate Pickup card (urgent) -->
+    <LinearLayout
+        android:id="@+id/cardLaneImmediatePickup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_stat_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Immediate Pickup"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_inactive"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:text="Urgent"
+                android:textColor="?attr/colorError"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Hot lead — pin to the top of GM's queue for an urgent phone call."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/btnLaneChooserCancel"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_leave_sheet_button_outline"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Cancel"
+            android:textColor="#1BCA0B"
+            android:textSize="13sp" />
+    </FrameLayout>
+</LinearLayout>

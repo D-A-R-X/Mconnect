@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.TextView
@@ -52,9 +53,23 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     private var lat: Double? = null
     private var lng: Double? = null
     private var resendCooldownSeconds: Int = 60
+    // The arrival photo's storage id — populated upstream in
+    // TripNavigationFragment.uploadArrivalPhotoThenAskOtp before this
+    // sheet is shown, then forwarded with the OTP verify request so
+    // the backend can link the photo to the fieldVisit row at the
+    // moment arrival is confirmed (not at trip completion).
+    private var arrivalPhotoStorageId: String? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Resize the sheet to make room for the soft keyboard so the
+        // OTP boxes + Submit button stay visible while the user types.
+        // The dialog_arrival_otp layout wraps its content in a
+        // NestedScrollView, so any shortfall in vertical space scrolls
+        // cleanly within the sheet rather than getting clipped.
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -84,6 +99,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         lat = if (args.containsKey(ARG_LAT)) args.getDouble(ARG_LAT) else null
         lng = if (args.containsKey(ARG_LNG)) args.getDouble(ARG_LNG) else null
         resendCooldownSeconds = args.getInt(ARG_RESEND_COOLDOWN, 60)
+        arrivalPhotoStorageId = args.getString(ARG_ARRIVAL_PHOTO_STORAGE_ID)
         val phoneMasked = args.getString(ARG_PHONE_MASKED)
         val expiresIn = args.getInt(ARG_EXPIRES_IN, 600)
 
@@ -166,7 +182,13 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = geoApi.verifyArrivalOtp(
                     session.bearerToken,
-                    ArrivalOtpVerifyBody(visitId = visitId, otp = entered, lat = lat, lng = lng)
+                    ArrivalOtpVerifyBody(
+                        visitId = visitId,
+                        otp = entered,
+                        lat = lat,
+                        lng = lng,
+                        arrivalPhotoStorageId = arrivalPhotoStorageId,
+                    ),
                 )
                 if (resp.success) {
                     setFragmentResult(RESULT_KEY, bundleOf(KEY_OTP to entered))
@@ -259,6 +281,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_RESEND_COOLDOWN = "arg_resend_cooldown"
         private const val ARG_LAT = "arg_lat"
         private const val ARG_LNG = "arg_lng"
+        private const val ARG_ARRIVAL_PHOTO_STORAGE_ID = "arg_arrival_photo_storage_id"
 
         fun newInstance(
             visitId: String,
@@ -267,6 +290,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
             resendCooldownSeconds: Int,
             lat: Double?,
             lng: Double?,
+            arrivalPhotoStorageId: String? = null,
         ): ArrivalOtpBottomSheet = ArrivalOtpBottomSheet().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -275,6 +299,9 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                 putInt(ARG_RESEND_COOLDOWN, resendCooldownSeconds)
                 if (lat != null) putDouble(ARG_LAT, lat)
                 if (lng != null) putDouble(ARG_LNG, lng)
+                if (!arrivalPhotoStorageId.isNullOrBlank()) {
+                    putString(ARG_ARRIVAL_PHOTO_STORAGE_ID, arrivalPhotoStorageId)
+                }
             }
         }
     }

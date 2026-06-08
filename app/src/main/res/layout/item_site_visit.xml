@@ -1,59 +1,327 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="10dp"
-    android:background="@drawable/bg_attendance_card"
-    android:foreground="?attr/selectableItemBackground"
-    android:orientation="vertical"
-    android:padding="14dp">
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_site_visit_card"
+    android:orientation="horizontal"
+    android:padding="12dp">
 
+    <!-- LEFT COLUMN: Date & Time Block -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="60dp"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:gravity="center"
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvVisitName"
-            android:layout_width="0dp"
+        <!-- Date Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:fontFamily="@font/inter_semibold"
-            android:maxLines="1"
-            android:textColor="#101828"
-            android:textSize="15sp" />
-
-        <TextView
-            android:id="@+id/tvVisitStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="22dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_badge_warning"
-            android:fontFamily="@font/inter_semibold"
+            android:background="@drawable/bg_sv_date_container"
             android:gravity="center"
-            android:paddingHorizontal="10dp"
-            android:textSize="10sp" />
+            android:orientation="vertical"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/tvVisitItemDay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="THU"
+                android:textColor="#667085"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/tvVisitItemDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="07"
+                android:textColor="#1D2939"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/tvVisitItemMonth"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="MAY"
+                android:textColor="#0B61CA"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Time Capsule -->
+        <TextView
+            android:id="@+id/tvVisitItemTime"
+            android:layout_width="match_parent"
+            android:layout_height="22dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_sv_time_capsule"
+            android:fontFamily="@font/inter_bold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="11:00 AM"
+            android:textColor="#004EEB"
+            android:textSize="9.5sp" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvVisitAddress"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:fontFamily="@font/inter_regular"
-        android:maxLines="2"
-        android:textColor="#475467"
-        android:textSize="12sp" />
+    <!-- VERTICAL DIVIDER -->
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="#EAECF0" />
 
-    <TextView
-        android:id="@+id/tvVisitWhen"
-        android:layout_width="match_parent"
+    <!-- RIGHT COLUMN: Content Block -->
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:fontFamily="@font/inter_medium"
-        android:textColor="?attr/colorAccentPrimary"
-        android:textSize="12sp" />
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Top row: Name & Status Pill -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvVisitItemStaffName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="Sri Mari Muthu"
+                android:textColor="#1D2939"
+                android:textSize="15sp" />
+
+            <!-- Status Pill -->
+            <LinearLayout
+                android:id="@+id/visitItemStatusPill"
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:background="@drawable/bg_sv_status_orange"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp">
+
+                <View
+                    android:id="@+id/visitItemStatusDot"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_sv_dot"
+                    android:backgroundTint="#F79009" />
+
+                <TextView
+                    android:id="@+id/tvVisitItemStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Scheduled"
+                    android:textColor="#B54708"
+                    android:textSize="9.5sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Second row: Phone Number & Vehicle Pill -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Phone Section -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chat_phone"
+                    app:tint="#98A2B3" />
+
+                <TextView
+                    android:id="@+id/tvVisitItemPhone"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text=""
+                    tools:text="9876543210"
+                    android:textColor="#98A2B3"
+                    android:textSize="11.5sp"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Vehicle Pill -->
+            <LinearLayout
+                android:id="@+id/visitItemVehiclePill"
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:background="@drawable/bg_sv_status_red"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp">
+
+                <ImageView
+                    android:id="@+id/ivVisitItemVehicleIcon"
+                    android:layout_width="11dp"
+                    android:layout_height="11dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_car_outline"
+                    app:tint="#F04438" />
+
+                <TextView
+                    android:id="@+id/tvVisitItemVehicleStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="No Vehicle Assigned"
+                    android:textColor="#F04438"
+                    android:textSize="9.5sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Horizontal Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/bg_sv_dashed_line"
+            android:layerType="software" />
+
+        <!-- Bottom row: BDO details & Visit category -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- BDO info -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_auth_user"
+                    app:tint="#98A2B3" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvVisitItemBdoName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/inter_bold"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:text=""
+                        tools:text="STAFF NAME"
+                        android:textColor="#344054"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:id="@+id/tvVisitItemBdoRole"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:text="BDO"
+                        android:textColor="#98A2B3"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Origin info -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.9"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_map_pin"
+                    app:tint="#98A2B3" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvVisitItemDestination"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/inter_bold"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:text="Client Place Visit"
+                        android:textColor="#344054"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:id="@+id/tvVisitItemDestinationLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:text="ORIGIN"
+                        android:textColor="#98A2B3"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

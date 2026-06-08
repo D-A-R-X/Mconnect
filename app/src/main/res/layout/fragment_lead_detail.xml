@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  KOS-XX: Lead Detail screen. Shows the lead's identity card + at most
+  one resolution banner:
+
+    • GM handoff banner — when there's an open out-of-station / immediate
+      pickup handoff AND the viewer's designation matches GM. Lets the GM
+      complete (creates real SV) or cancel (with reason).
+
+    • CP verification banner — when there's an open CP visit AND the
+      viewer is the assignedStaffId. Lets the CP field staff complete
+      (converts to SV) or cancel.
+
+  The two are mutually exclusive at the data layer — backend guarantees
+  no lead carries both an open handoff AND an open CP at the same time.
+  The fragment requests both endpoints in parallel and renders whichever
+  applies.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="?attr/colorSurfacePrimary">
+
+        <ImageView
+            android:id="@+id/btnLeadDetailBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="14dp"
+            android:contentDescription="Back"
+            android:padding="6dp"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Lead"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="17sp" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?attr/colorBorder" />
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/leadDetailRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Identity card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_completed_section_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/tvLeadName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Lead"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/tvLeadPhone"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvLeadMeta"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- GM handoff resolution banner — visible only when:
+                       • backend returns an open handoff for this lead
+                       • viewer's designation matches GM
+                -->
+                <LinearLayout
+                    android:id="@+id/leadGmBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_completed_section_card"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Resolve this handoff"
+                            android:textColor="?attr/colorForegroundPrimary"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvLeadGmRouting"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_chip_inactive"
+                            android:fontFamily="@font/inter_semibold"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="3dp"
+                            android:text="Out of Station"
+                            android:textColor="?attr/colorAccentPrimary"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Make the verification call, then confirm to create the real site visit or cancel if the prospect dropped."
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Notes from the call (optional)"
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="11sp" />
+
+                    <EditText
+                        android:id="@+id/etLeadGmNotes"
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/bg_leave_form_field"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="top|start"
+                        android:hint="What did the client confirm?"
+                        android:inputType="textMultiLine"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="10dp"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textColorHint="?attr/colorForegroundMuted"
+                        android:textSize="13sp" />
+
+                    <FrameLayout
+                        android:id="@+id/btnLeadGmComplete"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_leave_sheet_button_filled"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Confirm — create SV"
+                            android:textColor="@android:color/white"
+                            android:textSize="13sp" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/btnLeadGmCancel"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_chip_inactive"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Cancel handoff"
+                            android:textColor="?attr/colorError"
+                            android:textSize="12sp" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!--
+                  KOS-XX (web-parity revision): the CP verification banner
+                  was removed per the web project's update. CP visits are
+                  completed through the existing CP module workflow on
+                  mobile — the field staff opens the assigned CP visit
+                  from the CP Visits list, marks client met, picks an
+                  outcome, and optionally converts to SV. The daily task
+                  closes automatically server-side when `setOutcome` is
+                  called (clientPlaceVisits.ts now patches the task).
+                  Lead Detail keeps only the GM handoff banner.
+                -->
+
+                <!--
+                  Hint card shown when a CP visit IS assigned to the
+                  viewer for this lead — directs them to the proper
+                  surface (CP Visits list) instead of a quick-action.
+                -->
+                <LinearLayout
+                    android:id="@+id/leadCpHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_completed_section_card"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="CP visit assigned"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/tvLeadCpHintBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="You have a CP visit assigned for this lead. Open it from CP Visits → mark client met → pick the outcome. The lead-side task closes automatically once you save the outcome."
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="12sp" />
+
+                    <FrameLayout
+                        android:id="@+id/btnLeadCpOpenList"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_leave_sheet_button_filled"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Open in CP Visits"
+                            android:textColor="@android:color/white"
+                            android:textSize="13sp" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!-- Empty / read-only state — shown when neither banner
+                     applies (no open handoff or CP visit, OR the viewer
+                     lacks the right designation/assignment). -->
+                <LinearLayout
+                    android:id="@+id/leadEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_completed_section_card"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Nothing actionable here"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/tvLeadEmptyHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="No open handoffs or CP visits assigned for resolution."
+                        android:textColor="?attr/colorForegroundMuted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

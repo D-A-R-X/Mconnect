@@ -14,6 +14,8 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -38,7 +40,7 @@ class InventoryProjectsListFragment : Fragment() {
         session = SessionManager(requireContext())
 
         view.findViewById<View>(R.id.btnInventoryProjectsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         loadProjects(view)
@@ -56,20 +58,25 @@ class InventoryProjectsListFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadProjects(root: View) {
-        val loading = root.findViewById<View>(R.id.inventoryProjectsLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvInventoryProjectsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.inventoryProjectsList)
         val countText = root.findViewById<TextView>(R.id.tvInventoryProjectsCount)
 
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         list.removeAllViews()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMarketingProjects(session.bearerToken)
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load projects"
                     empty.visibility = View.VISIBLE
@@ -87,7 +94,7 @@ class InventoryProjectsListFragment : Fragment() {
                     list.addView(createProjectRow(p, list))
                 }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }

@@ -1,21 +1,19 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
-import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
-import com.manjugroups.m_connect.geotrack.service.GeoTrackService
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
-import com.manjugroups.m_connect.auth.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,13 +36,26 @@ import java.util.TimeZone
 data class AttendanceFlowState(
     val isLoading: Boolean = false,
     val isSubmitting: Boolean = false,
+    /** True only while an open session exists right now. Drives the live
+     *  ticker and the blue "You're Clocked In" / "Clocked Out" header on
+     *  the Attendance tab. Flips back to false after every clock-out. */
     val isClockedIn: Boolean = false,
+    /** True for the rest of the day once the user has punched in at least
+     *  once (whether the current session is open or already closed). Used
+     *  by feature surfaces — CP cards, trip start, GeoTrack — that must
+     *  not block work just because the user happens to be mid-break after
+     *  a clock-out. Mirrors `AttendanceTrackingGate.isClockedInForToday`. */
+    val hasClockedInToday: Boolean = false,
     val todayMinutes: Int = 0,
     val todayHours: String = "00:00 Hrs",
     val latestTotalHours: String = "00:00:00 hrs",
     val latestRange: String = "--",
     /** ISO timestamp of the first punch-in today, used to drive a live ticker. */
     val firstPunchInIso: String? = null,
+    /** ISO timestamp of the most recent punch-out today. Surfaced on the
+     *  attendance card so the operator sees both ends of today's session
+     *  without scrolling into the history list below. */
+    val lastPunchOutIso: String? = null,
     /** Sum of today's already-closed session minutes. While clocked-in we
      *  still tick `now - firstPunchIn` for live display, but on punch-out
      *  this becomes the source of truth. */
@@ -94,11 +105,17 @@ class AttendanceFlowViewModel(
                 val lastPunchOut = dayResp?.lastPunchOut ?: attendance?.lastPunchOut
                 val hasOpenSession = attendance?.hasOpenSession == true ||
                     dayResp?.hasOpenSession == true
-                val isClockedInForToday = shouldTreatAsClockedIn(
-                    firstPunchIn = firstPunchIn,
-                    hasOpenSession = hasOpenSession,
-                )
-                val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForToday)
+                // `isClockedIn` reflects whether an open session exists right
+                // now — it drives the live "today" ticker and the clocked-in
+                // header. It is NOT used to gate the Clock Out button anymore:
+                // per the one-time-Clock-In rule the button stays "Clock Out"
+                // all day, and the server now accepts a Clock Out with no open
+                // session by re-stamping the day's last punch-out (the last
+                // tap wins, locked at midnight) instead of rejecting it.
+                val isClockedInForUi = hasOpenSession
+                val hasClockedInTodayForUi =
+                    AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
+                val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
 
@@ -108,12 +125,14 @@ class AttendanceFlowViewModel(
                 _uiState.value = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
-                    isClockedIn = isClockedInForToday,
+                    isClockedIn = isClockedInForUi,
+                    hasClockedInToday = hasClockedInTodayForUi,
                     todayMinutes = totalMinutes,
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
                     latestRange = range,
                     firstPunchInIso = firstPunchIn,
+                    lastPunchOutIso = lastPunchOut,
                     closedTodayMinutes = totalMinutes,
                     payPeriodLabel = periodLabel,
                     payPeriodMinutes = periodMinutes,
@@ -146,7 +165,7 @@ class AttendanceFlowViewModel(
         val labelFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).apply {
             timeZone = tz
         }
-        val label = "Period ${labelFmt.format(firstDate)} – ${labelFmt.format(lastDate)}"
+        val label = "Paid Period ${labelFmt.format(firstDate)} - ${labelFmt.format(lastDate)}"
 
         val summed = try {
             val resp = api.getMyAttendance(token, fromDate = from, toDate = to)
@@ -203,6 +222,7 @@ class AttendanceFlowViewModel(
         )
     }
 
+
     private fun submitPunch(
         mode: PunchMode,
         token: String,
@@ -227,24 +247,27 @@ class AttendanceFlowViewModel(
             return
         }
 
-        // Optimistic: flip clocked-in state and emit Success immediately so UI feels instant.
-        // Real upload + punch run in background. Failures rollback state and emit SubmissionFailed.
+        // We used to emit Success optimistically before the API call to make
+        // the UI feel instant. That's wrong for punch: when the server rejects
+        // (e.g. HTTP 500 "No active punch-in found for today"), the user
+        // still saw a "Clock out successful" sheet because the early Success
+        // had already fired. Now we wait for the actual response and only
+        // emit Success when the server confirms it.
         val previousState = _uiState.value
         _uiState.update {
             it.copy(
                 isSubmitting = true,
                 isClockedIn = mode == PunchMode.PUNCH_IN,
+                // Once the user has punched in today, hasClockedInToday is
+                // sticky — clock-outs do NOT reset it. A fresh PUNCH_IN of
+                // course flips it on. This matches the one-time-Clock-In
+                // rule used everywhere outside the live ticker.
+                hasClockedInToday = it.hasClockedInToday || mode == PunchMode.PUNCH_IN,
             )
         }
 
         viewModelScope.launch {
             _events.emit(AttendanceFlowEvent.Loading(mode))
-            _events.emit(
-                AttendanceFlowEvent.Success(
-                    mode,
-                    if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
-                ),
-            )
 
             try {
                 val compressed = withContext(Dispatchers.IO) {
@@ -301,17 +324,47 @@ class AttendanceFlowViewModel(
                 }
 
                 _uiState.update { it.copy(isSubmitting = false) }
+                _events.emit(
+                    AttendanceFlowEvent.Success(
+                        mode,
+                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
+                    ),
+                )
                 loadTodayAttendance(token)
             } catch (e: Exception) {
                 rollbackOptimistic(previousState)
-                _events.emit(
-                    AttendanceFlowEvent.SubmissionFailed(
-                        mode,
-                        e.message ?: "Network error while submitting punch.",
-                    ),
-                )
+                val message = extractHttpErrorMessage(e) ?: e.message
+                    ?: "Network error while submitting punch."
+                _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
+                // If the server says there's no active punch-in for today, the
+                // client's `isClockedIn` is stale (e.g. session was auto-closed
+                // overnight, or never opened). Pull the truth from the server
+                // so the dashboard button flips back to "Clock In".
+                if (message.contains("No active punch-in", ignoreCase = true)) {
+                    loadTodayAttendance(token)
+                }
             }
         }
+    }
+
+    /**
+     * Convex returns its handler-thrown errors as HTTP 5xx with a JSON body
+     * like `{ "code": "...", "message": "No active punch-in found for today" }`.
+     * Retrofit gives us an HttpException — try to surface that nested message
+     * instead of the generic "HTTP 500" Retrofit toString.
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        // Prefer parsing the standard {message:..., error:...} fields without
+        // pulling in extra deps. Fall through to the raw body if parsing fails.
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            val msg = obj.get("message")?.asString
+                ?: obj.get("error")?.asString
+            msg?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun rollbackOptimistic(previous: AttendanceFlowState) {
@@ -319,6 +372,7 @@ class AttendanceFlowViewModel(
             it.copy(
                 isSubmitting = false,
                 isClockedIn = previous.isClockedIn,
+                hasClockedInToday = previous.hasClockedInToday,
             )
         }
     }
@@ -402,27 +456,7 @@ class AttendanceFlowViewModel(
         bootstrap: TrackingBootstrapData?,
         attendanceActive: Boolean,
     ) {
-        val session = SessionManager(context)
-        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-        session.geoTrackingEnabled =
-            bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-        session.geoConsentDeclined =
-            bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
-
-        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
-            context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-            return
-        }
-
-        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
-            GeoTrackService.start(context)
-        } else {
-            GeoTrackService.stop(context)
-        }
+        GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
     companion object {
@@ -459,7 +493,7 @@ class AttendanceFlowViewModel(
             return AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
         }
 
-        private fun formatIsoToTime(iso: String): String {
+        internal fun formatIsoToTime(iso: String): String {
             val millis = parseMillis(iso) ?: return "--"
             val formatter = SimpleDateFormat("hh:mm a", Locale.getDefault())
             return formatter.format(Date(millis))

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Date-filter calendar cell. Three layers, centered:
+    - rangeBg  : full-width 30dp horizontal strip for in-range days
+    - selectedBg : 30dp blue circle for the start/end day
+    - tvDay    : the day number
+
+  Height tightened from 48dp → 36dp so the calendar fits the sheet
+  without dominating the screen (mirrors the Figma mock proportions).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="36dp">
+
+    <!-- Light blue background for range -->
+    <View
+        android:id="@+id/rangeBg"
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:layout_gravity="center"
+        android:background="#D1E9FF"
+        android:visibility="gone" />
+
+    <!-- Blue pill for start/end -->
+    <View
+        android:id="@+id/selectedBg"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_home_status_dot"
+        android:backgroundTint="#0B61CA"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvDay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#101828"
+        android:textSize="14sp"
+        tools:text="12" />
+
+</FrameLayout>

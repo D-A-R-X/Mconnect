@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used for the play button on RECEIVED audio bubbles — blue circle so it
+     reads against the white bubble background. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#0B61CA" />
+</shape>

@@ -1,0 +1,15 @@
+<!-- Survey No — document-text glyph. Converted from document-text.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M17.5,5.83 V14.17 C17.5,16.67 16.25,18.33 13.33,18.33 H6.67 C3.75,18.33 2.5,16.67 2.5,14.17 V5.83 C2.5,3.33 3.75,1.67 6.67,1.67 H13.33 C16.25,1.67 17.5,3.33 17.5,5.83 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12.08,3.75 V5.42 C12.08,6.33 12.83,7.08 13.75,7.08 H15.42" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M6.67,10.83 H10" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M6.67,14.17 H13.33" />
+</vector>

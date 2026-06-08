@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.gson.Gson
@@ -18,6 +19,10 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentApplyLeaveBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyLeaveRequest
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
+import com.manjugroups.m_connect.ui.common.MonthYearPicker
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
@@ -59,13 +64,54 @@ class ApplyLeaveFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
         binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
         binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
-        binding.btnSubmit.setOnClickListener { submitLeave() }
+        // Submit Now now opens the confirmation modal; the real
+        // applyLeave call only fires after the user picks "Yes, Submit"
+        // in the sheet. Mirrors the design's third frame in the apply
+        // flow ("Double-check your leave details…").
+        binding.btnSubmit.setOnClickListener { promptSubmitConfirmation() }
+
+        // Listen once at view-create so multiple sheet opens reuse the
+        // same handler. The sheet emits a single boolean signalling
+        // whether the user confirmed; we drop the result on the floor
+        // when false and dismiss naturally.
+        setFragmentResultListener(SubmitLeaveConfirmSheet.RESULT_KEY) { _, bundle ->
+            val confirmed = bundle.getBoolean(SubmitLeaveConfirmSheet.KEY_CONFIRMED, false)
+            if (confirmed) submitLeave()
+        }
 
         updateDurationLabel()
         loadLeaveTypes()
+    }
+
+    /**
+     * Validate the form locally before opening the confirmation sheet
+     * so the user doesn't see the "Submit Leave" double-check modal
+     * just to be told their description is blank. Same checks
+     * submitLeave() runs — keeping them in sync.
+     */
+    private fun promptSubmitConfirmation() {
+        val fromMillis = selectedFromMillis
+        val toMillis = selectedToMillis
+        val reason = binding.etReason.text.toString().trim()
+        if (fromMillis == null || toMillis == null) {
+            Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (toMillis < fromMillis) {
+            Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (reason.isBlank()) {
+            Toast.makeText(requireContext(), "Enter leave description", Toast.LENGTH_SHORT).show()
+            return
+        }
+        SubmitLeaveConfirmSheet
+            .newInstance()
+            .show(parentFragmentManager, "submit_leave_confirm")
     }
 
     private fun loadLeaveTypes() {
@@ -83,12 +129,22 @@ class ApplyLeaveFragment : Fragment() {
                 if (types.isNotEmpty()) {
                     leaveTypes = types
                 }
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                // Coroutine cancelled by view-lifecycle teardown. Rethrow
+                // so structured concurrency unwinds correctly — swallowing
+                // it here previously made the coroutine resume past the
+                // catch and touch `binding` after _binding was already
+                // null on onDestroyView.
+                throw ce
             } catch (_: Exception) {
                 // Keep defaults when policy isn't available.
             }
 
             selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
-            binding.tvLeaveCategoryValue.text = prettyType(selectedLeaveType)
+            // Belt-and-suspenders: if for any reason the view was torn
+            // down between the await and here (race, slow device), use
+            // _binding? so the assignment no-ops instead of NPE-ing.
+            _binding?.tvLeaveCategoryValue?.text = prettyType(selectedLeaveType)
         }
     }
 
@@ -114,18 +170,26 @@ class ApplyLeaveFragment : Fragment() {
         val to = apiDateFormat.format(toMillis)
 
         binding.tvSubmit.visibility = View.INVISIBLE
-        binding.progressSubmit.visibility = View.VISIBLE
+        binding.skeletonSubmit.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(binding.skeletonSubmit)
         binding.btnSubmit.isClickable = false
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.applyLeave(
                     session.bearerToken,
-                    ApplyLeaveRequest(selectedLeaveType, from, to, reason)
+                    ApplyLeaveRequest(
+                        leaveType = selectedLeaveType,
+                        fromDate = from,
+                        toDate = to,
+                        reason = reason,
+                        reportingToId = session.reportingToId,
+                        reportingToName = session.reportingToName,
+                    )
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Leave applied!", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }
@@ -133,7 +197,8 @@ class ApplyLeaveFragment : Fragment() {
                 Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
             }
             _binding?.tvSubmit?.visibility = View.VISIBLE
-            _binding?.progressSubmit?.visibility = View.GONE
+            _binding?.skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+            _binding?.skeletonSubmit?.visibility = View.GONE
             _binding?.btnSubmit?.isClickable = true
         }
     }
@@ -304,6 +369,16 @@ class ApplyLeaveFragment : Fragment() {
             renderCalendar()
         }
 
+        monthLabel.setOnClickListener {
+            MonthYearPicker.show(requireContext(), displayMonth) { year, month ->
+                displayMonth.set(Calendar.YEAR, year)
+                displayMonth.set(Calendar.MONTH, month)
+                displayMonth.set(Calendar.DAY_OF_MONTH, 1)
+                displayMonth.clearTime()
+                renderCalendar()
+            }
+        }
+
         submitButton.setOnClickListener {
             val pickedFrom = tempFrom
             if (pickedFrom == null) {
@@ -376,6 +451,11 @@ class ApplyLeaveFragment : Fragment() {
 
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onDestroyView() {

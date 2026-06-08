@@ -152,7 +152,12 @@ class GeoTrackConsentActivity : AppCompatActivity() {
     private fun requestBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Android 11+ — system won't show "Allow all the time" in dialog
-            // Must redirect user to Settings
+            // Must redirect user to Settings. Tracking-enabled staff cannot
+            // skip this step: without "Allow all the time" the OS pauses
+            // FusedLocation callbacks the moment the app leaves foreground,
+            // so the day's locationPoints stream silently dies. We removed
+            // the Skip button — the only path forward is Open Settings →
+            // Location → Allow all the time.
             android.app.AlertDialog.Builder(this)
                 .setTitle("Background Location Required")
                 .setMessage("For tracking to work when the screen is off, you must select \"Allow all the time\" in Location settings.\n\nTap Open Settings → Location → Allow all the time")
@@ -162,9 +167,6 @@ class GeoTrackConsentActivity : AppCompatActivity() {
                     startActivity(intent)
                     // Check permission when user returns
                     permissionCheckPending = true
-                }
-                .setNegativeButton("Skip") { _, _ ->
-                    requestActivityRecognition()
                 }
                 .setCancelable(false)
                 .show()
@@ -205,9 +207,6 @@ class GeoTrackConsentActivity : AppCompatActivity() {
                     data = Uri.parse("package:$packageName")
                 }
                 batteryOptimizationLauncher.launch(intent)
-            }
-            .setNegativeButton("Skip") { _, _ ->
-                startTrackingService()
             }
             .setCancelable(false)
             .show()

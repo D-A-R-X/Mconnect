@@ -131,4 +131,26 @@ class LeavesViewModel : ViewModel() {
             }
         }
     }
+
+    /**
+     * Cancel one of the user's own pending leave requests. Hits
+     * /api/hr/leaves/cancel with the row id; reloads on success so
+     * the cancelled row disappears (or flips to a terminal state per
+     * backend semantics). Mirrors PermissionsViewModel.cancelPermission.
+     */
+    fun cancelLeave(bearerToken: String, id: String, canApprove: Boolean) {
+        viewModelScope.launch {
+            try {
+                val resp = api.cancelLeave(bearerToken, IdRequest(id))
+                if (resp.success) {
+                    _event.emit("Leave request cancelled")
+                    load(bearerToken, canApprove)
+                } else {
+                    _event.emit(resp.error ?: "Failed to cancel leave")
+                }
+            } catch (e: Exception) {
+                _event.emit(e.message ?: "Network error")
+            }
+        }
+    }
 }

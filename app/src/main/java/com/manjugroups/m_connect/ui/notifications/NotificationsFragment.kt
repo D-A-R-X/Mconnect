@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.notifications
 
 import android.os.Bundle
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -18,8 +20,10 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -44,15 +48,20 @@ class NotificationsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnMarkAllRead.setOnClickListener { markAllRead() }
+
+        binding.notificationsRefresh.setupPullToRefresh { loadNotifications() }
 
         loadNotifications()
     }
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
+        }
     }
 
     override fun onPause() {
@@ -61,6 +70,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun loadNotifications() {
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 api.getNotifications(session.bearerToken)
@@ -74,6 +84,8 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun renderNotifications(notifications: List<NotificationData>) {
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        binding.notificationsRefresh.dismissRefresh()
         binding.notificationList.removeAllViews()
 
         val unreadCount = notifications.count { !it.read }
@@ -206,6 +218,7 @@ class NotificationsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onDestroyView()
         _binding = null

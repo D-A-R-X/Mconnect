@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Shield with tick — info chip leading glyph for "auto-fill" note. -->
+    <path
+        android:fillColor="#2DAE12"
+        android:pathData="M12,2 L4,5 V11 C4,16.5 7.5,21 12,22 C16.5,21 20,16.5 20,11 V5 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M8.5,12 L11,14.5 L15.5,9.5" />
+</vector>

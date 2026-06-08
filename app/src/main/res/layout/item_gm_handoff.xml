@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Single row in the GM Handoffs queue. Urgent rows (immediate_pickup
+  lane) light up the red pill at the top-right; out-of-station rows use
+  a neutral grey one. Both tap-through to CompletedVisitDetailFragment.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rowGmHandoff"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_completed_section_card"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvGmHandoffName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:text="Client"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvGmHandoffLanePill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_inactive"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="Out of Station"
+            android:textColor="?attr/colorForegroundSecondary"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvGmHandoffPhone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_regular"
+        android:maxLines="1"
+        android:text="—"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="Scheduled"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/tvGmHandoffDateTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="—"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="From"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/tvGmHandoffFrom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_medium"
+                android:maxLines="1"
+                android:text="Telecaller"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

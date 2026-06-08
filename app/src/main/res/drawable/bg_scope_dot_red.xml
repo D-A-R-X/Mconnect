@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Small red dot rendered inside the scope chip when the current scope has
+  pending items (e.g. Team Leaves with leaves awaiting review). Matches
+  the design's notification dot between the label and the chevron.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#EF4444" />
+</shape>

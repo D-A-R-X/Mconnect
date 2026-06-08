@@ -1,0 +1,21 @@
+<!-- Survey-area glyph: a thin angle bracket / measurement mark used on
+     the inspection cards next to "3.20 Acres • 20 May 2026". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="14"
+    android:viewportHeight="14">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M3,3 L3,11 L11,11"
+        android:strokeColor="#667085"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.4" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,8 L11,3"
+        android:strokeColor="#667085"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.4" />
+</vector>

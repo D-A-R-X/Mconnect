@@ -98,10 +98,11 @@
                 android:layout_marginStart="10dp"
                 android:layout_weight="1"
                 android:background="@null"
+                android:digits="0123456789"
                 android:fontFamily="@font/inter_regular"
                 android:hint="@string/phone_hint"
                 android:inputType="phone"
-                android:maxLength="12"
+                android:maxLength="10"
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:textColor="#030407"
@@ -185,12 +186,12 @@
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
 
-            <ProgressBar
-                android:id="@+id/progressSendOtp"
+            <View
+                android:id="@+id/skeletonSendOtp"
                 android:layout_width="22dp"
                 android:layout_height="22dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="#FFFFFF"
+                android:background="@drawable/bg_skeleton_circle_inverse"
                 android:visibility="gone" />
         </FrameLayout>
 

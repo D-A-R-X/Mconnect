@@ -36,7 +36,7 @@ class WelcomeActivity : AppCompatActivity() {
 
         session = SessionManager(this)
         if (session.isLoggedIn) {
-            goMain()
+            goNext()
             return
         }
 
@@ -105,8 +105,13 @@ class WelcomeActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun goMain() {
-        startActivity(Intent(this, MainActivity::class.java))
+    private fun goNext() {
+        val next = if (session.mustChangePassword) {
+            Intent(this, ForcePasswordChangeActivity::class.java)
+        } else {
+            Intent(this, MainActivity::class.java)
+        }
+        startActivity(next)
         overridePendingTransition(0, 0)
         finish()
     }

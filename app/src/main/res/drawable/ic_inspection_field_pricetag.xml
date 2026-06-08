@@ -1,0 +1,15 @@
+<!-- Price/amount tag glyph used on the Market tab price fields and the
+     Conclusions tab. Converted from Downloads/tag-2.svg (sale-tag shape
+     with a hole + diagonal underline). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M3.67,12.94 L7.45,16.71 C9,18.26 11.51,18.26 13.07,16.71 L16.73,13.06 C18.28,11.51 18.28,8.99 16.73,7.43 L12.95,3.66 C12.15,2.87 11.06,2.45 9.95,2.51 L5.78,2.71 C4.11,2.78 2.79,4.11 2.7,5.76 L2.5,9.93 C2.45,11.06 2.88,12.15 3.67,12.94 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M8.11,10.19 C9.26,10.19 10.2,9.26 10.2,8.11 C10.2,6.95 9.26,6.02 8.11,6.02 C6.96,6.02 6.03,6.95 6.03,8.11 C6.03,9.26 6.96,10.19 8.11,10.19 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M11.03,14.36 L14.36,11.02" />
+</vector>

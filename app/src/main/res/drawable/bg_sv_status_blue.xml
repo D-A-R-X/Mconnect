@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Info-tinted pill background for the SV list "Own Vehicle" badge.
+  Matches the green/orange/red sibling backgrounds in this folder so
+  the badge sits consistently with Scheduled / In Progress / etc.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#EFF6FF" />
+    <corners android:radius="14dp" />
+</shape>

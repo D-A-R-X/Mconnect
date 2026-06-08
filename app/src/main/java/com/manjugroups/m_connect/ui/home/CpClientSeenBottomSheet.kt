@@ -25,9 +25,24 @@ class CpClientSeenBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                // Allow the floating verification chip (-40dp top margin)
+                // to render outside the sheet's content area. By default
+                // the sheet + its CoordinatorLayout parent clip children.
+                if (it is ViewGroup) {
+                    it.clipChildren = false
+                    it.clipToPadding = false
+                }
+                (it.parent as? ViewGroup)?.let { parent ->
+                    parent.clipChildren = false
+                    parent.clipToPadding = false
+                }
             }
         }
-        isCancelable = false
+        // Tapping the dim area above the sheet should dismiss it like a
+        // normal toast — without this the user is stuck unable to back
+        // out of the prompt by tapping the map / trip progress behind.
+        isCancelable = true
+        dialog.setCanceledOnTouchOutside(true)
         return dialog
     }
 
@@ -39,11 +54,13 @@ class CpClientSeenBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<TextView>(R.id.btnCpSeenYes).setOnClickListener {
+        // Buttons are now LinearLayouts (icon + label centered as one
+        // block) so we look them up as View, not TextView.
+        view.findViewById<View>(R.id.btnCpSeenYes).setOnClickListener {
             setFragmentResult(RESULT_KEY, bundleOf(KEY_CLIENT_SEEN to true))
             dismissAllowingStateLoss()
         }
-        view.findViewById<TextView>(R.id.btnCpSeenNo).setOnClickListener {
+        view.findViewById<View>(R.id.btnCpSeenNo).setOnClickListener {
             setFragmentResult(RESULT_KEY, bundleOf(KEY_CLIENT_SEEN to false))
             dismissAllowingStateLoss()
         }

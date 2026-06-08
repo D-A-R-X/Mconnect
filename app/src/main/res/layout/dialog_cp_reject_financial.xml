@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reject — financial dialog (KOS-XX). Captures `notEligibleReason` and
+  optional notes, then POSTs `setOutcome` with `outcome=not_interested`.
+  Server-side rejects `notEligibleReason` unless `outcome=not_interested`,
+  so the two fields ship together.
+
+  Reasons mirror the web's enum: loan_unavailable / budget_low / other.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_apply_leave_sheet"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Reject on financial grounds"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="17sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Pick the reason; this closes the lead as Not Interested."
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="12sp" />
+
+    <RadioGroup
+        android:id="@+id/rgRejectReason"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/rbReasonLoanUnavailable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:paddingVertical="6dp"
+            android:text="Loan unavailable"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
+
+        <RadioButton
+            android:id="@+id/rbReasonBudgetLow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:paddingVertical="6dp"
+            android:text="Budget too low"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
+
+        <RadioButton
+            android:id="@+id/rbReasonOther"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:paddingVertical="6dp"
+            android:text="Other"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
+    </RadioGroup>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Notes (optional)"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="11sp" />
+
+    <EditText
+        android:id="@+id/etRejectNotes"
+        android:layout_width="match_parent"
+        android:layout_height="86dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_leave_form_field"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="top|start"
+        android:hint="Any context for the telecaller"
+        android:inputType="textMultiLine"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/btnRejectCancel"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_leave_sheet_button_outline"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Cancel"
+                android:textColor="#1BCA0B"
+                android:textSize="13sp" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnRejectSubmit"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_chip_active"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Reject lead"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

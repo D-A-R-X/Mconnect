@@ -21,6 +21,8 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
@@ -40,6 +42,8 @@ class DialerFragment : Fragment() {
     private var tvStation: TextView? = null
     private var btnBackspace: View? = null
     private var btnCall: View? = null
+    private var callIcon: View? = null
+    private var callSkeleton: View? = null
 
     private var entered: String = ""
     private var station: String = DEFAULT_STATION
@@ -72,7 +76,7 @@ class DialerFragment : Fragment() {
         station = prefs.getString(KEY_STATION, DEFAULT_STATION) ?: DEFAULT_STATION
 
         view.findViewById<View>(R.id.btnDialerBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<View>(R.id.btnDialerSettings).setOnClickListener { showStationDialog() }
 
@@ -89,6 +93,8 @@ class DialerFragment : Fragment() {
 
         btnCall = view.findViewById(R.id.btnDialerCall)
         btnCall?.setOnClickListener { onCall() }
+        callIcon = view.findViewById(R.id.ivDialerCallIcon)
+        callSkeleton = view.findViewById(R.id.dialerCallingSkeleton)
 
         renderStation()
         renderNumber()
@@ -240,6 +246,9 @@ class DialerFragment : Fragment() {
     private fun triggerDoocti(phone: String, stationNumber: String) {
         calling = true
         btnCall?.isEnabled = false
+        callIcon?.visibility = View.INVISIBLE
+        callSkeleton?.visibility = View.VISIBLE
+        callSkeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
         Toast.makeText(requireContext(), "Placing call…", Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -263,6 +272,9 @@ class DialerFragment : Fragment() {
             } finally {
                 calling = false
                 btnCall?.isEnabled = true
+                callSkeleton?.let { SkeletonUtils.stopSkeletonPulse(it) }
+                callSkeleton?.visibility = View.GONE
+                callIcon?.visibility = View.VISIBLE
             }
         }
     }

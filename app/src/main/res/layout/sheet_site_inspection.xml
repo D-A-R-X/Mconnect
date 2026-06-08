@@ -1,0 +1,1175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Site Inspection bottom-sheet. Opens when the user taps a card in the
+  Inspection list. Header + 5-tab strip stays fixed; the form below
+  scrolls; the green "Next" button is pinned at the bottom.
+  Only the "Basic" tab content is rendered here — the others are
+  placeholder taps until the design is built out.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_inspection_panel"
+    android:orientation="vertical"
+    android:paddingTop="6dp">
+
+    <!-- Drag handle pill at the top of the sheet (matches Material BS). -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_inspection_next_button"
+        android:backgroundTint="#D1D5DB" />
+
+    <!-- Header: title + subtitle -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:includeFontPadding="false"
+            android:text="Site Inspection"
+            android:textColor="#101828"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:includeFontPadding="false"
+            android:text="Information about Land Procurement"
+            android:textColor="#6B7280"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- View-only banner — shown when VP has approved this inspection.
+         Hidden by default; SiteInspectionBottomSheet.applyViewOnlyMode
+         flips it visible and walks the form to disable every input. -->
+    <TextView
+        android:id="@+id/tvInspectionApprovedBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_query_status_pending"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
+        android:text="Approved by VP — View only"
+        android:textColor="#0B61CA"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- 5-tab strip: Basic (active) / Area / Market / Conclusions / Competitors. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="14dp">
+
+        <LinearLayout
+            android:id="@+id/tabBasic"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/tabBasicIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_active"
+                android:contentDescription="@null"
+                android:padding="7dp"
+                android:src="@drawable/ic_inspection_tab_basic"
+                app:tint="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/tabBasicLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                android:text="Basic"
+                android:textColor="#0B61CA" />
+
+            <View
+                android:id="@+id/tabBasicIndicator"
+                android:layout_width="24dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="2dp"
+                android:background="#0B61CA" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
+
+        <LinearLayout
+            android:id="@+id/tabArea"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/tabAreaIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
+                android:contentDescription="@null"
+                android:padding="7dp"
+                android:src="@drawable/ic_inspection_field_location_tick"
+                app:tint="#6A6D78" />
+
+            <TextView
+                android:id="@+id/tabAreaLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                android:text="Area"
+                android:textColor="#6A6D78" />
+
+            <View
+                android:id="@+id/tabAreaIndicator"
+                android:layout_width="24dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="2dp"
+                android:background="#0B61CA"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
+
+        <LinearLayout
+            android:id="@+id/tabMarket"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/tabMarketIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
+                android:contentDescription="@null"
+                android:padding="7dp"
+                android:src="@drawable/ic_inspection_tab_market"
+                app:tint="#6A6D78" />
+
+            <TextView
+                android:id="@+id/tabMarketLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                android:text="Market"
+                android:textColor="#6A6D78" />
+
+            <View
+                android:id="@+id/tabMarketIndicator"
+                android:layout_width="24dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="2dp"
+                android:background="#0B61CA"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
+
+        <LinearLayout
+            android:id="@+id/tabConclusions"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/tabConclusionsIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
+                android:contentDescription="@null"
+                android:padding="7dp"
+                android:src="@drawable/ic_inspection_tab_conclusions"
+                app:tint="#6A6D78" />
+
+            <TextView
+                android:id="@+id/tabConclusionsLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                android:text="Conclusions"
+                android:textColor="#6A6D78" />
+
+            <View
+                android:id="@+id/tabConclusionsIndicator"
+                android:layout_width="24dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="2dp"
+                android:background="#0B61CA"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginTop="-4dp"
+            android:background="#F3F3F5" />
+
+        <LinearLayout
+            android:id="@+id/tabCompetitors"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/tabCompetitorsIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_inspection_tab_circle_inactive"
+                android:contentDescription="@null"
+                android:padding="7dp"
+                android:src="@drawable/ic_inspection_tab_competitors"
+                app:tint="#6A6D78" />
+
+            <TextView
+                android:id="@+id/tabCompetitorsLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="2dp"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeMaxTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                android:text="Competitors"
+                android:textColor="#6A6D78" />
+
+            <View
+                android:id="@+id/tabCompetitorsIndicator"
+                android:layout_width="24dp"
+                android:layout_height="2dp"
+                android:layout_marginTop="2dp"
+                android:background="#0B61CA"
+                android:visibility="invisible" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Form area + Next button live inside this column so the button
+         can be pinned to the bottom when the scroll content is short. -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:paddingHorizontal="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="14dp"
+            android:paddingBottom="20dp">
+
+            <!-- Basic tab content. Visible by default; hidden when the
+                 user picks another tab. -->
+            <LinearLayout
+                android:id="@+id/basicTabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+            <!-- ==================== BASIC DETAILS ==================== -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Basic Details"
+                android:textColor="#101828"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="Fill all the details about the site"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldOwner" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldSurvey" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldSiteLocation" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldExactLocation" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldLandmark" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldMapLink" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldPopulation" />
+
+            <!-- ==================== ACCESSIBILITY ==================== -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Accessibility &amp; Infrastructure"
+                android:textColor="#101828"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="Enter road, connectivity and utility details"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Road Type *"
+                android:textColor="#101828"
+                android:textSize="12sp" />
+
+            <!-- Road-type checkboxes: each row is a LinearLayout with text
+                 + checkbox glyph. State flipped by the fragment via tag. -->
+            <LinearLayout
+                android:id="@+id/rowRoadMud"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_inspection_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Mud"
+                    android:textColor="#101828"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkRoadMud"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_checkbox_unchecked" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowRoadThar"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_inspection_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Thar"
+                    android:textColor="#101828"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkRoadThar"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_checkbox_unchecked" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowRoadConcrete"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_inspection_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Concrete"
+                    android:textColor="#101828"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkRoadConcrete"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_checkbox_unchecked" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowRoadConcreteBlocks"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_inspection_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Concrete Blocks"
+                    android:textColor="#101828"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkRoadConcreteBlocks"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_checkbox_unchecked" />
+            </LinearLayout>
+
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldAccessWidth" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldElectricity" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldEConnection" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldTelecom" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldRailway" />
+            <include
+                layout="@layout/component_inspection_field"
+                android:id="@+id/fieldBus" />
+            </LinearLayout>
+
+            <!-- Area tab content. Hidden until the user taps the Area tab.
+                 Five category blocks (School / College / Hospital / Mall /
+                 Market); each "Create X" pill adds a dashed-border entry
+                 below it (name + distance + delete). The entry rows are
+                 inflated at runtime from component_area_entry.xml. -->
+            <LinearLayout
+                android:id="@+id/areaTabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Area Attractiveness"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Add Nearby Distance and places"
+                    android:textColor="#6B7280"
+                    android:textSize="12sp" />
+
+                <!-- SCHOOL -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="School *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createSchool"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_owner" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create School"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/schoolEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- COLLEGE -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="College *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createCollege"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_college" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create College"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/collegeEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- HOSPITAL -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Hospital *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createHospital"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_hospital" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create Hospital"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/hospitalEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- MALL -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Mall *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createMall"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_mall" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create Mall"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/mallEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- MARKET -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Market *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createMarket"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_market" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create Market"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/marketEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <!-- ==================== MARKET TAB CONTENT ==================== -->
+            <LinearLayout
+                android:id="@+id/marketTabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Market &amp; Demand Analysis"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Capture market demand and pricing details"
+                    android:textColor="#6B7280"
+                    android:textSize="12sp" />
+
+                <!-- Present Demand pill row (3 chips). -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Present Demand *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipPresentVilla"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                    <Space android:layout_width="8dp" android:layout_height="0dp" />
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipPresentPlot"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                    <Space android:layout_width="8dp" android:layout_height="0dp" />
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipPresentApartments"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <!-- Future Demand pill row. -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Future Demand *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipFutureVilla"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                    <Space android:layout_width="8dp" android:layout_height="0dp" />
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipFuturePlot"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                    <Space android:layout_width="8dp" android:layout_height="0dp" />
+                    <include
+                        layout="@layout/component_inspection_demand_chip"
+                        android:id="@+id/chipFutureApartments"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <!-- Target Clients — 5 full-width rows. -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Target Clients *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <include
+                    layout="@layout/component_inspection_target_row"
+                    android:id="@+id/rowTargetHighEnd" />
+                <include
+                    layout="@layout/component_inspection_target_row"
+                    android:id="@+id/rowTargetUpperMiddle" />
+                <include
+                    layout="@layout/component_inspection_target_row"
+                    android:id="@+id/rowTargetMiddle" />
+                <include
+                    layout="@layout/component_inspection_target_row"
+                    android:id="@+id/rowTargetLower" />
+                <include
+                    layout="@layout/component_inspection_target_row"
+                    android:id="@+id/rowTargetEvs" />
+
+                <!-- Price fields (tag icon + amount input + unit dropdown). -->
+                <include
+                    layout="@layout/component_inspection_field"
+                    android:id="@+id/fieldLandlordPrice" />
+                <include
+                    layout="@layout/component_inspection_field"
+                    android:id="@+id/fieldRecommendPrice" />
+                <include
+                    layout="@layout/component_inspection_field"
+                    android:id="@+id/fieldSellPrice" />
+            </LinearLayout>
+
+            <!-- ==================== COMPETITORS TAB CONTENT ==================== -->
+            <LinearLayout
+                android:id="@+id/competitorsTabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Competitor Analysis (Optional)"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Add competitor details and comparison"
+                    android:textColor="#6B7280"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Competitor *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/createCompetitor"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_inspection_field_competitor" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Create Competitor"
+                        android:textColor="#9CA3AF"
+                        android:textSize="14sp" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#6B7280" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/competitorEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <!-- ==================== CONCLUSIONS TAB CONTENT ==================== -->
+            <LinearLayout
+                android:id="@+id/conclusionsTabContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:includeFontPadding="false"
+                    android:text="Conclusion"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Provide recommendation or conclusion"
+                    android:textColor="#6B7280"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Recommendation / Conclusion *"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+
+                <!-- Large multi-line text area with pin icon on the left. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_inspection_field"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="14dp">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_location_pin" />
+                    <EditText
+                        android:id="@+id/inputConclusion"
+                        android:layout_width="0dp"
+                        android:layout_height="120dp"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="top|start"
+                        android:hint="Enter Conclusion"
+                        android:importantForAutofill="no"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:paddingHorizontal="0dp"
+                        android:paddingVertical="0dp"
+                        android:textColor="#101828"
+                        android:textColorHint="#9CA3AF"
+                        android:textCursorDrawable="@null"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Pinned green "Next" CTA. -->
+    <TextView
+        android:id="@+id/btnInspectionNext"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_inspection_next_button"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="Next"
+        android:textColor="@android:color/white"
+        android:textSize="16sp" />
+</LinearLayout>

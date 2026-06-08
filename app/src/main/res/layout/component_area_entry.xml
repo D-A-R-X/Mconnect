@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Single Area-tab entry: dashed-border card containing
+   • Name field (icon + EditText)
+   • Distance field + delete button row
+  Inflated dynamically by the fragment when the user taps "Create X"
+  on a category. Tag carries the category key ("school", "college", ...)
+  so removal logic can stay generic.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="10dp"
+    android:background="@drawable/bg_inspection_area_entry"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <!-- Name field — full-width pill. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_inspection_field"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:id="@+id/areaEntryNameIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            tools:src="@drawable/ic_inspection_field_school" />
+
+        <EditText
+            android:id="@+id/areaEntryName"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:paddingHorizontal="0dp"
+            android:paddingVertical="0dp"
+            android:singleLine="true"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp"
+            tools:hint="Enter School Name" />
+    </LinearLayout>
+
+    <!-- Distance field + delete button row. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_inspection_field"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_inspection_field_railway" />
+
+            <EditText
+                android:id="@+id/areaEntryDistance"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:fontFamily="@font/inter_medium"
+                android:hint="Enter Distance"
+                android:importantForAutofill="no"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="0dp"
+                android:paddingVertical="0dp"
+                android:singleLine="true"
+                android:textColor="#101828"
+                android:textColorHint="#9CA3AF"
+                android:textCursorDrawable="@null"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/areaEntryDelete"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_inspection_delete_button"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="Delete"
+                android:src="@drawable/ic_trash" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

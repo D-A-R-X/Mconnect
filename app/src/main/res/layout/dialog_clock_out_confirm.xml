@@ -15,6 +15,7 @@
         android:paddingBottom="32dp">
 
         <TextView
+            android:id="@+id/tvDialogTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_semibold"
@@ -24,6 +25,7 @@
             android:textSize="22sp" />
 
         <TextView
+            android:id="@+id/tvDialogSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

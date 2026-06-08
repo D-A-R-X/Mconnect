@@ -1,0 +1,12 @@
+<!-- Railway Station Distance — flag-route glyph. Converted from
+     routing-2.svg (flag at one end, route + box at the other). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M14.46,7.54 L12.51,13.82 C12.04,15.32 9.95,15.34 9.46,13.86 L8.87,12.13 C8.72,11.66 8.34,11.28 7.87,11.13 L6.13,10.54 C4.66,10.05 4.68,7.94 6.17,7.49 L12.46,5.53 C13.69,5.16 14.85,6.32 14.46,7.54 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.5,18.33 H12.5 C16.67,18.33 18.33,16.67 18.33,12.5 V7.5 C18.33,3.33 16.67,1.67 12.5,1.67 H7.5 C3.33,1.67 1.67,3.33 1.67,7.5 V12.5 C1.67,16.67 3.33,18.33 7.5,18.33 Z" />
+</vector>

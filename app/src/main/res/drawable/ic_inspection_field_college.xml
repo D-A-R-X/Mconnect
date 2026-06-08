@@ -1,0 +1,23 @@
+<!-- College — courthouse / columned-building glyph. Converted from courthouse.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M1.67,18.33 H18.33" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M10,1.67 C11.33,2.2 12.83,2.2 14.17,1.67 V4.17 C12.83,4.7 11.33,4.7 10,4.17 V1.67 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M10,4.17 V6.67" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M14.17,6.67 H5.83 C4.17,6.67 3.33,7.5 3.33,9.17 V18.33 H16.67 V9.17 C16.67,7.5 15.83,6.67 14.17,6.67 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M3.82,10 H16.18" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M6.66,10 V18.33" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M9.99,10 V18.33" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5"
+        android:pathData="M13.33,10 V18.33" />
+</vector>

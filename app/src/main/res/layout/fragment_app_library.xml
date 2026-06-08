@@ -1,845 +1,1395 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Outer vertical LinearLayout = sticky blue header on top, refreshable
+  scrolling content area below. The header sits OUTSIDE the
+  NestedScrollView so "App Library" + illustration + filter pill strip
+  stay pinned at the top while the user scrolls the section cards.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#F1F3F8"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
 
-    <LinearLayout
-        android:id="@+id/appsContentWrapper"
+    <!-- STICKY blue header: title + illustration + filter pill strip stay
+         pinned at the top of the screen during scroll. Pulled OUT of the
+         NestedScrollView so vertical scrolling on the section cards
+         below doesn't move it. -->
+    <FrameLayout
+        android:id="@+id/libraryHeaderFrame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <LinearLayout
-            android:id="@+id/appsHeaderContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#0B61CA"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="20dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="16dp">
+        android:layout_height="160dp"
+        android:background="@drawable/bg_attendance_header_gradient">
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:id="@+id/libraryHeaderContent"
+                    android:layout_width="234dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <FrameLayout
-                        android:id="@+id/btnAppsProfile"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:background="@drawable/bg_home_new_avatar_circle"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <TextView
-                            android:id="@+id/tvAppsAvatarInitial"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:fontFamily="@font/inter_semibold"
-                            android:textColor="#0B61CA"
-                            android:textSize="15sp" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_semibold"
-                            android:includeFontPadding="false"
-                            android:text="App Library"
-                            android:textColor="#FFFFFF"
-                            android:textSize="17sp" />
-
-                        <TextView
-                            android:id="@+id/tvAppsHeaderSubtitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Shortcuts &amp; Operations"
-                            android:textColor="#B3D4FF"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <FrameLayout
-                    android:id="@+id/btnAppsBell"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_home_banner_btn"
-                    android:clickable="true"
-                    android:focusable="true">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_home_bell_exact"
-                        app:tint="#FFFFFF" />
-                </FrameLayout>
-            </LinearLayout>
-
-            <!-- Animated Banner Content -->
-            <LinearLayout
-                android:id="@+id/appsBannerExpandable"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingBottom="24dp"
-                android:visibility="invisible">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_gravity="center_vertical">
+                    android:layout_gravity="top|start"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="60dp"
+                    android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Access Everything"
-                        android:textColor="#FFFFFF"
-                        android:textSize="22sp"
-                        android:fontFamily="@font/inter_bold"/>
+                        android:fontFamily="@font/inter_semibold"
+                        android:includeFontPadding="false"
+                        android:text="App Library"
+                        android:textColor="#FEFEFE"
+                        android:textSize="24sp" />
 
                     <TextView
+                        android:id="@+id/tvLibrarySubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Everything grouped for quick access. One tap away."
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="14sp"
-                        android:lineHeight="20dp"
-                        android:fontFamily="@font/inter_medium"/>
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Everything grouped for quick access"
+                        android:textColor="#D9D6FE"
+                        android:textSize="14sp" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="100dp"
-                    android:layout_height="90dp"
-                    android:layout_marginStart="8dp"
-                    android:src="@drawable/ic_apps_header_illustration"
+                    android:id="@+id/ivLibraryIllustration"
+                    android:layout_width="119dp"
+                    android:layout_height="89dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="48dp"
+                    android:layout_marginEnd="14dp"
                     android:contentDescription="@null"
-                    android:layout_gravity="center_vertical"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/appsScrollView"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="#0B61CA"
-            android:clipToPadding="false"
-            android:fillViewport="true"
-            android:paddingBottom="96dp"
-            android:overScrollMode="never">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_home_content_card"
-                android:orientation="vertical"
-                android:paddingTop="24dp"
-                android:paddingBottom="100dp">
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_apps_header_illustration" />
 
                 <LinearLayout
-                    android:id="@+id/sectionsContainer"
+                    android:id="@+id/libraryPillStrip"
+                    android:layout_width="match_parent"
+                    android:layout_height="79dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/bg_apps_pill_strip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="17dp"
+                    android:paddingBottom="9dp">
+
+                    <LinearLayout
+                        android:id="@+id/pillAllApps"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillAllAppsIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_active"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_all" />
+
+                        <TextView
+                            android:id="@+id/pillAllAppsText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="All Apps"
+                            android:textColor="#0B61CA"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillAllAppsIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
+                    <LinearLayout
+                        android:id="@+id/pillHr"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillHrIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_hr"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillHrText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="HR"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillHrIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
+                    <LinearLayout
+                        android:id="@+id/pillMarketing"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillMarketingIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_marketing"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillMarketingText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="Marketing"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillMarketingIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
+                    <LinearLayout
+                        android:id="@+id/pillProject"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillProjectIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_project"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillProjectText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="Project"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillProjectIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
+                    <!-- LAND pill — same shape as the other tabs; tinted via
+                         imageTintList so the active state picks up brand blue. -->
+                    <LinearLayout
+                        android:id="@+id/pillLand"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillLandIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_land"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillLandText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="Land"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillLandIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
+                    <LinearLayout
+                        android:id="@+id/pillSettings"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillSettingsIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_apps_pill_v_settings"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillSettingsText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="Settings"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillSettingsIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+                </LinearLayout>
+    </FrameLayout>
+
+    <!-- Scrollable content area: pull-to-refresh wraps the section cards
+         only. The sticky header above is excluded so the user can pull
+         from anywhere in the cards to refresh without hitting the
+         header. -->
+    <!-- White content "card" — overlaps the blue header by -20dp so its
+         rounded top corners curve up cleanly into the blue, then slides
+         up over the blue on scroll. Same pattern as Home / Inspection.
+         White bg + rounded top corners are applied at runtime in
+         setupScrollAnimation(). -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/libraryRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="-28dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scrollLibrary"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <!-- The white card with rounded top corners. White bg +
+                 rounded TOP corners applied at runtime so this LinearLayout
+                 IS the visible white card — scrolls up at 1× rate with
+                 the page content, no separate panel translation. -->
+            <LinearLayout
+                android:id="@+id/libraryWhitePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:orientation="vertical"
+                android:paddingBottom="120dp">
+
+            <LinearLayout
+                android:id="@+id/sectionsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingTop="12dp">
+
+                <!-- ============= HR CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardHr"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/bg_apps_card"
                     android:orientation="vertical"
-                    android:paddingHorizontal="16dp">
+                    android:padding="16dp">
 
-                    <!-- ============= HR CARD ============= -->
                     <LinearLayout
-                        android:id="@+id/cardHr"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_apps_card"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_hr" />
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <ImageView
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
-                                android:contentDescription="@null"
-                                android:scaleType="fitCenter"
-                                android:src="@drawable/ic_apps_cat_hr" />
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="12dp"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_semibold"
-                                    android:includeFontPadding="false"
-                                    android:text="HR"
-                                    android:textColor="#000000"
-                                    android:textSize="16sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:includeFontPadding="false"
-                                    android:text="People • Policies • Operations"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
                             android:orientation="vertical">
 
-                            <LinearLayout
-                                android:id="@+id/itemHrAttendance"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="HR"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
 
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_attendance" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Attendance"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemHrLeave"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_leave" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Leave"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemHrPermissions"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_permissions" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Permissions"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemHrLoans"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_loans" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Loans"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="People • Policies • Operations"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- ============= MARKETING CARD ============= -->
                     <LinearLayout
-                        android:id="@+id/cardMarketing"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_apps_card"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
 
                         <LinearLayout
+                            android:id="@+id/itemHrAttendance"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
 
                             <ImageView
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
                                 android:contentDescription="@null"
                                 android:scaleType="fitCenter"
-                                android:src="@drawable/ic_apps_cat_marketing" />
+                                android:src="@drawable/ic_apps_attendance" />
 
-                            <LinearLayout
+                            <TextView
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="12dp"
                                 android:layout_weight="1"
-                                android:orientation="vertical">
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Attendance"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
 
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_semibold"
-                                    android:includeFontPadding="false"
-                                    android:text="Marketing"
-                                    android:textColor="#000000"
-                                    android:textSize="16sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:includeFontPadding="false"
-                                    android:text="Growth • Campaigns • Reports"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp" />
-                            </LinearLayout>
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
                         </LinearLayout>
 
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
                         <LinearLayout
+                            android:id="@+id/itemHrLeave"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_leave" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Leave"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemHrPermissions"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_permissions" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Permissions"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemHrLoans"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_loans" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Loans"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:id="@+id/dividerHrAttendanceReview"
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient"
+                            android:visibility="gone" />
+
+                        <!-- Manager-only: attendance approvals queue.
+                             Gated by hasPermission("attendance.approve") so
+                             non-managers don't see the row. -->
+                        <LinearLayout
+                            android:id="@+id/itemHrAttendanceReview"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_attendance" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Attendance Approvals"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ============= MARKETING CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardMarketing"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_marketing" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
                             android:orientation="vertical">
 
-                            <LinearLayout
-                                android:id="@+id/itemMarketingCpVisits"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Marketing"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
 
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_dealer" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="CP Visits"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemMarketingMyLeads"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_leads" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Leads"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemMarketingDialer"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_leads" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Dialer"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemMarketingInventory"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_field_visits" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Inventory"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@drawable/bg_apps_divider_gradient" />
-
-                            <LinearLayout
-                                android:id="@+id/itemMarketingNewBooking"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_dealer" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="New Booking"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Growth • Campaigns • Reports"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- ============= PROJECT MGMT CARD ============= -->
                     <LinearLayout
-                        android:id="@+id/cardProject"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_apps_card"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
 
                         <LinearLayout
+                            android:id="@+id/itemMarketingCpVisits"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
 
                             <ImageView
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
                                 android:contentDescription="@null"
                                 android:scaleType="fitCenter"
-                                android:src="@drawable/ic_apps_cat_pm" />
+                                android:src="@drawable/ic_apps_dealer" />
 
-                            <LinearLayout
+                            <TextView
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="12dp"
                                 android:layout_weight="1"
-                                android:orientation="vertical">
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="CP Visits"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
 
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_semibold"
-                                    android:includeFontPadding="false"
-                                    android:text="Project Management"
-                                    android:textColor="#000000"
-                                    android:textSize="16sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:includeFontPadding="false"
-                                    android:text="Projects • Tasks"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp" />
-                            </LinearLayout>
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
                         </LinearLayout>
 
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <!-- Site Visits — client-comes-to-plot trips owned by the
+                             site incharge. Sits below CP Visits in the Marketing
+                             group to mirror the web sidebar order. -->
                         <LinearLayout
+                            android:id="@+id/itemMarketingSiteVisits"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_site_visits" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Site Visits"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemMarketingMyLeads"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_leads" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Leads"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemMarketingDialer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_leads" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Dialer"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <!--
+                              Coming-soon pill replaces the chevron — the
+                              Dialer tab is intentionally not navigable
+                              until the feature ships. The fragment
+                              binding clears the click handler so taps
+                              on this row are no-ops.
+                            -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_apps_coming_soon_pill"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="4dp"
+                                android:text="Coming soon"
+                                android:textColor="#B54708"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemMarketingInventory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_field_visits" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Inventory"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemMarketingNewBooking"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_dealer" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Booking"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ============= PROJECT MGMT CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardProject"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_pm" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
                             android:orientation="vertical">
 
-                            <LinearLayout
-                                android:id="@+id/itemProjectTasks"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Project Management"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
 
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_tasks" />
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Tasks"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
-
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Projects • Tasks"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- ============= CONFIGURATION CARD ============= -->
                     <LinearLayout
-                        android:id="@+id/cardConfig"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_apps_card"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
 
                         <LinearLayout
+                            android:id="@+id/itemProjectTasks"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
 
                             <ImageView
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
                                 android:contentDescription="@null"
                                 android:scaleType="fitCenter"
-                                android:src="@drawable/ic_apps_cat_config" />
+                                android:src="@drawable/ic_apps_tasks" />
 
-                            <LinearLayout
+                            <TextView
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="12dp"
                                 android:layout_weight="1"
-                                android:orientation="vertical">
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Tasks"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
 
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_semibold"
-                                    android:includeFontPadding="false"
-                                    android:text="Configuration"
-                                    android:textColor="#000000"
-                                    android:textSize="16sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:includeFontPadding="false"
-                                    android:text="Personal Settings • Configuration"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp" />
-                            </LinearLayout>
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
                         </LinearLayout>
 
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
                         <LinearLayout
+                            android:id="@+id/itemProjectExpenses"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_tasks" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Expenses"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ============= LAND PROCUREMENT CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardLand"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_land" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
                             android:orientation="vertical">
 
-                            <LinearLayout
-                                android:id="@+id/itemSettings"
-                                android:layout_width="match_parent"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="12dp">
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Land Procurement"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
 
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:contentDescription="@null"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_settings_card" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Land • Inspection"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
 
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_weight="1"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:includeFontPadding="false"
-                                    android:text="Settings"
-                                    android:textColor="#111111"
-                                    android:textSize="14sp" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
 
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:contentDescription="@null"
-                                    android:src="@drawable/ic_apps_chevron" />
-                            </LinearLayout>
+                        <LinearLayout
+                            android:id="@+id/itemLandInspection"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_inspection" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Inspection"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#F2F4F7" />
+
+                        <LinearLayout
+                            android:id="@+id/itemLandQueries"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_queries" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Queries"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ============= CONFIGURATION CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardConfig"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_config" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Configuration"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Personal Settings • Configuration"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/itemSettings"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_settings_card" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Settings"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-    </LinearLayout>
-</FrameLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

@@ -1,0 +1,13 @@
+<!-- School — graduation cap + book base. Converted from teacher.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M8.38,2.11 L3.36,5.38 C1.75,6.43 1.75,8.78 3.36,9.83 L8.38,13.11 C9.28,13.7 10.76,13.7 11.66,13.11 L16.65,9.83 C18.25,8.78 18.25,6.44 16.65,5.39 L11.66,2.12 C10.76,1.52 9.28,1.52 8.38,2.11 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.69,10.9 L4.68,14.81 C4.68,15.87 5.5,17 6.5,17.33 L9.16,18.22 C9.62,18.37 10.38,18.37 10.84,18.22 L13.5,17.33 C14.5,17 15.32,15.87 15.32,14.81 V10.94" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M17.83,12.5 V7.5" />
+</vector>

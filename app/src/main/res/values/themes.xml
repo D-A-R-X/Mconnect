@@ -44,4 +44,15 @@
         <item name="colorInfoLight">@color/lt_info_light</item>
     </style>
 
+    <!-- Material date range picker overlay used by AttendanceFilterSheet.
+         Recolors the calendar accent to brand blue (#0B61CA) so selected days
+         match the design exactly. -->
+    <style name="ThemeOverlay.Mconnect.DateRangePicker" parent="ThemeOverlay.MaterialComponents.MaterialCalendar">
+        <item name="colorPrimary">#0B61CA</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#101828</item>
+        <item name="colorAccent">#0B61CA</item>
+    </style>
+
 </resources>

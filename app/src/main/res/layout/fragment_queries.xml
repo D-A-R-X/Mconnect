@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Queries page (Land Procurement > Queries). Mirrors the Inspection page:
+   • Sticky blue header with title + subtitle + hero illustration.
+   • Search pill + calendar date-filter button.
+   • All / Pending / Completed filter chips.
+   • Query card list + empty state.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F1F3F8"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/queriesHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#0B61CA"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="22dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/btnQueriesBack"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:contentDescription="Back"
+                android:focusable="true"
+                android:padding="6dp"
+                android:src="@drawable/ic_arrow_left"
+                android:visibility="gone"
+                app:tint="@android:color/white" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Queries"
+                android:textColor="@android:color/white"
+                android:textSize="24sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Manage and track all Queries"
+                android:textColor="#D9D6FE"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivQueriesHero"
+            android:layout_width="104dp"
+            android:layout_height="104dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_queries_hero" />
+    </LinearLayout>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/queriesRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/queriesScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:id="@+id/queriesWhitePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:orientation="vertical"
+                android:paddingTop="10dp"
+                android:paddingBottom="120dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_inspection_search"
+                        android:elevation="1dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="16dp">
+
+                        <EditText
+                            android:id="@+id/etQueriesSearch"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:fontFamily="@font/inter_medium"
+                            android:hint="Search Queries"
+                            android:importantForAutofill="no"
+                            android:inputType="text"
+                            android:paddingHorizontal="0dp"
+                            android:paddingVertical="0dp"
+                            android:singleLine="true"
+                            android:textColor="#101828"
+                            android:textColorHint="#9CA3AF"
+                            android:textCursorDrawable="@null"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="Search"
+                            android:src="@drawable/ic_chat_search"
+                            app:tint="#9CA3AF" />
+                    </LinearLayout>
+
+                    <FrameLayout
+                        android:id="@+id/btnQueriesDateFilter"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_inspection_search"
+                        android:clickable="true"
+                        android:elevation="1dp"
+                        android:focusable="true">
+
+                        <ImageView
+                            android:id="@+id/ivQueriesDateFilterDefault"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Date filter"
+                            android:src="@drawable/ic_calendar_days"
+                            app:tint="#0B61CA" />
+
+                        <LinearLayout
+                            android:id="@+id/queriesDateFilterActive"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <FrameLayout
+                                android:layout_width="24dp"
+                                android:layout_height="24dp">
+
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_calendar_blank" />
+
+                                <TextView
+                                    android:id="@+id/tvQueriesDateFilterDay"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:layout_marginTop="3dp"
+                                    android:fontFamily="@font/inter_bold"
+                                    android:gravity="center"
+                                    android:includeFontPadding="false"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="9sp"
+                                    tools:text="8" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvQueriesDateFilterMonth"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:textColor="#FFFFFF"
+                                android:textSize="9sp"
+                                tools:text="May" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!-- Status-bar segmented control. Outer pill is white with a
+                     faint blue border; the three segments are equal-weight
+                     and the active one paints a solid blue pill on top via
+                     bg_inspection_chip_active. Matches the reference
+                     design (Status Bar / All · Pending · Completed). -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_query_tab_track"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="3dp">
+
+                    <TextView
+                        android:id="@+id/chipQueriesAll"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_inspection_chip_active"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_semibold"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="All"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/chipQueriesPending"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="Pending"
+                        android:textColor="#101828"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/chipQueriesCompleted"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="Completed"
+                        android:textColor="#101828"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/queriesDateFilterChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_inspection_chip_active"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="6dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvQueriesDateFilterLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp" />
+
+                    <ImageView
+                        android:id="@+id/btnQueriesDateFilterClear"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginStart="6dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Clear date filter"
+                        android:padding="2dp"
+                        android:src="@drawable/ic_close_pill"
+                        app:tint="#FFFFFF" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/queriesLogList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp" />
+
+                <LinearLayout
+                    android:id="@+id/queriesEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="40dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="24dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvQueriesEmptyTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:gravity="center"
+                        android:text="No queries yet"
+                        android:textColor="#101828"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvQueriesEmptySubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="Document verification queries will appear here."
+                        android:textColor="#6B7280"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

@@ -121,6 +121,35 @@ interface GeoTrackApi {
         @Body body: CompleteVisitRequest
     ): GeoTrackResponse
 
+    @GET("api/mms-fleet/driver/trips")
+    suspend fun getMmsFleetDriverTrips(
+        @Header("Authorization") token: String
+    ): MmsFleetDriverTripsResponse
+
+    @POST("api/mms-fleet/driver/arrive")
+    suspend fun markMmsFleetDriverArrived(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverSiteVisitRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/start")
+    suspend fun startMmsFleetDriverTrip(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverStartRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/on-site")
+    suspend fun markMmsFleetDriverOnSite(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverSiteVisitRequest
+    ): MmsFleetDriverActionResponse
+
+    @POST("api/mms-fleet/driver/end")
+    suspend fun endMmsFleetDriverTrip(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverEndRequest
+    ): MmsFleetDriverActionResponse
+
     @POST("api/geotrack/route")
     suspend fun getRoute(
         @Header("Authorization") token: String,
@@ -177,6 +206,83 @@ interface GeoTrackApi {
         @Body body: ConvertCpVisitToSiteVisitRequest
     ): ConvertCpVisitToSiteVisitResponse
 
+    // ── Site Visits (mobile outcome sheet) ──────────────────────────
+    // The CompleteCpVisitBottomSheet drives the same outcome capture
+    // for pure-SV visits (not CP-converted). These wrappers mirror
+    // the CP setOutcome / convertToSiteVisit shape but write to the
+    // new siteVisits table.
+
+    @POST("api/marketing/siteVisits/setOutcome")
+    suspend fun setSiteVisitOutcome(
+        @Header("Authorization") token: String,
+        @Body body: SetSiteVisitOutcomeRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/convertToBooking")
+    suspend fun convertSiteVisitToBooking(
+        @Header("Authorization") token: String,
+        @Body body: ConvertSiteVisitToBookingRequest,
+    ): ConvertSiteVisitToBookingResponse
+
+    // ── SV lifecycle transitions ────────────────────────────────────
+    // Drive a siteVisits row through the same web state machine the
+    // SV Overview stepper visualises. Each takes the SV's _id and
+    // patches the row to the next state. assertTransition on the
+    // server-side mutation enforces the legal source state — calling
+    // markArrivedSite from scheduled (skipping picked_up) will 500
+    // with a transition error, so the mobile flow stays linear.
+
+    @POST("api/marketing/siteVisits/markPickedUp")
+    suspend fun markSiteVisitPickedUp(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markClientStarted")
+    suspend fun markSiteVisitClientStarted(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markArrivedSite")
+    suspend fun markSiteVisitArrivedSite(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markDropped")
+    suspend fun markSiteVisitDropped(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    // Returns the enriched CP visit (lead + client + place + fieldVisit +
+    // arrivalProof) used by the Completed Visit Detail screen. Mirrors the
+    // web's clientPlaceVisits.get() Convex query.
+    @GET("api/marketing/clientPlaceVisits/get")
+    suspend fun getCpVisitDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): CpVisitDetailResponse
+
+    // Marketing CP visits assigned to the bearer in a date range.
+    // Used by Home's "Today's Trip" merge so visits that exist in
+    // `clientPlaceVisits` but have no companion fieldVisits row yet
+    // still surface on the home screen.
+    @GET("api/marketing/clientPlaceVisits/my")
+    suspend fun getMyMarketingCpVisits(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        // Backend gates scope=all on IAM (marketing.cpVisits.viewAll /
+        // .view / projects.viewAll / isAdmin). Non-privileged callers
+        // get scoped assignment-only results regardless of what we
+        // send, so it's safe to default this to "all" — admins and
+        // managers get the full pool, field staff get their own
+        // assignments via the fallback path.
+        @Query("scope") scope: String = "all",
+    ): MyMarketingCpVisitsResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -186,6 +292,15 @@ interface GeoTrackApi {
         @Query("dayStart") dayStart: Long,
         @Query("dayEnd") dayEnd: Long
     ): TimelineResponse
+
+    @GET("api/geotrack/session-route")
+    suspend fun getSessionRoute(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null,
+        @Query("dayStart") dayStart: Long,
+        @Query("dayEnd") dayEnd: Long,
+        @Query("minStopMinutes") minStopMinutes: Int? = null,
+    ): SessionRouteResponse
 
     @GET("api/geotrack/trips")
     suspend fun getTrips(
@@ -200,7 +315,20 @@ interface GeoTrackApi {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
+            // Same auto-logout-on-401 watchdog as ApiService.create() —
+            // GeoTrack endpoints also need it because every trip /
+            // visit call goes through this client, and a stale token
+            // would silently fail tracking + outcome flows otherwise.
+            val authWatchdog = okhttp3.Interceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 401) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized()
+                }
+                response
+            }
             val client = OkHttpClient.Builder()
+                .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
@@ -421,6 +549,22 @@ data class TimelineResponse(
     val data: List<TimelinePoint>? = null
 )
 
+data class SessionRouteResponse(
+    val success: Boolean,
+    val data: SessionRouteData? = null,
+    val error: String? = null
+)
+
+data class SessionRouteData(
+    val session: TrackingSession? = null,
+    val timeline: List<TimelinePoint> = emptyList(),
+    val trips: List<GeoTrip> = emptyList(),
+    val stops: List<GeoTripStop> = emptyList(),
+    val routeStart: Long = 0L,
+    val routeEnd: Long = 0L,
+    val distanceMeters: Int = 0
+)
+
 data class LiveStatusResponse(
     val success: Boolean,
     val data: List<GeoLiveStatus>? = null,
@@ -535,7 +679,14 @@ data class ArrivalOtpVerifyBody(
     val visitId: String,
     val otp: String,
     val lat: Double? = null,
-    val lng: Double? = null
+    val lng: Double? = null,
+    // Storage id of the arrival photo we just uploaded. Sending it
+    // along with OTP verify links the photo to the fieldVisit row
+    // immediately, instead of having to wait for completeVisit to
+    // fire at trip-end. The web admin CP visit detail page was
+    // showing "No arrival photo yet" for that whole window — this
+    // closes the gap.
+    val arrivalPhotoStorageId: String? = null,
 )
 
 data class ArrivalOtpVerifyResponse(
@@ -566,6 +717,7 @@ data class CreateCpVisitRequest(
     val visitLng: Double? = null,
     val googleMapsLink: String? = null,
     val notes: String? = null,
+    val projectId: String? = null,
 )
 
 data class CreateCpVisitResponse(
@@ -621,6 +773,311 @@ data class ConvertCpVisitToSiteVisitResponse(
     val error: String? = null,
 )
 
+// ── SV outcome (mobile) ───────────────────────────────────────────
+// Used when the field staff records an outcome on a pure SV from
+// the CompleteCpVisitBottomSheet. Mirrors the CP SetOutcomeRequest
+// but accepts the richer not_interested fields the SV backend
+// allows. `id` is a siteVisits._id.
+data class SetSiteVisitOutcomeRequest(
+    val id: String,
+    /** interested | not_interested | postponed | converted_to_booking | other */
+    val outcome: String,
+    val postponeReasons: List<String>? = null,
+    val notInterestedReasons: List<String>? = null,
+    val notInterestedDetails: List<SvNotInterestedDetail>? = null,
+    val notes: String? = null,
+)
+
+data class SvNotInterestedDetail(
+    val reason: String,
+    val detail: String? = null,
+)
+
+/**
+ * Booking outcome path — drops a booking row keyed off the SV's
+ * project. The mobile sheet collects clientName, mobileNumber, plot,
+ * bookingDate, plus optional pricing fields. Backend approval
+ * workflow (pending_gm → CRM → VP) kicks in once the row lands.
+ */
+data class ConvertSiteVisitToBookingRequest(
+    val id: String,
+    val plotId: String,
+    val clientName: String,
+    val mobileNumber: String,
+    val bookingDate: String,
+    val bookingType: String? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
+    val bookingCost: Double? = null,
+    val advanceAmount: Double? = null,
+    val paymentMode: String? = null,
+    val notes: String? = null,
+    val originalTelecallerStaffId: String? = null,
+)
+
+data class ConvertSiteVisitToBookingResponse(
+    val success: Boolean,
+    val bookingId: String? = null,
+    val siteVisitId: String? = null,
+    val error: String? = null,
+)
+
+/** Single-id payload shared by every SV lifecycle transition route. */
+data class SiteVisitIdRequest(val id: String)
+
+// ── Enriched CP visit detail (mirrors web clientPlaceVisits.get) ──────────
+// Every field is optional because (a) older rows pre-date some columns and
+// (b) the backend returns the doc as-is. Defensive nullability prevents
+// Gson from blowing up when a key is missing.
+
+data class CpVisitDetailResponse(
+    val success: Boolean,
+    val visit: CpVisitDetail? = null,
+    val error: String? = null,
+)
+
+// Marketing CP visits list response — used by Home today's trip merge.
+// Each visit is the enriched clientPlaceVisits row (same shape as
+// `CpVisitDetail` minus arrival proof we don't need for the home card).
+data class MyMarketingCpVisitsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val visits: List<CpVisitDetail> = emptyList(),
+    val error: String? = null,
+)
+
+data class CpVisitDetail(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val leadId: String? = null,
+    val clientId: String? = null,
+    val clientPlaceId: String? = null,
+    val origin: String? = null,
+    val telecallerStaffId: String? = null,
+    val assignedStaffId: String? = null,
+    val assignedAt: Long? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val status: String? = null,
+    val clientMet: Boolean? = null,
+    val clientMetAt: Long? = null,
+    val clientNoShowReason: String? = null,
+    val outcome: String? = null,
+    val postponeReasons: List<String>? = null,
+    val convertedSiteVisitId: String? = null,
+    val convertedBookingId: String? = null,
+    val fieldVisitId: String? = null,
+    val notes: String? = null,
+    val completedAt: Long? = null,
+    val cancelledAt: Long? = null,
+    val expectedAttendeeCount: Int? = null,
+    val foodPreferences: String? = null,
+    val vehiclePreference: String? = null,
+    val isBookingCompleted: Boolean? = null,
+    val createdAt: Long? = null,
+    val updatedAt: Long? = null,
+    // SV-via-CP path: when the telecaller pre-fixed an SV via the
+    // dialer's "same area" routing, the CP visit carries the full SV
+    // payload here. Mobile uses this to lock the outcome sheet to the
+    // Site Visit tab and pre-fill the form with the telecaller's plan.
+    val proposedSiteVisit: ProposedSiteVisit? = null,
+    val attendees: List<CpVisitAttendee>? = null,
+    // CP-level projectId picked when the CP was created (see the
+    // mobile / web CP create form's Project field). Used by the SV
+    // outcome form to pre-fill the project picker when the CP was
+    // manually created (no proposedSiteVisit) instead of forcing
+    // the field staff to re-pick the same project.
+    val projectId: String? = null,
+    // Joined references the web `enrichVisit` helper attaches:
+    val lead: CpVisitLead? = null,
+    val client: CpVisitClient? = null,
+    val telecaller: CpVisitStaff? = null,
+    val assignedStaff: CpVisitStaff? = null,
+    val clientPlace: CpVisitPlace? = null,
+    val fieldVisit: CpVisitFieldVisit? = null,
+    val arrivalProof: CpVisitArrivalProof? = null,
+    /** Resolved project row from `enrichVisit` — used to label the SV picker. */
+    val project: CpVisitProject? = null,
+    /**
+     * Pre-resolved site-incharge staff row. Only the pure-SV detail
+     * path populates this (`getForMobileId` synthesizes it when there
+     * is no linked CP). For CP-converted SVs the incharge still has to
+     * be looked up via `proposedSiteVisit.inchargeStaffId` against the
+     * staff list endpoint.
+     */
+    val inchargeStaff: CpVisitStaff? = null,
+)
+
+data class CpVisitProject(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+)
+
+/**
+ * Telecaller's pre-fixed SV details snapshot. When non-null on a
+ * CP visit, the mobile bottom sheet locks to Site Visit mode and
+ * surfaces these fields as read-only with Reject / Confirm buttons.
+ */
+data class ProposedSiteVisit(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val projectId: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val inchargeStaffId: String? = null,
+    val hodStaffId: String? = null,
+    val bdoStaffId: String? = null,
+    val avpStaffId: String? = null,
+    val gmStaffId: String? = null,
+    val seniorManagerStaffId: String? = null,
+    // SV status + the surrounding signals the stepper needs to mirror
+    // the web's progress logic. Without these, mobile only reads
+    // `status` and misses the "vehicle assigned" auto-advance + the
+    // driver-side timestamp boosts (travelDeskStartedAt etc.).
+    val status: String? = null,
+    val travelMode: String? = null,
+    val vehicleId: String? = null,
+    val travelAgencyId: String? = null,
+    val pickedUpAt: Long? = null,
+    val arrivedSiteAt: Long? = null,
+    val droppedAt: Long? = null,
+    val completedAt: Long? = null,
+    val travelDeskStartedAt: Long? = null,
+    val travelDeskOnSiteAt: Long? = null,
+    val travelDeskEndedAt: Long? = null,
+)
+
+data class MmsFleetDriverTripsResponse(
+    val success: Boolean = false,
+    val trips: List<MmsFleetDriverTrip> = emptyList(),
+    val error: String? = null,
+)
+
+data class MmsFleetDriverActionResponse(
+    val success: Boolean = false,
+    val trip: MmsFleetDriverTrip? = null,
+    val error: String? = null,
+)
+
+data class MmsFleetDriverSiteVisitRequest(
+    val siteVisitId: String,
+)
+
+data class MmsFleetDriverStartRequest(
+    val siteVisitId: String,
+    val photoIds: List<String>,
+    val startKm: Double? = null,
+)
+
+data class MmsFleetDriverEndRequest(
+    val siteVisitId: String,
+    val photoIds: List<String>,
+    val endKm: Double? = null,
+)
+
+data class MmsFleetDriverTrip(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val pickupAddress: String? = null,
+    val pickupTime: String? = null,
+    val driverName: String? = null,
+    val driverPhone: String? = null,
+    val travelDeskArrivedAt: Long? = null,
+    val travelDeskStartedAt: Long? = null,
+    val travelDeskOnSiteAt: Long? = null,
+    val travelDeskEndedAt: Long? = null,
+    val travelDeskStartKm: Double? = null,
+    val travelDeskEndKm: Double? = null,
+    val travelDeskStartPhotoIds: List<String> = emptyList(),
+    val travelDeskEndPhotoIds: List<String> = emptyList(),
+    val phase: String? = null,
+    val canOperateToday: Boolean? = null,
+    val km: Double? = null,
+    val project: MmsFleetDriverProject? = null,
+    val vehicle: MmsFleetDriverVehicle? = null,
+)
+
+data class MmsFleetDriverProject(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+)
+
+data class MmsFleetDriverVehicle(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val vehicleNumber: String? = null,
+    val type: String? = null,
+)
+
+data class CpVisitAttendee(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null,
+    val notes: String? = null,
+)
+
+data class CpVisitLead(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val city: String? = null,
+    val preferredArea: String? = null,
+    val followUpStatus: String? = null,
+)
+
+data class CpVisitClient(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val city: String? = null,
+)
+
+data class CpVisitStaff(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // The Convex `staff` row stores the display label as `name`. The
+    // enrichVisit helper returns the raw row, so the wire field really
+    // is `name` — not `staffName`. Previously we only declared
+    // `staffName`, which meant assignedStaff/telecaller/incharge reads
+    // were silently null (mobile BDO showed "AKASH.B" forever because
+    // the real value was hiding behind the wrong field name).
+    val name: String? = null,
+    val staffName: String? = null,
+    val staffCode: String? = null,
+)
+
+data class CpVisitPlace(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val address: String? = null,
+    val formattedAddress: String? = null,
+    val landmark: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val contactPerson: String? = null,
+    val contactPhone: String? = null,
+)
+
+data class CpVisitFieldVisit(
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    val status: String? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val distanceMeters: Double? = null,
+    val durationMinutes: Double? = null,
+)
+
+data class CpVisitArrivalProof(
+    val photoStorageId: String? = null,
+    val photoUrl: String? = null,
+    val otpVerifiedAt: Long? = null,
+    val otpRequestedAt: Long? = null,
+    val gpsLat: Double? = null,
+    val gpsLng: Double? = null,
+    val distanceFromPlaceMeters: Double? = null,
+)
+
 data class AssignedPlace(
     @com.google.gson.annotations.SerializedName("_id") val id: String,
     val name: String,
@@ -664,7 +1121,35 @@ data class TodayVisit(
         value = "scheduledEndTime",
         alternate = ["scheduledEnd", "endTime", "meetingEndTime", "scheduledTo", "toTime", "endAt", "timeTo", "visitEndTime"]
     )
-    val scheduledEndTime: String? = null
+    val scheduledEndTime: String? = null,
+    // Mobile-only annotation set by the Home merge once we know whether
+    // the underlying CP visit carries an SV-fix payload. Server never
+    // sends this key so Gson leaves it as the default null on legacy
+    // /today-visits rows; the Home merge copies the data class with a
+    // non-null value for CP-merge rows. Values:
+    //   "sv_cum_cp"  → telecaller-fixed SV verified through a CP
+    //   "direct_cp"  → regular CP visit (no SV-fix payload)
+    //   "site_visit" → direct site visit (no CP intermediary)
+    //   null         → unknown
+    val visitCategory: String? = null,
+    // Travel-mode metadata for the SV list pill. Populated by the new
+    // siteVisits query (`marketing.siteVisits.listForViewerAsMobileVisits`)
+    // so the Android list can show "Own Vehicle" for SVs that the
+    // office fixed on the client's own vehicle instead of falling
+    // through to "No Vehicle Assigned". Legacy /today-visits rows
+    // leave these as null and the renderer falls back to the prior
+    // visitCategory heuristic. Values mirror the backend's
+    // travelModeValidator: "own_vehicle" | "cab" | "external".
+    val travelMode: String? = null,
+    val vehiclePreference: String? = null,
+    val vehicleAssigned: Boolean? = null,
+    // Convex auto-populates `_creationTime` on every doc; we surface it
+    // so Today's Trip can sort newest-first regardless of source (legacy
+    // fieldVisits route vs CP-merge path). For CP-merge rows where the
+    // legacy field is absent, toTodayVisitOrNull seeds this from the
+    // CpVisitDetail's stored `createdAt` (same numeric value).
+    @com.google.gson.annotations.SerializedName("_creationTime")
+    val creationTime: Double? = null,
 )
 
 data class CpVisitState(

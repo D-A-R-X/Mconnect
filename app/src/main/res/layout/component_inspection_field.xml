@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reusable form-field component:
+    • Label row (label TextView + red asterisk).
+    • Pill row (icon + EditText + optional trailing TextView / chevron).
+  All bindable IDs are nested inside a horizontal LinearLayout so the
+  fragment can grab them via `field.findViewById(...)`.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/fieldLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:textColor="#101828"
+            android:textSize="12sp"
+            tools:text="Land Owner Name" />
+
+        <TextView
+            android:id="@+id/fieldRequiredStar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="*"
+            android:textColor="#EF4444"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_inspection_field"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:id="@+id/fieldIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            tools:src="@drawable/ic_inspection_field_owner" />
+
+        <EditText
+            android:id="@+id/fieldInput"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:paddingHorizontal="0dp"
+            android:paddingVertical="0dp"
+            android:singleLine="true"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp"
+            tools:hint="Enter Name" />
+
+        <!-- Trailing area. For static suffixes ("K/m") only the text is
+             shown. For dropdowns ("Feet ▾") the whole row is clickable
+             and the chevron makes the affordance obvious. The fragment
+             flips `fieldTrailingChevron.visibility` for the dropdown case. -->
+        <LinearLayout
+            android:id="@+id/fieldTrailingContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/fieldTrailingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:textColor="#6B7280"
+                android:textSize="13sp"
+                tools:text="Feet" />
+
+            <ImageView
+                android:id="@+id/fieldTrailingChevron"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="4dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_down"
+                android:visibility="gone"
+                app:tint="#6B7280"
+                tools:visibility="visible" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

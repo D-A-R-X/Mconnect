@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import com.manjugroups.m_connect.auth.ForcePasswordChangeActivity
 import com.manjugroups.m_connect.auth.LoginActivity
 import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
@@ -79,6 +80,7 @@ class SplashActivity : AppCompatActivity() {
         val session = SessionManager(this)
         val onboarded = OnboardingPrefs(this).onboardingCompleted
         val next = when {
+            session.isLoggedIn && session.mustChangePassword -> ForcePasswordChangeActivity::class.java
             session.isLoggedIn -> MainActivity::class.java
             onboarded -> LoginActivity::class.java
             else -> WelcomeActivity::class.java

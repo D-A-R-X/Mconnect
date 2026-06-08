@@ -1,0 +1,25 @@
+<!--
+  Project picker pill background.
+   - Default: solid white pill, no border.
+   - state_activated=true: a yellow/gold ring appears around the pill,
+     mirroring the focused look in the reference design. The fragment
+     flips `isActivated` on the picker view while the popup is showing,
+     then back to false on dismiss.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFF" />
+            <stroke
+                android:width="2dp"
+                android:color="#F5C518" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFF" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</selector>

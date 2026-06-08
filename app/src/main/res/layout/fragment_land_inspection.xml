@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inspection page (Land Procurement > Inspection).
+  Layout:
+   • Sticky blue header with title + subtitle on the left and the
+     ChatGPT-generated inspection hero illustration on the right
+     (mirrors the App Library / Expenses header pattern).
+   • Below the header (scrolls): search pill + calendar button row,
+     status filter chip row, then the card list.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F1F3F8"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
+
+    <!-- STICKY blue header. Title block + hero illustration sit on the
+         same horizontal row, both centered vertically — matches the
+         reference design where the title and illustration are aligned
+         at the same Y, not stacked. -->
+    <LinearLayout
+        android:id="@+id/inspectionHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#0B61CA"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="22dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- Back arrow hidden per design — system back gesture / bottom
+                 navigation still pops the fragment. Click handler stays
+                 wired in the fragment in case visibility flips back. -->
+            <ImageView
+                android:id="@+id/btnInspectionBack"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:contentDescription="Back"
+                android:focusable="true"
+                android:padding="6dp"
+                android:src="@drawable/ic_arrow_left"
+                android:visibility="gone"
+                app:tint="@android:color/white" />
+
+            <TextView
+                android:id="@+id/tvInspectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Inspection"
+                android:textColor="@android:color/white"
+                android:textSize="24sp" />
+
+            <TextView
+                android:id="@+id/tvInspectionSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Manage and track all Inspection"
+                android:textColor="#D9D6FE"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Hero illustration — sized down slightly so it sits at the
+             same vertical level as the title block (matches reference). -->
+        <ImageView
+            android:id="@+id/ivInspectionHero"
+            android:layout_width="104dp"
+            android:layout_height="104dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_land_inspection_hero" />
+    </LinearLayout>
+
+    <!-- Rounded-top content panel — overlaps the bottom of the blue header
+         by -28dp so the page-bg curve cuts smoothly into the blue, matching
+         the reference design. Background = page bg, with 30dp rounded top
+         corners only. -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/inspectionRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="-28dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/inspectionScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:id="@+id/inspectionWhitePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:orientation="vertical"
+                android:paddingTop="10dp"
+                android:paddingBottom="120dp">
+
+                <!-- Search pill + calendar pill row. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Search pill — spec: 50dp tall, 10dp radius, white,
+                         padding 16 top/bottom × 20 left/right, soft 1dp
+                         shadow (Material elevation maps to the spec's
+                         X0 Y0 Blur1 black-40% drop shadow well enough). -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_inspection_search"
+                        android:elevation="1dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="16dp">
+
+                        <EditText
+                            android:id="@+id/etInspectionSearch"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:fontFamily="@font/inter_medium"
+                            android:hint="Search Inspection List"
+                            android:importantForAutofill="no"
+                            android:inputType="text"
+                            android:paddingHorizontal="0dp"
+                            android:paddingVertical="0dp"
+                            android:singleLine="true"
+                            android:textColor="#101828"
+                            android:textColorHint="#9CA3AF"
+                            android:textCursorDrawable="@null"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="Search"
+                            android:src="@drawable/ic_chat_search"
+                            app:tint="#9CA3AF" />
+                    </LinearLayout>
+
+                    <!-- Calendar button — matched to the search bar's 50dp
+                         height + 10dp radius so they read as a paired set. -->
+    <FrameLayout
+                        android:id="@+id/btnInspectionDateFilter"
+                        android:layout_width="50dp"
+                        android:layout_height="50dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_inspection_search"
+                        android:clickable="true"
+                        android:elevation="1dp"
+                        android:focusable="true">
+
+                        <!-- Default state: plain blue calendar glyph. -->
+                        <ImageView
+                            android:id="@+id/ivDateFilterDefault"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Date filter"
+                            android:src="@drawable/ic_calendar_days"
+                            app:tint="#0B61CA" />
+
+                        <!-- Active state: selected day inside a white calendar
+                             with the month below, on a blue button. -->
+                        <LinearLayout
+                            android:id="@+id/dateFilterActive"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <FrameLayout
+                                android:layout_width="24dp"
+                                android:layout_height="24dp">
+
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_calendar_blank" />
+
+                                <TextView
+                                    android:id="@+id/tvDateFilterDay"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:layout_marginTop="3dp"
+                                    android:fontFamily="@font/inter_bold"
+                                    android:gravity="center"
+                                    android:includeFontPadding="false"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="9sp"
+                                    tools:text="8" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvDateFilterMonth"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:textColor="#FFFFFF"
+                                android:textSize="9sp"
+                                tools:text="May" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!-- Status filter chips — horizontally scrollable so all four
+                     fit comfortably on narrower screens. -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp">
+
+                        <TextView
+                            android:id="@+id/chipFilterAll"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_inspection_chip_active"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="20dp"
+                            android:text="All"
+                            android:textColor="#FFFFFF"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/chipFilterProgress"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_inspection_chip_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="20dp"
+                            android:text="In progress"
+                            android:textColor="#6B7280"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/chipFilterCompleted"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_inspection_chip_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="20dp"
+                            android:text="Completed"
+                            android:textColor="#6B7280"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/chipFilterNotStarted"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_inspection_chip_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="20dp"
+                            android:text="Not Started"
+                            android:textColor="#6B7280"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+
+                <!-- Active date-filter chip — shown only when the user
+                     has picked a date via the calendar button. Tapping
+                     the X clears the filter. -->
+                <LinearLayout
+                    android:id="@+id/inspectionDateFilterChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_inspection_chip_active"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="6dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvInspectionDateFilterLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp" />
+
+                    <ImageView
+                        android:id="@+id/btnInspectionDateFilterClear"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginStart="6dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Clear date filter"
+                        android:padding="2dp"
+                        android:src="@drawable/ic_close_pill"
+                        app:tint="#FFFFFF" />
+                </LinearLayout>
+
+                <!-- Inspection card list — data-driven from the fragment.
+                     paddingHorizontal=16dp comes from the spec sheet's
+                     outer "border" measurements (16dp on every page edge).
+                     The cards themselves span the list width with no
+                     additional horizontal margin. -->
+                <LinearLayout
+                    android:id="@+id/inspectionLogList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp" />
+
+                <!-- Empty-state. Shown when the list query returns zero
+                     rows (no inspections assigned to the calling staff
+                     yet, or every row was filtered out by the chip /
+                     date / search filters). Hidden otherwise. -->
+                <LinearLayout
+                    android:id="@+id/inspectionEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="40dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="24dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvInspectionEmptyTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:gravity="center"
+                        android:text="No inspections assigned"
+                        android:textColor="#101828"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvInspectionEmptySubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="When an admin assigns you to a land property, it will appear here."
+                        android:textColor="#6B7280"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

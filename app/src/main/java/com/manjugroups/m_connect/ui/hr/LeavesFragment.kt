@@ -1,11 +1,15 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.animation.ObjectAnimator
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -15,11 +19,14 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
 import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -75,8 +82,9 @@ class LeavesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ApplyLeaveFragment())
@@ -106,6 +114,13 @@ class LeavesFragment : Fragment() {
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+
+        // Pull-to-refresh re-runs viewModel.load() so balance + history
+        // come back fresh. The spinner is dismissed in collectState() the
+        // moment the next non-loading state lands.
+        binding.leavesRefresh.setupPullToRefresh {
+            viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+        }
     }
 
     private fun setupFilterTabs() {
@@ -125,6 +140,8 @@ class LeavesFragment : Fragment() {
             renderState(viewModel.uiState.value)
         }
     }
+
+
 
     private fun updateFilterUi() {
         styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
@@ -152,12 +169,26 @@ class LeavesFragment : Fragment() {
 
     private fun renderState(state: LeavesState) {
         val canApprove = session.hasPermission("leaves.approve")
+        // Notification deep-link → approver pile (unchanged).
+        // History mode now routes by scope:
+        //   • MY   → own leaves, status-filtered
+        //   • TEAM → team pending approvals, Approve/Reject inline
+        //   • ALL  → own + status filter applied (passthrough until
+        //            a dedicated "all-leaves" endpoint exists)
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else {
             filterHistoryLeaves(state.myLeaves)
         }
         val isLoading = state.isLoading
+
+        if (screenMode == MODE_HISTORY) {
+            binding.filterRow.visibility = View.VISIBLE
+        }
+
+        // Clear the pull-refresh spinner as soon as a non-loading state
+        // arrives — regardless of whether it's success or error.
+        if (!isLoading) binding.leavesRefresh.dismissRefresh()
 
         val hasAllocation = state.casualTotal > 0 || state.sickTotal > 0 || state.earnedTotal > 0
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
@@ -187,15 +218,17 @@ class LeavesFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayLeaves.isEmpty())
-        renderLeaves(displayLeaves, canApprove && screenMode == MODE_APPROVAL)
+        val isApprovalForRender = canApprove && screenMode == MODE_APPROVAL
+        renderLeaves(displayLeaves, isApprovalForRender)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
-        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
+        val isTeamScope = screenMode == MODE_APPROVAL
+        val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
         binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
         binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
 
-        if (screenMode == MODE_APPROVAL) {
+        if (isTeamScope) {
             binding.tvSectionTitle.text = "Leave Approvals"
             binding.tvSectionSubtitle.visibility = View.GONE
         } else {
@@ -302,7 +335,11 @@ class LeavesFragment : Fragment() {
             }
 
             val bucket = bucketForStatus(leave.status)
-            val statusDate = parseCreationDate(leave.createdAt)
+            // Decision timestamp first (Approved/Rejected rows), fall
+            // back to creation time for Review rows / older data that
+            // pre-dates the decidedAt enrichment.
+            val decidedDate = parseIsoOrEpoch(leave.decidedAt)
+            val statusDate = decidedDate ?: parseCreationDate(leave.createdAt)
             val statusDateText = statusDate?.let { statusFmt.format(it) }
 
             val statusNote: String
@@ -330,6 +367,13 @@ class LeavesFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvLeaveType).text = rangeText
             card.findViewById<TextView>(R.id.tvLeaveStatus).text = "$days Day${if (days > 1) "s" else ""}"
 
+            // Dynamic labels matching Figma: reason as left label, leave type as right label
+            val reasonLabel = card.findViewById<TextView>(R.id.tvLeaveReasonLabel)
+            val typeLabel = card.findViewById<TextView>(R.id.tvLeaveTypeLabel)
+            reasonLabel.text = leave.reason?.trim()?.takeIf { it.isNotBlank() } ?: "Leave Date"
+            val leaveTypeDisplay = leave.leaveType?.replaceFirstChar { it.uppercaseChar() }?.let { "$it Leave" } ?: "Total Leave"
+            typeLabel.text = leaveTypeDisplay
+
             val reasonText = card.findViewById<TextView>(R.id.tvLeaveReason)
             reasonText.text = statusNote
             reasonText.setTextColor(statusColor)
@@ -337,19 +381,49 @@ class LeavesFragment : Fragment() {
 
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
+            val staffAvatar = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStaffAvatar)
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
             val approveButton = card.findViewById<TextView>(R.id.btnApproveLeave)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectLeave)
 
-            val displayName = leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            // For Approved/Rejected rows show the decision-maker (the
+            // approver who acted on the request) instead of the
+            // submitter — matches the design's "By Elaine" label on
+            // the approved/rejected cards. For Review rows we keep the
+            // submitter name, which is what the manager UI wants.
+            val showApprover = bucket == StatusBucket.APPROVED || bucket == StatusBucket.REJECTED
+            val displayName = if (showApprover) {
+                leave.approverName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: leave.staffName?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: "Self"
+            } else {
+                leave.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
+            }
             val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
             staffRow.visibility = View.VISIBLE
             byLabel.visibility = View.VISIBLE
             staffName.visibility = View.VISIBLE
             staffName.text = displayName
             staffInitial.text = initial
+
+            // Approver photo when present; clear back to the initial
+            // chip otherwise so recycled views don't keep the previous
+            // person's avatar.
+            val photoUrl = if (showApprover) leave.approverPhotoUrl?.takeIf { it.isNotBlank() } else null
+            if (photoUrl != null) {
+                staffAvatar.visibility = View.VISIBLE
+                staffInitial.visibility = View.INVISIBLE
+                staffAvatar.load(photoUrl) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+            } else {
+                staffAvatar.visibility = View.GONE
+                staffAvatar.setImageDrawable(null)
+                staffInitial.visibility = View.VISIBLE
+            }
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
@@ -367,6 +441,17 @@ class LeavesFragment : Fragment() {
                 }
             } else {
                 actionRow.visibility = View.GONE
+            }
+
+            // Show delete icon on the user's own leave cards (history mode only)
+            val deleteBtn = card.findViewById<View>(R.id.btnDeleteLeave)
+            if (!approvalMode && leave.id != null) {
+                deleteBtn.visibility = View.VISIBLE
+                deleteBtn.setOnClickListener {
+                    showCancelLeaveDialog(leave.id)
+                }
+            } else {
+                deleteBtn.visibility = View.GONE
             }
 
             if (leave.id == focusedEntityId) {
@@ -389,6 +474,39 @@ class LeavesFragment : Fragment() {
             else -> raw.toLong()
         }
         return runCatching { Date(millis) }.getOrNull()
+    }
+
+    /**
+     * Accepts either an ISO-8601 string ("2026-06-02T13:45:21.123Z" or
+     * "2026-06-02") OR a numeric epoch encoded as a string. Returns
+     * null on any failure so the caller can fall back to creationTime.
+     * Used to parse the server's `decidedAt` field on approved/rejected
+     * leave rows.
+     */
+    private fun parseIsoOrEpoch(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        raw.toDoubleOrNull()?.let { epoch ->
+            return parseCreationDate(epoch)
+        }
+        val isoPatterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (pattern in isoPatterns) {
+            runCatching {
+                val fmt = SimpleDateFormat(pattern, Locale.US)
+                if (pattern.endsWith("'Z'")) {
+                    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                fmt.parse(raw)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun sameDate(date1: Date, date2: Date): Boolean {
@@ -424,6 +542,32 @@ class LeavesFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showCancelLeaveDialog(leaveId: String) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+
+        // Set the background transparent so the rounded corners of bg_dialog_card show perfectly
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        // Wire up buttons
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            viewModel.cancelLeave(
+                session.bearerToken,
+                leaveId,
+                session.hasPermission("leaves.approve")
+            )
+        }
+
+        dialog.show()
     }
 
     private fun resolveColor(attr: Int): Int {

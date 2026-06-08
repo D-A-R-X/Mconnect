@@ -52,8 +52,10 @@ import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.CreateVisitRequest
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -112,6 +114,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpClientMet: Boolean? = null
     private var cpOutcome: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
+    // True once the reconcile detects this CP visit was opened as part of
+    // a telecaller-fixed SV (proposedSiteVisit / lead.sv_fixed / party
+    // data). Drives two UI changes:
+    //   - the post-arrival CTA reads "Complete SV details" instead of
+    //     "Complete CP details"
+    //   - the outcome sheet opens directly in locked SV mode (no flash
+    //     of the Booking tab while detect runs async inside the sheet)
+    private var cpIsSvFixed: Boolean = false
+
+    // True when this Trip Details is rendering a pure SV row (no CP
+    // behind it). Set from the visitCategory arg; lets renderPreStartPhase
+    // skip "Start Trip" and surface the outcome flow directly via
+    // CompleteCpVisitBottomSheet.forSiteVisit. Pure-SV visits don't go
+    // through the trip-tracking lifecycle on mobile — staff arrive
+    // directly and record the outcome.
+    private var isPureSiteVisit: Boolean = false
     private var showClientNotSeenCompletion = false
     // KOS-52: Set when the user picked "No, didn't see client" on the Yes/No
     // sheet. We still capture an arrival photo for proof but skip the OTP
@@ -275,12 +293,34 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
 
         tvTitle?.text = "Trip Details"
-        tvDestName?.text = placeName
+        // The "Type" cell on the Trip Details card now surfaces the visit
+        // category rather than echoing the client name (which the header
+        // already shows). Same vocabulary as Home / CP Visits rows so the
+        // user gets one consistent label across surfaces.
+        val visitCategory = args.getString(ARG_VISIT_CATEGORY)
+        val cpVisitIdLocal = args.getString(ARG_CP_VISIT_ID)
+        val isPlaceOnly = args.containsKey(ARG_PLACE_ID) && args.getString(ARG_VISIT_ID).isNullOrBlank()
+        // Pure-SV detection. visitCategory=site_visit AND no CP visit id
+        // behind it → this is a real siteVisits row whose trip lifecycle
+        // doesn't go through the legacy fieldVisits flow. The CTA at
+        // the bottom of the screen becomes "Complete Outcome" instead
+        // of "Start Trip"; tap opens the outcome sheet in SV mode.
+        isPureSiteVisit = (visitCategory == "site_visit") && cpVisitIdLocal.isNullOrBlank()
+        tvDestName?.text = when (visitCategory) {
+            "sv_cum_cp" -> "SV confirmation CP"
+            "direct_cp" -> "Direct CP"
+            "site_visit" -> "Site Visit"
+            else -> when {
+                isPlaceOnly -> "Assigned place"
+                !cpVisitIdLocal.isNullOrBlank() -> "CP visit"
+                else -> "Visit"
+            }
+        }
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
         tvOriginName?.text = "Current Location"
         bindTripClientHeader(view, placeName)
 
-        btnBack?.setOnClickListener { parentFragmentManager.popBackStack() }
+        btnBack?.setOnClickListener { navigateUp() }
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
         swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
         btnCompleteCpDetails?.setOnClickListener { showCpCompletionSheet() }
@@ -306,7 +346,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
         }
         setFragmentResultListener(CpTripCompletedBottomSheet.RESULT_KEY) { _, _ ->
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         mapView?.onCreate(savedInstanceState)
@@ -321,11 +361,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // there's no flicker where the detail page disagrees with the list.
         val incomingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
         when (incomingStatus) {
-            "arrived", "arrival_verified", "arrival-verified" -> {
+            "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
                 visitStarted = true
                 arrivalConfirmedForProgress = true
                 showTripStartTime()
-                applyStatusPill("Reaching")
+                applyStatusPill(if (session.isDriverMode) "On Site" else "Reaching")
                 btnOpenMaps?.visibility = View.GONE
                 renderArrivalPhase(alreadyArrived = true)
             }
@@ -345,11 +385,137 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 btnCompleteCpDetails?.visibility = View.GONE
             }
         }
+
+        // Self-healing: ARG_STATUS comes from whatever the home list said,
+        // which can lag the server (e.g. the legacy /today-visits row
+        // says "scheduled" but the spawned fieldVisits row is already
+        // "arrived" because the staff finished arrival OTP on a prior
+        // session). For CP visits, re-check the server-side truth and
+        // jump straight to the post-arrival phase so we never push the
+        // user through Start Trip → Swipe again on a trip they've
+        // already done.
+        if (!cpVisitId.isNullOrBlank()) {
+            reconcileCpVisitStatusFromServer()
+        }
+
+        setFragmentResultListener(DriverEndTripBottomSheet.RESULT_KEY) { _, bundle ->
+            val success = bundle.getBoolean("success")
+            if (success) {
+                Toast.makeText(requireContext(), "Trip completed successfully", Toast.LENGTH_SHORT).show()
+                navigateUp()
+            }
+        }
+    }
+
+    private fun reconcileCpVisitStatusFromServer() {
+        val cpId = cpVisitId ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = null,
+                    toDate = null,
+                )
+                if (!resp.success) return@launch
+                val cp = resp.visits.firstOrNull { it.id == cpId } ?: return@launch
+                if (!isAdded) return@launch
+
+                // Detect SV-fix mode from the same three signals the
+                // outcome sheet uses (proposedSiteVisit / lead.sv_fixed
+                // / party data). Drives two surfaces: the CTA label on
+                // this screen flips to "Complete SV details", and the
+                // sheet open is hinted so it skips the Booking-tab
+                // default render that was causing the visible flash.
+                val proposedHasFields = cp.proposedSiteVisit?.let { p ->
+                    !p.projectId.isNullOrBlank() ||
+                        !p.scheduledDate.isNullOrBlank() ||
+                        !p.scheduledTime.isNullOrBlank() ||
+                        !p.inchargeStaffId.isNullOrBlank() ||
+                        !p.hodStaffId.isNullOrBlank() ||
+                        !p.bdoStaffId.isNullOrBlank() ||
+                        !p.avpStaffId.isNullOrBlank() ||
+                        !p.gmStaffId.isNullOrBlank() ||
+                        !p.seniorManagerStaffId.isNullOrBlank()
+                } ?: false
+                val leadFlaggedSvFixed = cp.lead?.followUpStatus
+                    ?.lowercase(Locale.getDefault())
+                    ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+                    ?: false
+                val hasSvFixParty = (cp.expectedAttendeeCount ?: 0) > 0 ||
+                    (cp.attendees?.isNotEmpty() == true) ||
+                    !cp.foodPreferences.isNullOrBlank() ||
+                    !cp.vehiclePreference.isNullOrBlank()
+                cpIsSvFixed = proposedHasFields || leadFlaggedSvFixed || hasSvFixParty
+                if (cpIsSvFixed) {
+                    btnCompleteCpDetails?.text = "Complete SV details"
+                }
+                android.util.Log.d(
+                    "TripNav",
+                    "reconcile: cpIsSvFixed=$cpIsSvFixed (proposed=$proposedHasFields " +
+                        "lead=$leadFlaggedSvFixed party=$hasSvFixParty)",
+                )
+
+                // Pick the most-advanced authoritative status: prefer the
+                // spawned fieldVisits row (where "arrived" lives) over
+                // the CP-side lifecycle (which only tracks
+                // scheduled/in_progress/completed).
+                val effective = (cp.fieldVisit?.status ?: cp.status).orEmpty()
+                    .lowercase(Locale.getDefault())
+                when (effective) {
+                    "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
+                        visitStarted = true
+                        arrivalConfirmedForProgress = true
+                        showTripStartTime()
+                        applyStatusPill(if (session.isDriverMode) "On Site" else "Reaching")
+                        btnOpenMaps?.visibility = View.GONE
+                        renderArrivalPhase(alreadyArrived = true)
+                    }
+                    "in-progress", "in_progress", "ongoing", "started", "active" -> {
+                        // Only flip if we weren't already past the
+                        // enroute phase locally. Don't downgrade the UI
+                        // from arrived to enroute.
+                        if (!arrivalConfirmedForProgress) {
+                            visitStarted = true
+                            showTripStartTime()
+                            applyStatusPill("Enroute")
+                            btnOpenMaps?.visibility = View.GONE
+                            renderArrivalPhase(alreadyArrived = false)
+                        }
+                    }
+                    "completed", "complete", "done", "closed" -> {
+                        visitStarted = true
+                        showTripStartTime()
+                        applyStatusPill("Complete")
+                        btnOpenMaps?.visibility = View.GONE
+                        swipeArrived?.visibility = View.GONE
+                        btnCompleteCpDetails?.visibility = View.GONE
+                    }
+                    // "scheduled" or empty: leave the locally-rendered
+                    // pre-start phase as-is so the user can Start Trip.
+                    else -> { /* no-op */ }
+                }
+            } catch (_: Exception) {
+                // Network blip: don't disturb the locally-rendered UI.
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(false)
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            // The trip top bar is white (#FEFEFE) and only has paddingTop=14dp,
+            // which is not enough to clear the OS status bar when the previous
+            // screen left the activity in full-bleed mode. Tell MainActivity to
+            // paint a matching white strip behind the status bar with dark
+            // icons, so the back button + "Trip Details" title sit cleanly
+            // below the notification icons instead of overlapping them.
+            main.setTopBarAppearance(
+                android.graphics.Color.parseColor("#FEFEFE"),
+                darkStatusIcons = true,
+                fullBleed = false,
+            )
+        }
         mapView?.onResume()
     }
 
@@ -541,10 +707,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
             }
             TripStepState.ACTIVE -> {
-                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_outline)
-                icon?.setImageResource(activeIcon)
+                // "Current step" look: same green fill + white icon as a DONE
+                // step, but with the halo-ring drawable so the user can tell
+                // at a glance which step they're on right now (matches the
+                // En Route circle in the reference design).
+                container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_active_current)
+                icon?.setImageResource(doneIcon)
                 label?.setTextColor(Color.parseColor("#19B900"))
-                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_medium)
+                label?.typeface = ResourcesCompat.getFont(ctx, R.font.inter_semibold)
             }
             TripStepState.INACTIVE -> {
                 container?.background = ctx.getDrawable(R.drawable.bg_trip_progress_figma_inactive)
@@ -568,8 +738,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         hideTripStartTime()
         loadingOverlay?.visibility = View.GONE
         btnOpenMaps?.visibility = View.VISIBLE
-        tvStartTripLabel?.text = "Start Trip"
-        btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
+        // Pure SV: skip "Start Trip" entirely — the staff is already at
+        // the project; tap routes straight to the outcome sheet so
+        // they can record Booking / Postpone / Not Interested. Trip
+        // tracking on a real SV happens server-side on the parent row
+        // when the office side advances status. CP-derived visits
+        // keep the original "Start Trip" → trip-lifecycle flow.
+        if (isPureSiteVisit) {
+            tvStartTripLabel?.text = "Complete Outcome"
+            btnOpenMaps?.setOnClickListener { openSiteVisitOutcomeSheet() }
+        } else {
+            tvStartTripLabel?.text = "Start Trip"
+            btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
+        }
         swipeArrived?.visibility = View.GONE
         btnCompleteCpDetails?.visibility = View.GONE
         tvOriginName?.text = "Current Location"
@@ -591,9 +772,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val existingVisit = visitId
         val existingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
         val alreadyInFlight = existingStatus in setOf(
-            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived", "on_site", "on-site"
         )
-        val alreadyArrived = existingStatus in setOf("arrived", "arrival_verified", "arrival-verified")
+        val alreadyArrived = existingStatus in setOf("arrived", "arrival_verified", "arrival-verified", "on_site", "on-site")
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -653,6 +834,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 btnOpenMaps?.visibility = View.GONE
                 btnOpenMaps?.isEnabled = true
                 applyStatusPill(when {
+                    alreadyArrived && session.isDriverMode -> "On Site"
                     alreadyArrived && !cpVisitDecisionCaptured -> "Reaching"
                     alreadyInFlight -> "Enroute"
                     else -> "Enroute"
@@ -675,7 +857,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (!isAdded) return
         loadingOverlay?.visibility = View.GONE
         Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
-        parentFragmentManager.popBackStack()
+        navigateUp()
     }
 
     private fun hideTripStartTime() {
@@ -875,6 +1057,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (arrivalInProgress) return
         arrivalInProgress = true
 
+        if (session.isDriverMode) {
+            markDriverOnSite()
+            return
+        }
+
         if (isCpVisit()) {
             checkReachingAndAskClientSeen()
             return
@@ -889,6 +1076,41 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             return
         }
         requestArrivalOtpThenOpenCamera()
+    }
+
+    private fun markDriverOnSite() {
+        val id = visitId ?: run {
+            arrivalInProgress = false
+            swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            return
+        }
+        swipeArrived?.lockAsBusy("Updating on-site…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoApi.markMmsFleetDriverOnSite(
+                    session.bearerToken,
+                    MmsFleetDriverSiteVisitRequest(id),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(response.error ?: "Failed to mark on-site")
+                }
+                arrivalConfirmedForProgress = true
+                session.saveDriverTripArrival(id)
+                applyStatusPill("On Site")
+                renderArrivalPhase(alreadyArrived = true)
+                Toast.makeText(requireContext(), "On Site Reached", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+                Toast.makeText(
+                    requireContext(),
+                    "Failed to mark on-site: ${e.message ?: "Network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                arrivalInProgress = false
+            }
+        }
     }
 
     private fun checkReachingAndAskClientSeen() {
@@ -956,6 +1178,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 )
                 if (!resp.success) {
                     arrivalInProgress = false
+                    // If the server tells us this visit is already in the
+                    // "arrived" state (e.g. the user swiped successfully on
+                    // a prior session, the OTP was verified, but the
+                    // outcome step was never finished), don't dump them
+                    // back on the "Swipe to Complete Trip" loop forever —
+                    // jump straight to the post-arrival phase so the
+                    // "Complete CP details" button surfaces.
+                    val errMsg = resp.error.orEmpty().lowercase(Locale.getDefault())
+                    val alreadyVerified =
+                        errMsg.contains("already verified") ||
+                            errMsg.contains("finish the outcome")
+                    if (alreadyVerified) {
+                        arrivalConfirmedForProgress = true
+                        renderArrivalPhase(alreadyArrived = true)
+                        return@launch
+                    }
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                     Toast.makeText(
                         requireContext(),
@@ -1067,6 +1305,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
                 lat = otpLat,
                 lng = otpLng,
+                // Hand the already-uploaded photo's storage id to the
+                // OTP sheet so it can attach the photo to the
+                // fieldVisit row at OTP-verify time. Without this the
+                // photo only got linked at completeVisit (trip-end),
+                // which left the web admin showing "No arrival photo
+                // yet" for the entire in-flight window.
+                arrivalPhotoStorageId = pendingArrivalStorageId,
             ).show(parentFragmentManager, "arrival_otp")
         }
     }
@@ -1098,10 +1343,52 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {
-        val isCpVisit = isCpVisit()
-        val shouldFillCpDetails = alreadyArrived && isCpVisit && !cpVisitDecisionCaptured
-
         if (alreadyArrived) arrivalConfirmedForProgress = true
+
+        if (session.isDriverMode) {
+            if (alreadyArrived) {
+                swipeArrived?.visibility = View.GONE
+                btnCompleteCpDetails?.visibility = View.VISIBLE
+                btnCompleteCpDetails?.text = "End Trip"
+                btnCompleteCpDetails?.setOnClickListener {
+                    DriverEndTripBottomSheet.newInstance(visitId!!)
+                        .show(parentFragmentManager, "driver_end_trip")
+                }
+            } else {
+                btnCompleteCpDetails?.visibility = View.GONE
+                swipeArrived?.visibility = View.VISIBLE
+                swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
+            }
+            return
+        }
+
+        // Use cpVisitId presence (not the stricter tripType check in
+        // isCpVisit()) as the gate for showing the outcome-sheet CTA.
+        // Stale Home cache, older Home merge code, or a missing
+        // tripType arg on legacy rows would otherwise drop the user
+        // back onto the swipe path with no way out ("deadlock"). If
+        // we have a CP visit id, we have everything needed to open the
+        // outcome sheet — tripType is just an annotation.
+        //
+        // We also intentionally IGNORE cpVisitDecisionCaptured here.
+        // The flag can be set from an ARG_CP_OUTCOME that originated
+        // in a *prior* aborted attempt (e.g. user opened the sheet,
+        // tapped a tab, dismissed without completing); the visit's
+        // real terminal state has to come from the server (the
+        // reconcile path will hide both buttons on "completed"). In
+        // any non-terminal "arrived" state we always want the
+        // outcome-sheet CTA visible, since that's the only way to
+        // actually finish the trip.
+        val hasCpRow = !cpVisitId.isNullOrBlank()
+        val shouldFillCpDetails = alreadyArrived && hasCpRow
+
+        android.util.Log.d(
+            "TripNav",
+            "renderArrivalPhase alreadyArrived=$alreadyArrived hasCpRow=$hasCpRow " +
+                "tripType=$tripType cpVisitId=$cpVisitId " +
+                "cpVisitDecisionCaptured=$cpVisitDecisionCaptured " +
+                "-> showCpButton=$shouldFillCpDetails",
+        )
 
         if (shouldFillCpDetails) {
             arrivalInProgress = false
@@ -1115,7 +1402,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         swipeArrived?.visibility = View.VISIBLE
         swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
 
-        if (alreadyArrived && isCpVisit && cpVisitDecisionCaptured) {
+        // Non-CP arrival with decision captured (plain field visit where
+        // OTP verify is the only decision needed) — finalize the trip
+        // without further user action. CP visits never reach this branch
+        // because shouldFillCpDetails captures every arrived CP above.
+        if (alreadyArrived && isCpVisit() && cpVisitDecisionCaptured) {
             finalizeCompleteVisit()
         }
     }
@@ -1124,13 +1415,48 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val cpId = cpVisitId ?: return
         arrivalConfirmedForProgress = true
         applyStatusPill("Reaching")
+        // Treat the row as SV-fix when EITHER signal fires:
+        //   - cpIsSvFixed (set by the async reconcile when it completes)
+        //   - visitCategory == "sv_cum_cp" (handed down synchronously
+        //     from the caller — Home or CP list — which already
+        //     classified this row via the same payload signals)
+        // The visitCategory check fixes the visible flicker where users
+        // tap Complete-Outcome before reconcile finishes, briefly see
+        // the Booking tab body, then watch it snap to locked SV. With
+        // the synchronous hint the very first paint is already locked.
+        val visitCategory = arguments?.getString(ARG_VISIT_CATEGORY)
+        val svFix = cpIsSvFixed || visitCategory == "sv_cum_cp"
         CompleteCpVisitBottomSheet
             .newInstance(
                 cpVisitId = cpId,
                 cpClientMet = cpClientMet,
                 cpOutcome = cpOutcome,
+                isSvFixedHint = svFix,
             )
             .show(parentFragmentManager, "cp_visit_complete")
+    }
+
+    /**
+     * Pure-SV outcome flow. Opens [CompleteCpVisitBottomSheet] in
+     * SV-mode (Site Visit tab disabled, Booking / Postpone /
+     * Not Interested all persisting to the
+     * /api/marketing/siteVisits/setOutcome endpoint).
+     * Triggered by the "Complete Outcome" CTA that replaces "Start
+     * Trip" on pure-SV trip detail screens.
+     */
+    private fun openSiteVisitOutcomeSheet() {
+        val svId = arguments?.getString(ARG_VISIT_ID)
+        if (svId.isNullOrBlank()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Site visit id is missing",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        CompleteCpVisitBottomSheet
+            .forSiteVisit(svId)
+            .show(parentFragmentManager, "sv_outcome")
     }
 
     // KOS-52: After the user confirms "Yes, I saw the client" we still need
@@ -1278,7 +1604,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     CpTripCompletedBottomSheet().show(parentFragmentManager, "cp_trip_completed")
                 } else {
                     Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
-                    parentFragmentManager.popBackStack()
+                    navigateUp()
                 }
             } catch (e: Exception) {
                 arrivalInProgress = false
@@ -1369,6 +1695,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        // Visit category — feeds the Trip Details "Type" cell. Same
+        // vocabulary the Home + CP Visits lists use:
+        // "sv_cum_cp" / "direct_cp" / "site_visit" / null (places).
+        private const val ARG_VISIT_CATEGORY = "arg_visit_category"
 
         fun forVisit(
             visitId: String,
@@ -1381,6 +1711,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             clientPlaceVisitId: String? = null,
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
+            visitCategory: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -1393,6 +1724,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (clientPlaceVisitId != null) putString(ARG_CP_VISIT_ID, clientPlaceVisitId)
                 if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                 if (cpOutcome != null) putString(ARG_CP_OUTCOME, cpOutcome)
+                if (visitCategory != null) putString(ARG_VISIT_CATEGORY, visitCategory)
             }
         }
 

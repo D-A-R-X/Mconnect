@@ -17,6 +17,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityLoginBinding
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
@@ -44,7 +45,7 @@ class LoginActivity : AppCompatActivity() {
         session = SessionManager(this)
 
         if (session.isLoggedIn) {
-            goToMain()
+            goToNext()
             return
         }
 
@@ -64,7 +65,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         binding.btnEmployeeOption.setOnClickListener {
-            Toast.makeText(this, getString(R.string.employee_id_coming_soon), Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, EmployeePasswordLoginActivity::class.java))
         }
 
         binding.btnSendOtp.setOnClickListener {
@@ -94,12 +95,12 @@ class LoginActivity : AppCompatActivity() {
                     when (state) {
                         is AuthUiState.Loading -> {
                             binding.tvSendOtp.visibility = View.INVISIBLE
-                            binding.progressSendOtp.visibility = View.VISIBLE
+                            binding.skeletonSendOtp.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonSendOtp)
                             binding.btnSendOtp.isClickable = false
                         }
                         is AuthUiState.OtpSent -> {
                             resetButton()
-                            Toast.makeText(this@LoginActivity, state.message, Toast.LENGTH_SHORT).show()
                             val phone = normalizePhone(binding.etPhone.text.toString())
                             startActivity(Intent(this@LoginActivity, OtpActivity::class.java).apply {
                                 putExtra(OtpActivity.EXTRA_PHONE, phone)
@@ -108,7 +109,12 @@ class LoginActivity : AppCompatActivity() {
                         }
                         is AuthUiState.Error -> {
                             resetButton()
-                            Toast.makeText(this@LoginActivity, state.message, Toast.LENGTH_SHORT).show()
+                            val msg = state.message
+                            // Suppress dev-mode "OTP sent" confirmation that the backend
+                            // sometimes returns in the error channel.
+                            if (!msg.contains("otp sent", ignoreCase = true)) {
+                                Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
                             viewModel.resetState()
                         }
                         else -> resetButton()
@@ -120,12 +126,18 @@ class LoginActivity : AppCompatActivity() {
 
     private fun resetButton() {
         binding.tvSendOtp.visibility = View.VISIBLE
-        binding.progressSendOtp.visibility = View.GONE
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonSendOtp)
+        binding.skeletonSendOtp.visibility = View.GONE
         binding.btnSendOtp.isClickable = true
     }
 
-    private fun goToMain() {
-        startActivity(Intent(this, MainActivity::class.java))
+    private fun goToNext() {
+        val next = if (session.mustChangePassword) {
+            Intent(this, ForcePasswordChangeActivity::class.java)
+        } else {
+            Intent(this, MainActivity::class.java)
+        }
+        startActivity(next)
         finish()
     }
 

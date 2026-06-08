@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="100dp"
+    android:viewportWidth="120"
+    android:viewportHeight="100">
+
+    <!-- Background decorative circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.15"
+        android:pathData="M95,50 m-35,0 a35,35 0 1,0 70,0 a35,35 0 1,0 -70,0" />
+
+    <!-- Clipboard Main Body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M45,25 L85,25 Q90,25 90,30 L90,85 Q90,90 85,90 L45,90 Q40,90 40,85 L40,30 Q40,25 45,25 Z" />
+
+    <!-- Clipboard Top Clip -->
+    <path
+        android:fillColor="#0B61CA"
+        android:pathData="M55,18 L75,18 Q80,18 80,23 L80,30 Q80,35 75,35 L55,35 Q50,35 50,30 L50,23 Q50,18 55,18 Z" />
+
+    <!-- Progress Lines with Colored Dots (mirrors the mockup's list style) -->
+    <!-- Line 1: Green dot -->
+    <path android:fillColor="#1BCA0B" android:pathData="M50,48 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path android:fillColor="#EAECF0" android:pathData="M58,47 L82,47 L82,49 L58,49 Z" />
+
+    <!-- Line 2: Orange dot -->
+    <path android:fillColor="#F97316" android:pathData="M50,60 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path android:fillColor="#EAECF0" android:pathData="M58,59 L82,59 L82,61 L58,61 Z" />
+
+    <!-- Line 3: Blue dot -->
+    <path android:fillColor="#0B61CA" android:pathData="M50,72 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path android:fillColor="#EAECF0" android:pathData="M58,71 L82,71 L82,73 L58,73 Z" />
+
+    <!-- Decorative floating elements -->
+    <path
+        android:fillColor="#FFD93D"
+        android:pathData="M105,30 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+
+    <path
+        android:fillColor="#7A5AF8"
+        android:pathData="M30,70 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+
+</vector>

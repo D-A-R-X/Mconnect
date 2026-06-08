@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Full-width checkbox row used in Target Clients (Hig End / Upper
+  Middle / Middle / Lower / EVS Below). Fragment swaps the background
+  + checkbox glyph on click; the same pattern as the Road Type rows.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="50dp"
+    android:layout_marginTop="8dp"
+    android:background="@drawable/bg_inspection_field"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp">
+
+    <TextView
+        android:id="@+id/targetRowLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:textColor="#101828"
+        android:textSize="14sp"
+        tools:text="Upper Middle (50L - 1Cr)" />
+
+    <ImageView
+        android:id="@+id/targetRowCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_checkbox_unchecked" />
+</LinearLayout>

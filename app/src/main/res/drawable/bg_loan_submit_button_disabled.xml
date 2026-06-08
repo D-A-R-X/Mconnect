@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pill-shaped disabled background for submit buttons in loan / advance forms.
+  Matches bg_leave_submit_button's 100dp corner radius exactly.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E4E7EC" />
+    <corners android:radius="100dp" />
+</shape>

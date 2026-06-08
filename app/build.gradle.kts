@@ -5,7 +5,13 @@ plugins {
 
 fun envOrEmpty(name: String): String = System.getenv(name) ?: ""
 fun envOrDefault(name: String, defaultValue: String): String = System.getenv(name) ?: defaultValue
-fun ensureTrailingSlash(url: String): String = if (url.endsWith("/")) url else "$url/"
+fun ensureScheme(url: String): String =
+    if (url.isBlank() || url.startsWith("http://") || url.startsWith("https://")) url
+    else "https://$url"
+fun ensureTrailingSlash(url: String): String {
+    val withScheme = ensureScheme(url)
+    return if (withScheme.endsWith("/")) withScheme else "$withScheme/"
+}
 fun gradleProp(name: String): String = (project.findProperty(name) as String?) ?: ""
 
 val googleMapsApiKey = envOrDefault(
@@ -24,11 +30,21 @@ val googleMapsApiKey = envOrDefault(
         )
     )
 )
+// Point the Android client at the same Convex deployment the web admin uses.
+// Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
+// MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
+// touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://colorful-grouse-456.convex.site/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://dev-convex-http.aivida.in/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
+)
+val defaultAppUrl = ensureTrailingSlash(
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
+)
+val appUrl = ensureTrailingSlash(
+    envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
 )
 
 android {
@@ -49,6 +65,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
+        buildConfigField("String", "APP_URL", "\"${appUrl}\"")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${envOrEmpty("FIREBASE_APPLICATION_ID")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${envOrEmpty("FIREBASE_PROJECT_ID")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${envOrEmpty("FIREBASE_API_KEY")}\"")
@@ -68,11 +85,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlin {
-        jvmToolchain(17)
+        jvmToolchain(11)
     }
     buildFeatures {
         viewBinding = true
@@ -106,6 +123,9 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.coil)
     implementation(libs.coil.video)
+    implementation(libs.emoji2.emojipicker)
+    implementation("androidx.media3:media3-exoplayer:1.6.0")
+    implementation("androidx.media3:media3-ui:1.6.0")
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

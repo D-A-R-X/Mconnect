@@ -1,0 +1,55 @@
+<!-- Small "compare / two-direction" arrow used on land log rows.
+     Two opposing single-pixel arrowheads point inward, with two vertical
+     dashes between them. Converted from Downloads/arrow.svg
+     (12×12 viewport, #949494 stroke). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <!-- Centre column of dashed ticks. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,11 V10"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeWidth="1" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,9 V8"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeWidth="1" />
+    <!-- Right-side curved bridge to the right arrowhead. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,7 V5.5 C6,3.565 7.565,2 9.5,2 H11"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1" />
+    <!-- Left-side curved bridge to the left arrowhead. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M1,2 H2.5 C4.435,2 6,3.565 6,5.5 V6 V7"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1" />
+    <!-- Left arrowhead. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M2,1 L1,2 L2,3"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1" />
+    <!-- Right arrowhead. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,1 L11,2 L10,3"
+        android:strokeColor="#949494"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1" />
+</vector>

@@ -1,481 +1,797 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Sticky-header pattern matching App Library:
+   • Outer LinearLayout = vertical column with the blue header on top and
+     the refreshable scroll view (containing everything else) below.
+   • attendanceHeader sits OUTSIDE the NestedScrollView so it stays
+     pinned while the user scrolls. The header collapses from the
+     bottom as the user scrolls, with subtitle + illustration fading.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#F1F3F8"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
 
-    <!-- content area -->
-    <LinearLayout
-        android:id="@+id/hrContentWrapper"
+    <FrameLayout
+        android:id="@+id/attendanceHeader"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <!-- Top Header (Static Blue) -->
-        <LinearLayout
-            android:id="@+id/hrHeaderContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#0B61CA"
-            android:orientation="vertical">
+        android:layout_height="172dp"
+        android:background="@drawable/bg_attendance_header_gradient"
+        android:clipChildren="false">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:id="@+id/attendanceHeaderTextGroup"
+                android:layout_width="234dp"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="20dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="16dp">
+                android:layout_gravity="top|start"
+                android:layout_marginStart="28dp"
+                android:layout_marginTop="71dp"
+                android:orientation="vertical">
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:id="@+id/tvAttendanceHeaderTitle"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Let’s Clock-In!"
+                    android:textColor="#FEFEFE"
+                    android:textSize="24sp" />
 
-                    <FrameLayout
-                        android:id="@+id/btnHrProfile"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:background="@drawable/bg_home_new_avatar_circle"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <TextView
-                            android:id="@+id/tvHrAvatarInitial"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:fontFamily="@font/inter_semibold"
-                            android:textColor="#0B61CA"
-                            android:textSize="15sp" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_semibold"
-                            android:includeFontPadding="false"
-                            android:text="Attendance"
-                            android:textColor="#FFFFFF"
-                            android:textSize="17sp" />
-
-                        <TextView
-                            android:id="@+id/tvHrHeaderSubtitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Work logs &amp; Presence"
-                            android:textColor="#B3D4FF"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <FrameLayout
-                    android:id="@+id/btnHrBell"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_home_banner_btn"
-                    android:clickable="true"
-                    android:focusable="true">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_home_bell_exact"
-                        app:tint="#FFFFFF" />
-                </FrameLayout>
+                <TextView
+                    android:id="@+id/tvAttendanceHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:text="Don’t miss your clock in schedule"
+                    android:textColor="#D9D6FE"
+                    android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- Animated Banner Content (Initially height 0, invisible) -->
-            <LinearLayout
-                android:id="@+id/hrBannerExpandable"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingBottom="24dp"
-                android:visibility="invisible"
-                tools:layout_height="100dp"
-                tools:visibility="visible">
+            <ImageView
+                android:id="@+id/ivAttendanceHeaderIllustration"
+                android:layout_width="91dp"
+                android:layout_height="76dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="53dp"
+                android:layout_marginEnd="31dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_attendance_header_illustration" />
+    </FrameLayout>
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Let’s Clock-In!"
-                        android:textColor="#FFFFFF"
-                        android:textSize="22sp"
-                        android:fontFamily="@font/inter_bold"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Don’t miss your clock in schedule. Track your logs here."
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="14sp"
-                        android:lineHeight="20dp"
-                        android:fontFamily="@font/inter_medium"/>
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="100dp"
-                    android:layout_height="90dp"
-                    android:layout_marginStart="8dp"
-                    android:src="@drawable/ic_attendance_header_illustration"
-                    android:contentDescription="@null"
-                    android:layout_gravity="center_vertical"/>
-            </LinearLayout>
-        </LinearLayout>
+    <!-- White content "card" — overlaps the blue header by -20dp so its
+         rounded top corners curve up cleanly into the blue, then slides
+         up over the blue on scroll. Same pattern as Home / App Library /
+         Inspection. White bg + rounded top corners are applied at runtime
+         in setupAttendanceScrollAnimation(). -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/hrRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="-28dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
-            android:id="@+id/hrScrollView"
+            android:id="@+id/hrScroll"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="#0B61CA"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
             android:clipToPadding="false"
             android:fillViewport="true"
             android:overScrollMode="never">
 
             <LinearLayout
+                android:id="@+id/hrWhitePanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_home_content_card"
+                android:clipChildren="false"
                 android:orientation="vertical"
-                android:paddingBottom="100dp">
+                android:paddingBottom="120dp">
 
+        <!-- 24dp top gap = the blue header's 24dp rounded bottom corners
+             show through cleanly against the grey panel bg before being
+             cut off by the white summary card below. Matches the
+             Home dashboard's rounded-corner reveal. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/cardAttendanceSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="0dp"
+                android:layout_marginEnd="0dp"
+                android:background="@android:color/transparent"
+                android:orientation="vertical"
+                android:paddingStart="20dp"
+                android:paddingTop="20dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="Total Working Hour"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvPayPeriodLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:text="Paid Period —"
+                    android:textColor="#475467"
+                    android:textSize="13sp" />
+
+                <!--
+                  Today's clock-in / clock-out summary. Surfaces the
+                  exact times so the operator sees "today's attendance"
+                  on the same card as the Hrs totals, instead of
+                  having to scroll down to the history section. Hidden
+                  by default; the fragment makes it visible the moment
+                  the user has clocked in today (firstPunchInIso set).
+                -->
                 <LinearLayout
-                    android:id="@+id/hrMainContent"
+                    android:id="@+id/todayPunchSummary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingTop="24dp">
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_metric_box"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp"
+                    android:visibility="gone">
 
-                    <!-- Summary card is always present, avoids buttons glitching -->
                     <LinearLayout
-                        android:id="@+id/cardAttendanceSummary"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_attendance_summary_card"
-                        android:orientation="vertical"
-                        android:paddingStart="16dp"
-                        android:paddingTop="12dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="16dp">
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_semibold"
-                            android:text="Total Working Hour"
-                            android:textColor="#101828"
-                            android:textSize="14sp" />
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="Clocked in"
+                            android:textColor="#475467"
+                            android:textSize="11sp" />
 
                         <TextView
-                            android:id="@+id/tvPayPeriodLabel"
+                            android:id="@+id/tvTodayClockedInAt"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_regular"
-                            android:text="Period —"
-                            android:textColor="#475467"
-                            android:textSize="12sp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:orientation="horizontal">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="72dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/bg_attendance_metric_box"
-                                android:orientation="vertical"
-                                android:paddingStart="12dp"
-                                android:paddingTop="11dp"
-                                android:paddingEnd="12dp">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:text="Today"
-                                    android:textColor="#475467"
-                                    android:textSize="12sp" />
-
-                                <TextView
-                                    android:id="@+id/tvTodayHours"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="5dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:text="00:00 Hrs"
-                                    android:textColor="#161B23"
-                                    android:textSize="22sp" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="72dp"
-                                android:layout_marginStart="8dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/bg_attendance_metric_box"
-                                android:orientation="vertical"
-                                android:paddingStart="12dp"
-                                android:paddingTop="11dp"
-                                android:paddingEnd="12dp">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:text="This Pay Period"
-                                    android:textColor="#475467"
-                                    android:textSize="11sp" />
-
-                                <TextView
-                                    android:id="@+id/tvPayPeriodHours"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="5dp"
-                                    android:fontFamily="@font/inter_regular"
-                                    android:text="00:00 Hrs"
-                                    android:textColor="#161B23"
-                                    android:textSize="22sp" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <!-- Buttons stay here, always visible but enabled only when loaded -->
-                        <LinearLayout
-                            android:id="@+id/clockInButtonGroup"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:orientation="vertical">
-
-                            <androidx.appcompat.widget.AppCompatButton
-                                android:id="@+id/btnClockInNow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:background="@drawable/bg_attendance_btn_primary"
-                                android:fontFamily="@font/inter_medium"
-                                android:text="Clock In Now"
-                                android:textAllCaps="false"
-                                android:textColor="#FFFFFF"
-                                android:textSize="14sp" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/clockedInButtonGroup"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:orientation="horizontal"
-                            android:visibility="gone">
-
-                            <androidx.appcompat.widget.AppCompatButton
-                                android:id="@+id/btnTakeBreak"
-                                android:layout_width="0dp"
-                                android:layout_height="48dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/bg_attendance_btn_secondary"
-                                android:fontFamily="@font/inter_medium"
-                                android:text="Take A Break"
-                                android:textAllCaps="false"
-                                android:textColor="#6938EF"
-                                android:textSize="13sp" />
-
-                            <androidx.appcompat.widget.AppCompatButton
-                                android:id="@+id/btnClockOut"
-                                android:layout_width="0dp"
-                                android:layout_height="48dp"
-                                android:layout_marginStart="12dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/bg_attendance_btn_dark"
-                                android:fontFamily="@font/inter_medium"
-                                android:text="Clock Out"
-                                android:textAllCaps="false"
-                                android:textColor="#FFFFFF"
-                                android:textSize="13sp" />
-                        </LinearLayout>
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="—"
+                            android:textColor="#101828"
+                            android:textSize="15sp" />
                     </LinearLayout>
 
-                    <!-- Latest history placeholder -->
                     <LinearLayout
-                        android:id="@+id/cardHistory1"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_marginTop="12dp"
-                        android:layout_marginEnd="12dp"
-                        android:background="@drawable/bg_attendance_card"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="Clocked out"
+                            android:textColor="#475467"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvTodayClockedOutAt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="—"
+                            android:textColor="#101828"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_attendance_metric_box"
                         android:orientation="vertical"
-                        android:paddingStart="16dp"
+                        android:paddingStart="12dp"
                         android:paddingTop="12dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="16dp"
-                        android:visibility="gone">
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="12dp">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:src="@drawable/ic_tab_calendar_pencil"
-                                app:tint="#101828" />
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_clock"
+                                app:tint="#475467" />
 
                             <TextView
-                                android:id="@+id/tvHistoryDate1"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="4dp"
-                                android:fontFamily="@font/inter_semibold"
-                                android:text="-- September --"
-                                android:textColor="#101828"
-                                android:textSize="14sp" />
+                                android:layout_marginStart="6dp"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Today"
+                                android:textColor="#475467"
+                                android:textSize="12sp" />
                         </LinearLayout>
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
+                        <TextView
+                            android:id="@+id/tvTodayHours"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:background="@drawable/bg_attendance_history_inner"
-                            android:orientation="horizontal"
-                            android:padding="12dp">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="0.9"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:text="Total Hours"
-                                    android:textColor="#475467"
-                                    android:textSize="12sp" />
-
-                                <TextView
-                                    android:id="@+id/tvLatestTotalHours"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="3dp"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:text="--:--:-- hrs"
-                                    android:textColor="#344054"
-                                    android:textSize="16sp" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1.1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:text="Clock in &amp; Out"
-                                    android:textColor="#475467"
-                                    android:textSize="12sp" />
-
-                                <TextView
-                                    android:id="@+id/tvLatestRange"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="3dp"
-                                    android:ellipsize="end"
-                                    android:fontFamily="@font/inter_medium"
-                                    android:maxLines="1"
-                                    android:singleLine="true"
-                                    android:text="-- - --"
-                                    android:textColor="#344054"
-                                    android:textSize="16sp" />
-                            </LinearLayout>
-                        </LinearLayout>
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="00:00 Hrs"
+                            android:textColor="#101828"
+                            android:textSize="22sp" />
                     </LinearLayout>
 
                     <LinearLayout
-                        android:id="@+id/historyListContainer"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_marginTop="0dp"
-                        android:layout_marginEnd="12dp"
-                        android:orientation="vertical" />
-
-                    <LinearLayout
-                        android:id="@+id/attendanceSkeletonContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_marginEnd="12dp"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_attendance_metric_box"
                         android:orientation="vertical"
-                        android:visibility="gone">
+                        android:paddingStart="12dp"
+                        android:paddingTop="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="12dp">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="100dp"
-                            android:layout_marginTop="12dp"
-                            android:background="@drawable/bg_attendance_card"
-                            android:orientation="vertical"
-                            android:padding="16dp">
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                            <View
-                                android:layout_width="120dp"
-                                android:layout_height="12dp"
-                                android:background="@drawable/bg_attendance_skeleton_block" />
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_clock"
+                                app:tint="#475467" />
 
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="40dp"
-                                android:layout_marginTop="12dp"
-                                android:background="@drawable/bg_attendance_skeleton_block" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="This Pay Period"
+                                android:textColor="#475467"
+                                android:textSize="12sp" />
                         </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvPayPeriodHours"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="00:00 Hrs"
+                            android:textColor="#101828"
+                            android:textSize="22sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/clockInButtonGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="vertical">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnClockInNow"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_attendance_btn_primary"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Clock In Now"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <!--
+                    Clocked-in state: single full-width "Clock Out" button.
+                    The "Take a Break" / "Resume" pause-and-resume flow was
+                    intentionally removed per business decision — clock-in
+                    and clock-out are the only two actions exposed.
+                -->
+                <LinearLayout
+                    android:id="@+id/clockedInButtonGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnClockOut"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_attendance_btn_primary"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Clock Out"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cardHistory1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_attendance_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_tab_calendar_pencil"
+                        android:tint="#101828" />
+
+                    <TextView
+                        android:id="@+id/tvHistoryDate1"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="27 September 2024"
+                        android:textColor="#101828"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_attendance_history_inner"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0.9"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Total Hours"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvLatestTotalHours"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="08:00:00 hrs"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Clock in &amp; Out"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvLatestRange"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
 
-        <ProgressBar
-            android:id="@+id/hrLoadingOverlay"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center"
-            android:indeterminateTint="#FFFFFF"
-            android:visibility="gone" />
+            <LinearLayout
+                android:id="@+id/historyListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/cardHistory2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_attendance_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_tab_calendar_pencil"
+                        android:tint="#101828" />
+
+                    <TextView
+                        android:id="@+id/tvHistoryDate2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="26 September 2024"
+                        android:textColor="#101828"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_attendance_history_inner"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0.9"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Total Hours"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryHours2"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="08:00:00 hrs"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Clock in &amp; Out"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryRange2"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cardHistory3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_attendance_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_tab_calendar_pencil"
+                        android:tint="#101828" />
+
+                    <TextView
+                        android:id="@+id/tvHistoryDate3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="25 September 2024"
+                        android:textColor="#101828"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_attendance_history_inner"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0.9"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Total Hours"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryHours3"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="08:00:00 hrs"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Clock in &amp; Out"
+                            android:textColor="#475467"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryRange3"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="09:00 AM - 05:00 PM"
+                            android:textColor="#344054"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/attendanceSkeletonContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="89dp"
+                android:layout_marginEnd="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="140dp"
+                        android:layout_height="14dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="200dp"
+                        android:layout_height="10dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_attendance_skeleton_block" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_attendance_skeleton_block" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="104dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_attendance_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_attendance_skeleton_block" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
-</FrameLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

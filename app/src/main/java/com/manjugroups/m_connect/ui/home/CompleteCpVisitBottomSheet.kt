@@ -1,21 +1,24 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.app.Dialog
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
+import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -23,11 +26,22 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
+import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
+import com.manjugroups.m_connect.network.CpVisitDetail
+import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
+import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.ManualProfilePatch
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.SvNotInterestedDetail
+import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
@@ -38,13 +52,18 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * KOS-37 / KOS-52: collects the visit outcome (+ outcome-specific details) for
- * a CP visit. Caller (TripNavigationFragment) shows this after OTP verify on a
- * tripType=client_place "Yes, saw client" path; clientMet is implicitly true
- * because the sheet is unreachable without OTP success. On submit the sheet
- * POSTs markClientMet(true) and setOutcome, then signals the host to call
- * completeVisit. The "No, didn't see client" path skips this sheet entirely
- * and is handled directly in TripNavigationFragment.completeCpVisitWithoutClient.
+ * Outcome Information bottom sheet — full Booking flow (7 sub-tabs).
+ *
+ * State machine:
+ *   - Top tab (Outcome): BOOKING · SITE_VISIT · POSTPONE · NOT_INTERESTED
+ *   - Booking sub-tab (BookingSub): CLIENT · PROFESSIONAL · OFFICE · BOOKING
+ *                                   · CHARGES · PAYMENT · STAFF
+ *   - Within CLIENT sub-tab: BookingStep FIND_MOBILE → CLIENT_FORM
+ *
+ * Submit (Save Booking) collects every captured field across all sub-tabs
+ * and writes them to the visit's setOutcome.notes payload (single string
+ * the backend already accepts), with outcome="converted_to_booking". When
+ * a dedicated booking-create endpoint lands, persistBooking() flips to it.
  */
 class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
@@ -52,53 +71,381 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
-    private var selectedOutcome: String? = null
-    private val selectedPostponeReasons = linkedSetOf<String>()
-    private var selectedProject: MarketingProject? = null
-    private var selectedBdo: StaffData? = null
-    private var selectedIncharge: StaffData? = null
-    private var selectedHod: StaffData? = null
-    private var selectedAvp: StaffData? = null
-    private var selectedGm: StaffData? = null
-    private var selectedSeniorManager: StaffData? = null
-    private var salesStaff: List<StaffData> = emptyList()
-    private var projects: List<MarketingProject> = emptyList()
-    private var projectsLoading = false
-    private var siteVisitDate: String = todayYmd()
-    private var siteVisitTime: String = defaultTime()
-    private var selectedTravelMode: String = "cab"
+    /**
+     * Booking-form auto-save. Pushes the serialised form state to a
+     * Convex draft row + a local SharedPreferences mirror on a
+     * debounced timer (2s). Restores on dialog open so an app
+     * crash, kill-from-recent-apps, or login from another phone all
+     * resume the operator's typing instead of throwing it away.
+     * See BookingDraftManager.kt for the persistence details.
+     */
+    private var draftManager: BookingDraftManager? = null
+    private var draftRestoreApplied: Boolean = false
+    private var draftSuppressSave: Boolean = false
 
-    private var outcomeRow: LinearLayout? = null
-    private var siteVisitDetailsGroup: View? = null
-    private var siteVisitProject: TextView? = null
-    private var siteVisitDateView: TextView? = null
-    private var siteVisitTimeView: TextView? = null
-    private var siteVisitTravelMode: TextView? = null
-    private var pickupAddress: EditText? = null
-    private var siteVisitBdo: TextView? = null
-    private var siteVisitIncharge: TextView? = null
-    private var siteVisitHod: TextView? = null
-    private var siteVisitAvp: TextView? = null
-    private var siteVisitGm: TextView? = null
-    private var siteVisitSeniorManager: TextView? = null
-    private var visitorCount: EditText? = null
-    private var visitorRows: LinearLayout? = null
-    private var foodPreference: EditText? = null
-    private var postponeDetailsGroup: View? = null
-    private var postponeRow: LinearLayout? = null
-    private var postponeBudgetConcern: EditText? = null
-    private var postponeTiming: EditText? = null
-    private var postponeProjectDetails: EditText? = null
-    private var postponeOtherDetails: EditText? = null
-    private var notInterestedDetailsGroup: View? = null
-    private var notInterestedNotes: EditText? = null
-    private var waitDetailsGroup: View? = null
-    private var waitNotes: EditText? = null
-    private var errorText: TextView? = null
-    private var submitBtn: TextView? = null
+    // ---- Enums ----------------------------------------------------------
+    private enum class Outcome { BOOKING, SITE_VISIT, POSTPONE, NOT_INTERESTED }
+    private enum class BookingSub {
+        CLIENT, PROFESSIONAL, OFFICE, BOOKING, CHARGES, PAYMENT, STAFF
+    }
+    private enum class BookingStep { FIND_MOBILE, CLIENT_FORM }
+    private enum class YesNo { YES, NO }
+    private enum class SaveAs { DRAFT, CONFIRMED }
+
+    private var activeOutcome: Outcome = Outcome.BOOKING
+    private var bookingSub: BookingSub = BookingSub.CLIENT
+    private var bookingStep: BookingStep = BookingStep.FIND_MOBILE
+    /**
+     * The deepest sub-tab the user has progressed THROUGH via the
+     * Next button. Sub-tap navigation is gated on this — the user can
+     * tap a previously-visited tab to jump back and edit, but cannot
+     * tap a tab ahead of where they've validated up to. Forward
+     * navigation must still go through Next so the per-step
+     * validation runs (required fields, etc.).
+     */
+    private var maxVisitedBookingSub: BookingSub = BookingSub.CLIENT
+
+    // Form state for radio/checkbox rows
+    private var bookIsAgainstVisit: YesNo = YesNo.YES
+    private var bookDuplicate: Boolean = true
+    private var payGstApplicable: Boolean = true
+    private var payOtherApplicable: Boolean = true
+    private var payFlexi: Boolean = true
+    private var staffSaveAs: SaveAs = SaveAs.DRAFT
+    private var lastBookingPrefillKey: String? = null
+    private var bookingGstPercent: Double? = null
+
+    // ---- Top tab views --------------------------------------------------
+    private data class OutcomeTab(
+        val cell: View?,
+        val circle: View?,
+        val label: TextView?,
+        val indicator: View?,
+    )
+    private var tabBooking = OutcomeTab(null, null, null, null)
+    private var tabSiteVisit = OutcomeTab(null, null, null, null)
+    private var tabPostpone = OutcomeTab(null, null, null, null)
+    private var tabNotInterested = OutcomeTab(null, null, null, null)
+
+    // SV-via-CP locked mode. When the CP visit carries proposedSiteVisit,
+    // the sheet locks to Site Visit only, fades + disables every other
+    // tab, renders form fields read-only, and swaps Save for a Reject /
+    // Confirm pair.
+    private var lockedFromProposedSv: Boolean = false
+    private var cpLockedFooter: View? = null
+    private var btnCpLockedReject: TextView? = null
+    private var btnCpLockedConfirm: TextView? = null
+
+    /**
+     * "Pure SV" outcome mode. When [ARG_SITE_VISIT_ID] is set the sheet
+     * is being invoked from the Trip Details screen of a real siteVisits
+     * row (not a CP visit). In this mode:
+     *   - The Site Visit top tab is disabled and faded (this row IS
+     *     already an SV — re-converting would be nonsensical).
+     *   - Booking / Postpone / Not Interested all persist via the
+     *     /api/marketing/siteVisits/... endpoints instead of the CP
+     *     path.
+     *   - markClientMet is skipped (no CP visit to mark).
+     */
+    private val isSiteVisitMode: Boolean
+        get() {
+            val raw = arguments?.getString(ARG_SITE_VISIT_ID)
+            return !raw.isNullOrBlank()
+        }
+
+    private val argSiteVisitId: String?
+        get() = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
+
+    private val siteVisitLockedOutcome: Outcome?
+        get() = arguments?.getString(ARG_SITE_VISIT_LOCKED_OUTCOME)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::outcomeFromArg)
+
+    /**
+     * Standalone booking mode. Set when the sheet is opened from the
+     * Bookings list (+ button) — no CP visit and no SV row behind it.
+     * In this mode:
+     *   - Site Visit / Postpone / Not Interested top tabs are faded
+     *     and unclickable (only Booking makes sense without a visit
+     *     to attach an outcome to).
+     *   - persistBooking POSTs directly to /api/bookings via
+     *     api.createBooking instead of the CP setOutcome path.
+     */
+    private val isStandaloneBookingMode: Boolean
+        get() = arguments?.getBoolean(ARG_STANDALONE_BOOKING, false) == true
+
+    /**
+     * Cached display name for the visit's lead/client, set when the
+     * locked SV mode initialises. Used by [renderVisitorRows] so the
+     * first visitor card auto-fills with the lead's name + Relation =
+     * Self — the common 1-visitor case where the only attendee is
+     * the client themself. Field staff can still edit the row.
+     */
+    private var cachedLeadDisplayName: String? = null
+
+    /**
+     * Cached lead-side attendees array (if the telecaller pre-set any
+     * via the SV-fix payload). Replays into the visitor cards
+     * one-for-one when [renderVisitorRows] runs.
+     */
+    private var cachedPrefilledAttendees: List<com.manjugroups.m_connect.network.CpVisitAttendee>? = null
+
+    // ---- Sub-tab views --------------------------------------------------
+    private var subTabsScroll: HorizontalScrollView? = null
+    private var subTabClient: TextView? = null
+    private var subTabProfessional: TextView? = null
+    private var subTabOffice: TextView? = null
+    private var subTabBooking: TextView? = null
+    private var subTabCharges: TextView? = null
+    private var subTabPayment: TextView? = null
+    private var subTabStaff: TextView? = null
+
+    // ---- Body view roots ------------------------------------------------
+    private var bodyComingSoon: View? = null
+    private var bodyFindClient: View? = null
+    private var bodyClientForm: View? = null
+    private var bodyProfessional: View? = null
+    private var bodyOffice: View? = null
+    private var bodyBooking: View? = null
+    private var bodyCharges: View? = null
+    private var bodyPayment: View? = null
+    private var bodyStaff: View? = null
+
+    // ---- Field refs (lots — keep them grouped) -------------------------
+    // Client form (Frame 3) — many already declared.
+    private var etClientMobile: EditText? = null
+    private var tvFormPhone: TextView? = null
+    private var tvFormTitle: TextView? = null
+    private var etFormName: EditText? = null
+    private var etFormFather: EditText? = null
+    private var tvFormDob: TextView? = null
+    private var tvFormAnniversary: TextView? = null
+    private var etFormAltNumber: EditText? = null
+    private var etFormWhatsApp: EditText? = null
+    private var etFormEmail: EditText? = null
+    private var tvFormNationality: TextView? = null
+    private var etFormHomeAddress: EditText? = null
+    private var etFormPincode: EditText? = null
+    private var etFormState: EditText? = null
+    private var etFormDistrict: EditText? = null
+    private var etFormLocation: EditText? = null
+
+    // Professional
+    private var tvProfProfession: TextView? = null
+    private var etProfDesignation: EditText? = null
+    private var etProfIncome: EditText? = null
+
+    // Office
+    private var etOfficeName: EditText? = null
+    private var etOfficeEmail: EditText? = null
+    private var etOfficeMobile: EditText? = null
+    private var etOfficePhone: EditText? = null
+    private var etOfficeAddress: EditText? = null
+
+    // Booking
+    private var tvBookType: TextView? = null
+    private var tvBookSource: TextView? = null
+    private var etBookCef: EditText? = null
+    private var tvBookDate: TextView? = null
+    private var tvBookProject: TextView? = null
+    private var tvBookPlot: TextView? = null
+    private var tvBookProperty: TextView? = null
+    private var tvBookMode: TextView? = null
+    private var ivBookVisitYes: ImageView? = null
+    private var ivBookVisitNo: ImageView? = null
+    private var ivBookDuplicate: ImageView? = null
+
+    // Charges
+    private var etChargeBookingCost: EditText? = null
+    private var etChargeGuidelineValue: EditText? = null
+    private var etChargeSpecialConsideration: EditText? = null
+    private var etChargeDiscountApprovedBy: EditText? = null
+    private var etChargeScReason: EditText? = null
+    private var etChargeScValidity: EditText? = null
+    private var etChargePromoOffers: EditText? = null
+    private var tvChargePromoTnc: TextView? = null
+    private var etChargePromoValue: EditText? = null
+    private var etChargeOfferValidity: EditText? = null
+
+    // Payment
+    private var etPayRegCharges: EditText? = null
+    private var etPayGstAmount: EditText? = null
+    private var ivPayGstApplicable: ImageView? = null
+    private var etPayDocCharges: EditText? = null
+    private var etPayPattaCharges: EditText? = null
+    private var etPayOtherCharges: EditText? = null
+    private var ivPayOtherApplicable: ImageView? = null
+    private var etPayAdvanceAmount: EditText? = null
+    private var tvPayPaymentMode: TextView? = null
+    private var ivPayFlexi: ImageView? = null
+    private var etPayAllotDue: EditText? = null
+    private var tvPayAllotDate: TextView? = null
+    private var etPay2Mode: EditText? = null
+    private var tvPay2Date: TextView? = null
+    private var etPay3Mode: EditText? = null
+    private var tvPay3Date: TextView? = null
+    private var etPay4Mode: EditText? = null
+    private var tvPay4Date: TextView? = null
+    private var tvPayPrefReg: TextView? = null
+
+    // Staff
+    private var tvStaffAvp: TextView? = null
+    private var tvStaffGm: TextView? = null
+    private var tvStaffSm: TextView? = null
+    private var tvStaffBdo: TextView? = null
+    private var tvStaffTelecaller: TextView? = null
+    private var etStaffAadhar: EditText? = null
+    private var etStaffPancard: EditText? = null
+    private var etStaffRefName1: EditText? = null
+    private var etStaffRefMobile1: EditText? = null
+    private var etStaffRefProf1: EditText? = null
+    private var etStaffRefName2: EditText? = null
+    private var etStaffRefMobile2: EditText? = null
+    private var etStaffRefProf2: EditText? = null
+    private var tvStaffDocPrep: TextView? = null
+    private var ivStaffSaveDraft: ImageView? = null
+    private var ivStaffSaveConfirmed: ImageView? = null
+
+    // Site Visit body
+    private var bodySiteVisit: View? = null
+    private var tvSvProject: TextView? = null
+    private var tvSvDate: TextView? = null
+    private var tvSvTime: TextView? = null
+    private var btnSvTravelOwn: TextView? = null
+    private var btnSvTravelCab: TextView? = null
+    private var etSvPickupAddress: EditText? = null
+    private var tvSvIncharge: TextView? = null
+    private var tvSvHod: TextView? = null
+    private var tvSvAvp: TextView? = null
+    private var tvSvGm: TextView? = null
+    private var tvSvSm: TextView? = null
+    private var etSvVisitorCount: EditText? = null
+    private var siteVisitorRows: LinearLayout? = null
+
+    // Postpone body — aligned with the web's Postpone dialog
+    // (POSTPONE_REASONS in app/marketing/cp-visits/[id]/page.tsx):
+    // checkbox list of fixed reasons plus an optional notes field.
+    // Submits to the same `clientPlaceVisits.setOutcome` mutation the
+    // web uses, with the checked reason labels as `postponeReasons`.
+    private var bodyPostpone: View? = null
+    private var cbPostClientUnavailable: android.widget.CheckBox? = null
+    private var cbPostWeather: android.widget.CheckBox? = null
+    private var cbPostVehicle: android.widget.CheckBox? = null
+    private var cbPostDocument: android.widget.CheckBox? = null
+    private var cbPostRescheduledByClient: android.widget.CheckBox? = null
+    private var cbPostOtherCommitment: android.widget.CheckBox? = null
+    private var etPostNotes: EditText? = null
+
+    // Not Interested body — mirrors the web's SV "Mark not interested"
+    // dialog (NOT_INTERESTED_REASONS in app/marketing/site-visits/[id]/page.tsx):
+    // 8 reason checkboxes, each with an inline per-reason detail input,
+    // plus a general optional notes textarea.
+    //
+    // Each (checkbox, detail) pair is a paired view — the detail input
+    // is GONE until the checkbox is ticked. Storage of the picked
+    // values:
+    //   - notInterestedReasons: List<String> of the web-canonical labels
+    //   - notInterestedDetails: List<{reason, detail?}> aligned with
+    //     the checked reasons (omits unchecked ones)
+    //   - notes: optional general context
+    private var bodyNotInterested: View? = null
+    private var cbNiPrice: android.widget.CheckBox? = null
+    private var etNiPriceDetail: EditText? = null
+    private var cbNiDistance: android.widget.CheckBox? = null
+    private var etNiDistanceDetail: EditText? = null
+    private var cbNiLocation: android.widget.CheckBox? = null
+    private var etNiLocationDetail: EditText? = null
+    private var cbNiDevelopment: android.widget.CheckBox? = null
+    private var etNiDevelopmentDetail: EditText? = null
+    private var cbNiPlot: android.widget.CheckBox? = null
+    private var etNiPlotDetail: EditText? = null
+    private var cbNiLoan: android.widget.CheckBox? = null
+    private var etNiLoanDetail: EditText? = null
+    private var cbNiStaffApproach: android.widget.CheckBox? = null
+    private var etNiStaffApproachDetail: EditText? = null
+    private var cbNiDriverApproach: android.widget.CheckBox? = null
+    private var etNiDriverApproachDetail: EditText? = null
+    private var etNiNotes: EditText? = null
+
+    // Site Visit selections + cache
+    private var svProject: MarketingProject? = null
+    private var svIncharge: StaffData? = null
+    private var svHod: StaffData? = null
+    private var svAvp: StaffData? = null
+    private var svGm: StaffData? = null
+    private var svSm: StaffData? = null
+    private var svTravelMode: String? = null   // "own_vehicle" or "cab"
+    private var svProjectCache: List<MarketingProject> = emptyList()
+    private var svStaffCache: List<StaffData> = emptyList()
+
+    // Booking selections + caches. These back the Booking sub-tab pickers;
+    // the labels stay in the XML views, while these hold the IDs needed by
+    // the web-parity createBooking mutation.
+    private var bookingProject: MarketingProject? = null
+    private var bookingUnit: InventoryUnit? = null
+    private var bookingStaffAvp: StaffData? = null
+    private var bookingStaffGm: StaffData? = null
+    private var bookingStaffSm: StaffData? = null
+    private var bookingStaffBdo: StaffData? = null
+    private var bookingStaffTelecaller: StaffData? = null
+    private var bookingProjectCache: List<MarketingProject> = emptyList()
+    private var bookingUnitCacheProjectId: String? = null
+    private var bookingUnitCache: List<InventoryUnit> = emptyList()
+    private var bookingStaffCache: List<StaffData> = emptyList()
+
+    // "Edit" pill on the Client form header. Visible only after a
+    // phone lookup actually returns a matching lead and the form is
+    // prefilled. Two states:
+    //   - inactive (default after prefill): pill is outlined, form
+    //     fields are read-only so the user doesn't accidentally edit
+    //     canonical lead data.
+    //   - active (after tap): pill is filled green, form fields are
+    //     editable; persistBooking pushes the new values back to the
+    //     lead's manualProfile via /api/telecaller/leads/update.
+    private var btnEdit: TextView? = null
+    private var btnBack: TextView? = null
+    private var btnClear: TextView? = null
+    private var editEnabled: Boolean = false
+    // _id of the lead the prefill came from; null when no match was
+    // found. Drives whether the edit-push fires on submit.
+    private var prefilledLeadId: String? = null
+    private var lastLookedUpBookingPhone: String? = null
+
+    // Last 6-digit pincode we successfully enriched. Without this the
+    // TextWatcher would re-fire `/api/pincode` on every keystroke past
+    // digit 6 (and on view-restore), spamming the proxy and racing the
+    // user. Reset when the sheet recycles.
+    private var lastEnrichedBookingPincode: String? = null
+    private var btnSubmit: TextView? = null
+    private var tvError: TextView? = null
+
+    // ---- Lifecycle ------------------------------------------------------
+    // Tracks whether the host MainActivity's bottom tab bar was visible
+    // when this sheet opened. We hide the tab bar for the entire sheet
+    // lifetime so the bottom 56dp of the form (Save / Reject buttons,
+    // last fields) don't get clipped by the tab strip and so the slide-up
+    // animation doesn't briefly composite tab-bar pixels through the
+    // sheet's translucent background. Restored on dismiss to whatever
+    // state the host had — works correctly both from root tabs (Marketing
+    // → CP Visits, where the tab bar is visible) and from secondary
+    // screens like CompletedVisitDetailFragment (where it's already
+    // hidden and should stay that way).
+    private var hostTabBarWasVisible: Boolean? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Resize the dialog window when the IME comes up so the input
+        // field and the Next button stay above the keyboard instead of
+        // disappearing under it. The default for BottomSheetDialog is
+        // ADJUST_NOTHING (edge-to-edge), which is exactly what hid the
+        // bottom of the form before. Opting back into ADJUST_RESIZE +
+        // decor-fits-system-windows brings classic IME behaviour back.
+        dialog.window?.let { window ->
+            window.setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            )
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+        }
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -106,10 +453,44 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
-                isCancelable = false
+                // UX hardening — the form sheet was getting dismissed by a
+                // plain content scroll because the nested-scroll handoff
+                // promoted the gesture to a sheet drag. Killing drag means
+                // the sheet only closes via the Reject/Confirm/Save buttons
+                // or the system back press — never by a stray finger swipe
+                // inside the form. Programmatic dismiss() still works.
+                behavior.isDraggable = false
+                isCancelable = true
+            }
+            // Hide the host activity's bottom tab bar for the sheet's
+            // lifetime. Without this the tab bar shows through the
+            // translucent scrim during the slide-up animation (visible
+            // glitch) and stays peeking under the sheet's rounded bottom
+            // corners. Caching the prior state means we restore exactly
+            // what was there on dismiss, even if the sheet was opened
+            // from a secondary screen where the bar was already hidden.
+            (activity as? com.manjugroups.m_connect.MainActivity)?.let { host ->
+                if (hostTabBarWasVisible == null) {
+                    hostTabBarWasVisible = host.isTabBarVisible()
+                }
+                host.setTabBarVisible(false)
             }
         }
         return dialog
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        // Restore the host's tab bar to whatever it was before we opened.
+        // Runs on Reject / Confirm / Save / system-back / programmatic
+        // dismiss — every exit path funnels through here.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { host ->
+            val previous = hostTabBarWasVisible
+            if (previous != null) {
+                host.setTabBarVisible(previous)
+            }
+        }
+        hostTabBarWasVisible = null
+        super.onDismiss(dialog)
     }
 
     override fun onCreateView(
@@ -122,312 +503,1757 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        outcomeRow = view.findViewById(R.id.outcomeChipRow)
-        siteVisitDetailsGroup = view.findViewById(R.id.siteVisitDetailsGroup)
-        siteVisitProject = view.findViewById(R.id.tvCpSiteVisitProject)
-        siteVisitDateView = view.findViewById(R.id.tvCpSiteVisitDate)
-        siteVisitTimeView = view.findViewById(R.id.tvCpSiteVisitTime)
-        siteVisitTravelMode = view.findViewById(R.id.tvCpSiteVisitTravelMode)
-        pickupAddress = view.findViewById(R.id.etCpSiteVisitPickupAddress)
-        siteVisitBdo = view.findViewById(R.id.tvCpSiteVisitBdo)
-        siteVisitIncharge = view.findViewById(R.id.tvCpSiteVisitIncharge)
-        siteVisitHod = view.findViewById(R.id.tvCpSiteVisitHod)
-        siteVisitAvp = view.findViewById(R.id.tvCpSiteVisitAvp)
-        siteVisitGm = view.findViewById(R.id.tvCpSiteVisitGm)
-        siteVisitSeniorManager = view.findViewById(R.id.tvCpSiteVisitSeniorManager)
-        visitorCount = view.findViewById(R.id.etCpSiteVisitVisitorCount)
-        visitorRows = view.findViewById(R.id.visitorRows)
-        foodPreference = view.findViewById(R.id.etCpSiteVisitFoodPreference)
-        postponeDetailsGroup = view.findViewById(R.id.postponeDetailsGroup)
-        postponeRow = view.findViewById(R.id.postponeReasonRow)
-        postponeBudgetConcern = view.findViewById(R.id.etCpPostponeBudgetConcern)
-        postponeTiming = view.findViewById(R.id.etCpPostponeTiming)
-        postponeProjectDetails = view.findViewById(R.id.etCpPostponeProjectDetails)
-        postponeOtherDetails = view.findViewById(R.id.etCpPostponeOtherDetails)
-        notInterestedDetailsGroup = view.findViewById(R.id.notInterestedDetailsGroup)
-        notInterestedNotes = view.findViewById(R.id.etCpNotInterestedNotes)
-        waitDetailsGroup = view.findViewById(R.id.waitDetailsGroup)
-        waitNotes = view.findViewById(R.id.etCpWaitNotes)
-        errorText = view.findViewById(R.id.tvCpError)
-        submitBtn = view.findViewById(R.id.btnCpSubmit)
+        bindTopTabs(view)
+        bindSubTabs(view)
+        bindBodies(view)
+        bindClientFormFields(view)
+        bindProfessionalFields(view)
+        bindOfficeFields(view)
+        bindBookingFields(view)
+        bindChargesFields(view)
+        bindPaymentFields(view)
+        bindStaffFields(view)
+        bindSiteVisitFields(view)
+        bindPostponeFields(view)
+        bindNotInterestedFields(view)
 
-        arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }?.let(::setOutcome)
-        siteVisitProject?.setOnClickListener { pickProject() }
-        siteVisitBdo?.isClickable = false
-        siteVisitIncharge?.setOnClickListener {
-            pickStaff("Select SiteIncharge") {
-                selectedIncharge = it
-                siteVisitIncharge?.text = "SiteIncharge: ${it.name ?: "Selected"}"
-                val reportingTo = it.reportingToId ?: it.reportingTo
-                if (selectedHod == null && reportingTo != null) {
-                    selectedHod = salesStaff.firstOrNull { staff -> staff.id == reportingTo }
-                    selectedHod?.let { hod -> siteVisitHod?.text = "HOD: ${hod.name ?: "Selected"}" }
+        btnEdit = view.findViewById(R.id.btnOutcomeEdit)
+        btnEdit?.setOnClickListener { toggleEditMode() }
+        btnBack = view.findViewById(R.id.btnOutcomeBack)
+        btnBack?.setOnClickListener { goBackInBookingFlow() }
+        btnClear = view.findViewById(R.id.btnOutcomeClear)
+        btnClear?.setOnClickListener { clearBookingForm() }
+
+        // Drag-handle row at the top of the sheet — tap to dismiss.
+        // Drag-down dismiss is intentionally disabled (nested form
+        // scrolls used to trigger it accidentally), so the handle
+        // doubles as the close affordance.
+        view.findViewById<View>(R.id.outcomeDragHandleRow)?.setOnClickListener {
+            dismissAllowingStateLoss()
+        }
+        btnSubmit = view.findViewById(R.id.btnCpSubmit)
+        tvError = view.findViewById(R.id.tvCpError)
+
+        // Make the trailing " *" on every required-field label render
+        // in destructive red so it visually pops the same way the
+        // web's `<span className="text-destructive">*</span>` does.
+        // The label texts in XML already carry the asterisk (e.g.
+        // "Client Name *", "Booking Date *", "Client Phone Number *",
+        // "Client Mobile Number *") — we just need to colour just the
+        // star, not the whole label, on view bind.
+        colorizeRequiredStarsRedRecursively(view as android.view.ViewGroup)
+
+        // Wire booking-form draft auto-save AFTER all findViewById
+        // calls so every EditText reference is non-null. Order:
+        //   1. Build the manager with the bottom sheet's coroutine
+        //      scope so debounced flushes survive a dismiss-and-
+        //      reopen by tying lifetime to viewLifecycleOwner.
+        //   2. Attach TextWatchers on every form EditText.
+        //   3. Async fetch the most-recent draft (cloud OR local,
+        //      whichever's newer) and apply it before the AI prefill
+        //      from lookup runs so the operator's manual edits win
+        //      the priority slot.
+        draftManager = BookingDraftManager(
+            context = requireContext(),
+            api = api,
+            scope = viewLifecycleOwner.lifecycleScope,
+        )
+        attachDraftWatchers()
+        restoreDraftIfAny()
+        cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
+        btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
+        btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
+
+        // Pre-seed from args if caller passed an outcome.
+        arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
+            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it } }
+
+        // If TripNavigationFragment already detected this is an SV-fix
+        // CP, switch to Site Visit + fade the other tabs BEFORE the
+        // first renderState() call. Without this the user briefly sees
+        // the Booking tab default for one frame while the async detect
+        // resolves, then it snaps to locked Site Visit — visible as a
+        // flicker. Applying the hint synchronously here makes the first
+        // paint show locked Site Visit straight away. detectAndApply
+        // below still runs and refines the pre-fill values + final
+        // verification.
+        val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
+        if (isSvFixedHint) {
+            activeOutcome = Outcome.SITE_VISIT
+        }
+
+        wireInteractions()
+        renderState()
+
+        if (isSvFixedHint) {
+            // Pale-out the non-SV tabs immediately so the first paint
+            // matches the locked layout. detectAndApplyLockedSvMode
+            // below adds the read-only / Reject-Confirm footer once
+            // the server-side payload arrives.
+            listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+                tab.cell?.isClickable = false
+                tab.cell?.alpha = 0.35f
+            }
+        }
+
+        // Check whether the CP visit was pre-fixed by the telecaller. If
+        // so, lock the sheet to Site Visit and surface Reject / Confirm.
+        detectAndApplyLockedSvMode()
+
+        // Pure-SV outcome mode (no CP behind it). Disables the Site
+        // Visit top tab and pre-selects Booking — only the Booking /
+        // Postpone / Not Interested paths persist, and they route to
+        // the siteVisits endpoints instead of the CP path.
+        if (isSiteVisitMode) applySiteVisitOutcomeMode()
+
+        // Standalone booking mode (Bookings page + button). Lock to
+        // the Booking outcome tab so the user is creating a booking
+        // from scratch, not recording an outcome against a visit.
+        if (isStandaloneBookingMode) applyStandaloneBookingMode()
+    }
+
+    private fun applyStandaloneBookingMode() {
+        view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = "New Booking"
+        view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = "Booking form"
+        view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
+        btnEdit?.visibility = View.GONE
+        btnBack?.visibility = View.VISIBLE
+        btnClear?.visibility = View.VISIBLE
+        editEnabled = true
+        prefilledLeadId = null
+        bookingSub = BookingSub.CLIENT
+        bookingStep = BookingStep.CLIENT_FORM
+        if (tvBookDate?.text?.toString()?.trim().isNullOrEmpty()) {
+            tvBookDate?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                .format(Calendar.getInstance().time)
+        }
+        applyEditModeToFields(true)
+        activeOutcome = Outcome.BOOKING
+        renderState()
+    }
+
+    private fun applySiteVisitOutcomeMode() {
+        // The Site Visit tab itself makes no sense on a row that IS
+        // already a site visit — fade + disable it.
+        tabSiteVisit.cell?.isClickable = false
+        tabSiteVisit.cell?.alpha = 0.35f
+
+        // When launched from a specific SV outcome button, keep the
+        // same shared form UI but remove the outcome switcher so the
+        // operator only sees the form they chose.
+        val lockedOutcome = siteVisitLockedOutcome
+        if (lockedOutcome != null) {
+            view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
+            view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
+                Outcome.BOOKING -> "Converted as Booking"
+                Outcome.POSTPONE -> "Its Been Postponed"
+                Outcome.NOT_INTERESTED -> "Client Not Interested"
+                Outcome.SITE_VISIT -> "Site Visit"
+            }
+            view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = when (lockedOutcome) {
+                Outcome.BOOKING -> "Booking form"
+                Outcome.POSTPONE -> "Postponed reason"
+                Outcome.NOT_INTERESTED -> "Not interested reason"
+                Outcome.SITE_VISIT -> "Site visit form"
+            }
+        }
+
+        activeOutcome = lockedOutcome ?: Outcome.BOOKING
+        renderState()
+    }
+
+    // ---- View binding helpers ------------------------------------------
+    private fun bindTopTabs(view: View) {
+        tabBooking = OutcomeTab(
+            cell = view.findViewById(R.id.outcomeTopBooking),
+            circle = view.findViewById(R.id.circleOutcomeTopBooking),
+            label = view.findViewById(R.id.tvOutcomeTopBooking),
+            indicator = view.findViewById(R.id.indicatorOutcomeTopBooking),
+        )
+        tabSiteVisit = OutcomeTab(
+            cell = view.findViewById(R.id.outcomeTopSiteVisit),
+            circle = view.findViewById(R.id.circleOutcomeTopSiteVisit),
+            label = view.findViewById(R.id.tvOutcomeTopSiteVisit),
+            indicator = view.findViewById(R.id.indicatorOutcomeTopSiteVisit),
+        )
+        tabPostpone = OutcomeTab(
+            cell = view.findViewById(R.id.outcomeTopPostpone),
+            circle = view.findViewById(R.id.circleOutcomeTopPostpone),
+            label = view.findViewById(R.id.tvOutcomeTopPostpone),
+            indicator = view.findViewById(R.id.indicatorOutcomeTopPostpone),
+        )
+        tabNotInterested = OutcomeTab(
+            cell = view.findViewById(R.id.outcomeTopNotInterested),
+            circle = view.findViewById(R.id.circleOutcomeTopNotInterested),
+            label = view.findViewById(R.id.tvOutcomeTopNotInterested),
+            indicator = view.findViewById(R.id.indicatorOutcomeTopNotInterested),
+        )
+    }
+
+    private fun bindSubTabs(view: View) {
+        subTabsScroll = view.findViewById(R.id.bookingSubTabsScroll)
+        subTabClient = view.findViewById(R.id.subTabClientDetails)
+        subTabProfessional = view.findViewById(R.id.subTabProfessionalDetails)
+        subTabOffice = view.findViewById(R.id.subTabOfficeDetails)
+        subTabBooking = view.findViewById(R.id.subTabBookingDetails)
+        subTabCharges = view.findViewById(R.id.subTabChargesDetails)
+        subTabPayment = view.findViewById(R.id.subTabPaymentDetails)
+        subTabStaff = view.findViewById(R.id.subTabStaffDetails)
+        subTabProfessional?.visibility = View.GONE
+        subTabOffice?.visibility = View.GONE
+        subTabCharges?.visibility = View.GONE
+        subTabPayment?.visibility = View.GONE
+    }
+
+    private fun bindBodies(view: View) {
+        bodyComingSoon = view.findViewById(R.id.bodyComingSoon)
+        bodyFindClient = view.findViewById(R.id.bodyBookingFindClient)
+        bodyClientForm = view.findViewById(R.id.bodyBookingClientForm)
+        bodyProfessional = view.findViewById(R.id.bodyBookingProfessional)
+        bodyOffice = view.findViewById(R.id.bodyBookingOffice)
+        bodyBooking = view.findViewById(R.id.bodyBookingBooking)
+        bodyCharges = view.findViewById(R.id.bodyBookingCharges)
+        bodyPayment = view.findViewById(R.id.bodyBookingPayment)
+        bodyStaff = view.findViewById(R.id.bodyBookingStaff)
+    }
+
+    private fun bindClientFormFields(view: View) {
+        etClientMobile = view.findViewById(R.id.etOutcomeClientMobile)
+        tvFormPhone = view.findViewById(R.id.tvFormClientPhone)
+        tvFormTitle = view.findViewById(R.id.tvFormClientTitle)
+        etFormName = view.findViewById(R.id.etFormClientName)
+        etFormFather = view.findViewById(R.id.etFormFatherName)
+        tvFormDob = view.findViewById(R.id.tvFormDob)
+        tvFormAnniversary = view.findViewById(R.id.tvFormAnniversary)
+        etFormAltNumber = view.findViewById(R.id.etFormAlternateNumber)
+        etFormWhatsApp = view.findViewById(R.id.etFormWhatsApp)
+        etFormEmail = view.findViewById(R.id.etFormEmail)
+        tvFormNationality = view.findViewById(R.id.tvFormNationality)
+        etFormHomeAddress = view.findViewById(R.id.etFormHomeAddress)
+        etFormPincode = view.findViewById(R.id.etFormPincode)
+        etFormState = view.findViewById(R.id.etFormState)
+        etFormDistrict = view.findViewById(R.id.etFormDistrict)
+        etFormLocation = view.findViewById(R.id.etFormLocation)
+        // Pincode → Location/District/State auto-fill. Mirrors the web's
+        // usePincodeLocationEnrichment effect in mms-external-leads.tsx.
+        // The post-office Name from India Post IS the locality (e.g.
+        // 600083 → "Ashok Nagar"). We only ever fill blank fields, so a
+        // manual entry from the operator always wins. The lookup itself
+        // is throttled inside PincodeLookup (60s cache + dedup), but we
+        // ALSO guard here with lastEnrichedBookingPincode so the same
+        // pin doesn't re-fire as the user keeps typing or re-opens the
+        // sheet.
+        etFormPincode?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val pin = s?.toString()?.trim().orEmpty().filter { it.isDigit() }
+                if (pin.length != 6) return
+                if (pin == lastEnrichedBookingPincode) return
+                lastEnrichedBookingPincode = pin
+                enrichBookingPincode(pin)
+            }
+        })
+        (tvFormPhone as? EditText)?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val raw = s?.toString()?.trim().orEmpty()
+                val digits = raw.filter { it.isDigit() }.takeLast(10)
+                if (digits.length < 10 || digits == lastLookedUpBookingPhone) return
+                lastLookedUpBookingPhone = digits
+                lookupAndPrefillClientByPhone(digits)
+            }
+        })
+    }
+
+    private fun bindProfessionalFields(view: View) {
+        tvProfProfession = view.findViewById(R.id.tvProfProfession)
+        etProfDesignation = view.findViewById(R.id.etProfDesignation)
+        etProfIncome = view.findViewById(R.id.etProfIncome)
+    }
+
+    private fun bindOfficeFields(view: View) {
+        etOfficeName = view.findViewById(R.id.etOfficeName)
+        etOfficeEmail = view.findViewById(R.id.etOfficeEmail)
+        etOfficeMobile = view.findViewById(R.id.etOfficeMobile)
+        etOfficePhone = view.findViewById(R.id.etOfficePhone)
+        etOfficeAddress = view.findViewById(R.id.etOfficeAddress)
+    }
+
+    private fun bindBookingFields(view: View) {
+        tvBookType = view.findViewById(R.id.tvBookType)
+        tvBookSource = view.findViewById(R.id.tvBookSource)
+        etBookCef = view.findViewById(R.id.etBookCef)
+        tvBookDate = view.findViewById(R.id.tvBookDate)
+        tvBookProject = view.findViewById(R.id.tvBookProject)
+        tvBookPlot = view.findViewById(R.id.tvBookPlot)
+        tvBookProperty = view.findViewById(R.id.tvBookProperty)
+        tvBookMode = view.findViewById(R.id.tvBookMode)
+        ivBookVisitYes = view.findViewById(R.id.ivBookVisitYes)
+        ivBookVisitNo = view.findViewById(R.id.ivBookVisitNo)
+        ivBookDuplicate = view.findViewById(R.id.ivBookDuplicate)
+    }
+
+    private fun bindChargesFields(view: View) {
+        etChargeBookingCost = view.findViewById(R.id.etChargeBookingCost)
+        etChargeGuidelineValue = view.findViewById(R.id.etChargeGuidelineValue)
+        etChargeSpecialConsideration = view.findViewById(R.id.etChargeSpecialConsideration)
+        etChargeDiscountApprovedBy = view.findViewById(R.id.etChargeDiscountApprovedBy)
+        etChargeScReason = view.findViewById(R.id.etChargeScReason)
+        etChargeScValidity = view.findViewById(R.id.etChargeScValidity)
+        etChargePromoOffers = view.findViewById(R.id.etChargePromoOffers)
+        tvChargePromoTnc = view.findViewById(R.id.tvChargePromoTnc)
+        etChargePromoValue = view.findViewById(R.id.etChargePromoValue)
+        etChargeOfferValidity = view.findViewById(R.id.etChargeOfferValidity)
+    }
+
+    private fun bindPaymentFields(view: View) {
+        etPayRegCharges = view.findViewById(R.id.etPayRegCharges)
+        etPayGstAmount = view.findViewById(R.id.etPayGstAmount)
+        ivPayGstApplicable = view.findViewById(R.id.ivPayGstApplicable)
+        etPayDocCharges = view.findViewById(R.id.etPayDocCharges)
+        etPayPattaCharges = view.findViewById(R.id.etPayPattaCharges)
+        etPayOtherCharges = view.findViewById(R.id.etPayOtherCharges)
+        ivPayOtherApplicable = view.findViewById(R.id.ivPayOtherApplicable)
+        etPayAdvanceAmount = view.findViewById(R.id.etPayAdvanceAmount)
+        tvPayPaymentMode = view.findViewById(R.id.tvPayPaymentMode)
+        ivPayFlexi = view.findViewById(R.id.ivPayFlexi)
+        etPayAllotDue = view.findViewById(R.id.etPayAllotDue)
+        tvPayAllotDate = view.findViewById(R.id.tvPayAllotDate)
+        etPay2Mode = view.findViewById(R.id.etPay2Mode)
+        tvPay2Date = view.findViewById(R.id.tvPay2Date)
+        etPay3Mode = view.findViewById(R.id.etPay3Mode)
+        tvPay3Date = view.findViewById(R.id.tvPay3Date)
+        etPay4Mode = view.findViewById(R.id.etPay4Mode)
+        tvPay4Date = view.findViewById(R.id.tvPay4Date)
+        tvPayPrefReg = view.findViewById(R.id.tvPayPrefReg)
+        val recomputeWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                recomputeBookingFinanceDerivedFields()
+            }
+        }
+        etChargeBookingCost?.addTextChangedListener(recomputeWatcher)
+        etChargeSpecialConsideration?.addTextChangedListener(recomputeWatcher)
+        etChargeGuidelineValue?.addTextChangedListener(recomputeWatcher)
+        etPayAdvanceAmount?.addTextChangedListener(recomputeWatcher)
+    }
+
+    private fun bindStaffFields(view: View) {
+        tvStaffAvp = view.findViewById(R.id.tvStaffAvp)
+        tvStaffGm = view.findViewById(R.id.tvStaffGm)
+        tvStaffSm = view.findViewById(R.id.tvStaffSm)
+        tvStaffBdo = view.findViewById(R.id.tvStaffBdo)
+        tvStaffTelecaller = view.findViewById(R.id.tvStaffTelecaller)
+        etStaffAadhar = view.findViewById(R.id.etStaffAadhar)
+        etStaffPancard = view.findViewById(R.id.etStaffPancard)
+        etStaffRefName1 = view.findViewById(R.id.etStaffRefName1)
+        etStaffRefMobile1 = view.findViewById(R.id.etStaffRefMobile1)
+        etStaffRefProf1 = view.findViewById(R.id.etStaffRefProf1)
+        etStaffRefName2 = view.findViewById(R.id.etStaffRefName2)
+        etStaffRefMobile2 = view.findViewById(R.id.etStaffRefMobile2)
+        etStaffRefProf2 = view.findViewById(R.id.etStaffRefProf2)
+        tvStaffDocPrep = view.findViewById(R.id.tvStaffDocPrep)
+        ivStaffSaveDraft = view.findViewById(R.id.ivStaffSaveDraft)
+        ivStaffSaveConfirmed = view.findViewById(R.id.ivStaffSaveConfirmed)
+    }
+
+    private fun bindPostponeFields(view: View) {
+        bodyPostpone = view.findViewById(R.id.bodyPostpone)
+        cbPostClientUnavailable = view.findViewById(R.id.cbPostClientUnavailable)
+        cbPostWeather = view.findViewById(R.id.cbPostWeather)
+        cbPostVehicle = view.findViewById(R.id.cbPostVehicle)
+        cbPostDocument = view.findViewById(R.id.cbPostDocument)
+        cbPostRescheduledByClient = view.findViewById(R.id.cbPostRescheduledByClient)
+        cbPostOtherCommitment = view.findViewById(R.id.cbPostOtherCommitment)
+        etPostNotes = view.findViewById(R.id.etPostNotes)
+    }
+
+    private fun bindNotInterestedFields(view: View) {
+        bodyNotInterested = view.findViewById(R.id.bodyNotInterested)
+        cbNiPrice = view.findViewById(R.id.cbNiPrice)
+        etNiPriceDetail = view.findViewById(R.id.etNiPriceDetail)
+        cbNiDistance = view.findViewById(R.id.cbNiDistance)
+        etNiDistanceDetail = view.findViewById(R.id.etNiDistanceDetail)
+        cbNiLocation = view.findViewById(R.id.cbNiLocation)
+        etNiLocationDetail = view.findViewById(R.id.etNiLocationDetail)
+        cbNiDevelopment = view.findViewById(R.id.cbNiDevelopment)
+        etNiDevelopmentDetail = view.findViewById(R.id.etNiDevelopmentDetail)
+        cbNiPlot = view.findViewById(R.id.cbNiPlot)
+        etNiPlotDetail = view.findViewById(R.id.etNiPlotDetail)
+        cbNiLoan = view.findViewById(R.id.cbNiLoan)
+        etNiLoanDetail = view.findViewById(R.id.etNiLoanDetail)
+        cbNiStaffApproach = view.findViewById(R.id.cbNiStaffApproach)
+        etNiStaffApproachDetail = view.findViewById(R.id.etNiStaffApproachDetail)
+        cbNiDriverApproach = view.findViewById(R.id.cbNiDriverApproach)
+        etNiDriverApproachDetail = view.findViewById(R.id.etNiDriverApproachDetail)
+        etNiNotes = view.findViewById(R.id.etNiNotes)
+        // Toggle each per-reason detail input as its checkbox is
+        // ticked — matches the web pattern where the detail input
+        // only appears AFTER the reason is selected. Same behaviour
+        // for both modes (CP serialises into notes; SV ships them
+        // as notInterestedDetails to the backend).
+        wireNotInterestedDetailVisibility()
+    }
+
+    private fun wireNotInterestedDetailVisibility() {
+        val pairs = niReasonPairs()
+        pairs.forEach { (cb, detail) ->
+            // Initial sync — sheet may be re-opened with prior state
+            // restored elsewhere later, but for now nothing pre-checks.
+            detail?.visibility = if (cb?.isChecked == true) View.VISIBLE else View.GONE
+            cb?.setOnCheckedChangeListener { _, isChecked ->
+                detail?.visibility = if (isChecked) View.VISIBLE else View.GONE
+                if (!isChecked) detail?.setText("")
+            }
+        }
+    }
+
+    /**
+     * Returns the (checkbox, detail-input) pairs in the SAME order as
+     * the web's NOT_INTERESTED_REASONS so labels and array indices stay
+     * aligned across the two surfaces.
+     */
+    private fun niReasonPairs(): List<Pair<android.widget.CheckBox?, EditText?>> = listOf(
+        cbNiPrice to etNiPriceDetail,
+        cbNiDistance to etNiDistanceDetail,
+        cbNiLocation to etNiLocationDetail,
+        cbNiDevelopment to etNiDevelopmentDetail,
+        cbNiPlot to etNiPlotDetail,
+        cbNiLoan to etNiLoanDetail,
+        cbNiStaffApproach to etNiStaffApproachDetail,
+        cbNiDriverApproach to etNiDriverApproachDetail,
+    )
+
+    /**
+     * The 8 web-canonical reason labels in display order. Must match
+     * NOT_INTERESTED_REASONS in
+     * app/marketing/site-visits/[id]/page.tsx byte-for-byte so a row
+     * saved by mobile reads identically from the web admin.
+     */
+    private val NI_REASON_LABELS = listOf(
+        "Price",
+        "Distance",
+        "Location",
+        "Development in sourcing area",
+        "Preferred plot not choice",
+        "Loan eligibility",
+        "Internal staff approach or behaviour",
+        "Driver approach or behaviour",
+    )
+
+    private fun bindSiteVisitFields(view: View) {
+        bodySiteVisit = view.findViewById(R.id.bodySiteVisit)
+        tvSvProject = view.findViewById(R.id.tvSvProject)
+        tvSvDate = view.findViewById(R.id.tvSvDate)
+        tvSvTime = view.findViewById(R.id.tvSvTime)
+        btnSvTravelOwn = view.findViewById(R.id.btnSvTravelOwn)
+        btnSvTravelCab = view.findViewById(R.id.btnSvTravelCab)
+        etSvPickupAddress = view.findViewById(R.id.etSvPickupAddress)
+        tvSvIncharge = view.findViewById(R.id.tvSvIncharge)
+        tvSvHod = view.findViewById(R.id.tvSvHod)
+        tvSvAvp = view.findViewById(R.id.tvSvAvp)
+        tvSvGm = view.findViewById(R.id.tvSvGm)
+        tvSvSm = view.findViewById(R.id.tvSvSm)
+        etSvVisitorCount = view.findViewById(R.id.etSvVisitorCount)
+        siteVisitorRows = view.findViewById(R.id.siteVisitorRows)
+    }
+
+    // ---- Wire all interactions -----------------------------------------
+    private fun wireInteractions() {
+        // Top tabs
+        tabBooking.cell?.setOnClickListener { switchOutcome(Outcome.BOOKING) }
+        tabSiteVisit.cell?.setOnClickListener { switchOutcome(Outcome.SITE_VISIT) }
+        tabPostpone.cell?.setOnClickListener { switchOutcome(Outcome.POSTPONE) }
+        tabNotInterested.cell?.setOnClickListener { switchOutcome(Outcome.NOT_INTERESTED) }
+
+        // Sub-tab navigation: forward must still go through Next so
+        // per-step validation runs (required fields, etc.). BACKWARD
+        // and re-visiting an already-seen sub-tab is allowed via tap
+        // — the operator often realises they typed something wrong on
+        // an earlier tab while filling a later one. Gating is on
+        // `maxVisitedBookingSub` so an unvisited future tab can't be
+        // tap-skipped past validation.
+        fun wireSubTabJump(pill: TextView?, target: BookingSub) {
+            pill?.isClickable = true
+            pill?.isFocusable = true
+            pill?.setOnClickListener {
+                if (activeOutcome != Outcome.BOOKING) return@setOnClickListener
+                if (target.ordinal > maxVisitedBookingSub.ordinal) {
+                    // Forward jump beyond what's been validated — not
+                    // allowed silently. Toast tells the operator why.
+                    Toast.makeText(
+                        requireContext(),
+                        "Finish this step first — tap Next to continue",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@setOnClickListener
                 }
+                if (target == bookingSub) return@setOnClickListener
+                switchBookingSub(target)
             }
         }
-        siteVisitHod?.setOnClickListener { pickStaff("Select HOD") { selectedHod = it; siteVisitHod?.text = "HOD: ${it.name ?: "Selected"}" } }
-        siteVisitAvp?.setOnClickListener { pickStaff("Select AVP") { selectedAvp = it; siteVisitAvp?.text = "AVP: ${it.name ?: "Selected"}" } }
-        siteVisitGm?.setOnClickListener { pickStaff("Select GM") { selectedGm = it; siteVisitGm?.text = "GM: ${it.name ?: "Selected"}" } }
-        siteVisitSeniorManager?.setOnClickListener {
-            pickStaff("Select Senior Manager") {
-                selectedSeniorManager = it
-                siteVisitSeniorManager?.text = "Senior Manager: ${it.name ?: "Selected"}"
+        wireSubTabJump(subTabClient, BookingSub.CLIENT)
+        wireSubTabJump(subTabProfessional, BookingSub.PROFESSIONAL)
+        wireSubTabJump(subTabOffice, BookingSub.OFFICE)
+        wireSubTabJump(subTabBooking, BookingSub.BOOKING)
+        wireSubTabJump(subTabCharges, BookingSub.CHARGES)
+        wireSubTabJump(subTabPayment, BookingSub.PAYMENT)
+        wireSubTabJump(subTabStaff, BookingSub.STAFF)
+
+        // Client-form date / dropdown pickers
+        view?.findViewById<View>(R.id.rowFormTitle)?.setOnClickListener {
+            picker("Select Title", listOf("Mr", "Mrs", "Ms", "Dr", "Prof")) { tvFormTitle?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowFormDob)?.setOnClickListener { pickDate(tvFormDob) }
+        view?.findViewById<View>(R.id.rowFormAnniversary)?.setOnClickListener { pickDate(tvFormAnniversary) }
+        view?.findViewById<View>(R.id.rowFormNationality)?.setOnClickListener {
+            picker("Select Nationality", listOf("Indian", "NRI", "Foreign National")) { tvFormNationality?.text = it }
+        }
+
+        // Professional dropdown
+        view?.findViewById<View>(R.id.rowProfProfession)?.setOnClickListener {
+            picker("Select Profession", listOf("Business", "Salaried", "Self-Employed", "Other")) {
+                tvProfProfession?.text = it
             }
         }
-        visitorCount?.addTextChangedListener(object : TextWatcher {
+
+        // Booking sub-tab pickers.
+        //
+        // Each list mirrors the web's option set in
+        // `app/marketing/bookings/new/page.tsx` so the values the
+        // mobile sends match what the backend booking-mutation
+        // validator + downstream reports expect. Any drift here
+        // shows up as either a validation reject ("X is required")
+        // or — worse — a row that silently lands with a value no
+        // other surface can filter on (a CP/SV-tab list of bookings
+        // with bookingType="Direct" disappears from the web's
+        // bookingType=NEW filter).
+        view?.findViewById<View>(R.id.rowBookType)?.setOnClickListener {
+            // Web: ["NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"]
+            picker(
+                "Select Booking Type",
+                listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"),
+            ) { tvBookType?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowBookSource)?.setOnClickListener {
+            // Web auto-derives sourceType from context (cp_visit /
+            // site_visit / walk_in) without exposing a picker. Mobile
+            // still surfaces a picker — restrict the visible options
+            // to the same three valid strings so an operator override
+            // can never desync from the backend's accepted set.
+            picker(
+                "Select Source",
+                listOf("walk_in", "cp_visit", "site_visit"),
+            ) { tvBookSource?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener {
+            pickDate(tvBookDate) { loadBookingPlotPrefill(force = true) }
+        }
+        view?.findViewById<View>(R.id.rowBookProject)?.setOnClickListener {
+            pickBookingProject()
+        }
+        view?.findViewById<View>(R.id.rowBookPlot)?.setOnClickListener {
+            pickBookingUnit()
+        }
+        view?.findViewById<View>(R.id.rowBookProperty)?.setOnClickListener {
+            // Web: ["Plot", "Apartment", "Villa", "Commercial"] —
+            // mobile was missing "Commercial".
+            picker(
+                "Select Property Type",
+                listOf("Plot", "Apartment", "Villa", "Commercial"),
+            ) { tvBookProperty?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowBookMode)?.setOnClickListener {
+            // Web: ["Cash", "Cheque", "NEFT", "Online", "Loan"] —
+            // mobile had "Online Transfer" (non-matching) and was
+            // missing NEFT + Loan entirely.
+            picker(
+                "Select Booking Mode",
+                listOf("Cash", "Cheque", "NEFT", "Online", "Loan"),
+            ) { tvBookMode?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowBookVisitYes)?.setOnClickListener {
+            bookIsAgainstVisit = YesNo.YES; refreshBookingRadios()
+        }
+        view?.findViewById<View>(R.id.rowBookVisitNo)?.setOnClickListener {
+            bookIsAgainstVisit = YesNo.NO; refreshBookingRadios()
+        }
+        view?.findViewById<View>(R.id.rowBookDuplicate)?.setOnClickListener {
+            bookDuplicate = !bookDuplicate
+            ivBookDuplicate?.setImageResource(
+                if (bookDuplicate) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
+            )
+        }
+
+        // Charges picker
+        view?.findViewById<View>(R.id.rowChargePromoTnc)?.setOnClickListener {
+            picker("Select Offers T&C", listOf("Default T&C", "Festive T&C", "Custom T&C")) {
+                tvChargePromoTnc?.text = it
+            }
+        }
+
+        // Payment toggles + pickers
+        view?.findViewById<View>(R.id.rowPayGstApplicable)?.setOnClickListener {
+            payGstApplicable = !payGstApplicable
+            ivPayGstApplicable?.setImageResource(
+                if (payGstApplicable) R.drawable.ic_outcome_checkbox_checked
+                else R.drawable.ic_outcome_checkbox_empty
+            )
+        }
+        view?.findViewById<View>(R.id.rowPayOtherApplicable)?.setOnClickListener {
+            payOtherApplicable = !payOtherApplicable
+            ivPayOtherApplicable?.setImageResource(
+                if (payOtherApplicable) R.drawable.ic_outcome_checkbox_checked
+                else R.drawable.ic_outcome_checkbox_empty
+            )
+        }
+        view?.findViewById<View>(R.id.rowPayPaymentMode)?.setOnClickListener {
+            picker("Select Payment Mode", listOf("Lump Sum", "Construction-Linked", "Flexi")) {
+                tvPayPaymentMode?.text = it
+            }
+        }
+        view?.findViewById<View>(R.id.rowPayFlexi)?.setOnClickListener {
+            payFlexi = !payFlexi
+            ivPayFlexi?.setImageResource(
+                if (payFlexi) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
+            )
+        }
+        view?.findViewById<View>(R.id.rowPayAllotDate)?.setOnClickListener { pickDate(tvPayAllotDate) }
+        view?.findViewById<View>(R.id.rowPay2Date)?.setOnClickListener { pickDate(tvPay2Date) }
+        view?.findViewById<View>(R.id.rowPay3Date)?.setOnClickListener { pickDate(tvPay3Date) }
+        view?.findViewById<View>(R.id.rowPay4Date)?.setOnClickListener { pickDate(tvPay4Date) }
+        view?.findViewById<View>(R.id.rowPayPrefReg)?.setOnClickListener { pickDate(tvPayPrefReg) }
+
+        // Staff pickers + radio
+        view?.findViewById<View>(R.id.rowStaffAvp)?.setOnClickListener {
+            pickBookingStaff("Select AVP", "avp") { bookingStaffAvp = it; tvStaffAvp?.text = it.name ?: "Selected" }
+        }
+        view?.findViewById<View>(R.id.rowStaffGm)?.setOnClickListener {
+            pickBookingStaff("Select GM", "gm") { bookingStaffGm = it; tvStaffGm?.text = it.name ?: "Selected" }
+        }
+        view?.findViewById<View>(R.id.rowStaffSm)?.setOnClickListener {
+            pickBookingStaff("Select Senior Manager", "seniorManager") { bookingStaffSm = it; tvStaffSm?.text = it.name ?: "Selected" }
+        }
+        view?.findViewById<View>(R.id.rowStaffBdo)?.setOnClickListener {
+            pickBookingStaff("Select BDO", "bdo") { bookingStaffBdo = it; tvStaffBdo?.text = it.name ?: "Selected" }
+        }
+        view?.findViewById<View>(R.id.rowStaffTelecaller)?.setOnClickListener {
+            pickBookingStaff("Select Telecaller", "telecaller") { bookingStaffTelecaller = it; tvStaffTelecaller?.text = it.name ?: "Selected" }
+        }
+        view?.findViewById<View>(R.id.rowStaffDocPrep)?.setOnClickListener {
+            picker("Document Language", listOf("English", "Tamil", "Hindi")) { tvStaffDocPrep?.text = it }
+        }
+        view?.findViewById<View>(R.id.rowStaffSaveDraft)?.setOnClickListener {
+            staffSaveAs = SaveAs.DRAFT; refreshStaffSaveRadios()
+        }
+        view?.findViewById<View>(R.id.rowStaffSaveConfirmed)?.setOnClickListener {
+            staffSaveAs = SaveAs.CONFIRMED; refreshStaffSaveRadios()
+        }
+
+        // Top-level chrome — Edit button was removed from the layout.
+        btnSubmit?.setOnClickListener { onCtaTap() }
+
+        // ---- Site Visit interactions ----
+        view?.findViewById<View>(R.id.rowSvProject)?.setOnClickListener { pickSvProject() }
+        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { pickDate(tvSvDate, "dd-MM-yyyy") }
+        view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
+
+        view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
+            pickSvStaff("Select Site Incharge") {
+                svIncharge = it
+                tvSvIncharge?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.INCHARGE)
+            }
+        }
+        view?.findViewById<View>(R.id.rowSvHod)?.setOnClickListener {
+            pickSvStaff("Select HOD") {
+                svHod = it
+                tvSvHod?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.HOD)
+            }
+        }
+        view?.findViewById<View>(R.id.rowSvAvp)?.setOnClickListener {
+            pickSvStaff("Select AVP") {
+                svAvp = it
+                tvSvAvp?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.AVP)
+            }
+        }
+        view?.findViewById<View>(R.id.rowSvGm)?.setOnClickListener {
+            pickSvStaff("Select GM") {
+                svGm = it
+                tvSvGm?.text = it.name ?: "Selected"
+                autoFillSvHierarchyFrom(it, SvHierarchyLevel.GM)
+            }
+        }
+        view?.findViewById<View>(R.id.rowSvSm)?.setOnClickListener {
+            // SM is the top of the chain — nothing above to auto-fill.
+            pickSvStaff("Select Senior Manager") {
+                svSm = it
+                tvSvSm?.text = it.name ?: "Selected"
+            }
+        }
+
+        btnSvTravelOwn?.setOnClickListener { setTravelMode("own_vehicle") }
+        btnSvTravelCab?.setOnClickListener { setTravelMode("cab") }
+
+        // Each keystroke in the visitor count rebuilds the visitor card list.
+        etSvVisitorCount?.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 renderVisitorRows(s?.toString()?.toIntOrNull() ?: 0)
             }
-            override fun afterTextChanged(s: Editable?) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
         })
-        siteVisitDateView?.apply {
-            text = siteVisitDate
-            setOnClickListener { pickSiteVisitDate() }
-        }
-        siteVisitTimeView?.apply {
-            text = siteVisitTime
-            setOnClickListener { pickSiteVisitTime() }
-        }
-        siteVisitTravelMode?.setOnClickListener { toggleTravelMode() }
-        renderTravelMode()
 
-        renderOutcomeChips()
-        renderPostponeReasonChips()
-        loadSalesStaff()
-        loadProjects(showErrors = false)
-
-        submitBtn?.setOnClickListener { onSubmit() }
+        // Postpone tab no longer has interactive rows — the layout is a
+        // pure checkbox list (matching the web's Postpone dialog) plus
+        // a notes textarea. The previous Date & Time picker for a
+        // follow-up was dropped because the web equivalent doesn't
+        // carry one; the office tracks rescheduling from the
+        // approval/timeline view, not from the field-staff sheet.
     }
 
-    private fun renderOutcomeChips() {
-        val row = outcomeRow ?: return
-        row.removeAllViews()
-        OUTCOME_OPTIONS.forEach { (label, value) ->
-            val chip = makeChip(label) { setOutcome(value) }
-            applyChipState(chip, selectedOutcome == value)
-            chip.tag = value
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            params.marginEnd = dp(10)
-            row.addView(chip, params)
-        }
+    private fun refreshBookingRadios() {
+        ivBookVisitYes?.setImageResource(
+            if (bookIsAgainstVisit == YesNo.YES) R.drawable.ic_outcome_radio_on
+            else R.drawable.ic_outcome_radio_off
+        )
+        ivBookVisitNo?.setImageResource(
+            if (bookIsAgainstVisit == YesNo.NO) R.drawable.ic_outcome_radio_on
+            else R.drawable.ic_outcome_radio_off
+        )
     }
 
-    private fun renderPostponeReasonChips() {
-        val row = postponeRow ?: return
-        row.removeAllViews()
-        POSTPONE_REASON_OPTIONS.forEach { reason ->
-            val chip = makeChip(reason) { togglePostponeReason(reason) }
-            applyChipState(chip, selectedPostponeReasons.contains(reason))
-            chip.tag = reason
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            params.marginEnd = dp(10)
-            row.addView(chip, params)
-        }
+    private fun refreshPaymentToggles() {
+        ivPayGstApplicable?.setImageResource(
+            if (payGstApplicable) R.drawable.ic_outcome_checkbox_checked
+            else R.drawable.ic_outcome_checkbox_empty
+        )
+        ivPayOtherApplicable?.setImageResource(
+            if (payOtherApplicable) R.drawable.ic_outcome_checkbox_checked
+            else R.drawable.ic_outcome_checkbox_empty
+        )
+        ivPayFlexi?.setImageResource(
+            if (payFlexi) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
+        )
     }
 
-    private fun setOutcome(outcome: String) {
-        selectedOutcome = outcome
-        outcomeRow?.let { row ->
-            for (i in 0 until row.childCount) {
-                val v = row.getChildAt(i) as? TextView ?: continue
-                applyChipState(v, v.tag == outcome)
+    private fun refreshStaffSaveRadios() {
+        ivStaffSaveDraft?.setImageResource(
+            if (staffSaveAs == SaveAs.DRAFT) R.drawable.ic_outcome_radio_on
+            else R.drawable.ic_outcome_radio_off
+        )
+        ivStaffSaveConfirmed?.setImageResource(
+            if (staffSaveAs == SaveAs.CONFIRMED) R.drawable.ic_outcome_radio_on
+            else R.drawable.ic_outcome_radio_off
+        )
+    }
+
+    // ---- State transitions ---------------------------------------------
+    private fun switchOutcome(o: Outcome) {
+        activeOutcome = o
+        if (o == Outcome.BOOKING) {
+            bookingSub = BookingSub.CLIENT
+            bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
+            // Switching back to Booking from another outcome resets
+            // the visited-watermark — the user starts at CLIENT and
+            // must Next-through again.
+            maxVisitedBookingSub = BookingSub.CLIENT
+        }
+        renderState()
+    }
+
+    private fun switchBookingSub(sub: BookingSub) {
+        bookingSub = sub
+        if (!isStandaloneBookingMode && sub == BookingSub.CLIENT && bookingStep != BookingStep.CLIENT_FORM) {
+            bookingStep = BookingStep.FIND_MOBILE
+        }
+        renderState()
+    }
+
+    /**
+     * Single render entrypoint — flips top tabs, sub-tab pills, body
+     * visibility, and the CTA label off the current state.
+     */
+    private fun renderState() {
+        // Top tabs (4)
+        styleOutcomeTab(tabBooking, active = activeOutcome == Outcome.BOOKING)
+        styleOutcomeTab(tabSiteVisit, active = activeOutcome == Outcome.SITE_VISIT)
+        styleOutcomeTab(tabPostpone, active = activeOutcome == Outcome.POSTPONE)
+        styleOutcomeTab(tabNotInterested, active = activeOutcome == Outcome.NOT_INTERESTED)
+
+        // Sub-tab row (only on Booking)
+        val showSubTabs = activeOutcome == Outcome.BOOKING
+        subTabsScroll?.visibility = if (showSubTabs) View.VISIBLE else View.GONE
+        if (showSubTabs) {
+            styleSubTab(subTabClient, bookingSub == BookingSub.CLIENT)
+            styleSubTab(subTabBooking, bookingSub == BookingSub.BOOKING)
+            styleSubTab(subTabStaff, bookingSub == BookingSub.STAFF)
+
+            val activePill: TextView? = when (bookingSub) {
+                BookingSub.CLIENT -> subTabClient
+                BookingSub.BOOKING -> subTabBooking
+                BookingSub.STAFF -> subTabStaff
+                BookingSub.PROFESSIONAL, BookingSub.OFFICE, BookingSub.CHARGES, BookingSub.PAYMENT -> subTabClient
+            }
+            val scroll = subTabsScroll
+            if (activePill != null && scroll != null) {
+                scroll.post {
+                    val target = activePill.left - (scroll.width - activePill.width) / 2
+                    scroll.smoothScrollTo(target.coerceAtLeast(0), 0)
+                }
             }
         }
-        val isPostpone = outcome == OUTCOME_POSTPONED
-        val isSiteVisit = outcome == OUTCOME_SITE_VISIT
-        val isNotInterested = outcome == OUTCOME_NOT_INTERESTED
-        val isWait = outcome == OUTCOME_WAIT
-        siteVisitDetailsGroup?.visibility = if (isSiteVisit) View.VISIBLE else View.GONE
-        postponeDetailsGroup?.visibility = if (isPostpone) View.VISIBLE else View.GONE
-        notInterestedDetailsGroup?.visibility = if (isNotInterested) View.VISIBLE else View.GONE
-        waitDetailsGroup?.visibility = if (isWait) View.VISIBLE else View.GONE
-        if (!isPostpone) selectedPostponeReasons.clear()
+
+        // Body swap.
+        //  - Booking         : three web-parity tabs group the native sections.
+        //  - Site visit      : one-page conversion form.
+        //  - Postpone        : 4 free-text fields + follow-up date/time.
+        //  - Not Interested  : same 4 free-text fields, no follow-up.
+        val bookingActive = activeOutcome == Outcome.BOOKING
+        val siteVisitActive = activeOutcome == Outcome.SITE_VISIT
+        val postponeActive = activeOutcome == Outcome.POSTPONE
+        val notInterestedActive = activeOutcome == Outcome.NOT_INTERESTED
+
+        // Coming Soon is only the fallback now — every outcome has a body.
+        bodyComingSoon?.visibility = View.GONE
+        val showFindClient = bookingActive && bookingSub == BookingSub.CLIENT &&
+            bookingStep == BookingStep.FIND_MOBILE && !isStandaloneBookingMode
+        val showClientGroup = bookingActive && bookingSub == BookingSub.CLIENT &&
+            (bookingStep == BookingStep.CLIENT_FORM || isStandaloneBookingMode)
+        val showBookingFinance = bookingActive && bookingSub == BookingSub.BOOKING
+        val showPaymentStaff = bookingActive && bookingSub == BookingSub.STAFF
+        bodyFindClient?.visibility = if (showFindClient) View.VISIBLE else View.GONE
+        bodyClientForm?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
+        bodyProfessional?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
+        bodyOffice?.visibility = if (showClientGroup) View.VISIBLE else View.GONE
+        bodyBooking?.visibility = if (bookingActive && bookingSub == BookingSub.BOOKING)
+            View.VISIBLE else View.GONE
+        bodyCharges?.visibility = if (showBookingFinance) View.VISIBLE else View.GONE
+        bodyPayment?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
+        bodyStaff?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
+        bodySiteVisit?.visibility = if (siteVisitActive) View.VISIBLE else View.GONE
+        bodyPostpone?.visibility = if (postponeActive) View.VISIBLE else View.GONE
+        bodyNotInterested?.visibility = if (notInterestedActive) View.VISIBLE else View.GONE
+
+        // Edit chip visible from the moment we leave the find-mobile step,
+        // so the user can always jump back and re-enter the client mobile.
+        val onFindMobile = bookingActive && bookingSub == BookingSub.CLIENT &&
+            bookingStep == BookingStep.FIND_MOBILE
+        btnBack?.visibility = if (isStandaloneBookingMode && bookingActive) View.VISIBLE else View.GONE
+        btnClear?.visibility = if (isStandaloneBookingMode && bookingActive) View.VISIBLE else View.GONE
+
+        // CTA label
+        btnSubmit?.text = when {
+            siteVisitActive -> "Save"
+            postponeActive -> "Save"
+            notInterestedActive -> "Save"
+            onFindMobile -> "Next"
+            bookingActive && bookingSub == BookingSub.STAFF -> "Save Booking"
+            bookingActive -> "Next"
+            else -> "Close"
+        }
     }
 
-    private fun pickProject() {
-        if (projects.isNotEmpty()) {
-            showProjectPicker(projects)
+    private fun styleOutcomeTab(tab: OutcomeTab, active: Boolean) {
+        val ctx = context ?: return
+        tab.circle?.setBackgroundResource(
+            if (active) R.drawable.bg_outcome_tab_active
+            else R.drawable.bg_outcome_tab_inactive
+        )
+        val icon = (tab.circle as? FrameLayout)?.getChildAt(0) as? ImageView
+        icon?.imageTintList = android.content.res.ColorStateList.valueOf(
+            if (active) Color.WHITE else Color.parseColor("#6A6D78")
+        )
+        tab.label?.setTextColor(
+            if (active) Color.parseColor("#0B61CA") else Color.parseColor("#6A6D78")
+        )
+        tab.label?.typeface = ResourcesCompat.getFont(
+            ctx,
+            if (active) R.font.inter_semibold else R.font.inter_medium
+        )
+        tab.indicator?.visibility = if (active) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun styleSubTab(view: TextView?, active: Boolean) {
+        val v = view ?: return
+        val ctx = context ?: return
+        v.setBackgroundResource(
+            if (active) R.drawable.bg_outcome_subtab_active
+            else R.drawable.bg_outcome_subtab_inactive
+        )
+        v.setTextColor(if (active) Color.WHITE else Color.parseColor("#475467"))
+        v.typeface = ResourcesCompat.getFont(
+            ctx,
+            if (active) R.font.inter_semibold else R.font.inter_medium
+        )
+    }
+
+    // ---- CTA --------------------------------------------------------
+    private fun onCtaTap() {
+        clearError()
+        when (activeOutcome) {
+            Outcome.SITE_VISIT -> {
+                persistSiteVisit()
+                return
+            }
+            Outcome.POSTPONE -> {
+                persistPostpone()
+                return
+            }
+            Outcome.NOT_INTERESTED -> {
+                persistNotInterested()
+                return
+            }
+            Outcome.BOOKING -> { /* fall through to the Booking flow below */ }
+        }
+        // From the mobile-find step, validate, look up an existing lead
+        // by phone, and advance to the form (pre-filled when a match is
+        // found). Mirrors the BookingCreateFragment flow so a staffer
+        // who already engaged this client through the telecaller doesn't
+        // have to retype name / address / WhatsApp / email / etc.
+        if (bookingSub == BookingSub.CLIENT && bookingStep == BookingStep.FIND_MOBILE) {
+            val raw = etClientMobile?.text?.toString().orEmpty().trim()
+            if (raw.length < 6) {
+                showError("Enter a valid mobile number")
+                return
+            }
+            tvFormPhone?.text = raw
+            // Advance immediately for snappy UX — the lookup runs async
+            // and prefills fields when (if) a match arrives. Most users
+            // type then tap Next and start filling the form; if a lead
+            // exists the fields just appear filled by the time they
+            // look at them.
+            bookingStep = BookingStep.CLIENT_FORM
+            renderState()
+            lookupAndPrefillClientByPhone(raw)
             return
         }
-        loadProjects(showErrors = true)
+        // Final submit is on the Staff sub-tab. Anywhere else, Next moves
+        // to the next sub-tab in order.
+        if (bookingSub == BookingSub.STAFF) {
+            val name = etFormName?.text?.toString().orEmpty().trim()
+            if (name.isEmpty()) {
+                showError("Client name is required (Client Details tab)")
+                return
+            }
+            persistBooking()
+            return
+        }
+        // Required-field gate — block forward navigation until the
+        // current tab's must-have field is filled. Keeps the user
+        // from landing on Staff with a half-filled booking that the
+        // final Save would reject anyway. Tabs with no hard
+        // requirement (Charges / Payment money fields are optional
+        // — finance team finalises later) fall through cleanly.
+        val gateError = currentSubTabRequiredFieldMissing()
+        if (gateError != null) {
+            showError(gateError)
+            return
+        }
+        bookingSub = nextSubTab(bookingSub)
+        // Bump the watermark so the tap-back navigation can let the
+        // user jump straight to this sub-tab on a return trip.
+        if (bookingSub.ordinal > maxVisitedBookingSub.ordinal) {
+            maxVisitedBookingSub = bookingSub
+        }
+        renderState()
     }
 
-    private fun loadProjects(showErrors: Boolean) {
-        if (projectsLoading) return
-        projectsLoading = true
-        siteVisitProject?.text = "Loading projects..."
+    /**
+     * Returns the user-facing error message for whichever required
+     * field on the active sub-tab is still blank, or null when the
+     * tab is OK to advance from. Matches the asterisk-marked fields
+     * in the design — Client Name on CLIENT, Profession on
+     * PROFESSIONAL, Office Name on OFFICE, Booking Date + Project on
+     * BOOKING. CHARGES / PAYMENT / STAFF have no hard prerequisites
+     * here (Staff has its own check on the final Save).
+     */
+    private fun currentSubTabRequiredFieldMissing(): String? {
+        fun isBlankPlaceholder(value: String?, vararg placeholders: String): Boolean {
+            val v = value?.trim().orEmpty()
+            if (v.isEmpty()) return true
+            return placeholders.any { v.equals(it, ignoreCase = true) }
+        }
+        return when (bookingSub) {
+            BookingSub.CLIENT -> {
+                if (bookingStep != BookingStep.CLIENT_FORM) null
+                else if ((textOrNull(tvFormPhone?.text) ?: textOrNull(etClientMobile?.text)).isNullOrEmpty())
+                    "Mobile number is required before continuing"
+                else if (etFormName?.text?.toString()?.trim().isNullOrEmpty())
+                    "Client Name is required before continuing"
+                else null
+            }
+            BookingSub.PROFESSIONAL, BookingSub.OFFICE -> null
+            BookingSub.BOOKING -> {
+                when {
+                    isBlankPlaceholder(tvBookDate?.text?.toString(), "dd/mm/yyyy") ->
+                        "Booking Date is required before continuing"
+                    isBlankPlaceholder(tvBookProject?.text?.toString(), "Select Project") ->
+                        "Project is required before continuing"
+                    else -> null
+                }
+            }
+            BookingSub.CHARGES, BookingSub.PAYMENT, BookingSub.STAFF -> null
+        }
+    }
+
+    /**
+     * Flip the prefilled client form between read-only (default
+     * after a successful lookup) and editable. Edit button background
+     * + text colour change to signal the state; underlying form
+     * fields toggle isEnabled / focusability together.
+     */
+    private fun toggleEditMode() {
+        editEnabled = !editEnabled
+        applyEditModeToFields(editEnabled)
+        val pill = btnEdit ?: return
+        if (editEnabled) {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_active)
+            pill.setTextColor(Color.WHITE)
+            pill.text = "Done"
+            // Tap-through feedback so the operator knows the lock
+            // really did flip — the previous chip-only colour change
+            // was easy to miss in bright sunlight.
+            Toast.makeText(
+                requireContext(),
+                "Fields unlocked — edit and tap Done when finished",
+                Toast.LENGTH_SHORT,
+            ).show()
+        } else {
+            pill.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+            pill.setTextColor(Color.parseColor("#2DAE12"))
+            pill.text = "Edit"
+        }
+    }
+
+    // Cached original key listeners so the lock toggle can fully
+    // disable typing (setKeyListener(null) is the only universally
+    // reliable way to keep the IME from accepting input on Samsung /
+    // Xiaomi keyboards — focus + clickable alone leaves a soft IME
+    // entry path in some skins) and restore proper input behaviour
+    // on unlock. One entry per EditText pointer-identity.
+    private val cachedKeyListeners = mutableMapOf<android.widget.EditText, android.text.method.KeyListener?>()
+
+    /**
+     * Lock / unlock all PREFILLED form fields in one pass. Covers the
+     * Client identity fields AND the Professional/Office groups since
+     * any of those can be prefilled from the lead lookup or the
+     * clients-master row. Visit-specific fields (Booking / Charges /
+     * Payment / Staff) are NOT touched — those are always editable
+     * because they're new per booking, not lead-cached.
+     */
+    private fun applyEditModeToFields(enabled: Boolean) {
+        val fields = listOf(
+            // Client identity
+            etFormName, etFormFather, etFormAltNumber, etFormWhatsApp,
+            etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
+            etFormDistrict, etFormLocation,
+            // Professional
+            etProfDesignation, etProfIncome,
+            // Office
+            etOfficeName, etOfficeEmail, etOfficeMobile, etOfficePhone,
+            etOfficeAddress,
+        )
+        fields.forEach { f ->
+            f ?: return@forEach
+            // CRITICAL: do NOT use isEnabled=false here. Many Material
+            // text themes pipe state_enabled=false through to a
+            // near-transparent disabled colour on the EditText text,
+            // which made the prefilled lead data invisible until the
+            // user tapped Edit (which restored isEnabled=true).
+            //
+            // Lock editability via focus + click suppression + a null
+            // keyListener so the IME literally has no input target.
+            // Focus alone isn't enough on some OEM keyboards — they
+            // re-grant focus on long-press / soft-paste.
+            f.isFocusable = enabled
+            f.isFocusableInTouchMode = enabled
+            f.isClickable = enabled
+            f.isLongClickable = enabled
+            f.isCursorVisible = enabled
+            f.alpha = if (enabled) 1f else 0.95f
+            if (!enabled) {
+                // Lock: cache the original key listener (only on the
+                // FIRST lock so we don't accidentally cache the null
+                // we just set) and detach.
+                if (!cachedKeyListeners.containsKey(f)) {
+                    cachedKeyListeners[f] = f.keyListener
+                }
+                f.keyListener = null
+            } else {
+                // Unlock: restore whichever key listener the field had
+                // before we touched it. If we never cached one (i.e.
+                // the field was created in unlock mode), leave alone.
+                cachedKeyListeners[f]?.let { f.keyListener = it }
+            }
+        }
+    }
+
+    /**
+     * Push field-staff edits back to the lead. No-op when the form
+     * wasn't prefilled (prefilledLeadId is null) or the user never
+     * tapped Edit (editEnabled is false). Silent on errors — the
+     * booking save already succeeded; lead sync is best-effort.
+     */
+    private suspend fun pushClientEditsToLeadIfAny() {
+        val leadId = prefilledLeadId ?: return
+        if (!editEnabled) return
+        try {
+            val req = UpdateTelecallerLeadRequest(
+                leadId = leadId,
+                contactName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                emailId = etFormEmail?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                alternateNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                locationPreferred = etFormLocation?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                manualProfile = ManualProfilePatch(
+                    clientName = etFormName?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    pincode = etFormPincode?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    address = etFormHomeAddress?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    state = etFormState?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    district = etFormDistrict?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    alternateMobileNumber = etFormAltNumber?.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val resp = api.updateTelecallerLead(session.bearerToken, req)
+            android.util.Log.d(
+                LOG_TAG,
+                "lead update ${if (resp.success) "ok" else "failed: ${resp.error}"}",
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(LOG_TAG, "lead update threw", e)
+        }
+    }
+
+    /**
+     * Lookup an existing client by phone and replay known profile data
+     * onto the Client form fields. Telecaller lead data is used first,
+     * then the clients master fills anything still blank.
+     */
+    /**
+     * Fires the India Post `/api/pincode` proxy (same one the web hits)
+     * and fills Location, District, State from the result — but ONLY
+     * when those fields are still blank, so manual entries always win.
+     *
+     * Locality (stored visually in the Location field on the mobile
+     * booking form) maps to the post-office `Name` returned by India
+     * Post — see PincodeLookup for the suffix-cleaning and dedup logic.
+     * Mirrors mms-external-leads.tsx::usePincodeLocationEnrichment on
+     * the web so a pincode typed into the mobile sheet produces the
+     * exact same Location/District/State the web would.
+     */
+    private fun enrichBookingPincode(pin: String) {
         viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.getMarketingProjects(session.bearerToken)
+            val enriched = try {
+                com.manjugroups.m_connect.network.PincodeLookup.lookup(pin)
+            } catch (_: Throwable) {
+                null
+            } ?: return@launch
+            // Field-blank checks live INSIDE the post-coroutine block so
+            // values the operator typed while the network round-trip was
+            // in flight aren't trampled. Same anti-overwrite policy as
+            // the web's enrichment effect.
+            fun isBlank(et: EditText?): Boolean =
+                et?.text?.toString()?.trim().isNullOrEmpty()
+            if (isBlank(etFormLocation) && !enriched.locality.isNullOrBlank()) {
+                etFormLocation?.setText(enriched.locality)
+            }
+            if (isBlank(etFormDistrict) && !enriched.district.isNullOrBlank()) {
+                etFormDistrict?.setText(enriched.district)
+            }
+            if (isBlank(etFormState) && !enriched.state.isNullOrBlank()) {
+                etFormState?.setText(enriched.state)
+            }
+            // Treat the enrichment as a meaningful form-state change so
+            // the auto-save scratchpad picks it up on the next debounce
+            // window — without this the user could close the sheet and
+            // come back to a pincode without its enriched locality.
+            scheduleDraftPushIfActive()
+        }
+    }
+
+    private fun lookupAndPrefillClientByPhone(phone: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Track a user-friendly reason if the lead lookup misses or
+            // fails. We don't early-return on miss because the same
+            // phone might still match in the clients master — the
+            // function's contract is "lead first, then client". Only
+            // surface this toast if BOTH lookups end up empty.
+            var leadLookupError: String? = null
+            val lead = try {
+                val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
                 if (!resp.success) {
-                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                    if (showErrors) showError(resp.error ?: "Failed to load projects")
-                    return@launch
+                    android.util.Log.d(LOG_TAG, "lead lookup: ${resp.error ?: "no leads"}")
+                    // Server-side rejection (FORBIDDEN, scope, etc.) —
+                    // record the message but still fall through to the
+                    // client master in case that returns something.
+                    leadLookupError = resp.error ?: "Lead lookup failed"
+                    null
+                } else {
+                    resp.leads.firstOrNull().also {
+                        if (it == null) {
+                            android.util.Log.d(LOG_TAG, "lead lookup: no match for $phone")
+                            leadLookupError = "No existing lead for $phone"
+                        }
+                    }
                 }
-                if (resp.projects.isEmpty()) {
-                    siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                    if (showErrors) showError("No projects available")
-                    return@launch
-                }
-                projects = resp.projects
-                siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                if (showErrors) showProjectPicker(projects)
             } catch (e: Exception) {
-                siteVisitProject?.text = selectedProject?.name ?: "Select project"
-                if (showErrors) showError(e.message ?: "Failed to load projects")
-            } finally {
-                projectsLoading = false
+                android.util.Log.w(LOG_TAG, "lead lookup failed", e)
+                // Prefer parsed server message; otherwise the exception
+                // string. Convex 500s carry the thrown reason in the body.
+                val serverMsg = extractHttpErrorMessage(e)
+                leadLookupError = serverMsg ?: e.message ?: "Lead lookup network error"
+                null
             }
-        }
-    }
-
-    private fun showProjectPicker(items: List<MarketingProject>) {
-        SearchableSelectionDialog.show(
-            context = requireContext(),
-            title = "Select project",
-            options = items.map { project ->
-                SearchableOption(
-                    item = project,
-                    title = project.name ?: "Unnamed project",
-                    subtitle = listOfNotNull(project.location, project.status).joinToString(" • ").takeIf { it.isNotBlank() },
-                    keywords = listOfNotNull(project.id, project.scope, project.location, project.status).joinToString(" ")
-                )
-            },
-            emptyMessage = "No projects found"
-        ) { project ->
-            selectedProject = project
-            siteVisitProject?.text = project.name ?: "Select project"
-        }
-    }
-
-    private fun loadSalesStaff() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.getStaff(session.bearerToken, status = "active")
-                salesStaff = resp.staff.filter {
-                    val dept = it.department.orEmpty().lowercase(Locale.US)
-                    dept.contains("telesales") || dept.contains("sales")
+            val client = try {
+                val resp = api.searchClientByPhone(session.bearerToken, phone)
+                if (!resp.success) {
+                    android.util.Log.d(LOG_TAG, "client lookup: ${resp.error ?: "no client"}")
+                    null
+                } else {
+                    resp.client.also {
+                        if (it == null) android.util.Log.d(LOG_TAG, "client lookup: no match for $phone")
+                    }
                 }
-            } catch (_: Exception) {
-                salesStaff = emptyList()
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "client lookup failed", e)
+                null
+            }
+            if (lead == null && client == null) {
+                // Both lookups missed — only show the captured lead
+                // error if we're still on screen. Helps the user
+                // distinguish "no record yet" from a real fetch
+                // failure (FORBIDDEN, network, etc.). Falls back to a
+                // generic message when the lead miss was a clean
+                // "no match" and the client miss was also clean.
+                if (isAdded) {
+                    val msg = leadLookupError ?: "No existing record for $phone — fill the form"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            if (!isAdded) return@launch
+
+            fun fill(field: EditText?, value: String?) {
+                val v = value?.trim().orEmpty()
+                if (v.isEmpty()) return
+                if (field?.text?.toString()?.trim().isNullOrEmpty()) field?.setText(v)
+            }
+
+            lead?.let {
+                // Prefer the operator-edited manualProfile over the
+                // AI-derived latestAnalysisProfile. The web's Edit
+                // Live Profile dialog writes to lead.manualProfile,
+                // and when the operator typed pincode/state/district
+                // there, those values reflect their explicit intent
+                // (often verified via the pincode-lookup auto-fill).
+                // The AI analysis is a fallback for fields the
+                // operator hasn't touched yet — fall through with `?:`
+                // so an empty manualProfile entry still hits the AI
+                // value without forcing the operator to re-type.
+                val manual = it.manualProfile
+                val ai = it.latestAnalysisProfile
+                fill(etFormName, it.contactName ?: manual?.clientName ?: ai?.clientName)
+                fill(etFormEmail, it.emailId)
+                fill(etFormAltNumber, manual?.alternateMobileNumber ?: ai?.alternateMobileNumber)
+                fill(etFormHomeAddress, manual?.address ?: ai?.address ?: it.suggestedVisitAddress)
+                fill(etFormPincode, manual?.pincode ?: ai?.pincode)
+                fill(etFormState, manual?.state ?: ai?.state)
+                fill(etFormDistrict, manual?.district ?: ai?.district)
+                fill(etFormLocation, it.locationPreferred ?: it.clientCity)
+            }
+            client?.let { prefillFromClient(it, ::fill) }
+
+            if (lead != null && !isStandaloneBookingMode) {
+                // CP/SV lead-derived data is locked until Edit, so changes
+                // can be pushed back to the lead audit trail intentionally.
+                prefilledLeadId = lead.id
+                editEnabled = false
+                applyEditModeToFields(false)
+                btnEdit?.visibility = View.VISIBLE
+                btnEdit?.setBackgroundResource(R.drawable.bg_outcome_edit_chip_inactive)
+                btnEdit?.setTextColor(Color.parseColor("#2DAE12"))
+            } else {
+                prefilledLeadId = null
+                editEnabled = true
+                applyEditModeToFields(true)
+                btnEdit?.visibility = View.GONE
             }
         }
     }
 
-    private fun pickStaff(title: String, onPicked: (StaffData) -> Unit) {
-        if (salesStaff.isEmpty()) {
-            showError("No Sales & Marketing / Telesales staff found")
-            loadSalesStaff()
+    private fun prefillFromClient(
+        client: ClientProfile,
+        fill: (EditText?, String?) -> Unit,
+    ) {
+        fun fillLabel(field: TextView?, value: String?, placeholder: String) {
+            val v = value?.trim().orEmpty()
+            if (v.isEmpty()) return
+            val current = field?.text?.toString()?.trim().orEmpty()
+            if (current.isEmpty() || current.equals(placeholder, ignoreCase = true)) field?.text = v
+        }
+        fillLabel(tvFormTitle, client.title, "Title")
+        fill(etFormName, client.clientName)
+        fill(etFormFather, client.fatherSpouseName)
+        fillLabel(tvFormDob, client.dateOfBirth, "dd/mm/yyyy")
+        fillLabel(tvFormAnniversary, client.anniversaryDate, "dd/mm/yyyy")
+        fillLabel(tvFormNationality, client.nationality, "Nationality")
+        fill(etFormAltNumber, client.alternateNumbers)
+        fill(etFormWhatsApp, client.whatsappNumber)
+        fill(etFormEmail, client.email)
+        fill(etFormHomeAddress, client.homeAddress ?: client.formattedAddress ?: client.addressLine1)
+        fill(etFormPincode, client.pincode)
+        fill(etFormState, client.state)
+        fill(etFormDistrict, client.district)
+        fill(etFormLocation, client.location)
+        fillLabel(tvProfProfession, client.profession, "Select Profession")
+        fill(etProfDesignation, client.designation)
+        fill(etProfIncome, client.incomePerAnnum)
+        fill(etOfficeName, client.officeName)
+        fill(etOfficeAddress, client.officeAddress)
+        fill(etOfficeMobile, client.officeMobile)
+        fill(etOfficePhone, client.officePhone)
+        fill(etOfficeEmail, client.officeEmail)
+        fill(etStaffAadhar, client.aadhaar)
+        fill(etStaffPancard, client.pan)
+        fill(etStaffRefName1, client.referenceName1)
+        fill(etStaffRefMobile1, client.referenceMobile1)
+        fill(etStaffRefProf1, client.referenceProfession1)
+        fill(etStaffRefName2, client.referenceName2)
+        fill(etStaffRefMobile2, client.referenceMobile2)
+        fill(etStaffRefProf2, client.referenceProfession2)
+    }
+
+    /**
+     * Walks the inflated view tree and re-styles the trailing " *" on
+     * any TextView whose text ends with it, painting just the star in
+     * the destructive red used by the rest of the app. Idempotent —
+     * safe to call multiple times because the SpannableString
+     * replacement preserves the underlying characters byte-for-byte;
+     * a re-run just re-applies the same span on the same characters.
+     *
+     * We intentionally only colour the LAST trailing asterisk after
+     * trimming, not arbitrary "*" inside the label, so a label like
+     * "Promo Offers T&C" stays untouched and a label like "Booking
+     * Date *" gets only its tail star reddened.
+     *
+     * Color choice (#D92D20) mirrors the web's `var(--bad)` / Tailwind
+     * destructive token so the visual cue is consistent across
+     * surfaces — the web booking form renders its required-field
+     * asterisks in the same red.
+     */
+    private fun colorizeRequiredStarsRedRecursively(root: android.view.ViewGroup) {
+        val redColor = Color.parseColor("#D92D20")
+        fun visit(group: android.view.ViewGroup) {
+            for (i in 0 until group.childCount) {
+                val child = group.getChildAt(i)
+                if (child is android.view.ViewGroup) {
+                    visit(child)
+                } else if (child is android.widget.TextView) {
+                    val raw = child.text?.toString() ?: continue
+                    if (!raw.trimEnd().endsWith("*")) continue
+                    val starIdx = raw.lastIndexOf('*')
+                    if (starIdx < 0) continue
+                    val styled = android.text.SpannableString(raw)
+                    styled.setSpan(
+                        android.text.style.ForegroundColorSpan(redColor),
+                        starIdx,
+                        starIdx + 1,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                    child.text = styled
+                }
+            }
+        }
+        visit(root)
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Booking-form draft auto-save helpers. Three pieces:
+    //   1. collectFormState() — snapshot every captured field into a
+    //      map<String, String?> that round-trips through Gson.
+    //   2. applyFormState(map) — restore those values into the
+    //      EditTexts / TextViews on dialog re-open. Wrapped in
+    //      `draftSuppressSave` so the TextWatcher pulse this kicks
+    //      off doesn't immediately push the same blob back to the
+    //      server (would be a no-op but burns network).
+    //   3. attachDraftWatchers() — attach a single TextWatcher to
+    //      every form EditText that schedules a debounced push().
+    //
+    // The picker rows (Title, Project, Plot, Booking Type, etc.)
+    // update their TextView text directly in the existing onClick
+    // handlers — those call scheduleDraftPushIfActive() as well so
+    // dropdowns are captured too.
+    // ──────────────────────────────────────────────────────────────
+
+    private fun collectFormState(): Map<String, String?> {
+        fun et(field: android.widget.EditText?) = field?.text?.toString()
+        fun tv(field: android.widget.TextView?) = field?.text?.toString()
+        return mapOf(
+            // Client tab
+            "etClientMobile" to et(etClientMobile),
+            "tvFormClientPhone" to tv(tvFormPhone),
+            "tvFormClientTitle" to tv(tvFormTitle),
+            "etFormName" to et(etFormName),
+            "etFormFather" to et(etFormFather),
+            "tvFormDob" to tv(tvFormDob),
+            "tvFormAnniversary" to tv(tvFormAnniversary),
+            "tvFormNationality" to tv(tvFormNationality),
+            "etFormAltNumber" to et(etFormAltNumber),
+            "etFormWhatsApp" to et(etFormWhatsApp),
+            "etFormEmail" to et(etFormEmail),
+            "etFormHomeAddress" to et(etFormHomeAddress),
+            "etFormPincode" to et(etFormPincode),
+            "etFormState" to et(etFormState),
+            "etFormDistrict" to et(etFormDistrict),
+            "etFormLocation" to et(etFormLocation),
+            // Professional
+            "tvProfProfession" to tv(tvProfProfession),
+            "etProfDesignation" to et(etProfDesignation),
+            "etProfIncome" to et(etProfIncome),
+            // Office
+            "etOfficeName" to et(etOfficeName),
+            "etOfficeEmail" to et(etOfficeEmail),
+            "etOfficeMobile" to et(etOfficeMobile),
+            "etOfficePhone" to et(etOfficePhone),
+            "etOfficeAddress" to et(etOfficeAddress),
+            // Booking
+            "tvBookType" to tv(tvBookType),
+            "tvBookSource" to tv(tvBookSource),
+            "etBookCef" to et(etBookCef),
+            "tvBookDate" to tv(tvBookDate),
+            "tvBookProject" to tv(tvBookProject),
+            "tvBookPlot" to tv(tvBookPlot),
+            "tvBookProperty" to tv(tvBookProperty),
+            "tvBookMode" to tv(tvBookMode),
+            // Charges
+            "etChargeBookingCost" to et(etChargeBookingCost),
+            "etChargeGuidelineValue" to et(etChargeGuidelineValue),
+            "etChargeSpecialConsideration" to et(etChargeSpecialConsideration),
+            "etChargeDiscountApprovedBy" to et(etChargeDiscountApprovedBy),
+            "etChargeScReason" to et(etChargeScReason),
+            "etChargeScValidity" to et(etChargeScValidity),
+            "etChargePromoOffers" to et(etChargePromoOffers),
+            "tvChargePromoTnc" to tv(tvChargePromoTnc),
+            "etChargePromoValue" to et(etChargePromoValue),
+            "etChargeOfferValidity" to et(etChargeOfferValidity),
+            // Payment
+            "tvPayPaymentMode" to tv(tvPayPaymentMode),
+            "etPayRegCharges" to et(etPayRegCharges),
+            "etPayGstAmount" to et(etPayGstAmount),
+            "etPayDocCharges" to et(etPayDocCharges),
+            "etPayPattaCharges" to et(etPayPattaCharges),
+            "etPayOtherCharges" to et(etPayOtherCharges),
+            "etPayAdvanceAmount" to et(etPayAdvanceAmount),
+            "tvPayAllotDate" to tv(tvPayAllotDate),
+            "etPayAllotDue" to et(etPayAllotDue),
+            "tvPay2Date" to tv(tvPay2Date),
+            "etPay2Mode" to et(etPay2Mode),
+            "tvPay3Date" to tv(tvPay3Date),
+            "etPay3Mode" to et(etPay3Mode),
+            "tvPay4Date" to tv(tvPay4Date),
+            "etPay4Mode" to et(etPay4Mode),
+            "tvPayPrefReg" to tv(tvPayPrefReg),
+            // Staff
+            "tvStaffAvp" to tv(tvStaffAvp),
+            "tvStaffGm" to tv(tvStaffGm),
+            "tvStaffSm" to tv(tvStaffSm),
+            "tvStaffBdo" to tv(tvStaffBdo),
+            "tvStaffTelecaller" to tv(tvStaffTelecaller),
+            "etStaffAadhar" to et(etStaffAadhar),
+            "etStaffPancard" to et(etStaffPancard),
+            "tvStaffDocPrep" to tv(tvStaffDocPrep),
+            // References
+            "etStaffRefName1" to et(etStaffRefName1),
+            "etStaffRefMobile1" to et(etStaffRefMobile1),
+            "etStaffRefProf1" to et(etStaffRefProf1),
+            "etStaffRefName2" to et(etStaffRefName2),
+            "etStaffRefMobile2" to et(etStaffRefMobile2),
+            "etStaffRefProf2" to et(etStaffRefProf2),
+        )
+    }
+
+    private fun applyFormState(map: Map<String, String?>) {
+        if (map.isEmpty()) return
+        draftSuppressSave = true
+        try {
+            fun et(field: android.widget.EditText?, key: String) {
+                map[key]?.takeIf { it.isNotBlank() }?.let { field?.setText(it) }
+            }
+            fun tv(field: android.widget.TextView?, key: String) {
+                map[key]?.takeIf { it.isNotBlank() }?.let { field?.text = it }
+            }
+            et(etClientMobile, "etClientMobile")
+            tv(tvFormPhone, "tvFormClientPhone")
+            tv(tvFormTitle, "tvFormClientTitle")
+            et(etFormName, "etFormName")
+            et(etFormFather, "etFormFather")
+            tv(tvFormDob, "tvFormDob")
+            tv(tvFormAnniversary, "tvFormAnniversary")
+            tv(tvFormNationality, "tvFormNationality")
+            et(etFormAltNumber, "etFormAltNumber")
+            et(etFormWhatsApp, "etFormWhatsApp")
+            et(etFormEmail, "etFormEmail")
+            et(etFormHomeAddress, "etFormHomeAddress")
+            et(etFormPincode, "etFormPincode")
+            et(etFormState, "etFormState")
+            et(etFormDistrict, "etFormDistrict")
+            et(etFormLocation, "etFormLocation")
+            tv(tvProfProfession, "tvProfProfession")
+            et(etProfDesignation, "etProfDesignation")
+            et(etProfIncome, "etProfIncome")
+            et(etOfficeName, "etOfficeName")
+            et(etOfficeEmail, "etOfficeEmail")
+            et(etOfficeMobile, "etOfficeMobile")
+            et(etOfficePhone, "etOfficePhone")
+            et(etOfficeAddress, "etOfficeAddress")
+            tv(tvBookType, "tvBookType")
+            tv(tvBookSource, "tvBookSource")
+            et(etBookCef, "etBookCef")
+            tv(tvBookDate, "tvBookDate")
+            tv(tvBookProject, "tvBookProject")
+            tv(tvBookPlot, "tvBookPlot")
+            tv(tvBookProperty, "tvBookProperty")
+            tv(tvBookMode, "tvBookMode")
+            et(etChargeBookingCost, "etChargeBookingCost")
+            et(etChargeGuidelineValue, "etChargeGuidelineValue")
+            et(etChargeSpecialConsideration, "etChargeSpecialConsideration")
+            et(etChargeDiscountApprovedBy, "etChargeDiscountApprovedBy")
+            et(etChargeScReason, "etChargeScReason")
+            et(etChargeScValidity, "etChargeScValidity")
+            et(etChargePromoOffers, "etChargePromoOffers")
+            tv(tvChargePromoTnc, "tvChargePromoTnc")
+            et(etChargePromoValue, "etChargePromoValue")
+            et(etChargeOfferValidity, "etChargeOfferValidity")
+            tv(tvPayPaymentMode, "tvPayPaymentMode")
+            et(etPayRegCharges, "etPayRegCharges")
+            et(etPayGstAmount, "etPayGstAmount")
+            et(etPayDocCharges, "etPayDocCharges")
+            et(etPayPattaCharges, "etPayPattaCharges")
+            et(etPayOtherCharges, "etPayOtherCharges")
+            et(etPayAdvanceAmount, "etPayAdvanceAmount")
+            tv(tvPayAllotDate, "tvPayAllotDate")
+            et(etPayAllotDue, "etPayAllotDue")
+            tv(tvPay2Date, "tvPay2Date")
+            et(etPay2Mode, "etPay2Mode")
+            tv(tvPay3Date, "tvPay3Date")
+            et(etPay3Mode, "etPay3Mode")
+            tv(tvPay4Date, "tvPay4Date")
+            et(etPay4Mode, "etPay4Mode")
+            tv(tvPayPrefReg, "tvPayPrefReg")
+            tv(tvStaffAvp, "tvStaffAvp")
+            tv(tvStaffGm, "tvStaffGm")
+            tv(tvStaffSm, "tvStaffSm")
+            tv(tvStaffBdo, "tvStaffBdo")
+            tv(tvStaffTelecaller, "tvStaffTelecaller")
+            et(etStaffAadhar, "etStaffAadhar")
+            et(etStaffPancard, "etStaffPancard")
+            tv(tvStaffDocPrep, "tvStaffDocPrep")
+            et(etStaffRefName1, "etStaffRefName1")
+            et(etStaffRefMobile1, "etStaffRefMobile1")
+            et(etStaffRefProf1, "etStaffRefProf1")
+            et(etStaffRefName2, "etStaffRefName2")
+            et(etStaffRefMobile2, "etStaffRefMobile2")
+            et(etStaffRefProf2, "etStaffRefProf2")
+        } finally {
+            draftSuppressSave = false
+        }
+    }
+
+    private fun currentBookingSourceKey(): String =
+        BookingDraftManager.buildSourceKey(
+            cpVisitId = arguments?.getString(ARG_CP_VISIT_ID),
+            siteVisitId = arguments?.getString(ARG_SITE_VISIT_ID),
+            staffId = session.staffId,
+        )
+
+    private fun scheduleDraftPushIfActive() {
+        if (draftSuppressSave) return
+        val manager = draftManager ?: return
+        if (!isAdded) return
+        val sourceKey = currentBookingSourceKey()
+        val state = collectFormState()
+        if (state.values.all { it.isNullOrBlank() }) return
+        manager.push(
+            bearerToken = session.bearerToken,
+            sourceKey = sourceKey,
+            sourceCpVisitId = arguments?.getString(ARG_CP_VISIT_ID),
+            sourceSiteVisitId = arguments?.getString(ARG_SITE_VISIT_ID),
+            draftJson = manager.encode(state),
+        )
+    }
+
+    private fun attachDraftWatchers() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                scheduleDraftPushIfActive()
+            }
+        }
+        val editTexts = listOf(
+            etClientMobile, etFormName, etFormFather, etFormAltNumber,
+            etFormWhatsApp, etFormEmail, etFormHomeAddress, etFormPincode,
+            etFormState, etFormDistrict, etFormLocation, etProfDesignation,
+            etProfIncome, etOfficeName, etOfficeEmail, etOfficeMobile,
+            etOfficePhone, etOfficeAddress, etBookCef, etChargeBookingCost,
+            etChargeGuidelineValue, etChargeSpecialConsideration,
+            etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
+            etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
+            etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
+            etPayOtherCharges, etPayAdvanceAmount, etPayAllotDue, etPay2Mode,
+            etPay3Mode, etPay4Mode, etStaffAadhar, etStaffPancard,
+            etStaffRefName1, etStaffRefMobile1, etStaffRefProf1,
+            etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
+        )
+        editTexts.forEach { it?.addTextChangedListener(watcher) }
+    }
+
+    private fun restoreDraftIfAny() {
+        val manager = draftManager ?: return
+        val sourceKey = currentBookingSourceKey()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val snapshot = manager.restore(session.bearerToken, sourceKey) ?: return@launch
+            if (!isAdded || draftRestoreApplied) return@launch
+            draftRestoreApplied = true
+            applyFormState(manager.decode(snapshot.draftJson))
+            // Bump the "AI prefill already happened" flag so the AI
+            // analysis prefill that runs after lookup doesn't overwrite
+            // the operator's saved typing.
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Resumed your draft from " +
+                    java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                        .format(java.util.Date(snapshot.updatedAt)),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun clearDraftAfterSubmit() {
+        val manager = draftManager ?: return
+        manager.clear(session.bearerToken, currentBookingSourceKey())
+    }
+
+    private fun nextSubTab(current: BookingSub): BookingSub = when (current) {
+        BookingSub.CLIENT -> BookingSub.BOOKING
+        BookingSub.PROFESSIONAL, BookingSub.OFFICE -> BookingSub.BOOKING
+        BookingSub.BOOKING -> BookingSub.STAFF
+        BookingSub.CHARGES, BookingSub.PAYMENT -> BookingSub.STAFF
+        BookingSub.STAFF -> BookingSub.STAFF
+    }
+
+    private fun previousSubTab(current: BookingSub): BookingSub? = when (current) {
+        BookingSub.STAFF -> BookingSub.BOOKING
+        BookingSub.BOOKING, BookingSub.PROFESSIONAL, BookingSub.OFFICE -> BookingSub.CLIENT
+        BookingSub.CLIENT, BookingSub.CHARGES, BookingSub.PAYMENT -> null
+    }
+
+    private fun goBackInBookingFlow() {
+        if (activeOutcome != Outcome.BOOKING) return
+        val previous = previousSubTab(bookingSub)
+        if (previous == null) {
+            dismissAllowingStateLoss()
             return
         }
+        bookingSub = previous
+        bookingStep = BookingStep.CLIENT_FORM
+        renderState()
+    }
+
+    private fun clearBookingForm() {
+        if (!isStandaloneBookingMode) return
+        listOf(
+            etClientMobile, tvFormPhone as? EditText, etFormName, etFormFather,
+            etFormAltNumber, etFormWhatsApp, etFormEmail, etFormHomeAddress,
+            etFormPincode, etFormState, etFormDistrict, etFormLocation,
+            etProfDesignation, etProfIncome, etOfficeName, etOfficeEmail,
+            etOfficeMobile, etOfficePhone, etOfficeAddress, etBookCef,
+            etChargeBookingCost, etChargeGuidelineValue, etChargeSpecialConsideration,
+            etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
+            etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
+            etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
+            etPayOtherCharges,
+            etPayAdvanceAmount, etPayAllotDue, etPay2Mode, etPay3Mode, etPay4Mode,
+            etStaffAadhar, etStaffPancard, etStaffRefName1, etStaffRefMobile1,
+            etStaffRefProf1, etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
+        ).forEach { it?.setText("") }
+        listOf(
+            tvFormTitle, tvFormDob, tvFormAnniversary, tvFormNationality,
+            tvProfProfession, tvBookType, tvBookSource, tvBookProject,
+            tvBookPlot, tvBookProperty, tvBookMode, tvChargePromoTnc,
+            tvPayPaymentMode, tvPayAllotDate, tvPay2Date, tvPay3Date,
+            tvPay4Date, tvPayPrefReg, tvStaffAvp, tvStaffGm, tvStaffSm,
+            tvStaffBdo, tvStaffTelecaller, tvStaffDocPrep,
+        ).forEach { it?.text = "" }
+        tvBookDate?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            .format(Calendar.getInstance().time)
+        bookingProject = null
+        bookingUnit = null
+        bookingStaffAvp = null
+        bookingStaffGm = null
+        bookingStaffSm = null
+        bookingStaffBdo = null
+        bookingStaffTelecaller = null
+        prefilledLeadId = null
+        lastLookedUpBookingPhone = null
+        lastEnrichedBookingPincode = null
+        lastBookingPrefillKey = null
+        bookingGstPercent = null
+        bookIsAgainstVisit = YesNo.YES
+        bookDuplicate = false
+        payGstApplicable = true
+        payOtherApplicable = true
+        payFlexi = false
+        staffSaveAs = SaveAs.DRAFT
+        bookingSub = BookingSub.CLIENT
+        bookingStep = BookingStep.CLIENT_FORM
+        applyEditModeToFields(true)
+        refreshBookingRadios()
+        refreshPaymentToggles()
+        refreshStaffSaveRadios()
+        clearError()
+        renderState()
+        Toast.makeText(requireContext(), "Booking form cleared", Toast.LENGTH_SHORT).show()
+    }
+
+    // ---- Pickers ----------------------------------------------------
+    private fun picker(title: String, items: List<String>, onPicked: (String) -> Unit) {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = title,
-            options = salesStaff.map { staff ->
-                SearchableOption(
-                    item = staff,
-                    title = staff.name ?: "Unnamed staff",
-                    subtitle = listOfNotNull(staff.designation, staff.department, staff.employeeId).joinToString(" • ")
-                        .takeIf { it.isNotBlank() },
-                    keywords = listOfNotNull(staff.phone, staff.role, staff.status).joinToString(" ")
-                )
-            },
-            emptyMessage = "No staff found"
-        ) { onPicked(it) }
-    }
-
-    private fun renderVisitorRows(count: Int) {
-        val rows = visitorRows ?: return
-        rows.removeAllViews()
-        repeat(count.coerceIn(0, 12)) { index ->
-            val group = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(12), dp(12), dp(12))
-                setBackgroundResource(R.drawable.bg_stat_card)
-                tag = "visitor_row"
-            }
-            val title = TextView(requireContext()).apply {
-                text = "Visitor ${index + 1}"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setTextColor(android.graphics.Color.parseColor("#667085"))
-                typeface = resources.getFont(R.font.inter_semibold)
-            }
-            val name = makeVisitorEdit("Visitor ${index + 1} name").apply { tag = "name" }
-            val relation = makeVisitorEdit("Relation").apply { tag = "relation" }
-            val age = makeVisitorEdit("Age").apply {
-                tag = "age"
-                inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            }
-            val food = makeChip("Food: Veg") {
-                val current = group.findViewWithTag<TextView>("food")
-                val next = current?.text?.toString() != "Food: Veg"
-                current?.text = if (next) "Food: Veg" else "Food: Non-veg"
-            }.apply { tag = "food" }
-            applyChipState(food, false)
-            group.addView(title)
-            group.addView(name)
-            group.addView(relation)
-            group.addView(age)
-            group.addView(food)
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(10) }
-            rows.addView(group, params)
+            options = items.map { SearchableOption(item = it, title = it) },
+            emptyMessage = "No options found",
+        ) {
+            onPicked(it)
+            // Every picker selection contributes to the draft so the
+            // booking form survives an app crash mid-flow. Centralised
+            // here so we don't have to wire each rowBookType /
+            // rowBookProperty / rowChargePromoTnc / etc. individually.
+            scheduleDraftPushIfActive()
         }
     }
 
-    private fun makeVisitorEdit(hint: String): EditText =
-        EditText(requireContext()).apply {
-            this.hint = hint
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(android.graphics.Color.parseColor("#1D2939"))
-            setHintTextColor(android.graphics.Color.parseColor("#98A2B3"))
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            setBackgroundResource(R.drawable.bg_chip_inactive)
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(8) }
-            layoutParams = params
-        }
-
-    private fun collectVisitors(): List<SiteVisitAttendeeRequest> {
-        val rows = visitorRows ?: return emptyList()
-        val result = mutableListOf<SiteVisitAttendeeRequest>()
-        for (i in 0 until rows.childCount) {
-            val group = rows.getChildAt(i) as? LinearLayout ?: continue
-            val name = group.findViewWithTag<EditText>("name")?.text?.toString()?.trim().orEmpty()
-            val relation = group.findViewWithTag<EditText>("relation")?.text?.toString()?.trim().orEmpty()
-            val age = group.findViewWithTag<EditText>("age")?.text?.toString()?.trim().orEmpty()
-            val isVeg = !group.findViewWithTag<TextView>("food")?.text?.toString().orEmpty().contains("Non-veg")
-            result.add(
-                SiteVisitAttendeeRequest(
-                    name = name.takeIf { it.isNotEmpty() },
-                    relation = relation.takeIf { it.isNotEmpty() },
-                    age = age.takeIf { it.isNotEmpty() },
-                    isVeg = isVeg
-                )
-            )
-        }
-        return result
-    }
-
-    private fun pickSiteVisitDate() {
+    private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy", afterPicked: (() -> Unit)? = null) {
         val cal = Calendar.getInstance()
-        DatePickerDialog(
+        val raw = target?.text?.toString()?.trim().orEmpty()
+        listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy").firstNotNullOfOrNull { pattern ->
+            runCatching { SimpleDateFormat(pattern, Locale.US).parse(raw) }.getOrNull()
+        }?.let { cal.time = it }
+        android.app.DatePickerDialog(
             requireContext(),
-            { _, y, m, d ->
-                cal.set(y, m, d)
-                siteVisitDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-                siteVisitDateView?.text = siteVisitDate
+            { _, year, month, day ->
+                cal.set(year, month, day)
+                target?.text = SimpleDateFormat(format, Locale.US).format(cal.time)
+                afterPicked?.invoke()
+                // Same draft-capture story as picker() above — date
+                // edits land in the snapshot without per-callsite
+                // wiring.
+                scheduleDraftPushIfActive()
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -435,13 +2261,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ).show()
     }
 
-    private fun pickSiteVisitTime() {
+    private fun pickTime(target: TextView?) {
         val cal = Calendar.getInstance()
-        TimePickerDialog(
+        android.app.TimePickerDialog(
             requireContext(),
             { _, hour, minute ->
-                siteVisitTime = String.format(Locale.US, "%02d:%02d", hour, minute)
-                siteVisitTimeView?.text = siteVisitTime
+                target?.text = String.format(Locale.US, "%02d:%02d", hour, minute)
             },
             cal.get(Calendar.HOUR_OF_DAY),
             cal.get(Calendar.MINUTE),
@@ -449,240 +2274,2020 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ).show()
     }
 
-    private fun toggleTravelMode() {
-        selectedTravelMode = if (selectedTravelMode == "cab") "own_vehicle" else "cab"
-        renderTravelMode()
-    }
-
-    private fun renderTravelMode() {
-        siteVisitTravelMode?.text =
-            if (selectedTravelMode == "own_vehicle") "Client travel: Own vehicle"
-            else "Client travel: Cab required"
-    }
-
-    private fun togglePostponeReason(reason: String) {
-        if (!selectedPostponeReasons.add(reason)) selectedPostponeReasons.remove(reason)
-        postponeRow?.let { row ->
-            for (i in 0 until row.childCount) {
-                val v = row.getChildAt(i) as? TextView ?: continue
-                applyChipState(v, selectedPostponeReasons.contains(v.tag as? String ?: ""))
+    // ---- Booking picker helpers --------------------------------------
+    private fun pickBookingProject() {
+        if (bookingProjectCache.isNotEmpty()) {
+            showBookingProjectPicker(bookingProjectCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (!resp.success || resp.projects.isEmpty()) {
+                    showError(resp.error ?: "No projects available")
+                    return@launch
+                }
+                bookingProjectCache = resp.projects
+                showBookingProjectPicker(resp.projects)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load projects")
             }
         }
     }
 
-    private fun makeChip(label: String, onClick: () -> Unit): TextView {
-        val tv = TextView(requireContext())
-        tv.text = label
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        tv.setPadding(dp(16), dp(10), dp(16), dp(10))
-        tv.isClickable = true
-        tv.isFocusable = true
-        tv.setOnClickListener { onClick() }
-        return tv
+    private fun showBookingProjectPicker(items: List<MarketingProject>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select project",
+            options = items.map { p ->
+                SearchableOption(
+                    item = p,
+                    title = p.name ?: "Unnamed project",
+                    subtitle = listOfNotNull(p.location, p.status).joinToString(" • ")
+                        .takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(p.id, p.scope, p.location, p.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No projects found",
+        ) { project ->
+            bookingProject = project
+            bookingUnit = null
+            bookingUnitCacheProjectId = null
+            bookingUnitCache = emptyList()
+            lastBookingPrefillKey = null
+            bookingGstPercent = null
+            tvBookProject?.text = project.name ?: "Selected"
+            tvBookPlot?.text = "Select Plot"
+        }
     }
 
-    private fun applyChipState(view: TextView?, active: Boolean) {
-        val v = view ?: return
-        v.setBackgroundResource(if (active) R.drawable.bg_chip_active else R.drawable.bg_chip_inactive)
-        v.setTextColor(
-            if (active) android.graphics.Color.WHITE
-            else android.graphics.Color.parseColor("#1D2939")
+    private fun pickBookingUnit() {
+        val project = bookingProject
+        if (project == null) {
+            showError("Select project first")
+            return
+        }
+        if (bookingUnitCacheProjectId == project.id && bookingUnitCache.isNotEmpty()) {
+            showBookingUnitPicker(bookingUnitCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listInventoryUnits(
+                    token = session.bearerToken,
+                    projectId = project.id,
+                    status = "available",
+                )
+                if (!resp.success) {
+                    showError(resp.error ?: "Failed to load plots")
+                    return@launch
+                }
+                val available = resp.units.filter { it.status == "available" }
+                if (available.isEmpty()) {
+                    showError("No available plots in this project")
+                    return@launch
+                }
+                bookingUnitCacheProjectId = project.id
+                bookingUnitCache = available
+                showBookingUnitPicker(available)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load plots")
+            }
+        }
+    }
+
+    private fun showBookingUnitPicker(items: List<InventoryUnit>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select plot",
+            options = items.map { unit ->
+                val title = unit.unitNumber ?: unit.id
+                val subtitle = listOfNotNull(
+                    unit.unitType,
+                    unit.facing?.let { "Facing $it" },
+                    unit.area?.let { "${it.toInt()} sqft" },
+                    unit.priceSnapshot?.let { "₹${it.toLong()}" },
+                ).joinToString(" • ").takeIf { it.isNotBlank() }
+                SearchableOption(
+                    item = unit,
+                    title = title,
+                    subtitle = subtitle,
+                    keywords = listOfNotNull(unit.id, unit.block, unit.dimensions, unit.rawStatus)
+                        .joinToString(" "),
+                )
+            },
+            emptyMessage = "No plots found",
+        ) { unit ->
+            if (unit.status != "available") {
+                showError("Selected plot is no longer available")
+                return@show
+            }
+            bookingUnit = unit
+            tvBookPlot?.text = unit.unitNumber ?: unit.id
+            loadBookingPlotPrefill(force = true)
+        }
+    }
+
+    private fun loadBookingPlotPrefill(force: Boolean = false) {
+        val unit = bookingUnit ?: return
+        val key = "${unit.id}:${bookingDateForApi().orEmpty()}"
+        if (!force && key == lastBookingPrefillKey) return
+        lastBookingPrefillKey = key
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getBookingPlotPrefill(
+                    token = session.bearerToken,
+                    plotId = unit.id,
+                    bookingDate = bookingDateForApi(),
+                )
+                if (!resp.success) {
+                    showError(resp.error ?: "Failed to load plot finance details")
+                    return@launch
+                }
+                applyBookingPlotPrefill(resp)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load plot finance details")
+            }
+        }
+    }
+
+    private fun applyBookingPlotPrefill(resp: BookingPlotPrefillResponse) {
+        bookingGstPercent = resp.project?.gstPercent
+        val fields = resp.fields
+        fun money(value: Double?): String? {
+            if (value == null || !value.isFinite()) return null
+            val rounded = kotlin.math.round(value)
+            return if (kotlin.math.abs(value - rounded) < 0.01) rounded.toLong().toString()
+            else String.format(Locale.US, "%.2f", value)
+        }
+        fun setMoney(field: EditText?, value: Double?) {
+            money(value)?.let { field?.setText(it) }
+        }
+        fun setDate(field: TextView?, iso: String?) {
+            val parsed = dateTextForApi(iso) ?: return
+            val date = runCatching {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(parsed)
+            }.getOrNull() ?: return
+            field?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(date)
+        }
+
+        setMoney(etChargeBookingCost, fields?.bookingCost)
+        setMoney(etChargeGuidelineValue, fields?.guidelineValue)
+        setMoney(etPayRegCharges, fields?.registrationCharges)
+        setMoney(etPayGstAmount, fields?.gstAmount)
+        setMoney(etPayDocCharges, fields?.documentCharges)
+        setMoney(etPayPattaCharges, fields?.pattaCharges)
+        setMoney(etPayOtherCharges, fields?.otherCharges)
+        setMoney(etPayAdvanceAmount, fields?.advanceAmount)
+        setMoney(etPayAllotDue, fields?.allotmentDueAmount)
+        setDate(tvPayAllotDate, fields?.allotmentDueDate)
+
+        val schedules = resp.schedules
+        schedules.getOrNull(0)?.let {
+            setMoney(etPay2Mode, it.amount)
+            setDate(tvPay2Date, it.dueDate)
+        }
+        schedules.getOrNull(1)?.let {
+            setMoney(etPay3Mode, it.amount)
+            setDate(tvPay3Date, it.dueDate)
+        }
+        schedules.getOrNull(2)?.let {
+            setMoney(etPay4Mode, it.amount)
+            setDate(tvPay4Date, it.dueDate)
+        }
+        recomputeBookingFinanceDerivedFields()
+        Toast.makeText(requireContext(), "Plot pricing filled from project settings", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun recomputeBookingFinanceDerivedFields() {
+        val gstPercent = bookingGstPercent ?: return
+        if (!payGstApplicable) return
+        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return
+        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        val guidelineValue = numberOrNull(etChargeGuidelineValue?.text) ?: return
+        val agreedAmount = bookingCost - specialConsideration
+        val taxable = agreedAmount - guidelineValue
+        if (taxable > 0 && gstPercent.isFinite()) {
+            etPayGstAmount?.setText(kotlin.math.round((taxable * gstPercent) / 100).toLong().toString())
+        }
+    }
+
+    private fun pickBookingStaff(
+        title: String,
+        roleKey: String,
+        onPicked: (StaffData) -> Unit,
+    ) {
+        if (bookingStaffCache.isNotEmpty()) {
+            showBookingStaffPicker(title, filterBookingStaff(roleKey, bookingStaffCache), onPicked)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                bookingStaffCache = resp.staff
+                showBookingStaffPicker(title, filterBookingStaff(roleKey, resp.staff), onPicked)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load staff")
+            }
+        }
+    }
+
+    private fun filterBookingStaff(roleKey: String, items: List<StaffData>): List<StaffData> {
+        fun StaffData.haystack(): String = listOfNotNull(name, role, designation, department)
+            .joinToString(" ")
+            .lowercase(Locale.US)
+        val tokens = when (roleKey) {
+            "avp" -> listOf("avp", "assistant vice president")
+            "gm" -> listOf("gm", "general manager")
+            "seniorManager" -> listOf("senior manager", "sm")
+            "bdo" -> listOf("bdo", "business development")
+            "telecaller" -> listOf("telecaller", "tele caller", "telesales")
+            else -> emptyList()
+        }
+        val filtered = items.filter { staff -> tokens.any { staff.haystack().contains(it) } }
+        return filtered.ifEmpty { items }
+    }
+
+    private fun showBookingStaffPicker(
+        title: String,
+        items: List<StaffData>,
+        onPicked: (StaffData) -> Unit,
+    ) {
+        if (items.isEmpty()) {
+            showError("No staff found")
+            return
+        }
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = title,
+            options = items.map { staff ->
+                SearchableOption(
+                    item = staff,
+                    title = staff.name ?: "Unnamed staff",
+                    subtitle = listOfNotNull(staff.designation, staff.department, staff.employeeId)
+                        .joinToString(" • ").takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(staff.phone, staff.role, staff.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No staff found",
+        ) { onPicked(it) }
+    }
+
+    // ---- Site Visit helpers -----------------------------------------
+    private fun setTravelMode(mode: String) {
+        svTravelMode = mode
+        // Active button gets the gradient blue + white text; the other goes
+        // back to outlined.
+        val ctx = context ?: return
+        val ownActive = mode == "own_vehicle"
+        btnSvTravelOwn?.setBackgroundResource(
+            if (ownActive) R.drawable.bg_outcome_segment_active
+            else R.drawable.bg_outcome_segment_inactive
+        )
+        btnSvTravelOwn?.setTextColor(
+            if (ownActive) Color.WHITE else Color.parseColor("#475467")
+        )
+        btnSvTravelCab?.setBackgroundResource(
+            if (!ownActive) R.drawable.bg_outcome_segment_active
+            else R.drawable.bg_outcome_segment_inactive
+        )
+        btnSvTravelCab?.setTextColor(
+            if (!ownActive) Color.WHITE else Color.parseColor("#475467")
         )
     }
 
-    private fun dp(v: Int): Int =
-        (v * resources.displayMetrics.density).toInt()
-
-    private fun todayYmd(): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
-
-    private fun defaultTime(): String =
-        SimpleDateFormat("HH:mm", Locale.US).format(Calendar.getInstance().time)
-
-    private fun showError(msg: String) {
-        errorText?.text = msg
-        errorText?.visibility = View.VISIBLE
+    private fun pickSvProject() {
+        if (svProjectCache.isNotEmpty()) {
+            showSvProjectPicker(svProjectCache)
+            return
+        }
+        // Lazy-load on first tap; subsequent taps hit the cache.
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (!resp.success || resp.projects.isEmpty()) {
+                    showError(resp.error ?: "No projects available")
+                    return@launch
+                }
+                svProjectCache = resp.projects
+                showSvProjectPicker(resp.projects)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load projects")
+            }
+        }
     }
 
-    private fun clearError() {
-        errorText?.visibility = View.GONE
+    private fun showSvProjectPicker(items: List<MarketingProject>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select project",
+            options = items.map { p ->
+                SearchableOption(
+                    item = p,
+                    title = p.name ?: "Unnamed project",
+                    subtitle = listOfNotNull(p.location, p.status).joinToString(" • ").takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(p.id, p.scope, p.location, p.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No projects found",
+        ) { project ->
+            svProject = project
+            tvSvProject?.text = project.name ?: "Selected"
+        }
     }
 
-    private fun onSubmit() {
-        clearError()
+    private fun pickSvStaff(title: String, onPicked: (StaffData) -> Unit) {
+        // Sales-marketing + telesales staff are the eligible pool — same
+        // filter the legacy convert flow used.
+        if (svStaffCache.isNotEmpty()) {
+            showSvStaffPicker(title, svStaffCache, onPicked)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                val filtered = resp.staff.filter {
+                    val dept = it.department.orEmpty().lowercase(Locale.US)
+                    dept.contains("telesales") || dept.contains("sales")
+                }
+                if (filtered.isEmpty()) {
+                    showError("No Sales / Telesales staff found")
+                    return@launch
+                }
+                svStaffCache = filtered
+                showSvStaffPicker(title, filtered, onPicked)
+            } catch (e: Exception) {
+                showError(e.message ?: "Failed to load staff")
+            }
+        }
+    }
+
+    /**
+     * The Sales-Ownership hierarchy levels in ascending order.
+     * INCHARGE → HOD → AVP → GM → SM. When the operator picks a staff
+     * at level N, we walk up the reportingTo chain and fill any EMPTY
+     * slots above. Already-filled slots are never overwritten — that
+     * preserves any manual override the operator made above the level
+     * they're currently editing.
+     */
+    private enum class SvHierarchyLevel { INCHARGE, HOD, AVP, GM, SM }
+
+    /**
+     * Auto-fills the Sales-Ownership pickers above `startLevel` by
+     * walking up the picked staff's reportingTo chain. Mirrors the
+     * web's effect in `app/marketing/site-visits/page.tsx:419-426`
+     * (HOD = Incharge.reportingTo) and extends it the rest of the way
+     * up (HOD → AVP → GM → SM) so the operator only has to pick the
+     * bottom of the chain and the rest snaps into place.
+     *
+     * Resolution order for each step:
+     *   1. svStaffCache (already loaded by the SV picker) — instant
+     *   2. api.getStaffDetail(reportingToId) — for senior staff that
+     *      fall outside the sales/telesales department filter and
+     *      aren't in the cache
+     *
+     * The chain stops at the first link with no reportingToId OR when
+     * a senior detail fetch fails (best-effort — operator can still
+     * fill any remaining levels manually).
+     */
+    private fun autoFillSvHierarchyFrom(picked: StaffData, startLevel: SvHierarchyLevel) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            var current: StaffData = picked
+            var level = startLevel
+            while (true) {
+                val nextLevel = when (level) {
+                    SvHierarchyLevel.INCHARGE -> SvHierarchyLevel.HOD
+                    SvHierarchyLevel.HOD -> SvHierarchyLevel.AVP
+                    SvHierarchyLevel.AVP -> SvHierarchyLevel.GM
+                    SvHierarchyLevel.GM -> SvHierarchyLevel.SM
+                    SvHierarchyLevel.SM -> return@launch
+                }
+                val reportingToId = current.reportingToId?.takeIf { it.isNotBlank() }
+                    ?: current.reportingTo?.takeIf { it.isNotBlank() }
+                    ?: return@launch
+                // Already filled at this level — chain still continues
+                // upward FROM the existing pick (so manual overrides
+                // propagate too).
+                val existing = svStaffAtLevel(nextLevel)
+                val resolved = existing ?: resolveSvStaff(reportingToId) ?: return@launch
+                if (existing == null) {
+                    assignSvStaffAtLevel(nextLevel, resolved)
+                }
+                current = resolved
+                level = nextLevel
+            }
+        }
+    }
+
+    private fun svStaffAtLevel(level: SvHierarchyLevel): StaffData? = when (level) {
+        SvHierarchyLevel.INCHARGE -> svIncharge
+        SvHierarchyLevel.HOD -> svHod
+        SvHierarchyLevel.AVP -> svAvp
+        SvHierarchyLevel.GM -> svGm
+        SvHierarchyLevel.SM -> svSm
+    }
+
+    private fun assignSvStaffAtLevel(level: SvHierarchyLevel, staff: StaffData) {
+        val label = staff.name ?: "Selected"
+        when (level) {
+            SvHierarchyLevel.INCHARGE -> { svIncharge = staff; tvSvIncharge?.text = label }
+            SvHierarchyLevel.HOD -> { svHod = staff; tvSvHod?.text = label }
+            SvHierarchyLevel.AVP -> { svAvp = staff; tvSvAvp?.text = label }
+            SvHierarchyLevel.GM -> { svGm = staff; tvSvGm?.text = label }
+            SvHierarchyLevel.SM -> { svSm = staff; tvSvSm?.text = label }
+        }
+    }
+
+    /**
+     * Resolves a staff id to a StaffData object. Hits the in-memory
+     * svStaffCache first (zero-RTT for sales/telesales rows the picker
+     * already loaded), then falls back to /api/staff/get/{id} for
+     * senior management rows that aren't in the cache. Returns null on
+     * network error so the chain just stops cleanly.
+     */
+    private suspend fun resolveSvStaff(staffId: String): StaffData? {
+        svStaffCache.firstOrNull { it.id == staffId }?.let { return it }
+        return runCatching {
+            val resp = api.getStaffDetail(session.bearerToken, staffId)
+            // StaffFullData → StaffData. The reporting chain is the
+            // only field we need beyond identity; everything else gets
+            // best-effort filled from the detail response. We populate
+            // BOTH reportingTo and reportingToId from the detail's
+            // single `reportingTo` field (it's the staff id at this
+            // layer — see SessionManager.bootstrap saving
+            // `staff.reportingTo` into `session.reportingToId`).
+            resp.staff?.let { full ->
+                StaffData(
+                    id = full.id,
+                    name = full.name,
+                    phone = full.phone,
+                    role = full.role,
+                    designation = full.designation,
+                    status = full.status,
+                    employeeId = full.employeeId,
+                    department = full.department,
+                    reportingTo = full.reportingTo,
+                    reportingToId = full.reportingTo,
+                )
+            }
+        }.getOrNull()
+    }
+
+    private fun showSvStaffPicker(
+        title: String,
+        items: List<StaffData>,
+        onPicked: (StaffData) -> Unit,
+    ) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = title,
+            options = items.map { staff ->
+                SearchableOption(
+                    item = staff,
+                    title = staff.name ?: "Unnamed staff",
+                    subtitle = listOfNotNull(staff.designation, staff.department, staff.employeeId)
+                        .joinToString(" • ").takeIf { it.isNotBlank() },
+                    keywords = listOfNotNull(staff.phone, staff.role, staff.status).joinToString(" "),
+                )
+            },
+            emptyMessage = "No staff found",
+        ) { onPicked(it) }
+    }
+
+    /**
+     * Inflates one visitor card per expected attendee (capped at 12).
+     *
+     * Pre-fill behaviour:
+     *   - Index 0 (first card): name + relation = "Self" use the cached
+     *     lead/client name when available — the common 1-visitor case
+     *     is the client themself, so save the user a tap.
+     *   - All cards: when the telecaller pre-set attendees on the CP
+     *     visit's SV-fix payload, replay those onto the cards in order
+     *     (overrides the lead-only default on index 0).
+     *
+     * Field staff can edit anything pre-filled — this only sets the
+     * initial values.
+     */
+    private fun renderVisitorRows(count: Int) {
+        val rows = siteVisitorRows ?: return
+        rows.removeAllViews()
+        val safeCount = count.coerceIn(0, 12)
+        val prefilled = cachedPrefilledAttendees ?: emptyList()
+        val leadName = cachedLeadDisplayName
+        repeat(safeCount) { index ->
+            val card = layoutInflater.inflate(
+                R.layout.item_outcome_site_visitor, rows, false
+            )
+            wireVisitorCardToggles(card)
+            val attendee = prefilled.getOrNull(index)
+            val nameField = card.findViewWithTag<EditText>("name")
+            val relationField = card.findViewWithTag<TextView>("relation")
+            val ageField = card.findViewWithTag<EditText>("age")
+            when {
+                attendee != null -> {
+                    nameField?.setText(attendee.name.orEmpty())
+                    relationField?.text = attendee.relation.orEmpty()
+                    ageField?.setText(attendee.age.orEmpty())
+                    if (attendee.isVeg == false) {
+                        // Default layout pre-selects Veg; flip to Non-Veg
+                        // when the telecaller captured otherwise.
+                        card.findViewWithTag<TextView>("foodNonVeg")?.performClick()
+                    }
+                }
+                index == 0 && !leadName.isNullOrBlank() -> {
+                    nameField?.setText(leadName)
+                    relationField?.text = "Self"
+                }
+            }
+            rows.addView(card)
+        }
+    }
+
+    private fun wireVisitorCardToggles(card: View) {
+        val veg = card.findViewWithTag<TextView>("foodVeg")
+        val nonVeg = card.findViewWithTag<TextView>("foodNonVeg")
+        // Initial state: Veg pre-selected via the item layout. Wire the
+        // toggle so the user can flip between Veg / Non-Veg.
+        veg?.setOnClickListener {
+            veg.setBackgroundResource(R.drawable.bg_outcome_segment_active)
+            veg.setTextColor(Color.WHITE)
+            nonVeg?.setBackgroundResource(R.drawable.bg_outcome_segment_inactive)
+            nonVeg?.setTextColor(Color.parseColor("#475467"))
+        }
+        nonVeg?.setOnClickListener {
+            nonVeg.setBackgroundResource(R.drawable.bg_outcome_segment_active)
+            nonVeg.setTextColor(Color.WHITE)
+            veg?.setBackgroundResource(R.drawable.bg_outcome_segment_inactive)
+            veg?.setTextColor(Color.parseColor("#475467"))
+        }
+        // Relation dropdown opens a simple picker. "Self" sits at the
+        // top because it's the most-used value — the first visitor row
+        // is auto-filled with the lead's name + Self, and we want the
+        // option present in the picker too so the user can re-select
+        // it on subsequent cards or after editing.
+        card.findViewWithTag<View>("relationRow")?.setOnClickListener {
+            picker(
+                "Relation",
+                listOf(
+                    "Self",
+                    "Spouse",
+                    "Parent",
+                    "Sibling",
+                    "Child",
+                    "Friend",
+                    "Colleague",
+                    "Other",
+                ),
+            ) { card.findViewWithTag<TextView>("relation")?.text = it }
+        }
+    }
+
+    private fun collectVisitors(): List<SiteVisitAttendeeRequest> {
+        val rows = siteVisitorRows ?: return emptyList()
+        val out = mutableListOf<SiteVisitAttendeeRequest>()
+        for (i in 0 until rows.childCount) {
+            val card = rows.getChildAt(i)
+            val name = card.findViewWithTag<EditText>("name")?.text?.toString()?.trim().orEmpty()
+            val relation = card.findViewWithTag<TextView>("relation")?.text?.toString()?.trim().orEmpty()
+            val age = card.findViewWithTag<EditText>("age")?.text?.toString()?.trim().orEmpty()
+            val vegBtn = card.findViewWithTag<TextView>("foodVeg")
+            // Veg is "active" iff its background is the gradient drawable —
+            // mirror that to isVeg=true on the API payload.
+            val isVeg = (vegBtn?.currentTextColor == Color.WHITE)
+            out.add(
+                SiteVisitAttendeeRequest(
+                    name = name.takeIf { it.isNotEmpty() },
+                    relation = relation.takeIf { it.isNotEmpty() },
+                    age = age.takeIf { it.isNotEmpty() },
+                    isVeg = isVeg,
+                )
+            )
+        }
+        return out
+    }
+
+    private fun persistSiteVisit() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
-        // KOS-52: Sheet only shows on the "Yes, I saw the client" branch (after
-        // OTP verify), so met is implicitly true. The "No" branch is handled
-        // by TripNavigationFragment.completeCpVisitWithoutClient.
-        val met = true
-        val outcome = selectedOutcome ?: return showError("Please pick an outcome")
-        if (outcome == OUTCOME_POSTPONED && selectedPostponeReasons.isEmpty()) {
-            return showError("Pick at least one postpone reason")
-        }
-        if (outcome == OUTCOME_SITE_VISIT && selectedProject == null) {
-            return showError("Please select a project for the site visit")
-        }
+        val project = svProject ?: return showError("Please select a project")
+        val date = tvSvDate?.text?.toString()?.trim().orEmpty()
+        if (date.isEmpty()) return showError("Please pick a date")
+        val time = tvSvTime?.text?.toString()?.trim().takeIf { !it.isNullOrEmpty() }
 
-        submitBtn?.isClickable = false
-        submitBtn?.text = "Saving…"
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Saving…"
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // KOS-52: SV branch implies the user met the client at the
+                // place, so we still flip clientMet=true on the CP visit.
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
-                    MarkClientMetRequest(
-                        id = cpVisitId,
-                        clientMet = met
-                    )
+                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
                 )
                 if (!metResp.success) {
-                    submitBtn?.isClickable = true
-                    submitBtn?.text = "Submit"
-                    showError(metResp.error ?: "Failed to record client met")
+                    finishCtaSiteVisit(metResp.error ?: "Failed to record client met")
                     return@launch
                 }
 
-                if (outcome == OUTCOME_SITE_VISIT) {
-                    val project = selectedProject ?: return@launch run {
-                        submitBtn?.isClickable = true
-                        submitBtn?.text = "Submit"
-                        showError("Please select a project for the site visit")
-                    }
-                    val convertResp = geoApi.convertCpVisitToSiteVisit(
-                        session.bearerToken,
-                        ConvertCpVisitToSiteVisitRequest(
-                            id = cpVisitId,
-                            projectId = project.id,
-                            scheduledDate = siteVisitDate,
-                            scheduledTime = siteVisitTime,
-                            assignedTelecallerStaffId = selectedBdo?.id,
-                            inchargeStaffId = selectedIncharge?.id,
-                            hodStaffId = selectedHod?.id,
-                            avpStaffId = selectedAvp?.id,
-                            gmStaffId = selectedGm?.id,
-                            seniorManagerStaffId = selectedSeniorManager?.id,
-                            expectedAttendeeCount = visitorCount?.text?.toString()?.toIntOrNull()?.takeIf { it > 0 },
-                            attendees = collectVisitors().takeIf { it.isNotEmpty() },
-                            pickupAddress = pickupAddress?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
-                            travelMode = selectedTravelMode,
-                            foodPreferences = foodPreference?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
-                            notes = "Created from mobile CP visit"
-                        )
-                    )
-                    if (!convertResp.success) {
-                        submitBtn?.isClickable = true
-                        submitBtn?.text = "Submit"
-                        showError(convertResp.error ?: "Failed to create site visit")
-                        return@launch
-                    }
-                    setFragmentResult(
-                        RESULT_KEY,
-                        bundleOf(
-                            KEY_CLIENT_MET to met,
-                            KEY_OUTCOME to outcome
-                        )
-                    )
-                    dismissAllowingStateLoss()
-                    return@launch
-                }
-
-                val outcomeResp = geoApi.setCpVisitOutcome(
+                val convertResp = geoApi.convertCpVisitToSiteVisit(
                     session.bearerToken,
-                    SetOutcomeRequest(
+                    ConvertCpVisitToSiteVisitRequest(
                         id = cpVisitId,
-                        outcome = outcome,
-                        postponeReasons = if (outcome == OUTCOME_POSTPONED) selectedPostponeReasons.toList() else null,
-                        notes = buildOutcomeNotes(outcome)
-                    )
+                        projectId = project.id,
+                        scheduledDate = date,
+                        scheduledTime = time,
+                        // Stamp the current user as BOTH the
+                        // convertedBy slot and the telecaller. Without
+                        // these the server falls back to the CP visit's
+                        // assignedStaffId (which is often a different
+                        // field staff) — and then the freshly-created
+                        // SV never shows up in this user's mobile feed
+                        // because `listForViewerAsMobileVisits` keys
+                        // off telecallerId / convertedByStaffId /
+                        // inchargeStaffId.
+                        telecallerId = session.staffId,
+                        convertedByStaffId = session.staffId,
+                        inchargeStaffId = svIncharge?.id,
+                        hodStaffId = svHod?.id,
+                        avpStaffId = svAvp?.id,
+                        gmStaffId = svGm?.id,
+                        seniorManagerStaffId = svSm?.id,
+                        expectedAttendeeCount = etSvVisitorCount?.text?.toString()?.toIntOrNull()
+                            ?.takeIf { it > 0 },
+                        attendees = collectVisitors().takeIf { it.isNotEmpty() },
+                        pickupAddress = etSvPickupAddress?.text?.toString()?.trim()
+                            ?.takeIf { it.isNotEmpty() },
+                        travelMode = svTravelMode,
+                        notes = "Created from mobile CP visit",
+                    ),
                 )
-                if (!outcomeResp.success) {
-                    submitBtn?.isClickable = true
-                    submitBtn?.text = "Submit"
-                    showError(outcomeResp.error ?: "Failed to set outcome")
+                if (!convertResp.success) {
+                    finishCtaSiteVisit(convertResp.error ?: "Failed to create site visit")
                     return@launch
                 }
 
                 setFragmentResult(
                     RESULT_KEY,
                     bundleOf(
-                        KEY_CLIENT_MET to met,
-                        KEY_OUTCOME to outcome
-                    )
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_SITE_VISIT,
+                    ),
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                submitBtn?.isClickable = true
-                submitBtn?.text = "Submit"
-                showError(e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT).show()
+                // Retrofit throws HttpException on a 5xx before deserialising
+                // the response body — `e.message` is just "HTTP 500 Internal
+                // Server Error" which is useless to the user. Try to extract
+                // the JSON {error: "..."} the backend puts in the body so the
+                // toast shows the actual reason (staff busy, project missing,
+                // etc.) instead of a generic 500.
+                val serverMessage = extractHttpErrorMessage(e)
+                val message = serverMessage ?: e.message ?: "Network error"
+                finishCtaSiteVisit(message)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    // Backend SetOutcomeRequest only carries a single `notes` string, so we
-    // bundle the outcome-specific free-text fields into a labeled, multi-line
-    // value the back office can display verbatim. Empty fields are omitted.
-    private fun buildOutcomeNotes(outcome: String): String? {
-        return when (outcome) {
-            OUTCOME_POSTPONED -> {
-                val parts = listOfNotNull(
-                    postponeBudgetConcern?.text?.toString()?.trim()
-                        ?.takeIf { it.isNotEmpty() }?.let { "Budget concern: $it" },
-                    postponeTiming?.text?.toString()?.trim()
-                        ?.takeIf { it.isNotEmpty() }?.let { "Timing: $it" },
-                    postponeProjectDetails?.text?.toString()?.trim()
-                        ?.takeIf { it.isNotEmpty() }?.let { "Project details: $it" },
-                    postponeOtherDetails?.text?.toString()?.trim()
-                        ?.takeIf { it.isNotEmpty() }?.let { "Other: $it" },
-                )
-                parts.joinToString("\n").takeIf { it.isNotBlank() }
-            }
-            OUTCOME_NOT_INTERESTED ->
-                notInterestedNotes?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-            OUTCOME_WAIT ->
-                waitNotes?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-            else -> null
+    /**
+     * Pull the `{ error: "..." }` field out of a Retrofit HttpException's
+     * error body. Returns null on any failure (non-HttpException, body
+     * unreadable, JSON parse error, missing field). Mirrors the helper
+     * AttendanceFlowViewModel uses for the same purpose.
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun finishCtaSiteVisit(error: String) {
+        btnSubmit?.isClickable = true
+        btnSubmit?.text = "Save"
+        showError(error)
+    }
+
+    // ---- Postpone -------------------------------------------------------
+    private fun persistPostpone() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+        if (!isSiteVisitMode && cpVisitId.isNullOrBlank()) {
+            return showError("Missing CP visit id")
         }
+        // Match the web's Postpone dialog: at least one reason must be
+        // ticked; notes are optional. The backend's
+        // clientPlaceVisits.setOutcome rejects an empty postponeReasons
+        // array when outcome="postponed", so we mirror that check here
+        // and show the same gist message as the web's toast.
+        val reasons = postponedReasonsFromForm()
+        if (reasons.isEmpty()) {
+            showError("Select at least one postpone reason")
+            return
+        }
+        val notes = etPostNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+        finalizeTerminalOutcome(
+            cpVisitId = cpVisitId.orEmpty(),
+            outcomeEnum = OUTCOME_POSTPONED,
+            // Notes payload stays human-readable. Web stores `notes`
+            // as the operator typed; we do the same so a postponed
+            // visit looks identical regardless of which surface saved
+            // it. Reasons travel separately via postponeReasons.
+            notes = notes.orEmpty(),
+        )
+    }
+
+    // ---- Not Interested -------------------------------------------------
+    private fun persistNotInterested() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+        if (!isSiteVisitMode && cpVisitId.isNullOrBlank()) {
+            return showError("Missing CP visit id")
+        }
+        // Same web validation: at least one reason must be ticked.
+        val picks = niPicksFromForm()
+        if (picks.isEmpty()) {
+            showError("Select at least one reason")
+            return
+        }
+        val notes = etNiNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+        // For the CP path the backend's setOutcome doesn't accept
+        // notInterestedReasons / notInterestedDetails — only `notes`.
+        // We serialize the structured picks into the notes blob so the
+        // web admin opening the row still sees what the operator
+        // selected and any per-reason detail they typed. The SV path
+        // ships them as structured fields (handled in
+        // finalizeTerminalOutcome).
+        val serializedForCp = buildNotInterestedNotesForCp(picks, notes)
+        finalizeTerminalOutcome(
+            cpVisitId = cpVisitId.orEmpty(),
+            outcomeEnum = OUTCOME_NOT_INTERESTED,
+            notes = serializedForCp,
+        )
+    }
+
+    private data class NotInterestedPick(val reason: String, val detail: String?)
+
+    /**
+     * Walks the (checkbox, detail-input) pairs in display order and
+     * returns one entry per ticked reason. Detail is null when the
+     * inline input is empty — matches the web's
+     * `notInterestedDetails.map(r => ({ reason, detail: trim() || undefined }))`
+     * shape so the rows that land in the DB are isomorphic.
+     */
+    private fun niPicksFromForm(): List<NotInterestedPick> {
+        val pairs = niReasonPairs()
+        val picks = mutableListOf<NotInterestedPick>()
+        pairs.forEachIndexed { index, (cb, detailInput) ->
+            if (cb?.isChecked == true) {
+                val detail = detailInput?.text?.toString()?.trim().orEmpty()
+                picks += NotInterestedPick(
+                    reason = NI_REASON_LABELS[index],
+                    detail = detail.takeIf { it.isNotBlank() },
+                )
+            }
+        }
+        return picks
+    }
+
+    /**
+     * Mobile-only serializer: turns the structured picks into a
+     * human-readable notes blob for CP visits, since the CP backend
+     * doesn't have notInterestedReasons / notInterestedDetails
+     * columns. Keeps general notes after a blank line so the web
+     * admin can distinguish "what was selected" from "what was
+     * typed". Returns just the general notes when picks is empty
+     * (never expected — persistNotInterested gates on picks first).
+     */
+    private fun buildNotInterestedNotesForCp(
+        picks: List<NotInterestedPick>,
+        generalNotes: String?,
+    ): String = buildString {
+        if (picks.isNotEmpty()) {
+            append("Reasons: ")
+            append(picks.joinToString(", ") { it.reason })
+            picks.filter { !it.detail.isNullOrBlank() }.forEach {
+                append("\n• ").append(it.reason).append(": ").append(it.detail)
+            }
+        }
+        if (!generalNotes.isNullOrBlank()) {
+            if (isNotEmpty()) append("\n\n")
+            append(generalNotes)
+        }
+    }.trim()
+
+    /**
+     * Shared persistence path for the terminal outcomes (Postpone /
+     * Not Interested): mark the client as met (since the user reached
+     * this sheet only after the OTP-verified "Yes, I saw the client"
+     * branch) and then set the outcome with a serialized notes payload.
+     */
+    private fun finalizeTerminalOutcome(
+        cpVisitId: String,
+        outcomeEnum: String,
+        notes: String,
+    ) {
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Saving…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // SV mode: write directly to the siteVisits row via the
+                // dedicated endpoint. No markClientMet (there's no CP
+                // visit to mark), no CP setOutcome. The SV path accepts
+                // the same outcome strings (postponed / not_interested)
+                // and stores notes/reasons on the row.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCtaSave("Missing site visit id")
+                            return@launch
+                        }
+                    val resp = geoApi.setSiteVisitOutcome(
+                        session.bearerToken,
+                        SetSiteVisitOutcomeRequest(
+                            id = svId,
+                            outcome = outcomeEnum,
+                            postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
+                                postponedReasonsFromForm() else null,
+                            notInterestedReasons = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
+                                notInterestedReasonsFromForm() else null,
+                            // SV backend's setOutcome stores notInterestedDetails
+                            // alongside notInterestedReasons — same shape the
+                            // web SV detail page reads from. Per-reason detail
+                            // strings come from the inline inputs that
+                            // appear under each checked reason.
+                            notInterestedDetails = if (outcomeEnum == OUTCOME_NOT_INTERESTED)
+                                notInterestedDetailsFromForm() else null,
+                            notes = notes,
+                        ),
+                    )
+                    if (!resp.success) {
+                        finishCtaSave(resp.error ?: "Failed to save outcome")
+                        return@launch
+                    }
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to outcomeEnum),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
+                )
+                if (!metResp.success) {
+                    finishCtaSave(metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    SetOutcomeRequest(
+                        id = cpVisitId,
+                        outcome = outcomeEnum,
+                        // Backend's setOutcome throws when outcome="postponed"
+                        // and postponeReasons is empty/null. We now drive the
+                        // CP path off the same checkbox set the SV path uses,
+                        // so the row that lands in `clientPlaceVisits` looks
+                        // identical no matter which surface saved it.
+                        postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
+                            postponedReasonsFromForm() else null,
+                        notes = notes,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    finishCtaSave(outcomeResp.error ?: "Failed to save outcome")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to outcomeEnum),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                finishCtaSave(e.message ?: "Network error")
+                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Best-effort extraction of structured postpone reasons from the
+     * Postpone tab's form. The current CP path doesn't actually pass
+     * these to the server (sends notes only), so for SV mode we
+     * synthesise a single-element array from the captured fields when
+     * present. The SV backend requires a non-empty array for
+     * outcome=postponed.
+     */
+    /**
+     * Pulls the currently-checked postpone reason labels in the SAME
+     * order and SAME wording as the web's POSTPONE_REASONS list — so
+     * the row that lands in `clientPlaceVisits.postponeReasons` is
+     * byte-identical whether the operator saved from web or mobile.
+     * No fallback synthesis: an empty result is a real signal that
+     * the operator hit Save without ticking anything, and the caller
+     * (persistPostpone) shows the same gist error the web shows.
+     */
+    private fun postponedReasonsFromForm(): List<String> {
+        val picked = mutableListOf<String>()
+        if (cbPostClientUnavailable?.isChecked == true) picked += "Client unavailable"
+        if (cbPostWeather?.isChecked == true) picked += "Weather"
+        if (cbPostVehicle?.isChecked == true) picked += "Vehicle issue"
+        if (cbPostDocument?.isChecked == true) picked += "Document pending"
+        if (cbPostRescheduledByClient?.isChecked == true) picked += "Rescheduled by client"
+        if (cbPostOtherCommitment?.isChecked == true) picked += "Other commitment"
+        return picked
+    }
+
+    /**
+     * SV-path version of the picker — returns just the checked reason
+     * labels (no details). Web-canonical strings; same order as
+     * NOT_INTERESTED_REASONS. The SV backend's setOutcome rejects an
+     * empty array when outcome="not_interested" so the caller gates
+     * on picks first in persistNotInterested.
+     */
+    private fun notInterestedReasonsFromForm(): List<String> =
+        niPicksFromForm().map { it.reason }
+
+    /**
+     * Companion to notInterestedReasonsFromForm — returns the
+     * { reason, detail } pairs for the SV mutation. The backend stores
+     * this on siteVisits.notInterestedDetails so the web admin's
+     * detail-display reads identically.
+     */
+    private fun notInterestedDetailsFromForm(): List<SvNotInterestedDetail> =
+        niPicksFromForm().map { SvNotInterestedDetail(reason = it.reason, detail = it.detail) }
+
+    private fun finishCtaSave(error: String) {
+        btnSubmit?.isClickable = true
+        btnSubmit?.text = "Save"
+        showError(error)
+    }
+
+    /**
+     * Parse the Booking-tab date row into yyyy-MM-dd for the API.
+     * The picker writes "dd/MM/yyyy"; we just rewrite. Returns null
+     * when the field is empty or holds the placeholder so callers
+     * can fall back to today.
+     */
+    private fun bookingDateForApi(): String? {
+        val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
+        if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
+        return dateTextForApi(raw)
+    }
+
+    private fun dateTextForApi(raw: CharSequence?): String? {
+        val value = raw?.toString()?.trim().orEmpty()
+        if (value.isBlank() || value.contains("dd/", ignoreCase = true)) return null
+        val out = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy").forEach { pattern ->
+            val parsed = runCatching {
+                SimpleDateFormat(pattern, Locale.US).parse(value)
+            }.getOrNull()
+            if (parsed != null) return out.format(parsed)
+        }
+        return null
+    }
+
+    private fun textOrNull(value: CharSequence?): String? =
+        value?.toString()?.trim()?.takeIf {
+            it.isNotBlank() &&
+                !it.equals("select", ignoreCase = true) &&
+                !it.startsWith("select ", ignoreCase = true) &&
+                !it.equals("dd/mm/yyyy", ignoreCase = true)
+        }
+
+    private fun numberOrNull(value: CharSequence?): Double? =
+        value?.toString()?.trim()?.replace(",", "")?.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+
+    private fun buildBookingRequest(
+        sourceType: String,
+        cpVisitId: String? = null,
+        siteVisitId: String? = null,
+    ): CreateBookingRequest? {
+        // Match web's /marketing/bookings/new — only 3 hard requirements:
+        // Mobile Number, Client Name, Booking Date. Everything else is
+        // optional and the row lands in `bookings` with whatever the
+        // operator filled. Project / Plot / staff routing / charges are
+        // all encouraged (the labels still hint placeholder text) but
+        // not enforced — same as the web. Operators on the field can
+        // capture a booking with partial info and the office completes
+        // it later.
+        val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text)
+        val name = textOrNull(etFormName?.text)
+        val project = bookingProject
+        val unit = bookingUnit
+        if (phone.isNullOrBlank()) {
+            finishCta(error = "Mobile Number is required")
+            return null
+        }
+        if (name.isNullOrBlank()) {
+            finishCta(error = "Client Name is required")
+            return null
+        }
+        if (bookingDateForApi() == null) {
+            finishCta(error = "Booking Date is required")
+            return null
+        }
+        val bookingCost = numberOrNull(etChargeBookingCost?.text)
+        val advanceAmount = numberOrNull(etPayAdvanceAmount?.text)
+        return CreateBookingRequest(
+            clientName = name,
+            mobileNumber = phone,
+            bookingDate = bookingDateForApi() ?: SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                .format(Calendar.getInstance().time),
+            leadId = prefilledLeadId,
+            title = textOrNull(tvFormTitle?.text),
+            fatherSpouseName = textOrNull(etFormFather?.text),
+            dateOfBirth = dateTextForApi(tvFormDob?.text),
+            anniversaryDate = dateTextForApi(tvFormAnniversary?.text),
+            alternateNumbers = textOrNull(etFormAltNumber?.text),
+            whatsappNumber = textOrNull(etFormWhatsApp?.text),
+            email = textOrNull(etFormEmail?.text),
+            pincode = textOrNull(etFormPincode?.text),
+            homeAddress = textOrNull(etFormHomeAddress?.text),
+            profession = textOrNull(tvProfProfession?.text),
+            designation = textOrNull(etProfDesignation?.text),
+            incomePerAnnum = textOrNull(etProfIncome?.text),
+            officeName = textOrNull(etOfficeName?.text),
+            officeAddress = textOrNull(etOfficeAddress?.text),
+            state = textOrNull(etFormState?.text),
+            district = textOrNull(etFormDistrict?.text),
+            location = textOrNull(etFormLocation?.text),
+            officeMobile = textOrNull(etOfficeMobile?.text),
+            officePhone = textOrNull(etOfficePhone?.text),
+            officeEmail = textOrNull(etOfficeEmail?.text),
+            nationality = textOrNull(tvFormNationality?.text),
+            projectId = project?.id,
+            plotId = unit?.id,
+            plotNo = unit?.unitNumber,
+            bookingType = textOrNull(tvBookType?.text),
+            cefNo = textOrNull(etBookCef?.text),
+            isDuplicateBooking = bookDuplicate,
+            isAgainstSV = bookIsAgainstVisit == YesNo.YES,
+            propertyType = textOrNull(tvBookProperty?.text),
+            bookingMode = textOrNull(tvBookMode?.text),
+            bookingCost = bookingCost,
+            guidelineValue = numberOrNull(etChargeGuidelineValue?.text),
+            specialConsideration = numberOrNull(etChargeSpecialConsideration?.text),
+            specialConsiderationReason = textOrNull(etChargeScReason?.text),
+            discountApprovedBy = textOrNull(etChargeDiscountApprovedBy?.text),
+            specialConsiderationValidity = numberOrNull(etChargeScValidity?.text),
+            promotionalOffers = textOrNull(etChargePromoOffers?.text),
+            promotionalOffersTnC = textOrNull(tvChargePromoTnc?.text),
+            promotionalOfferValue = numberOrNull(etChargePromoValue?.text),
+            offerValidityPeriod = numberOrNull(etChargeOfferValidity?.text),
+            agreedAmount = bookingCost?.minus(numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0),
+            registrationCharges = numberOrNull(etPayRegCharges?.text),
+            gstAmount = numberOrNull(etPayGstAmount?.text),
+            gstApplicable = payGstApplicable,
+            documentCharges = numberOrNull(etPayDocCharges?.text),
+            pattaCharges = numberOrNull(etPayPattaCharges?.text),
+            otherCharges = numberOrNull(etPayOtherCharges?.text),
+            otherChargesApplicable = payOtherApplicable,
+            advanceAmount = advanceAmount,
+            balanceAmount = if (bookingCost != null && advanceAmount != null) bookingCost - advanceAmount else null,
+            paymentMode = textOrNull(tvPayPaymentMode?.text),
+            freePayment = payFlexi,
+            allotmentDueAmount = numberOrNull(etPayAllotDue?.text),
+            allotmentDueDate = dateTextForApi(tvPayAllotDate?.text),
+            secondPaymentAmount = numberOrNull(etPay2Mode?.text),
+            secondPaymentDate = dateTextForApi(tvPay2Date?.text),
+            thirdPaymentAmount = numberOrNull(etPay3Mode?.text),
+            thirdPaymentDate = dateTextForApi(tvPay3Date?.text),
+            fourthPaymentAmount = numberOrNull(etPay4Mode?.text),
+            fourthPaymentDate = dateTextForApi(tvPay4Date?.text),
+            preferredRegistrationDate = dateTextForApi(tvPayPrefReg?.text),
+            originalAvpStaffId = bookingStaffAvp?.id,
+            originalGmStaffId = bookingStaffGm?.id,
+            originalSeniorManagerStaffId = bookingStaffSm?.id,
+            originalBdoStaffId = bookingStaffBdo?.id,
+            originalTelecallerStaffId = bookingStaffTelecaller?.id,
+            aadhaar = textOrNull(etStaffAadhar?.text),
+            pan = textOrNull(etStaffPancard?.text),
+            referenceName1 = textOrNull(etStaffRefName1?.text),
+            referenceMobile1 = textOrNull(etStaffRefMobile1?.text),
+            referenceProfession1 = textOrNull(etStaffRefProf1?.text),
+            referenceName2 = textOrNull(etStaffRefName2?.text),
+            referenceMobile2 = textOrNull(etStaffRefMobile2?.text),
+            referenceProfession2 = textOrNull(etStaffRefProf2?.text),
+            docPreparedIn = textOrNull(tvStaffDocPrep?.text),
+            status = if (staffSaveAs == SaveAs.CONFIRMED) "pending_confirmation" else "draft",
+            sourceType = sourceType,
+            sourceClientPlaceVisitId = cpVisitId,
+            sourceSiteVisitId = siteVisitId,
+        )
+    }
+
+    private fun confirmationMissingFields(bookingCost: Double?, advanceAmount: Double?): List<String> {
+        val missing = mutableListOf<String>()
+        fun hasText(value: CharSequence?): Boolean = textOrNull(value) != null
+        fun requireText(label: String, value: CharSequence?) {
+            if (!hasText(value)) missing += label
+        }
+        requireText("CEF No", etBookCef?.text)
+        requireText("Property Type", tvBookProperty?.text)
+        requireText("Booking Mode", tvBookMode?.text)
+        requireText("Preferred Registration Date", tvPayPrefReg?.text)
+        requireText("Booking Type", tvBookType?.text)
+        requireText("Title", tvFormTitle?.text)
+        requireText("Alternate Numbers", etFormAltNumber?.text)
+        requireText("WhatsApp Number", etFormWhatsApp?.text)
+        requireText("Date of Birth", tvFormDob?.text)
+        requireText("Pincode", etFormPincode?.text)
+        requireText("Home Address", etFormHomeAddress?.text)
+        requireText("Office/Alternate Address", etOfficeAddress?.text)
+        requireText("Location", etFormLocation?.text)
+        requireText("State", etFormState?.text)
+        requireText("District", etFormDistrict?.text)
+        requireText("Father/Spouse Name", etFormFather?.text)
+        requireText("Profession", tvProfProfession?.text)
+        requireText("Reference Name 1", etStaffRefName1?.text)
+        requireText("Reference Name 2", etStaffRefName2?.text)
+        requireText("Reference Mobile Number 1", etStaffRefMobile1?.text)
+        requireText("Reference Mobile Number 2", etStaffRefMobile2?.text)
+        requireText("Aadhaar", etStaffAadhar?.text)
+        if (bookingProject == null) missing += "Project Name"
+        if (bookingUnit == null && textOrNull(tvBookPlot?.text) == null) missing += "Plot No"
+        if (bookingCost == null || bookingCost <= 0) missing += "Booking Cost"
+        if (bookingStaffTelecaller == null) missing += "Original TeleCaller"
+        if (bookingStaffBdo == null) missing += "Original BDO"
+        if (bookingStaffSm == null) missing += "Original Senior Manager"
+        if (bookingStaffGm == null) missing += "Original GM"
+        if (bookingStaffAvp == null && argSiteVisitId == null) missing += "Original AVP"
+        if (!hasText(tvPayPaymentMode?.text)) missing += "Payment Mode"
+        if (textOrNull(tvBookType?.text) == "NEW" && (advanceAmount == null || advanceAmount <= 0)) {
+            missing += "Advance Amount"
+        }
+        return missing
+    }
+
+    // ---- Persistence ------------------------------------------------
+    private fun persistBooking() {
+        val met = true
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Saving…"
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Standalone booking from the Bookings + button — no
+                // CP visit / SV row to attach an outcome to. POST
+                // straight to /api/bookings (the same web flow uses)
+                // so the row lands in `bookings` and the office-side
+                // approval workflow picks up from pending_gm.
+                if (isStandaloneBookingMode) {
+                    val request = buildBookingRequest(sourceType = "walk_in") ?: return@launch
+                    val createResp = api.createBooking(
+                        session.bearerToken,
+                        request,
+                    )
+                    if (!createResp.success) {
+                        finishCta(error = createResp.error ?: "Failed to create booking")
+                        return@launch
+                    }
+                    // Push any edits the user made on the prefilled
+                    // client form back to the lead so the next person
+                    // sees the corrected profile.
+                    pushClientEditsToLeadIfAny()
+                    // Booking row landed — wipe the auto-save scratchpad
+                    // so the next time this operator opens a booking
+                    // form for a DIFFERENT source they start with a
+                    // clean slate instead of inheriting these values.
+                    clearDraftAfterSubmit()
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(
+                            KEY_CLIENT_MET to met,
+                            KEY_OUTCOME to OUTCOME_BOOKING,
+                        ),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                // SV-mode booking — now uses the same booking-create
+                // endpoint as the web app, with sourceSiteVisitId set so
+                // the server can mark the SV converted.
+                if (isSiteVisitMode) {
+                    val svId = argSiteVisitId
+                        ?: run {
+                            finishCta(error = "Missing site visit id")
+                            return@launch
+                        }
+                    val request = buildBookingRequest(
+                        sourceType = "site_visit",
+                        siteVisitId = svId,
+                    ) ?: return@launch
+                    val resp = api.createBooking(
+                        session.bearerToken,
+                        request,
+                    )
+                    if (!resp.success) {
+                        finishCta(error = resp.error ?: "Failed to save booking")
+                        return@launch
+                    }
+                    // Mirror the CP-mode lead push for SV-mode too —
+                    // same Edit-toggle semantics, same target lead row.
+                    pushClientEditsToLeadIfAny()
+                    clearDraftAfterSubmit()
+                    setFragmentResult(
+                        RESULT_KEY,
+                        bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
+                    )
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
+
+                val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+                    ?: run {
+                        finishCta(error = "Missing CP visit id")
+                        return@launch
+                    }
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    MarkClientMetRequest(id = cpVisitId, clientMet = met),
+                )
+                if (!metResp.success) {
+                    finishCta(error = metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+
+                val request = buildBookingRequest(
+                    sourceType = "cp_visit",
+                    cpVisitId = cpVisitId,
+                ) ?: return@launch
+                val outcomeResp = api.createBooking(
+                    session.bearerToken,
+                    request,
+                )
+                if (!outcomeResp.success) {
+                    finishCta(error = outcomeResp.error ?: "Failed to save booking")
+                    return@launch
+                }
+
+                // Push any field-staff edits to the prefilled client
+                // form back to the lead's manualProfile. No-op when
+                // the user didn't tap Edit. Best-effort — booking
+                // already saved, so failures here just get logged.
+                pushClientEditsToLeadIfAny()
+                clearDraftAfterSubmit()
+
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to met,
+                        KEY_OUTCOME to OUTCOME_BOOKING,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                // Both surfaces (the inline tvError row and the Toast)
+                // are fed the SAME pre-humanized message so the operator
+                // doesn't see the raw stack trace anywhere. showError
+                // runs humanizeServerError internally; we mirror that
+                // for the Toast which writes its text directly.
+                val raw = e.message ?: "Network error"
+                finishCta(error = raw)
+                Toast.makeText(requireContext(), humanizeServerError(raw), Toast.LENGTH_LONG)
+                    .show()
+            }
+        }
+    }
+
+    private fun finishCta(error: String) {
+        btnSubmit?.isClickable = true
+        btnSubmit?.text = "Save Booking"
+        showError(error)
+    }
+
+    /**
+     * Serializes every captured field across the 7 sub-tabs into a single
+     * labeled multi-line string. This is the only payload the backend's
+     * setOutcome.notes endpoint accepts today — when a dedicated
+     * createBooking endpoint exists, structure this as JSON instead.
+     */
+    private fun serializeBookingForm(): String? {
+        val sb = StringBuilder()
+
+        fun section(title: String) {
+            if (sb.isNotEmpty()) sb.append("\n\n")
+            sb.append("[").append(title).append("]")
+        }
+        fun row(label: String, v: CharSequence?) {
+            val t = v?.toString()?.trim().orEmpty()
+            if (t.isEmpty()) return
+            sb.append("\n").append(label).append(": ").append(t)
+        }
+
+        // Client Details
+        section("Booking · Client Details")
+        row("Phone", tvFormPhone?.text)
+        row("Title", tvFormTitle?.text)
+        row("Name", etFormName?.text)
+        row("Father/Spouse", etFormFather?.text)
+        row("DOB", tvFormDob?.text)
+        row("Anniversary", tvFormAnniversary?.text)
+        row("Alt number", etFormAltNumber?.text)
+        row("WhatsApp", etFormWhatsApp?.text)
+        row("Email", etFormEmail?.text)
+        row("Nationality", tvFormNationality?.text)
+        row("Home Address", etFormHomeAddress?.text)
+        row("Pincode", etFormPincode?.text)
+        row("State", etFormState?.text)
+        row("District", etFormDistrict?.text)
+        row("Location", etFormLocation?.text)
+
+        // Professional
+        section("Booking · Professional Details")
+        row("Profession", tvProfProfession?.text)
+        row("Designation", etProfDesignation?.text)
+        row("Income Per Annum", etProfIncome?.text)
+
+        // Office
+        section("Booking · Office Details")
+        row("Office Name", etOfficeName?.text)
+        row("Office Email", etOfficeEmail?.text)
+        row("Office Mobile", etOfficeMobile?.text)
+        row("Office Phone", etOfficePhone?.text)
+        row("Office Address", etOfficeAddress?.text)
+
+        // Booking
+        section("Booking · Booking Details")
+        row("Booking Type", tvBookType?.text)
+        row("Source Type", tvBookSource?.text)
+        row("CEF No", etBookCef?.text)
+        row("Booking Date", tvBookDate?.text)
+        row("Project", tvBookProject?.text)
+        row("Plot", tvBookPlot?.text)
+        row("Property Type", tvBookProperty?.text)
+        row("Booking Mode", tvBookMode?.text)
+        row("Is Against Client Visit", if (bookIsAgainstVisit == YesNo.YES) "Yes" else "No (Online Sales)")
+        row("Duplicate Bookings", if (bookDuplicate) "Yes" else "No")
+
+        // Charges
+        section("Booking · Charges Details")
+        row("Booking Cost", etChargeBookingCost?.text)
+        row("Guideline Value", etChargeGuidelineValue?.text)
+        row("Special Consideration", etChargeSpecialConsideration?.text)
+        row("Discount Approved By", etChargeDiscountApprovedBy?.text)
+        row("SC Reason", etChargeScReason?.text)
+        row("SC Validity (days)", etChargeScValidity?.text)
+        row("Promotional Offers", etChargePromoOffers?.text)
+        row("Promotional Offers T&C", tvChargePromoTnc?.text)
+        row("Promotional Offers Value", etChargePromoValue?.text)
+        row("Offer Validity Period (days)", etChargeOfferValidity?.text)
+
+        // Payment
+        section("Booking · Payment Details")
+        row("Registration Charges", etPayRegCharges?.text)
+        row("GST Amount", etPayGstAmount?.text)
+        row("GST If Applicable", if (payGstApplicable) "Yes" else "No")
+        row("Document Charges", etPayDocCharges?.text)
+        row("Other Charges", etPayOtherCharges?.text)
+        row("Other Charges If Applicable", if (payOtherApplicable) "Yes" else "No")
+        row("Advance Amount", etPayAdvanceAmount?.text)
+        row("Payment Mode", tvPayPaymentMode?.text)
+        row("Flexi Payment", if (payFlexi) "Yes" else "No")
+        row("Allotment Due Amount", etPayAllotDue?.text)
+        row("Allotment Due Date", tvPayAllotDate?.text)
+        row("2nd Payment Mode", etPay2Mode?.text)
+        row("2nd Payment Date", tvPay2Date?.text)
+        row("3rd Payment Mode", etPay3Mode?.text)
+        row("3rd Payment Date", tvPay3Date?.text)
+        row("4th Payment Mode", etPay4Mode?.text)
+        row("4th Payment Date", tvPay4Date?.text)
+        row("Preferred Registration Date", tvPayPrefReg?.text)
+
+        // Staff
+        section("Booking · Staff Details")
+        row("AVP", tvStaffAvp?.text)
+        row("General Manager", tvStaffGm?.text)
+        row("Senior Manager", tvStaffSm?.text)
+        row("BDO", tvStaffBdo?.text)
+        row("Telecaller", tvStaffTelecaller?.text)
+        row("Aadhar", etStaffAadhar?.text)
+        row("Pancard", etStaffPancard?.text)
+        row("Reference Name 1", etStaffRefName1?.text)
+        row("Reference Mobile 1", etStaffRefMobile1?.text)
+        row("Reference Profession 1", etStaffRefProf1?.text)
+        row("Reference Name 2", etStaffRefName2?.text)
+        row("Reference Mobile 2", etStaffRefMobile2?.text)
+        row("Reference Profession 2", etStaffRefProf2?.text)
+        row("Document to be prepared in", tvStaffDocPrep?.text)
+        row("Save as", if (staffSaveAs == SaveAs.DRAFT) "Draft" else "Confirmed")
+
+        return sb.toString().takeIf { it.isNotBlank() }
+    }
+
+    private fun showError(msg: String) {
+        tvError?.text = humanizeServerError(msg)
+        tvError?.visibility = View.VISIBLE
+    }
+
+    private fun clearError() {
+        tvError?.visibility = View.GONE
+    }
+
+    /**
+     * Cleans up server-side error messages before showing them to the
+     * operator. Convex throws a single big string that includes:
+     *   • An "Uncaught Error: " prefix
+     *   • The actual human-readable message
+     *   • A stack trace ("at fnName (../convex/file.ts:LINE:COL)")
+     *
+     * Showing the whole blob — with code paths, line numbers, and the
+     * scary "Uncaught Error" header — looks like a crash to a field
+     * operator. This helper strips the noise, keeps the message, and
+     * reformats the most common "missing fields" case as something a
+     * non-technical user can act on.
+     *
+     * If the input doesn't match any known noise pattern (e.g. a
+     * straightforward "Network error" Toast), it's returned unchanged.
+     */
+    private fun humanizeServerError(raw: String): String {
+        if (raw.isBlank()) return "Something went wrong. Please try again."
+
+        // 1) Drop everything from the first stack-trace marker onwards.
+        //    Convex stack lines look like:  at name (../convex/x.ts:1:2)
+        //    Splitting on a newline followed by whitespace + "at " strips
+        //    them in one shot without nibbling at legitimate "at "
+        //    occurrences in the message body.
+        val noStack = raw.split(Regex("(?m)\\n\\s*at\\s")).firstOrNull()?.trim().orEmpty()
+
+        // 2) Strip the "Uncaught Error:" / "Error:" / "ConvexError:" prefix.
+        val noPrefix = noStack
+            .replace(Regex("^(Uncaught\\s+)?(Convex)?Error:\\s*", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        // 3) Strip trailing punctuation noise so the next sentence we
+        //    might append doesn't look weird.
+        val clean = noPrefix.trimEnd('.', ' ', '\n')
+
+        if (clean.isEmpty()) return "Something went wrong. Please try again."
+
+        // 4) Reformat the most common case — "Cannot submit booking for
+        //    confirmation. Missing: A, B, C." — into a clearer two-line
+        //    message so the operator sees the gap at a glance instead of
+        //    parsing a comma-soup string.
+        val missingMatch = Regex(
+            "^Cannot submit booking for confirmation\\.\\s*Missing:\\s*(.+)$",
+            RegexOption.IGNORE_CASE,
+        ).find(clean)
+        if (missingMatch != null) {
+            val fields = missingMatch.groupValues[1]
+                .trimEnd('.', ' ')
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            // These fields aren't actually required to SAVE the row —
+            // they're approval-workflow asks the office can fill in
+            // later. Frame it that way so the operator doesn't think
+            // the booking failed entirely.
+            val list = if (fields.size <= 4) fields.joinToString(", ")
+            else fields.take(4).joinToString(", ") + " +" + (fields.size - 4) + " more"
+            return "Save the booking as Draft, or fill in: $list. The office can add these during approval."
+        }
+
+        return clean
+    }
+
+    private fun outcomeFromArg(value: String): Outcome? = when (value) {
+        OUTCOME_BOOKING -> Outcome.BOOKING
+        OUTCOME_SITE_VISIT -> Outcome.SITE_VISIT
+        OUTCOME_POSTPONED -> Outcome.POSTPONE
+        OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
+        // Map rejected → NOT_INTERESTED for the UI enum since both
+        // are terminal-decline tabs; the actual outcome string saved
+        // server-side stays distinct ("rejected"). This only matters
+        // for the visual highlight on a resumed sheet — the
+        // server-truth value isn't overwritten.
+        OUTCOME_REJECTED -> Outcome.NOT_INTERESTED
+        else -> null
+    }
+
+    // ── SV-via-CP locked-tab mode ───────────────────────────────────────
+    //
+    // The telecaller can fix a Site Visit via the "same area" routing
+    // from the dialer. That path doesn't create the SV directly — it
+    // creates a CP visit with a `proposedSiteVisit` payload and assigns
+    // a field staff to verify with the client first. When the field
+    // staff opens this sheet after meeting the client, the proper UX
+    // is "you don't fill anything in, you just Reject or Confirm what
+    // the telecaller already prepared". This helper detects that
+    // payload and re-shapes the sheet accordingly.
+
+    private fun detectAndApplyLockedSvMode() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+        if (cpVisitId.isNullOrBlank()) {
+            android.util.Log.d(LOG_TAG, "detect: no cpVisitId arg, skipping")
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Single-visit get — replaces the historical hack of
+                // pulling the full 200-row /my list just to find one row.
+                // Cuts latency on sheet open from ~1-2s on a slow link
+                // down to one round-trip (~100ms) AND removes the visible
+                // glitch where the Booking tab body painted for one frame
+                // before async detect resolved and snapped the UI to
+                // locked SV. The /api/marketing/clientPlaceVisits/get
+                // route was wired in a later patch — keeping the helper
+                // shape identical so the rest of this method is unchanged.
+                val detailResp = geoApi.getCpVisitDetail(
+                    session.bearerToken,
+                    cpVisitId,
+                )
+                if (!detailResp.success) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: get call failed: ${detailResp.error ?: "(no error)"}",
+                    )
+                    return@launch
+                }
+                val visit = detailResp.visit
+                if (visit == null) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId not returned by get",
+                    )
+                    return@launch
+                }
+                // Diagnostic dump of every signal we use to detect
+                // "this CP came from a telecaller-fixed SV". If the
+                // locked UI still doesn't activate on a known SV-fixed
+                // visit, this line in logcat tells us which signal is
+                // missing on the server-side row.
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId " +
+                        "leadFollowUpStatus=${visit.lead?.followUpStatus} " +
+                        "origin=${visit.origin} " +
+                        "outcome=${visit.outcome} " +
+                        "fieldVisitStatus=${visit.fieldVisit?.status} " +
+                        "expectedAttendeeCount=${visit.expectedAttendeeCount} " +
+                        "attendeesSize=${visit.attendees?.size ?: 0} " +
+                        "foodPreferences=${visit.foodPreferences} " +
+                        "vehiclePreference=${visit.vehiclePreference} " +
+                        "proposed.project=${visit.proposedSiteVisit?.projectId} " +
+                        "proposed.incharge=${visit.proposedSiteVisit?.inchargeStaffId} " +
+                        "proposed.date=${visit.proposedSiteVisit?.scheduledDate}",
+                )
+
+                val proposed = visit.proposedSiteVisit
+                val proposedMeaningful = proposed?.isMeaningful() == true
+                val leadFlaggedSvFixed = visit.lead?.followUpStatus
+                    ?.lowercase(Locale.getDefault())
+                    ?.let { s -> s == "sv_fixed" || s.contains("sv_fixed") || s.contains("sv-fixed") }
+                    ?: false
+                // The telecaller-fixed SV path on web (telecaller/leads/[id]
+                // page.tsx, lines 1133-1158) is the ONLY CP-create flow
+                // that spreads partyArgs — expectedAttendeeCount /
+                // attendees / foodPreferences / vehiclePreference — onto
+                // the CP visit row. Regular CP-only creates never include
+                // them, and createFromMobile / mobile-side createCpVisit
+                // doesn't take those args either. So any party data on a
+                // CP visit is a strong server-side fingerprint that the
+                // telecaller went through "Fix Site Visit -> same area"
+                // for this row.
+                val hasSvFixParty =
+                    (visit.expectedAttendeeCount ?: 0) > 0 ||
+                        (visit.attendees?.isNotEmpty() == true) ||
+                        !visit.foodPreferences.isNullOrBlank() ||
+                        !visit.vehiclePreference.isNullOrBlank()
+
+                // Always seed the SV-form caches from CP context so
+                // the visitor row, project picker and pickup address
+                // pre-fill even on a *manually*-created CP with no
+                // SV-lock signal. Locked-SV mode (below) layers on
+                // top of these defaults.
+                seedSvDefaultsFromCpVisit(visit)
+
+                // Lock the sheet if ANY signal fires:
+                //   1. proposedSiteVisit has at least one populated field
+                //   2. The lead's followUpStatus is already "sv_fixed"
+                //   3. Party data is on the CP visit row (SV-fix-only)
+                if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
+                    android.util.Log.d(
+                        LOG_TAG,
+                        "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode (defaults seeded)",
+                    )
+                    return@launch
+                }
+                val source = when {
+                    proposedMeaningful -> "proposedSiteVisit"
+                    leadFlaggedSvFixed -> "lead.followUpStatus=sv_fixed"
+                    else -> "partyData"
+                }
+                android.util.Log.d(
+                    LOG_TAG,
+                    "detect: cpVisitId=$cpVisitId locked SV mode (source=$source)",
+                )
+                // Pass the proposed payload through whenever it's
+                // meaningful so the form pre-fills. Otherwise hand a
+                // blank payload — the locked UX (Reject / Confirm,
+                // other tabs pale) still applies, just without
+                // pre-filled values.
+                applyLockedSvMode(visit, proposed ?: ProposedSiteVisit())
+            } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "detect: exception ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * proposedSiteVisit can be persisted as an empty object `{}` if the
+     * web form was opened and abandoned, which Gson deserialises into a
+     * ProposedSiteVisit with every field null. Lock the sheet only
+     * when at least one meaningful field has been populated — that
+     * way an empty stub doesn't accidentally hide all the other tabs.
+     */
+    private fun ProposedSiteVisit.isMeaningful(): Boolean {
+        return !projectId.isNullOrBlank() ||
+            !scheduledDate.isNullOrBlank() ||
+            !scheduledTime.isNullOrBlank() ||
+            !inchargeStaffId.isNullOrBlank() ||
+            !hodStaffId.isNullOrBlank() ||
+            !bdoStaffId.isNullOrBlank() ||
+            !avpStaffId.isNullOrBlank() ||
+            !gmStaffId.isNullOrBlank() ||
+            !seniorManagerStaffId.isNullOrBlank()
+    }
+
+    /**
+     * Seed the SV outcome form with whatever the CP visit already
+     * knows — client name (first visitor = client / Self), attendees
+     * the telecaller pre-set, the CP's project, and the place's
+     * pickup address. Fires unconditionally on every CP detail load
+     * so a manually-created CP gets the same head-start the
+     * locked-SV path enjoys. applyLockedSvMode runs AFTER this and
+     * can layer telecaller-pre-fixed overrides on top.
+     */
+    private suspend fun seedSvDefaultsFromCpVisit(visit: CpVisitDetail) {
+        if (!isAdded) return
+
+        // Client display name → first visitor name + "Self" relation.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+
+        // Telecaller-pre-set attendees (rare on a pure manual CP,
+        // common on the SV-fixed path) — used by renderVisitorRows.
+        cachedPrefilledAttendees = visit.attendees
+
+        // Visitor count: prefer the field the telecaller set, then
+        // attendees.size, then default to 1 so the user always sees
+        // at least the client/Self card pre-filled.
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        val effectiveCount = if (visitorCount > 0) visitorCount else 1
+        // Only stamp the field if it's blank — preserves user edits
+        // when they reopen the sheet.
+        if (etSvVisitorCount?.text?.toString().isNullOrBlank()) {
+            etSvVisitorCount?.setText(effectiveCount.toString())
+        }
+
+        // Pickup address: pull from the resolved clientPlace row.
+        if (etSvPickupAddress?.text?.toString().isNullOrBlank()) {
+            etSvPickupAddress?.setText(
+                visit.clientPlace?.address
+                    ?: visit.clientPlace?.formattedAddress
+                    ?: visit.lead?.preferredArea
+                    ?: "",
+            )
+        }
+
+        // Project picker: prefer the CP's own projectId (set by the
+        // mobile/web Create CP form's Project picker), then fall back
+        // to the proposedSiteVisit.projectId path that
+        // applyLockedSvMode also uses. Lets a manually-created CP
+        // arrive at the SV form with the project already selected.
+        val cpProjectId = visit.projectId ?: visit.proposedSiteVisit?.projectId
+        prefillProjectIfPossible(cpProjectId)
+    }
+
+    private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
+        if (!isAdded) return
+        lockedFromProposedSv = true
+
+        // 1. Force the active outcome to Site Visit and re-render so the
+        //    SV body is the one on screen.
+        activeOutcome = Outcome.SITE_VISIT
+        renderState()
+
+        // 2. Fade non-SV tabs and make them unclickable.
+        listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+            tab.cell?.isClickable = false
+            tab.cell?.alpha = 0.35f
+        }
+
+        // 3. Pre-fill the SV form from `proposedSiteVisit` + visit-level
+        //    fields (attendees, food prefs, pickup address from the
+        //    client place if we have it).
+        tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
+        tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+
+        // Cache lead + attendee context for the visitor-row auto-fill.
+        // Order: client.clientName (canonical, manually entered) →
+        // lead.contactName (telecaller-typed during dialer flow) →
+        // clientPlace.name (fallback). renderVisitorRows reads this
+        // cache when expanding cards so the first row is pre-filled
+        // with the lead's name + Self relation — the common case for
+        // 1-visitor meetings.
+        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        cachedPrefilledAttendees = visit.attendees
+
+        val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0
+        // Default to 1 visitor when the telecaller didn't specify and the
+        // SV-fix flow doesn't carry attendees — the most common reality
+        // is the lead alone, and pre-populating saves a tap.
+        val effectiveVisitorCount = if (visitorCount > 0) visitorCount else 1
+        etSvVisitorCount?.setText(effectiveVisitorCount.toString())
+        etSvPickupAddress?.setText(
+            visit.clientPlace?.address
+                ?: visit.clientPlace?.formattedAddress
+                ?: visit.lead?.preferredArea
+                ?: "",
+        )
+
+        // Resolve project + staff names from the caches (load them if
+        // they're cold so the labels render as something meaningful
+        // instead of "Selected").
+        prefillProjectIfPossible(proposed.projectId)
+        prefillSvStaff(proposed)
+
+        // 4. SV form fields stay EDITABLE in locked mode — the CP visit
+        //    staff often needs to adjust telecaller-fixed details (e.g.
+        //    swap the BDO if they're not available, tweak pickup address
+        //    after talking to the client, change schedule). The locked
+        //    aspect is the *outcome path* — only Reject / Confirm exits
+        //    are allowed (no Postpone / Booking tabs). Earlier we used
+        //    applyReadOnlyToSvBody() here but that contradicted the
+        //    field-staff workflow.
+
+        // 5. Swap the single Save button for the Reject / Confirm pair.
+        btnSubmit?.visibility = View.GONE
+        cpLockedFooter?.visibility = View.VISIBLE
+        btnCpLockedReject?.setOnClickListener { onLockedRejectTap() }
+        btnCpLockedConfirm?.setOnClickListener { onLockedConfirmTap() }
+    }
+
+    private suspend fun prefillProjectIfPossible(projectId: String?) {
+        if (projectId.isNullOrBlank()) return
+        if (svProjectCache.isEmpty()) {
+            runCatching {
+                val resp = api.getMarketingProjects(session.bearerToken)
+                if (resp.success && resp.projects.isNotEmpty()) {
+                    svProjectCache = resp.projects
+                }
+            }
+        }
+        val match = svProjectCache.firstOrNull { it.id == projectId }
+        if (match != null) {
+            svProject = match
+            tvSvProject?.text = match.name ?: "Selected"
+        } else {
+            tvSvProject?.text = "Selected"
+        }
+    }
+
+    private suspend fun prefillSvStaff(proposed: ProposedSiteVisit) {
+        // Build the label-set we need to resolve. If anything is set,
+        // load the staff cache once and map IDs -> names.
+        val anyStaff = listOfNotNull(
+            proposed.inchargeStaffId,
+            proposed.hodStaffId,
+            proposed.avpStaffId,
+            proposed.gmStaffId,
+            proposed.seniorManagerStaffId,
+        )
+        if (anyStaff.isEmpty()) return
+        if (svStaffCache.isEmpty()) {
+            runCatching {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                svStaffCache = resp.staff
+            }
+        }
+        fun byId(id: String?): StaffData? =
+            if (id.isNullOrBlank()) null else svStaffCache.firstOrNull { it.id == id }
+
+        byId(proposed.inchargeStaffId)?.let { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.inchargeStaffId.isNullOrBlank()) tvSvIncharge?.text = "Selected" }
+        byId(proposed.hodStaffId)?.let { svHod = it; tvSvHod?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.hodStaffId.isNullOrBlank()) tvSvHod?.text = "Selected" }
+        byId(proposed.avpStaffId)?.let { svAvp = it; tvSvAvp?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.avpStaffId.isNullOrBlank()) tvSvAvp?.text = "Selected" }
+        byId(proposed.gmStaffId)?.let { svGm = it; tvSvGm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.gmStaffId.isNullOrBlank()) tvSvGm?.text = "Selected" }
+        byId(proposed.seniorManagerStaffId)?.let { svSm = it; tvSvSm?.text = it.name ?: "Selected" }
+            ?: run { if (!proposed.seniorManagerStaffId.isNullOrBlank()) tvSvSm?.text = "Selected" }
+    }
+
+    private fun applyReadOnlyToSvBody() {
+        val body = bodySiteVisit ?: return
+        // 1. Explicitly NULL the click listeners on every interactive row.
+        //    bindSiteVisitFields wired these in onViewCreated, and the row
+        //    LinearLayouts use OutcomeFieldPillClickable which sets
+        //    clickable=true in the style — so just toggling isClickable
+        //    off later was racing the style. Clearing the listener is the
+        //    only bulletproof block.
+        val rowIds = intArrayOf(
+            R.id.rowSvProject,
+            R.id.rowSvDate,
+            R.id.rowSvTime,
+            R.id.rowSvIncharge,
+            R.id.rowSvHod,
+            R.id.rowSvAvp,
+            R.id.rowSvGm,
+            R.id.rowSvSm,
+        )
+        for (id in rowIds) {
+            body.findViewById<View>(id)?.apply {
+                setOnClickListener(null)
+                isClickable = false
+                isFocusable = false
+                alpha = 0.7f
+            }
+        }
+
+        // 2. Walk the body to disable every EditText so the address /
+        //    visitor-count inputs can't be typed into either.
+        fun walk(v: View) {
+            if (v is EditText) {
+                v.isFocusable = false
+                v.isFocusableInTouchMode = false
+                v.isCursorVisible = false
+                v.isEnabled = false
+                v.alpha = 0.7f
+                v.setOnClickListener(null)
+            } else if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+        }
+        walk(body)
+
+        // 3. Pickup From segmented control — kill the travel-mode toggles.
+        btnSvTravelOwn?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+        btnSvTravelCab?.apply {
+            setOnClickListener(null)
+            isClickable = false
+            isFocusable = false
+            alpha = 0.7f
+        }
+
+    }
+
+    private fun onLockedConfirmTap() {
+        // Confirming just reuses the existing persistSiteVisit flow —
+        // it already calls markClientMet + convertCpVisitToSiteVisit with
+        // the populated SV fields, which we filled from the telecaller's
+        // proposed payload.
+        clearError()
+        persistSiteVisit()
+    }
+
+    private fun onLockedRejectTap() {
+        // Hand off to the Rejection Case sub-sheet so the field staff
+        // can capture a free-text reason ("client backed out due to
+        // budget", "site location mismatch", etc.). That sheet fires
+        // the same markClientMet + setCpVisitOutcome(not_interested)
+        // chain we used to invoke directly here, but with the reason
+        // shipped as the outcome notes so back-office surfaces have
+        // context. On success it re-emits this sheet's RESULT_KEY so
+        // the upstream TripNavigationFragment flow continues as
+        // before — no caller change needed.
+        clearError()
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+            ?: return showError("Missing CP visit id")
+
+        // Listen on the reason sheet's RESULT_KEY (a distinct key from
+        // this sheet's own RESULT_KEY so re-broadcasting can't loop).
+        // When the reason sheet succeeds we forward the result upstream
+        // on our own key so the TripNavigationFragment listener — which
+        // expects CompleteCpVisitBottomSheet.RESULT_KEY — fires
+        // exactly as it always did, and then dismiss this sheet too.
+        parentFragmentManager.setFragmentResultListener(
+            RejectReasonBottomSheet.RESULT_KEY,
+            this,
+        ) { _, bundle ->
+            val outcome = bundle.getString(RejectReasonBottomSheet.KEY_OUTCOME)
+            if (outcome == OUTCOME_REJECTED) {
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_REJECTED,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            }
+        }
+
+        RejectReasonBottomSheet
+            .newInstance(cpVisitId)
+            .show(parentFragmentManager, "cp_reject_reason")
     }
 
     companion object {
+        private const val LOG_TAG = "CpOutcomeSheet"
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
+        private const val RESULT_KEY_GENERIC_DATE = "cp_visit_generic_date"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
+        private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
+        private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        // Pre-pass from TripNavigationFragment when the upstream
+        // reconcile already determined this CP came from a telecaller-
+        // fixed SV. Lets us avoid the brief Booking-tab flash while the
+        // sheet's own detect call resolves.
+        private const val ARG_IS_SV_FIXED_HINT = "arg_is_sv_fixed_hint"
+        // Pure-SV outcome mode — set by [forSiteVisit] when the sheet
+        // is opened from the SV Trip Details "Complete Outcome" CTA.
+        // Mutually exclusive with the CP path; presence of this arg
+        // flips isSiteVisitMode true.
+        private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
+        private const val ARG_SITE_VISIT_LOCKED_OUTCOME = "arg_site_visit_locked_outcome"
+        // Standalone booking creation mode — set by [forStandaloneBooking]
+        // when the sheet is opened from the Bookings list + button.
+        // No visit to attach to; persistBooking POSTs to /api/bookings
+        // instead of the CP / SV outcome paths.
+        private const val ARG_STANDALONE_BOOKING = "arg_standalone_booking"
 
-        // Mapping from PRD §10 Phase B labels to backend outcomeValidator literals.
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
-        private const val OUTCOME_WAIT = "interested"
+        // SV-cum-CP rejection (distinct from not_interested). Set by
+        // the RejectReasonBottomSheet sub-flow with the captured reason
+        // shipped as notes; Convex outcomeValidator was extended to
+        // accept this value.
+        private const val OUTCOME_REJECTED = "rejected"
 
-        private val OUTCOME_OPTIONS = listOf(
-            "Booking" to OUTCOME_BOOKING,
-            "Site Visit" to OUTCOME_SITE_VISIT,
-            "Postpone" to OUTCOME_POSTPONED,
-            "Not Interested" to OUTCOME_NOT_INTERESTED,
-            "Wait" to OUTCOME_WAIT,
-        )
-
-        private val POSTPONE_REASON_OPTIONS = listOf("Budget", "Timing", "Project", "Other")
+        // siteVisits.setOutcome accepts a subset of CP outcome strings.
+        // Booking outcome translates to the SV's "converted_to_booking"
+        // value — the actual booking row creation is deferred to the
+        // office side until the mobile plot picker is real.
+        private const val OUTCOME_SV_CONVERTED_TO_BOOKING = "converted_to_booking"
 
         fun newInstance(
             cpVisitId: String,
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
+            isSvFixedHint: Boolean = false,
         ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CP_VISIT_ID, cpVisitId)
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
+                    if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
                 }
             }
 
-        private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
-        private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        /**
+         * Factory for the pure-SV outcome flow. The sheet renders the
+         * same Booking / Postpone / Not Interested tabs but locks the
+         * Site Visit tab (this row IS already a site visit), and all
+         * persistence routes to /api/marketing/siteVisits/... endpoints.
+         */
+        fun forSiteVisit(
+            siteVisitId: String,
+            initialOutcome: String? = null,
+        ): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_SITE_VISIT_ID, siteVisitId)
+                    if (!initialOutcome.isNullOrBlank()) {
+                        putString(ARG_SITE_VISIT_LOCKED_OUTCOME, initialOutcome)
+                    }
+                }
+            }
+
+        /**
+         * Factory for standalone booking creation from the Bookings
+         * list + button. Sheet locks to the Booking outcome (Site
+         * Visit / Postpone / Not Interested top tabs are faded and
+         * disabled), and Save Booking POSTs to /api/bookings via
+         * api.createBooking — same endpoint the web booking form
+         * hits, so the new row syncs through the existing approval
+         * workflow.
+         */
+        fun forStandaloneBooking(): CompleteCpVisitBottomSheet =
+            CompleteCpVisitBottomSheet().apply {
+                arguments = Bundle().apply {
+                    putBoolean(ARG_STANDALONE_BOOKING, true)
+                }
+            }
     }
 }

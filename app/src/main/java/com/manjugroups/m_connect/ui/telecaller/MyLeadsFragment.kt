@@ -16,6 +16,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.network.TelecallerLeadData
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -51,7 +53,7 @@ class MyLeadsFragment : Fragment() {
             ?: Mode.ALL
 
         view.findViewById<View>(R.id.btnLeadsBack).setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
         view.findViewById<TextView>(R.id.tvLeadsTitle).text = when (mode) {
             Mode.ALL -> "My Leads"
@@ -76,20 +78,25 @@ class MyLeadsFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        super.onDestroyView()
+    }
+
     private fun loadLeads(root: View) {
-        val loading = root.findViewById<View>(R.id.leadsLoading)
+        val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<TextView>(R.id.tvLeadsEmpty)
         val list = root.findViewById<LinearLayout>(R.id.leadsList)
         val countText = root.findViewById<TextView>(R.id.tvLeadsCount)
 
-        loading.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(skeletonContainer)
         empty.visibility = View.GONE
         list.removeAllViews()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.getMyLeads(session.bearerToken, limit = 200)
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load leads"
                     empty.visibility = View.VISIBLE
@@ -123,7 +130,7 @@ class MyLeadsFragment : Fragment() {
                     list.addView(row)
                 }
             } catch (e: Exception) {
-                loading.visibility = View.GONE
+                SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 empty.text = "Network error: ${e.message ?: "unknown"}"
                 empty.visibility = View.VISIBLE
             }
@@ -182,10 +189,17 @@ class MyLeadsFragment : Fragment() {
             }
         }
 
-        row.findViewById<View>(R.id.btnLeadCall).setOnClickListener {
-            placeCall(lead.mobileNumber)
-        }
-        row.setOnClickListener { placeCall(lead.mobileNumber) }
+        // Call action is currently a Coming-soon pill — the out-bound
+        // dialer integration isn't ready yet. Keep the pill inert so
+        // taps don't trigger the dial flow; the row itself is also
+        // non-tappable to avoid a confused "I clicked the row and
+        // nothing happened" experience.
+        val callPill = row.findViewById<View>(R.id.btnLeadCall)
+        callPill.isClickable = false
+        callPill.isFocusable = false
+        callPill.setOnClickListener(null)
+        row.isClickable = false
+        row.setOnClickListener(null)
     }
 
     private fun placeCall(rawPhone: String?) {

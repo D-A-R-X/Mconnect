@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Calendar icon used on Booking list rows (booking date), filter chip
+  decoration, and the search/empty hint. 16dp, purple accent matching
+  the source SVG. Drawn as a vector for cheap tinting.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+
+    <path
+        android:pathData="M5.3335,1.33594 L5.3335,3.33594"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.6665,1.33594 L10.6665,3.33594"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M2.3335,6.0625 L13.6668,6.0625"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M14,5.66927 L14,11.3359 C14,13.3359 13,14.6693 10.6667,14.6693 L5.33333,14.6693 C3,14.6693 2,13.3359 2,11.3359 L2,5.66927 C2,3.66927 3,2.33594 5.33333,2.33594 L10.6667,2.33594 C13,2.33594 14,3.66927 14,5.66927 Z"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.463,9.13021 L10.469,9.13021"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.463,11.1302 L10.469,11.1302"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M7.99715,9.13021 L8.00314,9.13021"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M7.99715,11.1302 L8.00314,11.1302"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M5.52938,9.13021 L5.53537,9.13021"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M5.52938,11.1302 L5.53537,11.1302"
+        android:strokeColor="#9333EA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

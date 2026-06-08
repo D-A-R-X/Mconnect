@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid blue right-side bar that visually extends from the start day's blue
+     circle toward the next day. Used as background under the start day cell. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:left="20dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#3A7FD1" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#0B61CA" />
+        </shape>
+    </item>
+</layer-list>

@@ -20,6 +20,7 @@ room = "2.7.1"
 workmanager = "2.10.1"
 ksp = "2.3.2"
 coil = "2.7.0"
+emoji2 = "1.5.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -50,6 +51,7 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-video = { group = "io.coil-kt", name = "coil-video", version.ref = "coil" }
+emoji2-emojipicker = { group = "androidx.emoji2", name = "emoji2-emojipicker", version.ref = "emoji2" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

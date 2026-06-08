@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Booking row card — one entry on the Bookings list.
+
+  Header row : client name (left, bold) + status pill (right)
+  Sub-row    : reference number + project/plot meta
+  Date row   : calendar icon + booking date
+  Amount row : agreed/advance/balance summary line
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_booking_card"
+    android:layout_marginBottom="12dp"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="14dp">
+
+    <!-- TOP ROW: client + status -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvBookingClient"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="Client name"
+            android:textColor="#101828"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvBookingStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_home_trip_status_done"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="Draft"
+            android:textColor="#475467"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Ref + project meta -->
+    <TextView
+        android:id="@+id/tvBookingMeta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="BKG-20260601-0001 · Project · Plot"
+        android:textColor="#667085"
+        android:textSize="12sp" />
+
+    <!-- Date row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_booking_calendar" />
+
+        <TextView
+            android:id="@+id/tvBookingDate"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="01 Jun 2026"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvBookingAmount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:text="₹0"
+            android:textColor="#0B61CA"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

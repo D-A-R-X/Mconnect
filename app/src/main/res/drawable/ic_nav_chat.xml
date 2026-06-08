@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <!-- Speech bubble outline with tail at bottom-left -->
+    <path
+        android:pathData="M5,4 L19,4 A2,2 0 0 1 21,6 L21,15 A2,2 0 0 1 19,17 L11,17 L7,21 L7,17 L5,17 A2,2 0 0 1 3,15 L3,6 A2,2 0 0 1 5,4 Z"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Three dots inside -->
+    <path
+        android:pathData="M8,10.5 L8.01,10.5 M12,10.5 L12.01,10.5 M16,10.5 L16.01,10.5"
+        android:strokeWidth="2.4"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+</vector>

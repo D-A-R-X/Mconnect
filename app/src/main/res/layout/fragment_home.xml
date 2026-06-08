@@ -1,56 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8">
 
-    <ProgressBar
-        android:id="@+id/homeLoading"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_gravity="center"
-        android:indeterminateTint="#6C61F7" />
-
+    <!-- Vertical stack: sticky blue header on top, refreshable scroll
+         content below. The header sits OUTSIDE the NestedScrollView so
+         it stays pinned while the user scrolls the today's-trip card. -->
     <LinearLayout
-        android:id="@+id/homeContentWrapper"
+        android:id="@+id/homeStickyColumn"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical"
         android:visibility="gone">
 
-        <LinearLayout
-            android:id="@+id/homeHeaderContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#0B61CA"
-            android:orientation="vertical">
-
+            <!-- BLUE HEADER SECTION (STICKY) -->
             <LinearLayout
+                android:id="@+id/homeHeaderContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="20dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="16dp">
+                android:background="@drawable/bg_home_blue_header"
+                android:orientation="vertical">
 
+                <!-- PROFILE ROW (paddingTop is gap below status bar; inset listener adds the system status bar height on top of this) -->
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:id="@+id/homeProfileRow"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="12dp">
 
                     <FrameLayout
                         android:id="@+id/btnHomeProfile"
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:background="@drawable/bg_home_new_avatar_circle"
+                        android:backgroundTint="#22FFFFFF"
                         android:clickable="true"
                         android:focusable="true">
+
+                        <ImageView
+                            android:id="@+id/ivHomeAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop" />
 
                         <TextView
                             android:id="@+id/tvAvatarInitial"
@@ -58,14 +59,15 @@
                             android:layout_height="wrap_content"
                             android:layout_gravity="center"
                             android:fontFamily="@font/inter_semibold"
-                            android:textColor="#0B61CA"
+                            android:textColor="#FFFFFF"
                             android:textSize="15sp" />
                     </FrameLayout>
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
+                        android:layout_weight="1"
                         android:orientation="vertical">
 
                         <LinearLayout
@@ -82,158 +84,258 @@
                                 android:includeFontPadding="false"
                                 android:letterSpacing="0.01"
                                 android:textColor="#FFFFFF"
-                                android:textSize="17sp"
-                                tools:text="Donald Trump" />
+                                android:textSize="16sp" />
 
                             <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:layout_marginStart="6dp"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:layout_marginStart="8dp"
                                 android:contentDescription="@null"
-                                android:src="@drawable/ic_home_verified_badge" />
+                                android:src="@drawable/ic_home_verified_badge"
+                                app:tint="#FFFFFF" />
                         </LinearLayout>
 
                         <TextView
                             android:id="@+id/tvHeaderRole"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="1dp"
                             android:fontFamily="@font/inter_medium"
                             android:includeFontPadding="false"
-                            android:letterSpacing="-0.02"
-                            android:textColor="#B3D4FF"
-                            android:textSize="12sp"
-                            tools:text="Sales Executive Officer" />
+                            android:letterSpacing="-0.04"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="12sp" />
                     </LinearLayout>
+
+                    <FrameLayout
+                        android:id="@+id/btnHomeBell"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_new_action_circle"
+                        android:backgroundTint="#22FFFFFF"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_home_bell_exact"
+                            app:tint="#FFFFFF" />
+
+                        <TextView
+                            android:id="@+id/tvBellBadge"
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginEnd="2dp"
+                            android:background="@drawable/bg_tab_active"
+                            android:fontFamily="@font/inter_semibold"
+                            android:gravity="center"
+                            android:textColor="#FFFFFF"
+                            android:textSize="8sp"
+                            android:visibility="gone" />
+                    </FrameLayout>
                 </LinearLayout>
 
-                <FrameLayout
-                    android:id="@+id/btnHomeBell"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_home_banner_btn"
-                    android:clickable="true"
-                    android:focusable="true">
+                <!-- BANNER CONTENT (PLAN, VISIT, ACHIEVE) — design Home panel 177dp -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cardWorkSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="4dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
 
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_home_bell_exact"
-                        app:tint="#FFFFFF" />
+                    <LinearLayout
+                        android:id="@+id/bannerTextContent"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:orientation="vertical"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/guidelineIllustration"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
 
-                    <TextView
-                        android:id="@+id/tvBellBadge"
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:layout_gravity="top|end"
-                        android:layout_marginTop="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:background="@drawable/bg_tab_active"
-                        android:fontFamily="@font/inter_semibold"
-                        android:gravity="center"
-                        android:textColor="#FFFFFF"
-                        android:textSize="8sp"
-                        android:visibility="gone" />
-                </FrameLayout>
-            </LinearLayout>
+                        <TextView
+                            android:id="@+id/tvSummaryTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:letterSpacing="-0.02"
+                            android:text="Plan, Visit \u0026 Achieve"
+                            android:textColor="#FFFFFF"
+                            android:textSize="17sp" />
 
-            <!-- Animated Banner Content -->
-            <LinearLayout
-                android:id="@+id/bannerExpandable"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingBottom="24dp"
-                android:visibility="invisible">
+                        <TextView
+                            android:id="@+id/tvSummarySubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:letterSpacing="-0.01"
+                            android:text="Track your tasks, visits and\nattendance in one place."
+                            android:textColor="#EDEAFF"
+                            android:textSize="11.5sp" />
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_gravity="center_vertical">
+                        <LinearLayout
+                            android:id="@+id/btnViewSummary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/bg_welcome_button_chip"
+                            android:backgroundTint="#FFFFFF"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="5dp">
 
-                    <TextView
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="View My Summary"
+                                android:textColor="#0B61CA"
+                                android:textSize="10sp" />
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_marginStart="4dp"
+                                android:src="@drawable/ic_triple_chevron_right"
+                                app:tint="#0B61CA" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <androidx.constraintlayout.widget.Guideline
+                        android:id="@+id/guidelineIllustration"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Plan, Visit &amp; Achieve"
-                        android:textColor="#FFFFFF"
-                        android:textSize="22sp"
-                        android:fontFamily="@font/inter_bold"/>
+                        android:orientation="vertical"
+                        app:layout_constraintGuide_percent="0.58" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Track your tasks, visits and attendance in one place."
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="14sp"
-                        android:lineHeight="20dp"
-                        android:fontFamily="@font/inter_medium"/>
+                    <FrameLayout
+                        android:id="@+id/bannerIllustrationContainer"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_marginEnd="16dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@id/guidelineIllustration"
+                        app:layout_constraintTop_toTopOf="parent">
 
-                    <TextView
-                        android:id="@+id/btnViewSummary"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:background="@drawable/bg_home_banner_btn"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:text="View My Summary  \u203a"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:fontFamily="@font/inter_semibold"/>
-                </LinearLayout>
+                        <ImageView
+                            android:id="@+id/ivBannerGlitter"
+                            android:layout_width="120dp"
+                            android:layout_height="60dp"
+                            android:layout_gravity="top|center_horizontal"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/home_banner_glitter" />
 
+                        <ImageView
+                            android:id="@+id/ivBannerMobile"
+                            android:layout_width="96dp"
+                            android:layout_height="125dp"
+                            android:layout_gravity="center"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/home_banner_mobile" />
+
+                        <ImageView
+                            android:id="@+id/ivBannerProgress"
+                            android:layout_width="66dp"
+                            android:layout_height="42dp"
+                            android:layout_gravity="bottom|start"
+                            android:layout_marginBottom="24dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/home_banner_progress" />
+
+                        <ImageView
+                            android:id="@+id/ivBannerSuitcase"
+                            android:layout_width="66dp"
+                            android:layout_height="68dp"
+                            android:layout_gravity="bottom|end"
+                            android:layout_marginBottom="16dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/home_banner_suitcase" />
+
+                    </FrameLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- Binding compatibility shim -->
                 <ImageView
-                    android:layout_width="110dp"
-                    android:layout_height="100dp"
-                    android:layout_marginStart="8dp"
-                    android:src="@drawable/cameraiconhomebanner"
-                    android:contentDescription="@null"
-                    android:layout_gravity="center_vertical"/>
+                    android:id="@+id/ivBannerAnimation"
+                    android:layout_width="1dp"
+                    android:layout_height="1dp"
+                    android:visibility="gone" />
+
             </LinearLayout>
-        </LinearLayout>
+
+    <!-- Refreshable scrolling content area — sits BELOW the sticky blue
+         header but overlaps it by -20dp so the panel's rounded top
+         corners curve up cleanly into the blue (matches the Inspection
+         page pattern). The white panel background + rounded top corners
+         are applied at runtime in setupHomeScrollAnimation(), so when
+         the panel translates up on scroll the WHOLE blue header is
+         covered by white. clipToOutline=true bounds inner content to
+         the rounded shape. -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/homeRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.core.widget.NestedScrollView
             android:id="@+id/homeContent"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:background="#0B61CA"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
             android:clipToPadding="false"
             android:fillViewport="true"
-            android:overScrollMode="never">
+            android:paddingBottom="120dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_home_content_card"
+                android:clipChildren="false"
+                android:orientation="vertical">
+
+            <!-- Section container — sits on the panel's white surface
+                 (the panel itself now carries the white bg + rounded
+                 top corners, applied at runtime, overlapping the blue
+                 header by -20dp). paddingTop pushes the "Today's Trip"
+                 title clear of the rounded-corner curve at the top. -->
+            <LinearLayout
+                android:id="@+id/whiteContentArea"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@android:color/transparent"
                 android:orientation="vertical"
-                android:paddingStart="16dp"
-                android:paddingTop="24dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="100dp">
+                android:paddingHorizontal="16dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="20dp">
 
                 <LinearLayout
                     android:id="@+id/cardTodayVisit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingBottom="8dp">
+                    android:orientation="vertical">
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
-                        android:paddingTop="12dp"
                         android:paddingBottom="12dp">
 
                         <TextView
@@ -242,7 +344,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_semibold"
                             android:includeFontPadding="false"
-                            android:text="Today&#39;s Trip"
+                            android:text="Today's Trip"
                             android:textColor="#101828"
                             android:textSize="20sp" />
 
@@ -265,19 +367,78 @@
                             android:textColor="#7A5AF8"
                             android:textSize="12sp"
                             android:visibility="gone" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <!--
+                          Role dropdown removed — Driver vs Executive view
+                          is now derived from the logged-in staff's
+                          designation (see SessionManager.isDriverMode +
+                          HomeFragment.setupRoleAdaptiveView). Mirrors the
+                          web's hasDriverDesignation check; no manual
+                          override surface.
+                        -->
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/tvVisitSectionSubtitle"
+                    <LinearLayout
+                        android:id="@+id/layoutDriverTabs"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:includeFontPadding="false"
-                        android:visibility="gone"
-                        android:text="Your schedule for the day"
-                        android:textColor="#475467"
-                        android:textSize="12sp" />
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="12dp"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/tabAll"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_cpv_filter_pill_active"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:gravity="center"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp"
+                            android:text="All"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tabUpcoming"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_cpv_filter_pill_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp"
+                            android:text="Upcoming"
+                            android:textColor="#344054"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tabCompleted"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_cpv_filter_pill_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp"
+                            android:text="Completed"
+                            android:textColor="#344054"
+                            android:textSize="12sp" />
+                    </LinearLayout>
 
                     <LinearLayout
                         android:id="@+id/visitEmptyContent"
@@ -303,7 +464,7 @@
                                 android:fontFamily="@font/inter_semibold"
                                 android:includeFontPadding="false"
                                 android:lineHeight="20dp"
-                                android:text="Today&#39;s Trip"
+                                android:text="Today Trip"
                                 android:textColor="#101828"
                                 android:textSize="14sp" />
 
@@ -332,7 +493,6 @@
                                 android:id="@+id/ivVisitEmptyState"
                                 android:layout_width="152dp"
                                 android:layout_height="142dp"
-                                android:alpha="0.56"
                                 android:contentDescription="@null"
                                 android:scaleType="fitCenter"
                                 android:src="@drawable/ic_home_empty_trips" />
@@ -346,6 +506,7 @@
                                 android:gravity="center"
                                 android:includeFontPadding="false"
                                 android:lineHeight="24dp"
+                                android:text="No Trips Available"
                                 android:textColor="#161B23"
                                 android:textSize="14sp" />
 
@@ -358,6 +519,7 @@
                                 android:gravity="center"
                                 android:includeFontPadding="false"
                                 android:lineSpacingMultiplier="1.3"
+                                android:text="It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
                                 android:textColor="#777F8C"
                                 android:textSize="10sp" />
                         </LinearLayout>
@@ -406,39 +568,28 @@
                                 android:layout_marginTop="10dp"
                                 android:background="@drawable/bg_attendance_skeleton_block" />
                         </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="86dp"
-                            android:layout_marginBottom="10dp"
-                            android:background="@drawable/bg_home_today_visit_item"
-                            android:gravity="center_vertical"
-                            android:orientation="vertical"
-                            android:padding="12dp">
-
-                            <View
-                                android:layout_width="140dp"
-                                android:layout_height="14dp"
-                                android:background="@drawable/bg_attendance_skeleton_block" />
-
-                            <View
-                                android:layout_width="90dp"
-                                android:layout_height="10dp"
-                                android:layout_marginTop="10dp"
-                                android:background="@drawable/bg_attendance_skeleton_block" />
-
-                            <View
-                                android:layout_width="74dp"
-                                android:layout_height="10dp"
-                                android:layout_gravity="end"
-                                android:layout_marginTop="10dp"
-                                android:background="@drawable/bg_attendance_skeleton_block" />
-                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/skeletonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F1F3F8"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:background="@drawable/bg_home_blue_header" />
+
+        <include layout="@layout/skeleton_profile_item" />
+        <include layout="@layout/skeleton_detail_item" />
+    </LinearLayout>
 </FrameLayout>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single amenity inside a competitor entry: dashed-border row with a
+     name input + red delete button. Inflated when the user taps
+     "+ Add Amenity" in the competitor entry. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:background="@drawable/bg_inspection_area_entry"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_inspection_field"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+        <EditText
+            android:id="@+id/inputAmenityName"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Amenities"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:paddingHorizontal="0dp"
+            android:singleLine="true"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/btnAmenityDelete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_inspection_delete_button"
+        android:clickable="true"
+        android:focusable="true">
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:contentDescription="Delete"
+            android:src="@drawable/ic_trash" />
+    </FrameLayout>
+</LinearLayout>

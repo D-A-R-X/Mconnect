@@ -107,4 +107,26 @@ class PermissionsViewModel : ViewModel() {
             }
         }
     }
+
+    /**
+     * Cancel one of the user's own pending permission requests. Hits
+     * /api/hr/permissions/cancel with the row id; reloads on success
+     * so the cancelled row disappears (or flips to a terminal state,
+     * depending on backend semantics).
+     */
+    fun cancelPermission(bearerToken: String, id: String, canApprove: Boolean) {
+        viewModelScope.launch {
+            try {
+                val resp = api.cancelPermission(bearerToken, IdRequest(id))
+                if (resp.success) {
+                    _event.emit("Permission request cancelled")
+                    load(bearerToken, canApprove)
+                } else {
+                    _event.emit(resp.error ?: "Failed to cancel permission")
+                }
+            } catch (e: Exception) {
+                _event.emit(e.message ?: "Network error")
+            }
+        }
+    }
 }

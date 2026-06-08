@@ -33,38 +33,41 @@
         android:textSize="16sp" />
 
     <TextView
-        android:layout_width="270dp"
+        android:layout_width="280dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:fontFamily="@font/inter_regular"
         android:gravity="center"
+        android:lineSpacingExtra="2dp"
         android:text="You have marked that you did not see the client. This trip has been completed."
         android:textColor="#475467"
-        android:textSize="10sp" />
+        android:textSize="12sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="58dp"
-        android:layout_marginTop="16dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
         android:background="@drawable/bg_cp_complete_info"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="10dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="12dp">
 
         <TextView
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
             android:background="@drawable/bg_home_trip_avatar"
             android:fontFamily="@font/inter_bold"
             android:gravity="center"
+            android:includeFontPadding="false"
             android:text="!"
             android:textColor="#006BEA"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -72,25 +75,28 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
                 android:text="Client not seen"
                 android:textColor="#006BEA"
-                android:textSize="11sp" />
+                android:textSize="13sp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
                 android:text="Marked at trip completion"
                 android:textColor="#475467"
-                android:textSize="10sp" />
+                android:textSize="11.5sp" />
         </LinearLayout>
     </LinearLayout>
 
     <TextView
         android:id="@+id/btnCpCompleteBackHome"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="12dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
         android:background="@drawable/bg_cp_seen_yes"
         android:clickable="true"
         android:focusable="true"
@@ -98,5 +104,5 @@
         android:gravity="center"
         android:text="Back to Home"
         android:textColor="@android:color/white"
-        android:textSize="12sp" />
+        android:textSize="14sp" />
 </LinearLayout>

@@ -4,14 +4,18 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHomeBinding
@@ -19,6 +23,12 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
+import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -35,9 +45,8 @@ class HomeFragment : Fragment() {
         "It looks like you don’t have any meetings scheduled at the moment. " +
             "This space will be updated as new meetings are added!"
 
-    private var hasAnimatedBanner = false
-    private var isBannerCollapsed = false
-    private var bannerMeasuredHeight = 0
+    private var pendingEntryAnimation = true
+    private val bannerFloatAnimators = mutableListOf<android.animation.ObjectAnimator>()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -52,37 +61,284 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        applyStatusBarInset()
         setupHeader()
         setupActions()
-        setupScroll()
+        setupPullToRefresh()
+        setupHomeScrollAnimation()
         collectState()
         collectEvents()
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
+        startBannerAnimation()
+
+        setupRoleAdaptiveView()
+        setupDriverTabs()
+
+        setFragmentResultListener(DriverStartTripBottomSheet.RESULT_KEY) { _, bundle ->
+            val success = bundle.getBoolean("success")
+            if (success) {
+                val visitId = bundle.getString("visitId").orEmpty()
+                viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+                val state = viewModel.uiState.value
+                if (state is HomeUiState.Loaded) {
+                    state.todayVisits.firstOrNull { it.id == visitId }?.let { visit ->
+                        val startedVisit = visit.copy(status = "in-progress")
+                        openTripNavigationForVisit(startedVisit)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupPullToRefresh() {
+        // Fire the same loads the screen does on first open so a pull
+        // refreshes attendance, today's visits and notifications in
+        // one gesture. The spinner is dismissed in collectState() when
+        // the next "loaded" state lands.
+        binding.homeRefresh.setupPullToRefresh {
+            viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+            loadUnreadNotifications()
+        }
+    }
+
+    /**
+     * Collapsing-header effect — same pattern as App Library / Attendance:
+     *  - the "Plan, Visit & Achieve" banner (cardWorkSummary) fades and
+     *    its layout height shrinks to 0 so the header collapses to just
+     *    the profile row (avatar + name + bell) when scrolled.
+     *  - the profile row stays at full opacity and full Y position so it
+     *    never crosses into the status bar.
+     * Effect saturates within ~140dp of scroll.
+     */
+    /**
+     * "Panel slides up over fixed header" scroll effect.
+     * Home's blue header (with profile row + banner) stays anchored at
+     * full size and full opacity; the SwipeRefresh panel translates up
+     * over it as the user scrolls, eventually fully overlaying the
+     * blue. Header's bottom corners straighten 24dp → 0dp in step with
+     * the slide.
+     */
+    private fun setupHomeScrollAnimation() {
+        val density = binding.root.resources.displayMetrics.density
+        val maxCornerRadiusPx = 24f * density
+        val headerBg = binding.homeHeaderContainer
+            .applyShrinkableBlueHeaderBackground()
+        headerBg.setBottomCornerRadius(maxCornerRadiusPx)
+
+        // The white card with rounded TOP corners is the
+        // `whiteContentArea` — which lives INSIDE the NestedScrollView,
+        // so it scrolls up at exactly 1× rate as the user scrolls (no
+        // parallax, no shrinking — single scroll source). The panel
+        // (SwipeRefreshLayout) itself is transparent.
+        //
+        // The ancestors all set clipChildren=false in XML so the
+        // rounded top edge can draw OUTSIDE the panel's bounds, into
+        // the blue header's area — that's how the white visually
+        // "overlays" the blue as it scrolls up.
+        val whiteCardBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            // Light grey (page-bg tone) so the pure-white trip cards
+            // inside read as floating on a softer surface, matching the
+            // reference design.
+            setColor(android.graphics.Color.parseColor("#F1F3F8"))
+            cornerRadii = floatArrayOf(
+                maxCornerRadiusPx, maxCornerRadiusPx, // top-left
+                maxCornerRadiusPx, maxCornerRadiusPx, // top-right
+                0f, 0f,                                // bottom-right
+                0f, 0f,                                // bottom-left
+            )
+        }
+        binding.whiteContentArea.background = whiteCardBg
+    }
+
+    private fun applyStatusBarInset() {
+        val basePaddingTop = binding.homeProfileRow.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeHeaderContainer) { _, insets ->
+            val b = _binding ?: return@setOnApplyWindowInsetsListener insets
+            val topInset = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            b.homeProfileRow.setPadding(
+                b.homeProfileRow.paddingStart,
+                basePaddingTop + topInset,
+                b.homeProfileRow.paddingEnd,
+                b.homeProfileRow.paddingBottom
+            )
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
+    }
+
+    private fun startBannerAnimation() {
+        val anim = binding.ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable
+        anim?.start()
     }
 
     override fun onResume() {
         super.onResume()
+        // Defensive: restore tab bar in case a child fragment hid it.
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#0B61CA"),
+            false,
+            fullBleed = true
+        )
         loadUnreadNotifications()
+        // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
-        
-        // Re-trigger animation expansion on swipe back
-        if (!hasAnimatedBanner) {
-            animateBannerExpansion()
+        // Pull the staff record so a profile photo updated from web/iOS
+        // appears here too. ProfilePhotos.resolve rebuilds the serve URL
+        // from the current BASE_URL on every render, so cached photos
+        // never stick to an old domain.
+        applyAvatarPhoto(session.userPhotoUrl)
+        loadHeaderDesignation()
+        // Replay the stagger when returning to the Home tab (either from a child
+        // fragment via back, or after pop-back from another tab via show/hide).
+        if (_binding != null && binding.homeStickyColumn.visibility == View.VISIBLE) {
+            binding.homeContent.post { playHomeEntryAnimation() }
+        }
+        startBannerAnimation()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) {
+            stopBannerFloatingAnimation()
+        } else if (_binding != null &&
+            binding.homeStickyColumn.visibility == View.VISIBLE) {
+            binding.homeContent.post { playHomeEntryAnimation() }
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // Reset state so it re-animates next time
-        hasAnimatedBanner = false
-        isBannerCollapsed = false
-        if (_binding != null) {
-            binding.bannerExpandable.visibility = View.INVISIBLE
-            binding.bannerExpandable.alpha = 0f
-            binding.bannerExpandable.layoutParams.height = 0
+    private fun playHomeEntryAnimation() {
+        if (_binding == null) return
+
+        // Cancel any in-flight property animations on banner pieces.
+        val views = listOf(
+            binding.homeProfileRow, binding.whiteContentArea,
+            binding.tvSummaryTitle, binding.tvSummarySubtitle, binding.btnViewSummary,
+            binding.ivBannerMobile, binding.ivBannerProgress, binding.ivBannerSuitcase,
+            binding.ivBannerGlitter
+        )
+        views.forEach { it.animate().cancel() }
+        stopBannerFloatingAnimation()
+
+        // Reset transforms so the entry animation is deterministic on replays.
+        views.forEach {
+            it.translationY = 0f
+            it.translationX = 0f
+            it.alpha = 1f
+            it.scaleX = 1f
+            it.scaleY = 1f
         }
+
+        val ctx = binding.root.context
+        val density = ctx.resources.displayMetrics.density
+        val slideLeftPx = -30f * density   // text slides in from the left (-30dp)
+
+        val easeOut = android.view.animation.DecelerateInterpolator(2f)
+        val emphasized = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
+
+        // 1. Profile row fade/slide down (Frame 1 → Frame 2)
+        binding.homeProfileRow.alpha = 0f
+        binding.homeProfileRow.translationY = -16f * density
+        binding.homeProfileRow.animate()
+            .alpha(1f).translationY(0f)
+            .setDuration(360L)
+            .setInterpolator(easeOut)
+            .start()
+
+        // 2. White curtain descends to reveal the banner (Frame 1 → Frame 3 reveal)
+        // Starts immediately so the banner is exposed by the time pieces enter their final spots.
+        binding.whiteContentArea.animate().cancel()
+        binding.whiteContentArea.translationY = -150f * density
+        binding.whiteContentArea.animate()
+            .translationY(0f)
+            .setDuration(720L)
+            .setInterpolator(easeOut)
+            .start()
+
+        // 3. Banner text slides in from the left while the curtain is descending
+        animateInFromLeft(binding.tvSummaryTitle, slideLeftPx, 120L, 380L, emphasized)
+        animateInFromLeft(binding.tvSummarySubtitle, slideLeftPx, 200L, 380L, emphasized)
+        animateInFromLeft(binding.btnViewSummary, slideLeftPx, 300L, 380L, emphasized)
+
+        // 4. Right-side illustrations stagger in (start earlier so they're settled by ~720ms when curtain lands)
+        val rightSide = listOf(
+            binding.ivBannerGlitter to 160L,   // back layer first
+            binding.ivBannerMobile to 200L,
+            binding.ivBannerProgress to 280L,
+            binding.ivBannerSuitcase to 360L
+        )
+        var lastDelay = 0L
+        rightSide.forEach { (v, delay) ->
+            v.alpha = 0f
+            v.translationX = 32f * density
+            v.translationY = 12f * density
+            v.scaleX = 0.92f
+            v.scaleY = 0.92f
+            v.animate()
+                .alpha(1f).translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
+                .setStartDelay(delay)
+                .setDuration(420L)
+                .setInterpolator(easeOut)
+                .start()
+            if (delay > lastDelay) lastDelay = delay
+        }
+
+        // Kick off the continuous floating loop once the cluster has landed.
+        binding.root.postDelayed({
+            if (_binding != null) startBannerFloatingAnimation()
+        }, lastDelay + 480L)
+    }
+
+    private fun animateInFromLeft(
+        v: View,
+        startX: Float,
+        delay: Long,
+        duration: Long,
+        interpolator: android.view.animation.Interpolator
+    ) {
+        v.alpha = 0f
+        v.translationX = startX
+        v.animate()
+            .alpha(1f).translationX(0f)
+            .setStartDelay(delay)
+            .setDuration(duration)
+            .setInterpolator(interpolator)
+            .start()
+    }
+
+    private fun startBannerFloatingAnimation() {
+        if (_binding == null) return
+        stopBannerFloatingAnimation()
+        val density = binding.root.context.resources.displayMetrics.density
+        // (view, amplitudeDp, delayMs) — mirrors the reference's y bobbing keyframes
+        // and per-element delays. Mobile, progress, and suitcase each bob with 
+        // a different rhythm.
+        val floats = listOf(
+            Triple(binding.ivBannerMobile, -6f, 750L),
+            Triple(binding.ivBannerProgress, 5f, 500L),
+            Triple(binding.ivBannerSuitcase, -5f, 1500L),
+            Triple(binding.ivBannerGlitter, 4f, 1000L)
+        )
+        floats.forEach { (view, amplitudeDp, startDelay) ->
+            val animator = android.animation.ObjectAnimator.ofFloat(
+                view, View.TRANSLATION_Y, 0f, amplitudeDp * density
+            ).apply {
+                duration = 2800L
+                this.startDelay = startDelay
+                repeatCount = android.animation.ValueAnimator.INFINITE
+                repeatMode = android.animation.ValueAnimator.REVERSE
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            }
+            animator.start()
+            bannerFloatAnimators.add(animator)
+        }
+    }
+
+    private fun stopBannerFloatingAnimation() {
+        bannerFloatAnimators.forEach { it.cancel() }
+        bannerFloatAnimators.clear()
     }
 
     private fun setupHeader() {
@@ -91,8 +347,24 @@ class HomeFragment : Fragment() {
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
         binding.tvAvatarInitial.text = name.first().uppercase()
-        binding.tvHeaderRole.text = if (session.isAdmin) "Administrator" else "Staff"
+        applyAvatarPhoto(session.userPhotoUrl)
+        binding.tvHeaderRole.text =
+            if (session.isAdmin) "Administrator" else "Staff"
         loadHeaderDesignation()
+    }
+
+    private fun applyAvatarPhoto(url: String?) {
+        val resolved = ProfilePhotos.resolve(url)
+        if (resolved == null) {
+            binding.ivHomeAvatar.setImageDrawable(null)
+            binding.tvAvatarInitial.visibility = View.VISIBLE
+            return
+        }
+        binding.tvAvatarInitial.visibility = View.GONE
+        binding.ivHomeAvatar.load(resolved) {
+            crossfade(true)
+            transformations(CircleCropTransformation())
+        }
     }
 
     private fun loadHeaderDesignation() {
@@ -107,7 +379,33 @@ class HomeFragment : Fragment() {
                     staff.department?.takeIf { it.isNotBlank() },
                 ).joinToString(" • ")
                 if (role.isNotBlank()) binding.tvHeaderRole.text = role
-            } catch (_: Exception) { }
+                // Backfill designation for sessions that pre-date the
+                // designation cache (older installs that logged in
+                // before this field existed). SessionManager.isDriverMode
+                // reads this directly, so refreshing on Home open keeps
+                // the driver/executive view aligned with the staff
+                // record without forcing a re-login.
+                staff.designation?.takeIf { it.isNotBlank() }?.let {
+                    val previous = session.isDriverMode
+                    session.designation = it
+                    // If this is the first time we learnt the user is a
+                    // Driver (or stopped being one), re-apply the tab
+                    // visibility right away so the screen reshapes
+                    // without waiting for a tab switch.
+                    if (previous != session.isDriverMode) {
+                        setupRoleAdaptiveView()
+                        (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
+                            renderVisitCard(state)
+                        }
+                    }
+                }
+                staff.photo?.takeIf { it.isNotBlank() }?.let { photo ->
+                    session.userPhotoUrl = photo
+                    applyAvatarPhoto(photo)
+                }
+            } catch (_: Exception) {
+                // Keep the fallback; not worth a toast on a soft header field.
+            }
         }
     }
 
@@ -124,94 +422,6 @@ class HomeFragment : Fragment() {
                 .addToBackStack(null)
                 .commit()
         }
-        binding.btnViewSummary.setOnClickListener {
-            Toast.makeText(requireContext(), "Opening Work Summary...", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupScroll() {
-        binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, _ ->
-            if (scrollY > 50 && !isBannerCollapsed && bannerMeasuredHeight > 0) {
-                collapseBanner()
-            } else if (scrollY < 10 && isBannerCollapsed) {
-                expandBanner()
-            }
-        })
-    }
-
-    private fun collapseBanner() {
-        if (!isBannerCollapsed) {
-            isBannerCollapsed = true
-            val animator = android.animation.ValueAnimator.ofInt(binding.bannerExpandable.height, 0)
-            animator.addUpdateListener { valueAnimator ->
-                if (_binding == null) return@addUpdateListener
-                val value = valueAnimator.animatedValue as Int
-                val params = binding.bannerExpandable.layoutParams
-                params.height = value
-                binding.bannerExpandable.layoutParams = params
-            }
-            animator.duration = 300
-            animator.start()
-            binding.bannerExpandable.animate().alpha(0f).setDuration(200).start()
-        }
-    }
-
-    private fun expandBanner() {
-        if (isBannerCollapsed) {
-            isBannerCollapsed = false
-            val animator = android.animation.ValueAnimator.ofInt(0, bannerMeasuredHeight)
-            animator.addUpdateListener { valueAnimator ->
-                if (_binding == null) return@addUpdateListener
-                val value = valueAnimator.animatedValue as Int
-                val params = binding.bannerExpandable.layoutParams
-                params.height = value
-                binding.bannerExpandable.layoutParams = params
-            }
-            animator.duration = 300
-            animator.start()
-            binding.bannerExpandable.animate().alpha(1f).setDuration(300).start()
-        }
-    }
-
-    private fun animateBannerExpansion() {
-        if (hasAnimatedBanner || _binding == null) return
-        hasAnimatedBanner = true
-
-        binding.homeContentWrapper.visibility = View.VISIBLE
-        binding.bannerExpandable.visibility = View.VISIBLE
-        binding.bannerExpandable.alpha = 0f
-        
-        binding.bannerExpandable.post {
-            if (_binding == null) return@post
-            val widthSpec = View.MeasureSpec.makeMeasureSpec(binding.bannerExpandable.width, View.MeasureSpec.EXACTLY)
-            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            binding.bannerExpandable.measure(widthSpec, heightSpec)
-            bannerMeasuredHeight = binding.bannerExpandable.measuredHeight
-
-            if (bannerMeasuredHeight <= 0) {
-                hasAnimatedBanner = false
-                return@post
-            }
-
-            val animator = android.animation.ValueAnimator.ofInt(0, bannerMeasuredHeight)
-            animator.addUpdateListener { valueAnimator ->
-                if (_binding == null) return@addUpdateListener
-                val value = valueAnimator.animatedValue as Int
-                val params = binding.bannerExpandable.layoutParams
-                params.height = value
-                binding.bannerExpandable.layoutParams = params
-            }
-            
-            animator.addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationStart(animation: android.animation.Animator) {
-                    _binding?.bannerExpandable?.animate()?.alpha(1f)?.setDuration(400)?.start()
-                }
-            })
-            
-            animator.duration = 700
-            animator.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-            animator.start()
-        }
     }
 
     private fun collectState() {
@@ -220,21 +430,40 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            binding.homeLoading.visibility = View.VISIBLE
+                            // Don't paint over the skeleton while a pull-refresh
+                            // is in flight — the swipe spinner already signals
+                            // "loading" so the full-screen skeleton would
+                            // double up. The skeleton is only useful for the
+                            // initial open.
+                            if (!binding.homeRefresh.isRefreshing) {
+                                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                                // The sticky header + scroll content are now siblings
+                                // under homeStickyColumn — hide the WHOLE column so the
+                                // skeleton overlay doesn't paint over a half-loaded
+                                // header.
+                                binding.homeStickyColumn.visibility = View.GONE
+                            }
                         }
+
                         is HomeUiState.Loaded -> {
-                            binding.homeLoading.visibility = View.GONE
-                            binding.homeContentWrapper.visibility = View.VISIBLE
-                            binding.homeContent.visibility = View.VISIBLE
-                            animateBannerExpansion()
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                            binding.homeRefresh.dismissRefresh()
+                            binding.homeStickyColumn.visibility = View.VISIBLE
+                            renderSummary()
                             if (!viewModel.isVisitsLoading.value) {
                                 renderVisitCard(state)
                             }
+                            if (pendingEntryAnimation) {
+                                pendingEntryAnimation = false
+                                binding.homeContent.post { playHomeEntryAnimation() }
+                            }
                         }
+
                         is HomeUiState.Error -> {
-                            binding.homeLoading.visibility = View.GONE
-                            binding.homeContentWrapper.visibility = View.VISIBLE
-                            binding.homeContent.visibility = View.VISIBLE
+                            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                            binding.homeRefresh.dismissRefresh()
+                            binding.homeStickyColumn.visibility = View.VISIBLE
+                            binding.tvSummarySubtitle.text = "Today task & presence activity"
                             binding.tvVisitCountBadge.visibility = View.GONE
                             binding.visitListContent.visibility = View.GONE
                             binding.visitEmptyContent.visibility = View.VISIBLE
@@ -251,6 +480,7 @@ class HomeFragment : Fragment() {
                 viewModel.isVisitsLoading.collect { loading ->
                     setVisitSkeletonVisible(loading)
                     if (!loading) {
+                        // Re-render once loading finishes so the real cards appear.
                         (viewModel.uiState.value as? HomeUiState.Loaded)?.let(::renderVisitCard)
                     }
                 }
@@ -294,18 +524,40 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.punchEvent.collect { event ->
-                    val message = when (event) {
-                        is PunchEvent.Success -> event.message
-                        is PunchEvent.Error -> event.message
+                    // Success is already confirmed by the "Clockout/Clock-in
+                    // Successful" sheet — only surface errors as a toast.
+                    if (event is PunchEvent.Error) {
+                        Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
                     }
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
+    private fun renderSummary() {
+        // As per the provided frames, the banner text is static: "Plan, Visit & Achieve"
+        // But we can update the subtitle or other elements if needed.
+        // For now, keeping it consistent with the image.
+    }
+
     private fun renderVisitCard(state: HomeUiState.Loaded) {
-        val visits = state.todayVisits.filter { it.status != "cancelled" }
+        // Home shows today's visits only.
+        val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
+        val visits = if (session.isDriverMode) {
+            when (selectedTab) {
+                "upcoming" -> unfilteredVisits.filter {
+                    val s = it.status.lowercase(Locale.getDefault())
+                    s !in setOf("completed", "complete", "done", "closed")
+                }
+                "completed" -> unfilteredVisits.filter {
+                    val s = it.status.lowercase(Locale.getDefault())
+                    s in setOf("completed", "complete", "done", "closed")
+                }
+                else -> unfilteredVisits
+            }
+        } else {
+            unfilteredVisits
+        }
         val displayCount = visits.size
 
         if (displayCount > 0) {
@@ -318,8 +570,9 @@ class HomeFragment : Fragment() {
         if (displayCount == 0) {
             binding.visitListContent.visibility = View.GONE
             binding.visitEmptyContent.visibility = View.VISIBLE
-            binding.tvVisitEmptyTitle.text = "No Visits Available"
-            binding.tvVisitEmptySubtitle.text = visitEmptySubtitle
+            // Match Frame 4 text exactly
+            binding.tvVisitEmptyTitle.text = "No Trips Available"
+            binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
             return
         }
 
@@ -345,6 +598,7 @@ class HomeFragment : Fragment() {
         val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
         val action = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
+        val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
         val avatar = itemView.findViewById<TextView>(R.id.tvVisitItemAvatar)
         val staffName = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
         val staffRole = itemView.findViewById<TextView>(R.id.tvVisitItemStaffRole)
@@ -354,25 +608,68 @@ class HomeFragment : Fragment() {
         val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
 
         val clientName = visit.placeName ?: visit.leadName ?: "Scheduled Visit"
+        // Client name lives in the header (avatar + staffName) only — the
+        // body's left cell now shows the visit Type ("Direct CP" / "SV
+        // confirmation CP" / etc.) instead of repeating the client name.
         bindTripCardHeader(avatar, staffName, staffRole, clientName)
-        title.text = clientName
         time.text = formatVisitTimeOrDate(visit)
         distance.text = if (visit.placeLat != null && visit.placeLng != null) "Open route" else "Not mapped"
 
+        val isCpVisit = visit.clientPlaceVisitId != null
+        // Surface the visit category so the field staff can tell at a
+        // glance which lane this row belongs to before tapping in.
+        // "sv_cum_cp" rows open into the locked Reject/Confirm sheet on
+        // the trip nav; "direct_cp" rows open the full outcome flow.
+        val categoryLabel = when (visit.visitCategory) {
+            "sv_cum_cp" -> "SV confirmation CP"
+            "direct_cp" -> "Direct CP"
+            "site_visit" -> "Site Visit"
+            else -> if (isCpVisit) "CP visit" else "Visit"
+        }
+        // Bind category into the body's Type cell. The standalone
+        // tvVisitItemLead badge below the grid is no longer needed.
+        title.text = categoryLabel
+        lead.visibility = View.GONE
+
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
-        val isInProgress = status in setOf("in-progress", "in_progress", "ongoing", "started", "active", "arrived")
+        val needsCpDetails = isCpVisit && status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
+        val isInProgress = status in setOf(
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived", "on_site", "on-site"
+        )
 
         when {
-            isInProgress -> {
-                statusText.text = if (status == "arrived") "Reaching" else "Enroute"
+            needsCpDetails -> {
+                statusText.text = "Reaching"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
                 statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
-                action.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                action.text = "Complete Trip"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
+                action.setTextColor(android.graphics.Color.WHITE)
+                actionIcon.visibility = View.VISIBLE
+                eta.text = "Within ${visit.reachingRadiusMeters ?: 500}m"
+            }
+            isInProgress -> {
+                statusText.text = when (status) {
+                    "arrived" -> "Reaching"
+                    "on_site", "on-site" -> "On Site"
+                    else -> "Enroute"
+                }
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = when (status) {
+                    "arrived" -> "Complete Trip"
+                    "on_site", "on-site" -> "End Trip"
+                    else -> "Enroute"
+                }
                 actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_progress)
                 action.setTextColor(android.graphics.Color.parseColor("#B54708"))
                 actionIcon.visibility = View.GONE
-                eta.text = if (status == "arrived") "At client place" else "Tracking"
+                eta.text = when (status) {
+                    "arrived" -> "At client place"
+                    "on_site", "on-site" -> "At site"
+                    else -> "Tracking"
+                }
             }
             isCompleted -> {
                 statusText.text = "Complete"
@@ -406,18 +703,105 @@ class HomeFragment : Fragment() {
             }
         }
 
-        val canOpen = !isCompleted
-        if (canOpen) {
-            val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
-            itemView.setOnClickListener(openNav)
-            actionBtn.setOnClickListener(openNav)
+        if (session.isDriverMode) {
+            if (isCompleted) {
+                val openDetail: (View) -> Unit = {
+                    DriverTripCompletedBottomSheet.newInstance(visit.id)
+                        .show(parentFragmentManager, "driver_trip_completed")
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openDetail)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openDetail)
+            } else if (!isInProgress && canStartTrip) {
+                val startTrip: (View) -> Unit = {
+                    DriverStartTripBottomSheet.newInstance(visit.id)
+                        .show(parentFragmentManager, "driver_start_trip")
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(startTrip)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(startTrip)
+            } else {
+                val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
+            }
+        } else {
+            if (isCompleted) {
+                // Completed visits open a read-only summary instead of the trip flow.
+                val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openDetail)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openDetail)
+            } else {
+                val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openNav)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openNav)
+            }
         }
 
         applyItemSpacing(itemView, index, total)
         return itemView
     }
 
-    private fun bindTripCardHeader(avatar: TextView, nameView: TextView, roleView: TextView, clientName: String) {
+    private fun createAssignedPlaceItem(place: AssignedPlace, index: Int, total: Int): View {
+        val itemView = layoutInflater.inflate(R.layout.item_home_today_visit, binding.visitListContent, false)
+        val title = itemView.findViewById<TextView>(R.id.tvVisitItemTitle)
+        val time = itemView.findViewById<TextView>(R.id.tvVisitItemTime)
+        val actionBtn = itemView.findViewById<LinearLayout>(R.id.btnVisitItemAction)
+        val action = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
+        val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
+        val avatar = itemView.findViewById<TextView>(R.id.tvVisitItemAvatar)
+        val staffName = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
+        val staffRole = itemView.findViewById<TextView>(R.id.tvVisitItemStaffRole)
+        val statusPill = itemView.findViewById<LinearLayout>(R.id.visitItemStatusPill)
+        val statusText = itemView.findViewById<TextView>(R.id.tvVisitItemStatus)
+        val distance = itemView.findViewById<TextView>(R.id.tvVisitItemDistance)
+        val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
+
+        bindTripCardHeader(avatar, staffName, staffRole, place.name)
+        // Place name is already shown in the header — body Type cell calls
+        // out the row kind ("Assigned place") instead of repeating it.
+        title.text = "Assigned place"
+        time.text = "Available Today"
+        distance.text = if (place.lat != null && place.lng != null) "Open route" else "Not mapped"
+        eta.text = "After start"
+        statusText.text = "Ready"
+        statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_ready)
+        statusText.setTextColor(android.graphics.Color.parseColor("#169B2F"))
+        action.text = "Start Trip"
+        actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
+        action.setTextColor(android.graphics.Color.WHITE)
+        actionIcon.visibility = View.VISIBLE
+
+        val openNav: (View) -> Unit = { openTripNavigationForPlace(place) }
+        itemView.isClickable = true
+        itemView.isFocusable = true
+        itemView.setOnClickListener(openNav)
+        actionBtn.isClickable = true
+        actionBtn.setOnClickListener(openNav)
+
+        applyItemSpacing(itemView, index, total)
+        return itemView
+    }
+
+    private fun bindTripCardHeader(
+        avatar: TextView,
+        nameView: TextView,
+        roleView: TextView,
+        clientName: String,
+    ) {
         val name = formatPersonName(clientName.ifBlank { "Client" })
         avatar.text = name.firstOrNull()?.uppercase() ?: "M"
         nameView.text = name
@@ -442,6 +826,30 @@ class HomeFragment : Fragment() {
             clientPlaceVisitId = visit.clientPlaceVisitId,
             cpClientMet = visit.cpVisit?.clientMet,
             cpOutcome = visit.cpVisit?.outcome,
+            visitCategory = visit.visitCategory,
+        )
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openCompletedVisitDetail(visit: TodayVisit) {
+        val fragment = com.manjugroups.m_connect.ui.marketing
+            .CompletedVisitDetailFragment.forVisit(visit)
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openTripNavigationForPlace(place: AssignedPlace) {
+        val fragment = TripNavigationFragment.forPlace(
+            placeId = place.id,
+            placeName = place.name,
+            placeAddress = place.address,
+            destLat = place.lat,
+            destLng = place.lng
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
@@ -451,27 +859,42 @@ class HomeFragment : Fragment() {
 
     private fun applyItemSpacing(itemView: View, index: Int, total: Int) {
         val params = itemView.layoutParams as? LinearLayout.LayoutParams
-            ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            ?: LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         params.bottomMargin = if (index == total - 1) 0 else dpToPx(10)
         itemView.layoutParams = params
     }
 
     private fun formatVisitTimeOrDate(visit: TodayVisit): String {
-        val start = visit.scheduledStartTime?.let { formatTimeValue(it) }
-        val end = visit.scheduledEndTime?.let { formatTimeValue(it) }
+        val startRaw = visit.scheduledStartTime
+        val endRaw = visit.scheduledEndTime
+        val start = startRaw?.let { formatTimeValue(it) }
+        val end = endRaw?.let { formatTimeValue(it) }
+
         if (!start.isNullOrBlank() && !end.isNullOrBlank()) return "$start - $end"
         if (!start.isNullOrBlank()) return start
         if (!end.isNullOrBlank()) return end
+
+        // Fallback: if scheduledDate contains a datetime, show time; else show date.
         val embeddedTime = visit.scheduledDate.let { formatTimeValue(it) }
         if (!embeddedTime.isNullOrBlank()) return embeddedTime
+
         return formatVisitDate(visit.scheduledDate)
     }
 
     private fun formatVisitDate(scheduledDate: String?): String {
         if (scheduledDate.isNullOrBlank()) return "Today"
         val parsed = runCatching {
+            // Try ISO 8601 first, then plain date
             val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            iso.isLenient = false
             iso.parse(scheduledDate.substringBefore(".").substringBefore("Z"))
+        }.getOrNull() ?: runCatching {
+            val plain = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            plain.isLenient = false
+            plain.parse(scheduledDate.take(10))
         }.getOrNull() ?: return "Today"
         return SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(parsed)
     }
@@ -479,35 +902,124 @@ class HomeFragment : Fragment() {
     private fun formatTimeValue(raw: String): String? {
         val value = raw.trim()
         if (value.isBlank()) return null
+
+        // ISO 8601 datetime: extract time after the 'T' separator before any regex
+        // (word-boundary \b fails between 'T' and a digit, and timezone '+HH:MM' can false-match)
         val isoMatch = Regex("""^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})""").find(value)
         if (isoMatch != null) {
             val hour24 = isoMatch.groupValues[1].toIntOrNull() ?: return null
             val minute = isoMatch.groupValues[2]
-            val hour12 = if (hour24 == 0) 12 else if (hour24 > 12) hour24 - 12 else hour24
+            val hour12 = when {
+                hour24 == 0 -> 12
+                hour24 > 12 -> hour24 - 12
+                else -> hour24
+            }
             val suffix = if (hour24 < 12) "AM" else "PM"
             return String.format(Locale.getDefault(), "%02d:%s %s", hour12, minute, suffix)
         }
+
+        val amPmMatch = Regex("(?i)\\b(\\d{1,2}:\\d{2})(?::\\d{2})?\\s*(AM|PM)\\b").find(value)
+        if (amPmMatch != null) {
+            return "${amPmMatch.groupValues[1]} ${amPmMatch.groupValues[2].uppercase(Locale.getDefault())}"
+        }
+
+        val h24Match = Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)(?::[0-5]\\d)?\\b").find(value)
+        if (h24Match != null) {
+            val hour24 = h24Match.groupValues[1].toIntOrNull() ?: return null
+            val minute = h24Match.groupValues[2]
+            val hour12 = when {
+                hour24 == 0 -> 12
+                hour24 > 12 -> hour24 - 12
+                else -> hour24
+            }
+            val suffix = if (hour24 < 12) "AM" else "PM"
+            return String.format(Locale.getDefault(), "%02d:%s %s", hour12, minute, suffix)
+        }
+
         return null
     }
 
-    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
+    private fun dpToPx(dp: Int): Int {
+        val density = resources.displayMetrics.density
+        return (dp * density).toInt()
+    }
 
     private fun loadUnreadNotifications() {
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { api.getUnreadNotificationCount(session.bearerToken) }
-                .onSuccess { response ->
-                    if (_binding == null) return@onSuccess
-                    binding.tvBellBadge.visibility = if (response.unreadCount > 0) View.VISIBLE else View.GONE
-                    binding.tvBellBadge.text = if (response.unreadCount > 99) "99+" else response.unreadCount.toString()
-                }
+            runCatching {
+                api.getUnreadNotificationCount(session.bearerToken)
+            }.onSuccess { response ->
+                if (_binding == null) return@onSuccess
+                val unreadCount = response.unreadCount
+                binding.tvBellBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+                binding.tvBellBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+            }
         }
     }
 
+    private var selectedTab = "all"
+
+    private fun setupDriverTabs() {
+        val clickListener = View.OnClickListener { v ->
+            selectedTab = when (v.id) {
+                R.id.tabUpcoming -> "upcoming"
+                R.id.tabCompleted -> "completed"
+                else -> "all"
+            }
+            updateTabSelectionVisuals()
+            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+        }
+        binding.tabAll.setOnClickListener(clickListener)
+        binding.tabUpcoming.setOnClickListener(clickListener)
+        binding.tabCompleted.setOnClickListener(clickListener)
+        updateTabSelectionVisuals()
+    }
+
+    private fun updateTabSelectionVisuals() {
+        val activeBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_active)
+        val inactiveBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_inactive)
+        val white = android.graphics.Color.WHITE
+        val grayText = android.graphics.Color.parseColor("#344054")
+
+        binding.tabAll.background = if (selectedTab == "all") activeBg else inactiveBg
+        binding.tabAll.setTextColor(if (selectedTab == "all") white else grayText)
+        binding.tabAll.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "all") R.font.inter_semibold else R.font.inter_medium
+        )
+
+        binding.tabUpcoming.background = if (selectedTab == "upcoming") activeBg else inactiveBg
+        binding.tabUpcoming.setTextColor(if (selectedTab == "upcoming") white else grayText)
+        binding.tabUpcoming.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "upcoming") R.font.inter_semibold else R.font.inter_medium
+        )
+
+        binding.tabCompleted.background = if (selectedTab == "completed") activeBg else inactiveBg
+        binding.tabCompleted.setTextColor(if (selectedTab == "completed") white else grayText)
+        binding.tabCompleted.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+            requireContext(),
+            if (selectedTab == "completed") R.font.inter_semibold else R.font.inter_medium
+        )
+    }
+
+    /**
+     * Driver / Executive view is auto-selected from the logged-in
+     * staff's designation — see SessionManager.isDriverMode (mirrors
+     * the web's `hasDriverDesignation` check). The old Executive /
+     * Driver dropdown that let any operator flip this manually is
+     * gone; this helper just shows the driver-only filter pills
+     * when the current account actually IS a driver.
+     */
+    private fun setupRoleAdaptiveView() {
+        binding.layoutDriverTabs.visibility =
+            if (session.isDriverMode) View.VISIBLE else View.GONE
+    }
+
     override fun onDestroyView() {
+        SkeletonUtils.stopAll()
+        stopBannerFloatingAnimation()
         super.onDestroyView()
         _binding = null
-        hasAnimatedBanner = false
-        isBannerCollapsed = false
-        bannerMeasuredHeight = 0
     }
 }

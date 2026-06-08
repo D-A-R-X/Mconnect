@@ -141,6 +141,7 @@
             android:focusable="true">
 
             <ImageView
+                android:id="@+id/ivDialerCallIcon"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:layout_gravity="center"
@@ -149,12 +150,12 @@
                 android:rotation="-45"
                 app:tint="@android:color/white" />
 
-            <ProgressBar
-                android:id="@+id/dialerCalling"
+            <View
+                android:id="@+id/dialerCallingSkeleton"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="@android:color/white"
+                android:background="@drawable/bg_skeleton_circle_inverse"
                 android:visibility="gone" />
         </FrameLayout>
     </FrameLayout>

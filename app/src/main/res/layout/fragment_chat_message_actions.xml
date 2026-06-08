@@ -26,7 +26,7 @@
         android:fontFamily="@font/inter_regular"
         android:maxLines="3"
         android:ellipsize="end"
-        android:text="Good morning, boss 💕 How's your day starting out?" />
+        android:text="Message Preview" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -87,6 +87,30 @@
         android:orientation="horizontal">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Copy" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
         <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_copy" app:tint="#667085" />
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
+
+    <LinearLayout
+        android:id="@+id/btnSelectMore"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Select more" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
+        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_check_double" app:tint="#667085" />
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
+
+    <LinearLayout
+        android:id="@+id/btnInfo"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Info" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
+        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_info" app:tint="#667085" />
     </LinearLayout>
 
     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />

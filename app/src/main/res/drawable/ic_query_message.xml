@@ -1,0 +1,31 @@
+<!-- Query detail glyph (from Downloads/message.svg, 12×12). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <path
+        android:pathData="M4.25 9.5H4C2 9.5 1 9 1 6.5V4C1 2 2 1 4 1H8C10 1 11 2 11 4V6.5C11 8.5 10 9.5 8 9.5H7.75C7.595 9.5 7.445 9.575 7.35 9.7L6.6 10.7C6.27 11.14 5.73 11.14 5.4 10.7L4.65 9.7C4.57 9.59 4.385 9.5 4.25 9.5Z"
+        android:strokeColor="#9090A8"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M7.99823 5.5H8.00272"
+        android:strokeColor="#9090A8"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M5.99774 5.5H6.00223"
+        android:strokeColor="#9090A8"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.99725 5.5H4.00174"
+        android:strokeColor="#9090A8"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -1,0 +1,47 @@
+<!-- Inspection item icon: pink circle background with two location pins
+     connected by a zig-zag path (an inspection route between two sites).
+     Converted from Downloads/Background.svg (32×32 viewport). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Pink rounded background (perfect circle, rx=16 on 32×32). -->
+    <path
+        android:fillColor="#FFE8FC"
+        android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+    <!-- Top-left location pin outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M9.38,11.07 C9.91,8.76 13.39,8.76 13.91,11.07 C14.23,12.42 13.37,13.57 12.62,14.28 C12.07,14.8 11.21,14.79 10.67,14.28 C9.93,13.57 9.07,12.42 9.38,11.07 Z"
+        android:strokeColor="#E401B3"
+        android:strokeWidth="1.5" />
+    <!-- Bottom-right location pin outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M18.05,19.07 C18.58,16.76 22.07,16.76 22.61,19.07 C22.92,20.42 22.06,21.57 21.31,22.28 C20.76,22.8 19.89,22.79 19.35,22.28 C18.59,21.57 17.73,20.42 18.05,19.07 Z"
+        android:strokeColor="#E401B3"
+        android:strokeWidth="1.5" />
+    <!-- Zig-zag connector between the two pins. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M16,11.33 L17.79,11.33 C19.02,11.33 19.59,12.86 18.67,13.67 L13.34,18.33 C12.41,19.14 12.99,20.67 14.21,20.67 L16,20.67"
+        android:strokeColor="#E401B3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <!-- Pin centre dots (rendered as 1-unit segments with round caps so they
+         appear as filled dots when stroked). -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M11.66,11.67 L11.67,11.67"
+        android:strokeColor="#E401B3"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M20.32,19.67 L20.33,19.67"
+        android:strokeColor="#E401B3"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+</vector>

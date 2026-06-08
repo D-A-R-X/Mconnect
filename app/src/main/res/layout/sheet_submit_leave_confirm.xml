@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Submit Leave confirmation modal. Matches the design's third frame
+  in the Apply Leave flow — blue stacked-layers chip, "Submit Leave"
+  title, "Double-check your leave details…" subtitle, and two CTAs
+  (Yes Submit filled, No Let me check outlined).
+
+  Returns to ApplyLeaveFragment via a FragmentResult so the caller
+  decides what to do on confirm vs cancel.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_apply_leave_sheet"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="28dp"
+    android:paddingBottom="20dp">
+
+    <!-- Blue layer chip -->
+    <FrameLayout
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:background="@drawable/bg_leave_confirm_layer">
+
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_leave_confirm_layer" />
+    </FrameLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:text="Submit Leave"
+        android:textColor="#101828"
+        android:textSize="18sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:lineSpacingExtra="2dp"
+        android:text="Double-check your leave details to ensure everything is correct. Do you want to proceed?"
+        android:textColor="#667085"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/btnSubmitLeaveConfirm"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="22dp"
+        android:background="@drawable/bg_leave_sheet_button_filled"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="Yes, Submit"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/btnSubmitLeaveCancel"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_leave_sheet_button_outline"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="No, Let me check"
+        android:textColor="#0B61CA"
+        android:textSize="14sp" />
+</LinearLayout>

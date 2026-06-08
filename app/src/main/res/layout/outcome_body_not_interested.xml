@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Outcome · Not Interested — mirrors the web's "Mark not interested"
+  dialog at app/marketing/site-visits/[id]/page.tsx
+  (NOT_INTERESTED_REASONS): 8 reason checkboxes, each with an inline
+  per-reason detail input that appears once the checkbox is ticked,
+  plus a general optional notes textarea.
+
+  Wire format on save:
+    SV mode (siteVisits.setOutcome) — sends notInterestedReasons +
+      notInterestedDetails + notes. Backend rejects empty reasons.
+    CP mode (clientPlaceVisits.setOutcome) — backend only has a
+      `notes` column, so the checked reasons + their details are
+      serialized into the notes blob so a web admin opening the row
+      still sees the structured information as readable text.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bodyNotInterested"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Why is the client not interested?" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:text="Select one or more — visit will be marked complete."
+        android:textColor="#94A3B8"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="6dp">
+
+        <!-- Price -->
+        <CheckBox
+            android:id="@+id/cbNiPrice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Price"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiPriceDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about price"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Distance -->
+        <CheckBox
+            android:id="@+id/cbNiDistance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Distance"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiDistanceDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about distance"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Location -->
+        <CheckBox
+            android:id="@+id/cbNiLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Location"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiLocationDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about location"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Development in sourcing area -->
+        <CheckBox
+            android:id="@+id/cbNiDevelopment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Development in sourcing area"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiDevelopmentDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about development in sourcing area"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Preferred plot not choice -->
+        <CheckBox
+            android:id="@+id/cbNiPlot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Preferred plot not choice"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiPlotDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about preferred plot not choice"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Loan eligibility -->
+        <CheckBox
+            android:id="@+id/cbNiLoan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Loan eligibility"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiLoanDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about loan eligibility"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Internal staff approach or behaviour -->
+        <CheckBox
+            android:id="@+id/cbNiStaffApproach"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Internal staff approach or behaviour"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiStaffApproachDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about internal staff approach or behaviour"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Driver approach or behaviour -->
+        <CheckBox
+            android:id="@+id/cbNiDriverApproach"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="40dp"
+            android:paddingStart="6dp"
+            android:text="Driver approach or behaviour"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/etNiDriverApproachDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_medium"
+            android:hint="More about driver approach or behaviour"
+            android:includeFontPadding="false"
+            android:inputType="textCapSentences"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="16dp"
+        android:text="Additional notes" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:includeFontPadding="false"
+        android:text="Optional — any context the office should see."
+        android:textColor="#94A3B8"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="top"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_doc" />
+
+        <EditText
+            android:id="@+id/etNiNotes"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top"
+            android:hint="Additional context"
+            android:includeFontPadding="false"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="2"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

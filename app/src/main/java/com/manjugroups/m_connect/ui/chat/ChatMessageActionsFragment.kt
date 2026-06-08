@@ -9,8 +9,19 @@ import com.manjugroups.m_connect.databinding.FragmentChatMessageActionsBinding
 
 class ChatMessageActionsFragment : BottomSheetDialogFragment() {
 
+    interface Callback {
+        fun onReply(messageId: String)
+        fun onReact(messageId: String, emoji: String)
+        fun onCopy(text: String)
+        fun onDelete(messageId: String)
+        fun onForward(messageId: String)
+        fun onInfo(messageId: String) {}
+        fun onSelectMore(messageId: String) {}
+    }
+
     private var _binding: FragmentChatMessageActionsBinding? = null
     private val binding get() = _binding!!
+    private var callback: Callback? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentChatMessageActionsBinding.inflate(inflater, container, false)
@@ -20,21 +31,60 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val body = arguments?.getString("body") ?: ""
+        val messageId = arguments?.getString("messageId") ?: ""
         binding.tvMessagePreview.text = body
 
-        binding.btnReply.setOnClickListener { dismiss() }
-        binding.btnForward.setOnClickListener { dismiss() }
-        binding.btnCopy.setOnClickListener { dismiss() }
-        binding.btnDelete.setOnClickListener { dismiss() }
+        binding.btnReply.setOnClickListener {
+            val id = arguments?.getString("messageId") ?: ""
+            callback?.onReply(id)
+            dismiss()
+        }
+        binding.btnForward.setOnClickListener {
+            callback?.onForward(messageId)
+            dismiss()
+        }
+        binding.btnCopy.setOnClickListener {
+            callback?.onCopy(body)
+            dismiss()
+        }
+        binding.btnSelectMore.setOnClickListener {
+            callback?.onSelectMore(messageId)
+            dismiss()
+        }
+        binding.btnInfo.setOnClickListener {
+            callback?.onInfo(messageId)
+            dismiss()
+        }
+        binding.btnDelete.setOnClickListener {
+            callback?.onDelete(messageId)
+            dismiss()
+        }
         
-        listOf(binding.reactFire, binding.reactClap, binding.reactHeart, binding.reactSmile, binding.reactAngry, binding.reactThumb).forEach { 
-            it.setOnClickListener { dismiss() }
+        val reactions = listOf(
+            binding.reactFire to "🔥",
+            binding.reactClap to "🙌",
+            binding.reactHeart to "❤️",
+            binding.reactSmile to "😄",
+            binding.reactAngry to "😠",
+            binding.reactThumb to "👍"
+        )
+        
+        reactions.forEach { (view, emoji) ->
+            view.setOnClickListener {
+                callback?.onReact(messageId, emoji)
+                dismiss()
+            }
         }
     }
 
+    fun setCallback(cb: Callback) {
+        this.callback = cb
+    }
+
     companion object {
-        fun newInstance(body: String) = ChatMessageActionsFragment().apply {
+        fun newInstance(messageId: String, body: String) = ChatMessageActionsFragment().apply {
             arguments = Bundle().apply {
+                putString("messageId", messageId)
                 putString("body", body)
             }
         }

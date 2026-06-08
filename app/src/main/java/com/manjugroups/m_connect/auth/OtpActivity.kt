@@ -13,7 +13,6 @@ import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -28,6 +27,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityOtpBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 
 class OtpActivity : AppCompatActivity() {
@@ -174,12 +174,12 @@ class OtpActivity : AppCompatActivity() {
                     when (state) {
                         is AuthUiState.Loading -> {
                             binding.tvVerify.visibility = View.INVISIBLE
-                            binding.progressVerify.visibility = View.VISIBLE
+                            binding.skeletonVerify.visibility = View.VISIBLE
+                            SkeletonUtils.startSkeletonPulse(binding.skeletonVerify)
                             binding.btnVerify.isClickable = false
                         }
                         is AuthUiState.OtpSent -> {
                             resetButton()
-                            Toast.makeText(this@OtpActivity, "OTP resent", Toast.LENGTH_SHORT).show()
                             clearOtp()
                             viewModel.resetState()
                         }
@@ -204,7 +204,8 @@ class OtpActivity : AppCompatActivity() {
 
     private fun resetButton() {
         binding.tvVerify.visibility = View.VISIBLE
-        binding.progressVerify.visibility = View.GONE
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonVerify)
+        binding.skeletonVerify.visibility = View.GONE
         binding.btnVerify.isClickable = true
     }
 
@@ -250,7 +251,9 @@ class OtpActivity : AppCompatActivity() {
                 phone = response.user?.phone ?: phone
             )
             session.staffId = response.user?.staffId
-            session.geoTrackingEnabled = false
+            session.employeeId = response.user?.employeeId
+            session.mustChangePassword = false
+            session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
             session.geoConsentGiven = false
             session.geoConsentDeclined = false
             session.shouldTrackNow = false
@@ -261,6 +264,26 @@ class OtpActivity : AppCompatActivity() {
             }.onSuccess { iam ->
                 session.iamPermissions = iam.permissions.toSet()
                 session.isAdmin = iam.isAdmin
+            }
+
+            // Cache the reporting officer so the very first leave/permission
+            // apply (before the user opens Profile) can route to the right
+            // approver. Best-effort — if it fails, ApplyLeaveFragment will
+            // refetch on demand.
+            session.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->
+                runCatching {
+                    api.getStaffDetail(session.bearerToken, staffId)
+                }.onSuccess { resp ->
+                    resp.staff?.let { staff ->
+                        session.reportingToId = staff.reportingTo
+                        session.reportingToName = staff.reportingToName
+                        // Cache designation so SessionManager.isDriverMode
+                        // can derive role automatically (matches the web's
+                        // hasDriverDesignation check). Replaces the old
+                        // user-toggled Executive/Driver dropdown on Home.
+                        session.designation = staff.designation
+                    }
+                }
             }
 
             requestNotificationAccessThenContinue()

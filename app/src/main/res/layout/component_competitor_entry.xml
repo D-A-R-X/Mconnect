@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Competitor entry card. One dashed-border container that holds the
+  full competitor form: number badge + delete button at the top, then a
+  vertical stack of labelled fields, then the nested Amenities list.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="10dp"
+    android:background="@drawable/bg_inspection_area_entry"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Header row: number badge + red delete button. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/competitorNumber"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="@drawable/bg_inspection_competitor_number"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            tools:text="1" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <FrameLayout
+            android:id="@+id/competitorDelete"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_inspection_delete_button"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="Delete"
+                android:src="@drawable/ic_trash" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Helper for one labelled field row: this template repeats 12 times,
+         each block = label + plain-styled EditText (no leading icon to
+         match the screenshot where competitor fields are bare). -->
+    <TextView style="@style/InspectionFieldLabel" android:text="Promoter Name *" />
+    <EditText android:id="@+id/inputPromoterName"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="TTS Developers"
+        android:inputType="textCapWords" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Google Map Link" />
+    <EditText android:id="@+id/inputCompetitorMapLink"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="https://maps.app.goo.gl/..."
+        android:inputType="textUri" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Project Name *" />
+    <EditText android:id="@+id/inputProjectName"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Project name"
+        android:inputType="textCapWords" />
+
+    <!-- Approval Type — bare row with a chevron, opens a popup. -->
+    <TextView style="@style/InspectionFieldLabel" android:text="Approval Type" />
+    <LinearLayout
+        android:id="@+id/dropdownApproval"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_inspection_field"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+        <TextView
+            android:id="@+id/dropdownApprovalLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="DTCP"
+            android:textColor="#101828"
+            android:textSize="14sp" />
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_chevron_down"
+            app:tint="#6B7280" />
+    </LinearLayout>
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Location *" />
+    <EditText android:id="@+id/inputCompetitorLocation"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Sithayankottai"
+        android:inputType="textCapWords" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Current Stage" />
+    <EditText android:id="@+id/inputCurrentStage"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Extent / Units" />
+    <EditText android:id="@+id/inputExtent"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Amount"
+        android:inputType="numberDecimal" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Amenities" />
+    <EditText android:id="@+id/inputAmenitiesMain"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <!-- Amenities sub-list (dashed-border entries with delete). -->
+    <LinearLayout
+        android:id="@+id/amenitiesList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+    <TextView
+        android:id="@+id/btnAddAmenity"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_inspection_field"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="+ Add Amenity"
+        android:textColor="#0B61CA"
+        android:textSize="13sp" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Distance from Project" />
+    <EditText android:id="@+id/inputDistanceProject"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Distance from Bus Stand" />
+    <EditText android:id="@+id/inputDistanceBus"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Distance from Railway" />
+    <EditText android:id="@+id/inputDistanceRailway"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Distance from Public Transport" />
+    <EditText android:id="@+id/inputDistancePublic"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Distance from Private Transport" />
+    <EditText android:id="@+id/inputDistancePrivate"
+        style="@style/InspectionFieldPlainInput"
+        android:hint="Enter Details"
+        android:inputType="text" />
+
+    <!-- Price + unit dropdown rows. -->
+    <TextView style="@style/InspectionFieldLabel" android:text="Actual Price (Rs.)" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_inspection_field"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+        <EditText
+            android:id="@+id/inputActualPrice"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Details"
+            android:importantForAutofill="no"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="0dp"
+            android:singleLine="true"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp" />
+        <LinearLayout
+            android:id="@+id/actualPriceUnit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="6dp">
+            <TextView
+                android:id="@+id/actualPriceUnitLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Acre"
+                android:textColor="#6B7280"
+                android:textSize="13sp" />
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="4dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_down"
+                app:tint="#6B7280" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView style="@style/InspectionFieldLabel" android:text="Final Price (Rs.)" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_inspection_field"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+        <EditText
+            android:id="@+id/inputFinalPrice"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:fontFamily="@font/inter_medium"
+            android:hint="Enter Details"
+            android:importantForAutofill="no"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="0dp"
+            android:singleLine="true"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp" />
+        <LinearLayout
+            android:id="@+id/finalPriceUnit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="6dp">
+            <TextView
+                android:id="@+id/finalPriceUnitLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Acre"
+                android:textColor="#6B7280"
+                android:textSize="13sp" />
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="4dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_down"
+                app:tint="#6B7280" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

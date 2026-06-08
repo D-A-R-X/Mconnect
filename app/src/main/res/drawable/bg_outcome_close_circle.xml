@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft neutral circle behind the X close button. Same fill as the
+     inactive outcome tab so the chrome reads consistently. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#F1F5F9" />
+</shape>

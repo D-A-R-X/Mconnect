@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Confirm SV / Shift-to-project dialog (KOS-XX). Single layout used for
+  both actions — only the title and the `shiftedFromProjectId` payload
+  differ. Confirm SV keeps the originally-pitched project; Shift swaps
+  to a different one and records the original via shiftedFromProjectId.
+
+  Posts `convertToSiteVisit`. Minimal field set vs the full SV form
+  intentionally: detailed pickup / attendee planning happens later, in
+  the SV-side flow. This dialog only commits to project + date.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_apply_leave_sheet"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/tvConfirmSvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Confirm site visit"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="17sp" />
+
+    <TextView
+        android:id="@+id/tvConfirmSvSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Convert this prospect into a scheduled site visit."
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="12sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Project"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:id="@+id/rowConfirmSvProject"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_leave_form_field"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp">
+
+        <TextView
+            android:id="@+id/tvConfirmSvProject"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_regular"
+            android:text="Select project"
+            android:textColor="?attr/colorForegroundSecondary"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_leave_chevron_down" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="Date"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="11sp" />
+
+            <EditText
+                android:id="@+id/etConfirmSvDate"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_leave_form_field"
+                android:focusable="false"
+                android:fontFamily="@font/inter_regular"
+                android:hint="yyyy-mm-dd"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textColorHint="?attr/colorForegroundMuted"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="Time (optional)"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="11sp" />
+
+            <EditText
+                android:id="@+id/etConfirmSvTime"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_leave_form_field"
+                android:focusable="false"
+                android:fontFamily="@font/inter_regular"
+                android:hint="hh:mm"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textColorHint="?attr/colorForegroundMuted"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Notes (optional)"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="11sp" />
+
+    <EditText
+        android:id="@+id/etConfirmSvNotes"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_leave_form_field"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="top|start"
+        android:hint="Anything the SV team should know"
+        android:inputType="textMultiLine"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundMuted"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/btnConfirmSvCancel"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_leave_sheet_button_outline"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Cancel"
+                android:textColor="#1BCA0B"
+                android:textSize="13sp" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnConfirmSvSubmit"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_leave_sheet_button_filled"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/tvConfirmSvSubmit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Confirm SV"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

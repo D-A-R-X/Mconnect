@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Double-check modal shown before the apply-leave API call. Layout:
+    [blue stacked-layers badge centered, half-overlapping the card top]
+    "Submit Leave"
+    "Double-check your leave details to ensure everything is correct.
+     Do you want to proceed?"
+    [Yes, Submit]      ← filled green
+    [No, Let me check] ← outlined green
+  The icon sits ABOVE the card edge to match the design's silhouette.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="8dp"
+    android:paddingTop="32dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:background="@drawable/bg_stat_card"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="Submit Leave"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:text="Double-check your leave details to ensure everything is correct. Do you want to proceed?"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="13sp" />
+
+        <FrameLayout
+            android:id="@+id/btnConfirmSubmit"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_leave_sheet_button_filled"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Yes, Submit"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnConfirmCancel"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_leave_sheet_button_outline"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="No, Let me check"
+                android:textColor="#1BCA0B"
+                android:textSize="13sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="center_horizontal|top"
+        android:background="@drawable/bg_leave_dialog_icon">
+
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_leave_dialog_stack" />
+    </FrameLayout>
+</FrameLayout>

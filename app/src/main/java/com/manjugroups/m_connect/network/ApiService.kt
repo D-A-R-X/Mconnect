@@ -19,8 +19,20 @@ interface ApiService {
     @POST("api/auth/verify-otp")
     suspend fun verifyOtp(@Body body: VerifyOtpRequest): VerifyOtpResponse
 
+    @POST("api/auth/login-with-employee-id")
+    suspend fun loginWithEmployeeId(@Body body: EmployeePasswordLoginRequest): EmployeePasswordLoginResponse
+
+    @POST("api/auth/change-own-password")
+    suspend fun changeOwnPassword(
+        @Header("Authorization") token: String,
+        @Body body: ChangeOwnPasswordRequest
+    ): SimpleResponse
+
     @GET("api/auth/validate-session")
     suspend fun validateSession(@Header("Authorization") token: String): ValidateSessionResponse
+
+    @GET
+    suspend fun lookupPincode(@Url url: String): List<PincodeLookupEnvelope>
 
     @POST("api/auth/logout")
     suspend fun logout(@Header("Authorization") token: String): LogoutResponse
@@ -70,6 +82,35 @@ interface ApiService {
         @Body body: PunchRequest
     ): PunchResponse
 
+    /**
+     * Withdraw a pending attendance submission for a specific date.
+     * Mirrors /api/hr/leaves/cancel — same delete affordance on the
+     * mobile attendance history page. Server rejects non-pending dates.
+     */
+    @POST("api/hr/attendance/cancel")
+    suspend fun cancelMyAttendance(
+        @Header("Authorization") token: String,
+        @Body body: AttendanceCancelRequest,
+    ): SimpleResponse
+
+    // Attendance — manager approval queue (mirrors leaves/permissions approval).
+    @GET("api/hr/attendance/pending-approvals")
+    suspend fun getPendingAttendanceApprovals(
+        @Header("Authorization") token: String
+    ): AttendanceApprovalsResponse
+
+    @POST("api/hr/attendance/approve")
+    suspend fun approveAttendance(
+        @Header("Authorization") token: String,
+        @Body body: ApproveAttendanceRequest
+    ): SimpleResponse
+
+    @POST("api/hr/attendance/reject")
+    suspend fun rejectAttendance(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest
+    ): SimpleResponse
+
     // Shifts
     @GET("api/hr/shifts/today")
     suspend fun getTodayShift(
@@ -118,6 +159,42 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: IdRequest
     ): SimpleResponse
+
+    @POST("api/hr/staff/me/profile-photo")
+    suspend fun setMyProfilePhoto(
+        @Header("Authorization") token: String,
+        @Body body: SetProfilePhotoRequest
+    ): SetProfilePhotoResponse
+
+    @retrofit2.http.DELETE("api/hr/staff/me/profile-photo")
+    suspend fun deleteMyProfilePhoto(
+        @Header("Authorization") token: String
+    ): SimpleResponse
+
+    // ── Loans (read-only) ──
+    @GET("api/hr/loans/my")
+    suspend fun getMyLoans(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null
+    ): MyLoansResponse
+
+    @GET("api/hr/loans/get")
+    suspend fun getLoanDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): LoanDetailResponse
+
+    @GET("api/hr/loans/repayments")
+    suspend fun getLoanRepayments(
+        @Header("Authorization") token: String,
+        @Query("loanId") loanId: String
+    ): LoanRepaymentsResponse
+
+    @POST("api/hr/loans/apply")
+    suspend fun applyLoan(
+        @Header("Authorization") token: String,
+        @Body body: ApplyLoanRequest
+    ): ApplyLoanResponse
 
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
@@ -507,7 +584,7 @@ interface ApiService {
         @Body body: PresenceHeartbeatRequest
     ): SimpleResponse
 
-    @POST("api/staff/me/update")
+    @POST("api/hr/staff/update")
     suspend fun updateMyProfile(
         @Header("Authorization") token: String,
         @Body body: UpdateMyProfileRequest
@@ -549,6 +626,88 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: AddTaskUpdateRequest
     ): TaskMutationResponse
+
+    // ── Project Management: project list / detail / per-project tasks ──
+
+    @GET("api/projects")
+    suspend fun getMyProjects(
+        @Header("Authorization") token: String
+    ): MyProjectsResponse
+
+    @GET("api/projects/get")
+    suspend fun getProjectDetail(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): ProjectDetailResponse
+
+    @GET("api/projects/tasks")
+    suspend fun getProjectTasks(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String
+    ): ProjectTasksResponse
+
+    @GET("api/projects/tasks/updates")
+    suspend fun getTaskTimeline(
+        @Header("Authorization") token: String,
+        @Query("taskId") taskId: String
+    ): TaskTimelineResponse
+
+    @GET("api/projects/tasks/resources")
+    suspend fun getTaskResources(
+        @Header("Authorization") token: String,
+        @Query("taskId") taskId: String
+    ): TaskResourcesResponse
+
+    // ── Storage: generate signed upload URL (Convex storage) ──
+
+    @POST("api/storage/generate-upload-url")
+    suspend fun generateStorageUploadUrl(
+        @Header("Authorization") token: String
+    ): StorageUploadUrlResponse
+
+    // PUT the file bytes to the signed URL returned above. Convex returns
+    // a JSON body with the storageId once the upload completes.
+    @PUT
+    suspend fun uploadFileToStorage(
+        @Url url: String,
+        @Header("Content-Type") contentType: String,
+        @Body body: okhttp3.RequestBody
+    ): StorageUploadResultResponse
+
+    // ── Project Expenses ──
+
+    @GET("api/projects/expenses")
+    suspend fun listProjectExpenses(
+        @Header("Authorization") token: String,
+        @Query("projectId") projectId: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("category") category: String? = null
+    ): ProjectExpensesResponse
+
+    @GET("api/projects/expenses/get")
+    suspend fun getProjectExpense(
+        @Header("Authorization") token: String,
+        @Query("id") id: String
+    ): ProjectExpenseDetailResponse
+
+    @POST("api/projects/expenses/create")
+    suspend fun createProjectExpense(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectExpenseRequest
+    ): ProjectExpenseCreateResponse
+
+    @POST("api/projects/expenses/update")
+    suspend fun updateProjectExpense(
+        @Header("Authorization") token: String,
+        @Body body: UpdateProjectExpenseRequest
+    ): SimpleResponse
+
+    @POST("api/projects/expenses/mark-paid")
+    suspend fun markProjectExpensePaid(
+        @Header("Authorization") token: String,
+        @Body body: MarkExpensePaidRequest
+    ): SimpleResponse
 
     // ── Telecaller (mobile My Leads + Dialer) ──
 
@@ -613,18 +772,163 @@ interface ApiService {
         @Body body: CreateBookingRequest,
     ): CreateBookingResponse
 
+    // ── Booking-form auto-save scratchpad. CompleteCpVisitBottomSheet
+    // pushes the in-progress form state to /save on a debounced timer
+    // so a crash / kill / re-login on a different phone doesn't lose
+    // the operator's typing. Resumes the form via /get on dialog open
+    // and wipes the row via /clear after a successful createBooking.
+    @POST("api/bookings/draft/save")
+    suspend fun saveBookingDraft(
+        @Header("Authorization") token: String,
+        @Body body: BookingDraftSaveRequest,
+    ): BookingDraftSaveResponse
+
+    @GET("api/bookings/draft/get")
+    suspend fun getBookingDraft(
+        @Header("Authorization") token: String,
+        @Query("sourceKey") sourceKey: String,
+    ): BookingDraftGetResponse
+
+    @POST("api/bookings/draft/clear")
+    suspend fun clearBookingDraft(
+        @Header("Authorization") token: String,
+        @Body body: BookingDraftClearRequest,
+    ): BookingDraftClearResponse
+
+    // GET /api/marketing/bookings/my — bookings the caller is involved in.
+    // `status` is one of draft|pending_confirmation|confirmed|cancelled or
+    // null for "All". Backend gates on marketing.bookings.view and returns
+    // an empty list (200) when the user lacks permission.
+    @GET("api/marketing/bookings/my")
+    suspend fun listMyBookings(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = null,
+    ): BookingsListResponse
+
+    @GET("api/bookings/{id}")
+    suspend fun getBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+    ): BookingDetailResponse
+
+    @PATCH("api/bookings/{id}")
+    suspend fun updateBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: UpdateBookingRequest,
+    ): SimpleResponse
+
+    @POST("api/bookings/{id}/approve")
+    suspend fun approveBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: BookingApproveRequest = BookingApproveRequest(),
+    ): BookingActionResponse
+
+    @POST("api/bookings/{id}/reject")
+    suspend fun rejectBooking(
+        @Header("Authorization") token: String,
+        @Path("id") id: String,
+        @Body body: BookingRejectRequest,
+    ): BookingActionResponse
+
+    @GET("api/bookings/plot-prefill")
+    suspend fun getBookingPlotPrefill(
+        @Header("Authorization") token: String,
+        @Query("plotId") plotId: String,
+        @Query("bookingDate") bookingDate: String? = null,
+    ): BookingPlotPrefillResponse
+
     @GET("api/telecaller/leads/search-by-phone")
     suspend fun searchTelecallerLeadsByPhone(
         @Header("Authorization") token: String,
         @Query("phone") phone: String,
     ): TelecallerLeadSearchResponse
 
+    @GET("api/clients/search-by-phone")
+    suspend fun searchClientByPhone(
+        @Header("Authorization") token: String,
+        @Query("phone") phone: String,
+    ): ClientSearchResponse
+
+    /**
+     * Push edits made by the field staff on the prefilled client
+     * form back to the lead's manualProfile. Server records the
+     * caller as editorStaffId so the lead's edit-history timeline
+     * picks up the change with proper attribution.
+     */
+    @POST("api/telecaller/leads/update")
+    suspend fun updateTelecallerLead(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTelecallerLeadRequest,
+    ): SimpleResponse
+
+    // ── Land Procurement: Inspection ────────────────────────────────────
+    @GET("api/land/inspections/my")
+    suspend fun listMyInspections(
+        @Header("Authorization") token: String,
+    ): InspectionListResponse
+
+    @GET("api/land/inspections/get")
+    suspend fun getInspectionForProperty(
+        @Header("Authorization") token: String,
+        @Query("propertyId") propertyId: String,
+    ): InspectionGetResponse
+
+    @POST("api/land/inspections/save")
+    suspend fun saveInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionSaveRequest,
+    ): InspectionSaveResponse
+
+    @POST("api/land/inspections/accept")
+    suspend fun acceptInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionAcceptRequest,
+    ): InspectionActionResponse
+
+    @POST("api/land/inspections/reschedule")
+    suspend fun rescheduleInspection(
+        @Header("Authorization") token: String,
+        @Body body: InspectionRescheduleRequest,
+    ): InspectionActionResponse
+
+    @GET("api/land/queries/my")
+    suspend fun listMyQueries(
+        @Header("Authorization") token: String,
+    ): QueryListResponse
+
+    @POST("api/land/queries/update")
+    suspend fun updateQuery(
+        @Header("Authorization") token: String,
+        @Body body: QueryUpdateRequest,
+    ): InspectionActionResponse
+
     companion object {
         fun create(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
+            // Auto-logout on 401. Without this, a deployment URL swap
+            // (dev → prod or vice versa) or a server-side session
+            // revocation leaves the app stuck with every screen showing
+            // empty / errored data and no way back to a working state.
+            // The interceptor watches every response, fires the
+            // SessionInvalidationBus on 401, and the currently-foreground
+            // activity collects + bounces the user to login. Bearer-less
+            // requests (auth/OTP/login endpoints) shouldn't normally 401
+            // unless the token is invalid anyway, so we don't try to
+            // distinguish — every 401 is treated as "session is dead."
+            val authWatchdog = okhttp3.Interceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 401) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized()
+                }
+                response
+            }
             val client = OkHttpClient.Builder()
+                .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
@@ -644,14 +948,45 @@ data class SendOtpRequest(val phone: String)
 data class SendOtpResponse(val success: Boolean, val message: String?)
 data class VerifyOtpRequest(val phone: String, val otp: String)
 data class VerifyOtpResponse(val success: Boolean, val token: String?, val user: UserInfo?, val error: String?)
+data class EmployeePasswordLoginRequest(val employeeId: String, val password: String)
+data class EmployeePasswordLoginResponse(
+    val success: Boolean,
+    val token: String? = null,
+    val user: UserInfo? = null,
+    val mustChangePassword: Boolean = false,
+    val error: String? = null
+)
+data class ChangeOwnPasswordRequest(
+    val currentPassword: String? = null,
+    val newPassword: String
+)
 data class UserInfo(
     @SerializedName("_id") val staffId: String? = null,
+    val employeeId: String? = null,
     val name: String? = null,
     val role: String? = null,
     val phone: String? = null,
-    val geoTrackingEnabled: Boolean = false
+    val email: String? = null,
+    val designation: String? = null,
+    val department: String? = null,
+    val isAdmin: Boolean = false,
+    val roleLevel: Int? = null,
+    val status: String? = null,
+    val geoTrackingEnabled: Boolean = false,
+    val mustChangePassword: Boolean = false
 )
 data class ValidateSessionResponse(val success: Boolean, val user: UserInfo?)
+data class PincodeLookupEnvelope(
+    @SerializedName("Status") val status: String? = null,
+    @SerializedName("PostOffice") val postOffice: List<PincodePostOffice>? = null
+)
+data class PincodePostOffice(
+    @SerializedName("Name") val name: String? = null,
+    @SerializedName("Block") val block: String? = null,
+    @SerializedName("Division") val division: String? = null,
+    @SerializedName("District") val district: String? = null,
+    @SerializedName("State") val state: String? = null
+)
 data class LogoutResponse(val success: Boolean, val message: String?)
 
 // Staff models
@@ -666,12 +1001,26 @@ data class StaffData(
     val employeeId: String?,
     val department: String?,
     val reportingTo: String? = null,
-    val reportingToId: String? = null
+    val reportingToId: String? = null,
+    val geoTrackingEnabled: Boolean = false,
+    val trackingDeviceHealth: TrackingDeviceHealth? = null
+)
+
+data class TrackingDeviceHealth(
+    val status: String? = null,
+    val lastSyncedAt: Long? = null,
+    val missing: List<String> = emptyList(),
+    val manufacturer: String? = null,
+    val model: String? = null,
+    val appVersion: String? = null,
 )
 
 // Attendance models
 data class AttendanceTodayResponse(val success: Boolean, val attendance: AttendanceData?)
 data class MyAttendanceResponse(val success: Boolean, val total: Int?, val records: List<AttendanceRecord> = emptyList())
+
+/** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
+data class AttendanceCancelRequest(val date: String)
 data class AttendanceRecord(
     val date: String?,
     val status: String?,
@@ -681,6 +1030,13 @@ data class AttendanceRecord(
     val punchOutTime: String? = null,
     val hasOpenSession: Boolean? = null,
     val sessions: List<SessionData>? = emptyList(),
+    // Decision metadata mirrored from leaves — populated on
+    // approved/rejected rows so the history row can show
+    // "By <approver>" with photo and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -739,6 +1095,39 @@ data class DaySessionsResponse(
     val lastPunchOut: String? = null,
 )
 
+// Attendance approval queue — manager pending-approvals payload.
+// Backend returns the records key (not "attendance"), see http.ts:2724.
+data class AttendanceApprovalsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val records: List<AttendanceApprovalRecord> = emptyList()
+)
+
+data class AttendanceApprovalRecord(
+    @SerializedName("_id") val id: String?,
+    val staffId: String? = null,
+    val staffName: String? = null,
+    val date: String? = null,
+    val punchInTime: String? = null,
+    val punchOutTime: String? = null,
+    val totalMinutes: Int? = null,
+    val source: String? = null,
+    val status: String? = null,
+    // Backend categorisation chosen by the approver — present | half-day | absent | weekoff | holiday.
+    val approvedAttendance: String? = null,
+    val department: String? = null,
+    val designation: String? = null,
+    val employeeId: String? = null
+)
+
+// Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
+// to "present" when omitted; the app always sends an explicit choice to make
+// audit logs unambiguous.
+data class ApproveAttendanceRequest(
+    val id: String,
+    val approvedAttendance: String
+)
+
 // Punch models
 data class PunchRequest(
     val latitude: Double? = null,
@@ -786,13 +1175,22 @@ data class LeaveData(
     val toDate: String?,
     val reason: String?,
     val status: String?,
-    @SerializedName("_creationTime") val createdAt: Double?
+    @SerializedName("_creationTime") val createdAt: Double?,
+    // Decision metadata — populated server-side on /my for approved
+    // and rejected rows so the mobile card can render "By <approver>"
+    // with the person's avatar and "Approved/Rejected at <date>".
+    val approverName: String? = null,
+    val approverPhotoUrl: String? = null,
+    /** ISO datetime — approvedOn / rejectedOn / fallback updatedAt. */
+    val decidedAt: String? = null,
 )
 data class ApplyLeaveRequest(
     val leaveType: String,
     val fromDate: String,
     val toDate: String,
-    val reason: String
+    val reason: String,
+    val reportingToId: String? = null,
+    val reportingToName: String? = null
 )
 data class ApplyLeaveResponse(val success: Boolean, val leaveId: String?, val error: String? = null)
 
@@ -842,11 +1240,115 @@ data class ApplyPermissionRequest(
     val date: String,
     val fromTime: String,
     val toTime: String,
-    val reason: String
+    val reason: String,
+    val reportingToId: String? = null,
+    val reportingToName: String? = null
 )
 data class ApplyPermissionResponse(val success: Boolean, val permissionId: String?, val error: String? = null)
 
 // Common
+// ── Profile photo ──
+data class SetProfilePhotoRequest(val storageId: String)
+data class SetProfilePhotoResponse(
+    val success: Boolean = false,
+    val staff: StaffFullData? = null,
+    val photo: ProfilePhotoData? = null,
+    val error: String? = null
+)
+data class ProfilePhotoData(val storageId: String? = null, val url: String? = null)
+
+// ── Loans models ──
+// All numeric loan fields use Double to match Convex's v.number() (Float64).
+// Gson throws if a JSON number with any decimal/exponent lands in a Long?
+// field — which is what happens when the backend returns amounts like
+// 25000.0 from a number column.
+data class LoanData(
+    @SerializedName("_id") val id: String?,
+    val loanId: String?,
+    val staffId: String?,
+    val staffName: String?,
+    val employeeId: String?,
+    val principalAmount: Double? = null,
+    val loanAmount: Double? = null,
+    val annualInterestRate: Double? = null,
+    val interestType: String? = null,
+    val disbursedDate: String? = null,
+    val repaymentStartMonth: String? = null,
+    val repaymentEndMonth: String? = null,
+    val monthlyDeduction: Double? = null,
+    val totalRepaid: Double? = null,
+    val remainingBalance: Double? = null,
+    val status: String? = null,
+    val purpose: String? = null,
+    val notes: String? = null,
+    val approvalStatus: String? = null,
+    val repayments: List<LoanRepaymentData>? = null
+)
+
+data class LoanRepaymentData(
+    @SerializedName("_id") val id: String? = null,
+    val loanId: String? = null,
+    val staffId: String? = null,
+    val month: String? = null,
+    val amount: Double? = null,
+    val mode: String? = null,
+    val notes: String? = null,
+    val createdAt: String? = null
+)
+
+data class LoansSummary(
+    val totalLoans: Int = 0,
+    val activeCount: Int = 0,
+    val previousCount: Int = 0,
+    val pendingCount: Int = 0,
+    val totalDisbursed: Double = 0.0,
+    val totalRepaid: Double = 0.0,
+    val currentOutstanding: Double = 0.0
+)
+
+data class MyLoansResponse(
+    val success: Boolean = false,
+    val summary: LoansSummary? = null,
+    val active: List<LoanData> = emptyList(),
+    val previous: List<LoanData> = emptyList(),
+    val pending: List<LoanData> = emptyList(),
+    val error: String? = null
+)
+
+data class LoanDetailResponse(
+    val success: Boolean = false,
+    val loan: LoanData? = null,
+    val error: String? = null
+)
+
+data class LoanRepaymentsResponse(
+    val success: Boolean = false,
+    val total: Int = 0,
+    val repayments: List<LoanRepaymentData> = emptyList(),
+    val error: String? = null
+)
+
+data class ApplyLoanRequest(
+    val nominee1Id: String? = null,
+    val nominee1Name: String? = null,
+    val nominee2Id: String? = null,
+    val nominee2Name: String? = null,
+    val loanAmount: Double? = null,
+    val interestType: String? = null,
+    val disbursedDate: String? = null,
+    val repaymentStartMonth: String? = null,
+    val tenureMonths: Double? = null,
+    val originalDocument: String? = null,
+    val purpose: String? = null,
+    val notes: String? = null
+)
+
+data class ApplyLoanResponse(
+    val success: Boolean = false,
+    val loanId: String? = null,
+    val error: String? = null
+)
+
 data class IdRequest(val id: String)
 data class RejectRequest(val id: String, val reason: String)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
@@ -916,6 +1418,7 @@ data class StaffFullData(
     val religion: String?, val nationality: String?,
     val qualification: String?, val experienceYears: Int?,
     // Employment
+    val reportingTo: String? = null,
     val reportingToName: String?, val roleLevel: Int?,
     // Documents
     val documents: List<StaffDocument>?,
@@ -980,7 +1483,8 @@ data class MessageData(
     val channelId: String?, val conversationId: String?,
     val isDeleted: Boolean?, val isEdited: Boolean?,
     val replyCount: Int?, val parentMessageId: String?,
-    val attachments: List<MessageAttachmentData>? = null
+    val attachments: List<MessageAttachmentData>? = null,
+    val reactions: List<ReactionData>? = null
 )
 data class MessageAttachmentData(
     @SerializedName("_id") val id: String? = null,
@@ -1168,7 +1672,10 @@ data class PresenceHeartbeatRequest(val status: String? = null)
 // ── Staff self-edit (personal + family fields) ─────────────────────────────
 
 data class UpdateMyProfileRequest(
+    val id: String? = null,
     val name: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
     val dateOfBirth: String? = null,
     val gender: String? = null,
     val maritalStatus: String? = null,
@@ -1215,6 +1722,11 @@ data class TaskData(
     val achievedQuantity: Double? = null,
     val totalQuantity: Double? = null,
     val unit: String? = null,
+    // Estimated / actual cost in INR. `tasks.create` stores both as
+    // optional numbers on the schema; the Task Overview surfaces
+    // estimatedCost in the Est. Cost card.
+    val estimatedCost: Double? = null,
+    val actualCost: Double? = null,
     val todaysUpdate: String? = null,
     val blocker: String? = null,
     val tomorrowsPlan: String? = null,
@@ -1274,7 +1786,14 @@ data class AddTaskUpdateRequest(
     val todaysUpdate: String? = null,
     val blocker: String? = null,
     val tomorrowsPlan: String? = null,
-    val progressSnapshot: Int? = null
+    val progressSnapshot: Int? = null,
+    val images: List<TaskUpdateImage>? = null
+)
+
+data class TaskUpdateImage(
+    val storageId: String,
+    val url: String? = null,
+    val name: String? = null
 )
 
 data class TaskMutationResponse(
@@ -1282,6 +1801,211 @@ data class TaskMutationResponse(
     val updateId: String? = null,
     val task: TaskData? = null,
     val error: String? = null
+)
+
+// ── Project Management: projects list / detail / per-project tasks ─────────
+
+data class ProjectSummary(
+    @SerializedName("_id") val id: String,
+    val name: String? = null,
+    val description: String? = null,
+    val status: String? = null,
+    val progress: Int? = null,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val budget: Double? = null,
+    val location: String? = null,
+    val managerName: String? = null,
+    val staffManagerId: String? = null,
+    val projectType: String? = null
+)
+
+data class MyProjectsResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val projects: List<ProjectSummary> = emptyList(),
+    val error: String? = null
+)
+
+data class ProjectDetailResponse(
+    val success: Boolean,
+    val project: ProjectSummary? = null,
+    val isProjectManager: Boolean? = null,
+    val membershipRole: String? = null,
+    val error: String? = null
+)
+
+data class ProjectTasksResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val tasks: List<TaskData> = emptyList(),
+    val error: String? = null
+)
+
+data class TaskTimelineEntry(
+    @SerializedName("_id") val id: String,
+    val taskId: String? = null,
+    val projectId: String? = null,
+    val date: String? = null,
+    val todaysUpdate: String? = null,
+    val blocker: String? = null,
+    val tomorrowsPlan: String? = null,
+    val progressSnapshot: Int? = null,
+    val images: List<TaskUpdateImage>? = null,
+    val createdBy: String? = null,
+    // Server stores createdAt as an ISO-8601 string (`new Date().toISOString()`
+    // in taskUpdates.create). Declaring this as Double crashed Gson with
+    // `NumberFormatException: For input string: "2026-05-23T20:04:07.161Z"`
+    // when the Time Line sheet tried to load.
+    val createdAt: String? = null,
+    @SerializedName("_creationTime") val creationTime: Double? = null
+)
+
+data class TaskTimelineResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val updates: List<TaskTimelineEntry> = emptyList(),
+    val error: String? = null
+)
+
+data class TaskResourceEntry(
+    @SerializedName("_id") val id: String,
+    val taskId: String? = null,
+    val resourceType: String? = null,    // material | labour | equipment
+    val itemName: String? = null,
+    val unit: String? = null,
+    val budgetQty: Double? = null,
+    val plannedQty: Double? = null,
+    val actualQty: Double? = null,
+    val rate: Double? = null,
+    val isLumpsum: Boolean? = null,
+    val lumpsumAmount: Double? = null
+)
+
+data class TaskResourcesResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val resources: List<TaskResourceEntry> = emptyList(),
+    val error: String? = null
+)
+
+// ── Storage (Convex upload URL flow) ───────────────────────────────────────
+
+data class StorageUploadUrlResponse(
+    val success: Boolean,
+    val uploadUrl: String? = null,
+    val error: String? = null
+)
+
+data class StorageUploadResultResponse(
+    val storageId: String? = null
+)
+
+// ── Project Expenses ───────────────────────────────────────────────────────
+
+data class ExpenseReceipt(
+    val storageId: String,
+    val url: String? = null,
+    val name: String? = null
+)
+
+data class ProjectExpense(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val category: String,                // labour | materials | equipment | other
+    val amount: Double,
+    val date: String,                    // YYYY-MM-DD
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false,
+    val paidAt: Double? = null,
+    val paidByStaffId: String? = null,
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+    @SerializedName("_creationTime") val creationTime: Double? = null
+)
+
+data class ExpenseCategoryTotals(
+    val labour: Double = 0.0,
+    val materials: Double = 0.0,
+    val equipment: Double = 0.0,
+    val other: Double = 0.0
+)
+
+data class ExpenseTotals(
+    val byCategory: ExpenseCategoryTotals = ExpenseCategoryTotals(),
+    val total: Double = 0.0,
+    val paid: Double = 0.0,
+    val pending: Double = 0.0,
+    val count: Int = 0
+)
+
+data class ProjectExpensesResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val expenses: List<ProjectExpense> = emptyList(),
+    val totals: ExpenseTotals? = null,
+    val error: String? = null
+)
+
+data class ProjectExpenseDetailResponse(
+    val success: Boolean,
+    val expense: ProjectExpenseDetail? = null,
+    val error: String? = null
+)
+
+data class ProjectExpenseDetail(
+    @SerializedName("_id") val id: String,
+    val projectId: String? = null,
+    val category: String,
+    val amount: Double,
+    val date: String,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false,
+    val paidAt: Double? = null,
+    val paidByStaffId: String? = null,
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+    val project: ProjectSummary? = null,
+    val createdByName: String? = null,
+    val paidByName: String? = null
+)
+
+data class CreateProjectExpenseRequest(
+    val projectId: String,
+    val category: String,
+    val amount: Double,
+    val date: String,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null,
+    val paid: Boolean = false
+)
+
+data class ProjectExpenseCreateResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val error: String? = null
+)
+
+data class UpdateProjectExpenseRequest(
+    val id: String,
+    val category: String? = null,
+    val amount: Double? = null,
+    val date: String? = null,
+    val paymentMethod: String? = null,
+    val notes: String? = null,
+    val receipts: List<ExpenseReceipt>? = null
+)
+
+data class MarkExpensePaidRequest(
+    val id: String,
+    val paid: Boolean
 )
 
 // ── Telecaller leads (mobile) ──────────────────────────────────────────────
@@ -1331,6 +2055,76 @@ data class TelecallerLeadSearchResponse(
     val error: String? = null
 )
 
+data class ClientSearchResponse(
+    val success: Boolean,
+    val client: ClientProfile? = null,
+    val error: String? = null,
+)
+
+data class ClientProfile(
+    @SerializedName("_id") val id: String? = null,
+    val title: String? = null,
+    val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val nationality: String? = null,
+    val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val homeAddress: String? = null,
+    val addressLine1: String? = null,
+    val formattedAddress: String? = null,
+    val pincode: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+)
+
+/**
+ * Body for /api/telecaller/leads/update — used by the outcome
+ * sheet's Edit-mode submit to push field-staff edits back to the
+ * lead. Every field is optional; only ones the user actually
+ * changed are sent. manualProfile.* mirrors the schema shape so
+ * a single PATCH covers the whole client-form payload.
+ */
+data class UpdateTelecallerLeadRequest(
+    @SerializedName("id") val leadId: String,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val emailId: String? = null,
+    val alternateNumber: String? = null,
+    val clientCity: String? = null,
+    val locationPreferred: String? = null,
+    val manualProfile: ManualProfilePatch? = null,
+)
+
+data class ManualProfilePatch(
+    val clientName: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val alternateMobileNumber: String? = null,
+)
+
 data class TelecallerLeadSearchData(
     @SerializedName("_id") val id: String,
     val contactName: String? = null,
@@ -1340,6 +2134,11 @@ data class TelecallerLeadSearchData(
     val locationPreferred: String? = null,
     val suggestedVisitAddress: String? = null,
     val latestAnalysisProfile: LeadAnalysisProfile? = null,
+    // Operator-edited manual profile (from the web Edit Live Profile
+    // dialog). When present, prefer these values over the AI-derived
+    // latestAnalysisProfile — they reflect explicit corrections the
+    // operator typed, not the AI's best guess at parsing the call.
+    val manualProfile: ManualProfilePatch? = null,
 )
 
 data class LeadAnalysisProfile(
@@ -1450,6 +2249,55 @@ data class InventoryLayoutResponse(
 
 data class InventoryUnitIdRequest(val id: String)
 
+data class BookingPlotPrefillProject(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val ratePerSqft: Double? = null,
+    val guidelineRatePerSqft: Double? = null,
+    val gstPercent: Double? = null,
+)
+
+data class BookingPlotPrefillPlot(
+    @SerializedName("_id") val id: String? = null,
+    val plotNo: String? = null,
+    val area: Double? = null,
+    val ratePerSqft: Double? = null,
+    val plotCost: Double? = null,
+    val guidelineValue: Double? = null,
+)
+
+data class BookingPlotPrefillFields(
+    val bookingCost: Double? = null,
+    val agreedAmount: Double? = null,
+    val guidelineValue: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherCharges: Double? = null,
+    val advanceAmount: Double? = null,
+    val advanceDueDate: String? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+)
+
+data class BookingPaymentSchedulePrefill(
+    val description: String? = null,
+    val paymentPercent: Double? = null,
+    val daysFromBooking: Double? = null,
+    val amount: Double? = null,
+    val dueDate: String? = null,
+)
+
+data class BookingPlotPrefillResponse(
+    val success: Boolean,
+    val project: BookingPlotPrefillProject? = null,
+    val plot: BookingPlotPrefillPlot? = null,
+    val fields: BookingPlotPrefillFields? = null,
+    val schedules: List<BookingPaymentSchedulePrefill> = emptyList(),
+    val error: String? = null,
+)
+
 // ── Marketing: Bookings (KOS-52) ────────────────────────────────────────────
 // Mobile sends only the fields the booking picker collects. plotId is always
 // included when the user selected an inventory unit — server-side validator
@@ -1459,20 +2307,599 @@ data class CreateBookingRequest(
     val mobileNumber: String,
     val bookingDate: String,                // yyyy-MM-dd
     val leadId: String? = null,
+    val title: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
     val projectId: String? = null,
     val plotId: String? = null,
     val plotNo: String? = null,
     val bookingType: String? = null,
+    val cefNo: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
     val bookingMode: String? = null,
     val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val agreedAmount: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstAmount: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
-    val email: String? = null,
-    val homeAddress: String? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
+    val originalAvpStaffId: String? = null,
+    val originalGmStaffId: String? = null,
+    val originalSeniorManagerStaffId: String? = null,
+    val originalBdoStaffId: String? = null,
+    val originalTelecallerStaffId: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val status: String? = null,
+    val sourceType: String? = null,
+    val sourceClientPlaceVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
 )
 
 data class CreateBookingResponse(
     val success: Boolean,
     val id: String? = null,
     val error: String? = null,
+)
+
+// ── Booking draft wire types ─────────────────────────────────────
+// `sourceKey` is the stable string the backend uses to dedupe the
+// per-staff scratchpad: stringified CP id, SV id, or "standalone".
+
+data class BookingDraftSaveRequest(
+    val sourceKey: String,
+    val sourceCpVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
+    /** Opaque blob — the mobile owns the schema. */
+    val draftJson: String,
+)
+
+data class BookingDraftSaveResponse(
+    val success: Boolean,
+    val id: String? = null,
+    val updatedAt: Long? = null,
+    val created: Boolean? = null,
+    val error: String? = null,
+)
+
+data class BookingDraftPayload(
+    @SerializedName("_id") val id: String? = null,
+    val staffId: String? = null,
+    val sourceKey: String? = null,
+    val sourceCpVisitId: String? = null,
+    val sourceSiteVisitId: String? = null,
+    val draftJson: String? = null,
+    val updatedAt: Long? = null,
+)
+
+data class BookingDraftGetResponse(
+    val success: Boolean = false,
+    val draft: BookingDraftPayload? = null,
+    val error: String? = null,
+)
+
+data class BookingDraftClearRequest(val sourceKey: String)
+
+data class BookingDraftClearResponse(
+    val success: Boolean = false,
+    val deleted: Boolean? = null,
+    val error: String? = null,
+)
+
+// ── Marketing: Bookings list (mobile) ──────────────────────────────────────
+// Server enriches each row with projectName + plotNumber so the list card
+// can render without secondary lookups.
+data class Booking(
+    @SerializedName("_id") val id: String,
+    @SerializedName("_creationTime") val creationTime: Double? = null,
+    val bookingRefNo: String? = null,
+    val title: String? = null,
+    val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
+    val bookingDate: String? = null,                // yyyy-MM-dd
+    val bookingType: String? = null,
+    val cefNo: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
+    val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
+    val otherCharges: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val agreedAmount: Double? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val plotNumber: String? = null,                  // server-enriched fallback
+    /** draft | pending_confirmation | confirmed | cancelled */
+    val status: String? = null,
+    val approvalStage: String? = null,
+    val sourceType: String? = null,                  // cp_visit | site_visit | walk_in
+    val createdByStaffId: String? = null,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val accountsTransactionId: String? = null,
+    val accountsPaymentProofStorageId: String? = null,
+    val accountsPaymentProofFileName: String? = null,
+    val approvalRequest: BookingApprovalRequest? = null,
+    val approvalWorkflow: BookingApprovalWorkflow? = null,
+    val cancellationRequest: BookingApprovalRequest? = null,
+    val cancellationApprovalStage: String? = null,
+    val cancellationRequestedAt: Double? = null,
+    val plot: BookingPlotDetail? = null,
+    val sourceTelecallerStaff: BookingStaffBrief? = null,
+    val sourceAvpStaff: BookingStaffBrief? = null,
+)
+
+data class BookingsListResponse(
+    val success: Boolean,
+    val total: Int? = null,
+    val bookings: List<Booking> = emptyList(),
+    val error: String? = null,
+)
+
+data class BookingDetailResponse(
+    val success: Boolean,
+    val booking: Booking? = null,
+    val error: String? = null,
+)
+
+data class BookingApprovalHistory(
+    val stepOrder: Int? = null,
+    val action: String? = null,
+    val approverName: String? = null,
+    val comment: String? = null,
+    val timestamp: String? = null,
+)
+
+data class BookingApprovalRequest(
+    val requestedBy: String? = null,
+    val requestedOn: String? = null,
+    val currentStep: Int? = null,
+    val totalSteps: Int? = null,
+    val currentApproverId: String? = null,
+    val currentApproverName: String? = null,
+    val currentApproverRole: String? = null,
+    val status: String? = null,
+    val approvalHistory: List<BookingApprovalHistory> = emptyList(),
+)
+
+data class BookingApprovalWorkflow(
+    val steps: List<BookingApprovalStep> = emptyList(),
+)
+
+data class BookingApprovalStep(
+    val stepOrder: Int? = null,
+    val approverRole: String? = null,
+    val requiresTransactionId: Boolean? = null,
+    val allowsPaymentProof: Boolean? = null,
+)
+
+data class BookingPlotDetail(
+    @SerializedName("_id") val id: String? = null,
+    val unitNumber: String? = null,
+    val plotNo: String? = null,
+    val status: String? = null,
+)
+
+data class BookingStaffBrief(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+)
+
+data class UpdateBookingRequest(
+    val title: String? = null,
+    val clientName: String? = null,
+    val fatherSpouseName: String? = null,
+    val dateOfBirth: String? = null,
+    val anniversaryDate: String? = null,
+    val mobileNumber: String? = null,
+    val alternateNumbers: String? = null,
+    val whatsappNumber: String? = null,
+    val email: String? = null,
+    val pincode: String? = null,
+    val homeAddress: String? = null,
+    val profession: String? = null,
+    val designation: String? = null,
+    val incomePerAnnum: String? = null,
+    val officeName: String? = null,
+    val officeAddress: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val location: String? = null,
+    val officeMobile: String? = null,
+    val officePhone: String? = null,
+    val officeEmail: String? = null,
+    val nationality: String? = null,
+    val bookingType: String? = null,
+    val cefNo: String? = null,
+    val bookingDate: String? = null,
+    val isDuplicateBooking: Boolean? = null,
+    val isAgainstSV: Boolean? = null,
+    val propertyType: String? = null,
+    val bookingMode: String? = null,
+    val plotNo: String? = null,
+    val bookingCost: Double? = null,
+    val guidelineValue: Double? = null,
+    val specialConsideration: Double? = null,
+    val specialConsiderationReason: String? = null,
+    val discountApprovedBy: String? = null,
+    val specialConsiderationValidity: Double? = null,
+    val promotionalOffers: String? = null,
+    val promotionalOffersTnC: String? = null,
+    val promotionalOfferValue: Double? = null,
+    val offerValidityPeriod: Double? = null,
+    val agreedAmount: Double? = null,
+    val registrationCharges: Double? = null,
+    val gstApplicable: Boolean? = null,
+    val gstAmount: Double? = null,
+    val documentCharges: Double? = null,
+    val pattaCharges: Double? = null,
+    val otherChargesApplicable: Boolean? = null,
+    val otherCharges: Double? = null,
+    val advanceAmount: Double? = null,
+    val balanceAmount: Double? = null,
+    val paymentMode: String? = null,
+    val freePayment: Boolean? = null,
+    val allotmentDueAmount: Double? = null,
+    val allotmentDueDate: String? = null,
+    val secondPaymentAmount: Double? = null,
+    val secondPaymentDate: String? = null,
+    val thirdPaymentAmount: Double? = null,
+    val thirdPaymentDate: String? = null,
+    val fourthPaymentAmount: Double? = null,
+    val fourthPaymentDate: String? = null,
+    val preferredRegistrationDate: String? = null,
+    val aadhaar: String? = null,
+    val pan: String? = null,
+    val referenceName1: String? = null,
+    val referenceMobile1: String? = null,
+    val referenceProfession1: String? = null,
+    val referenceName2: String? = null,
+    val referenceMobile2: String? = null,
+    val referenceProfession2: String? = null,
+    val docPreparedIn: String? = null,
+    val status: String? = null,
+)
+
+data class BookingApproveRequest(
+    val comment: String? = null,
+    val accountsTransactionId: String? = null,
+    val accountsPaymentProofStorageId: String? = null,
+    val accountsPaymentProofFileName: String? = null,
+)
+
+data class BookingRejectRequest(
+    val rejectionReason: String,
+)
+
+data class BookingActionResponse(
+    val success: Boolean,
+    val booking: Booking? = null,
+    val error: String? = null,
+)
+
+// ── Land Procurement: Inspection (mobile) ──────────────────────────────────
+// Convex `landProperties` row enriched on the server with a derived inspector
+// status (`not_started` / `in_progress` / `completed`) and the calling
+// inspector's per-staff report id when one exists.
+data class InspectionListItem(
+    @SerializedName("_id") val propertyId: String,
+    val referenceNo: String? = null,
+    val totalArea: Double? = null,
+    val areaUnit: String? = null,
+    val inspectionDate: String? = null,
+    val village: String? = null,
+    val taluk: String? = null,
+    val district: String? = null,
+    val locality: String? = null,
+    val city: String? = null,
+    val fullAddress: String? = null,
+    val pincode: String? = null,
+    val referrerContact: String? = null,
+    val surveyNo: String? = null,
+    val propertyType: String? = null,
+    val derivedInspectionStatus: String? = null,
+    // pending / accepted / date_change_requested / date_change_approved /
+    // date_change_rejected (null on legacy rows). Gates the inspection form:
+    // only "accepted" lets the inspector fill it in.
+    val inspectionAcceptanceStatus: String? = null,
+    val reportId: String? = null,
+    // VP final review of the submitted inspection. "approved" → form
+    // locks to view-only on mobile (the inspector can still see what was
+    // submitted but can no longer edit). "hold" / "rejected" keep the
+    // form editable so the inspector can address feedback.
+    val vpInspectionStatus: String? = null,
+)
+
+data class InspectionListResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val items: List<InspectionListItem> = emptyList(),
+    val error: String? = null,
+)
+
+// Returned by `/api/land/inspections/get`. `report` is `{}` for properties
+// where the inspector hasn't saved anything yet — Gson maps that to all
+// fields being null.
+// One Area-tab nearby place: school / college / hospital / mall. Both keys
+// are required strings on the server (v.string()), so default to "" rather
+// than null when building a save payload.
+data class InspectionAreaEntry(
+    val name: String = "",
+    val distance: String = "",
+)
+
+// One competitor project. Mirrors the web's landCompetitors row so a phone
+// submission shows up on the web competitor list unchanged. approvalType is
+// the server union ("cmda"/"dtcp"/"panchayat") or null; price units are sent
+// lowercased to match the web's stored values.
+data class InspectionCompetitor(
+    val promoterName: String? = null,
+    val projectName: String? = null,
+    val location: String? = null,
+    val latLong: String? = null,
+    val extentUnits: String? = null,
+    val approvalType: String? = null,
+    val amenities: String? = null,
+    val amenitiesList: List<String>? = null,
+    val currentStage: String? = null,
+    val distanceFromProject: String? = null,
+    val distanceFromBusStand: String? = null,
+    val distanceFromRailway: String? = null,
+    val distanceFromPublic: String? = null,
+    val distanceFromPrivate: String? = null,
+    val actualPrice: Double? = null,
+    val actualPriceUnit: String? = null,
+    val finalPrice: Double? = null,
+    val finalPriceUnit: String? = null,
+)
+
+data class InspectionReportData(
+    val inspectionDate: String? = null,
+    val customerName: String? = null,
+    val conductNo: String? = null,
+    val surveyNo: String? = null,
+    val siteLocation: String? = null,
+    val exactLocation: String? = null,
+    val landmark: String? = null,
+    val latLong: String? = null,
+    val population: String? = null,
+    val accessibilityWidth: String? = null,
+    val accessibilityWidthUnit: String? = null,
+    val electricity: String? = null,
+    val eConnectionToLand: String? = null,
+    val telecom: String? = null,
+    val railwayStationDistance: String? = null,
+    val busStopDistance: String? = null,
+    val roadType: List<String>? = null,
+    val schoolExists: Boolean? = null,
+    val schoolEntries: List<InspectionAreaEntry>? = null,
+    val collegeExists: Boolean? = null,
+    val collegeEntries: List<InspectionAreaEntry>? = null,
+    val hospitalExists: Boolean? = null,
+    val hospitalEntries: List<InspectionAreaEntry>? = null,
+    val mallExists: Boolean? = null,
+    val mallEntries: List<InspectionAreaEntry>? = null,
+    val marketExists: Boolean? = null,
+    val marketEntries: List<InspectionAreaEntry>? = null,
+    val presentDemand: List<String>? = null,
+    val futureDemand: List<String>? = null,
+    val targetClients: List<String>? = null,
+    val landlordPrice: Double? = null,
+    val landlordPriceUnit: String? = null,
+    val recommendationPrice: Double? = null,
+    val recommendationPriceUnit: String? = null,
+    val priceCanSell: Double? = null,
+    val priceCanSellUnit: String? = null,
+    val conclusion: String? = null,
+)
+
+data class InspectionGetResponse(
+    val success: Boolean,
+    val property: InspectionListItem? = null,
+    val report: InspectionReportData? = null,
+    val competitors: List<InspectionCompetitor>? = null,
+    val error: String? = null,
+)
+
+// Send only the keys the user actually touched — nulls are dropped on the
+// server side, so partial saves don't wipe earlier values from the web.
+data class InspectionSaveRequest(
+    val propertyId: String,
+    val inspectionDate: String? = null,
+    val customerName: String? = null,
+    val conductNo: String? = null,
+    val surveyNo: String? = null,
+    val siteLocation: String? = null,
+    val exactLocation: String? = null,
+    val landmark: String? = null,
+    val latLong: String? = null,
+    val population: String? = null,
+    val accessibilityWidth: String? = null,
+    val accessibilityWidthUnit: String? = null,
+    val electricity: String? = null,
+    val eConnectionToLand: String? = null,
+    val telecom: String? = null,
+    val railwayStationDistance: String? = null,
+    val busStopDistance: String? = null,
+    val roadType: List<String>? = null,
+    val schoolExists: Boolean? = null,
+    val schoolEntries: List<InspectionAreaEntry>? = null,
+    val collegeExists: Boolean? = null,
+    val collegeEntries: List<InspectionAreaEntry>? = null,
+    val hospitalExists: Boolean? = null,
+    val hospitalEntries: List<InspectionAreaEntry>? = null,
+    val mallExists: Boolean? = null,
+    val mallEntries: List<InspectionAreaEntry>? = null,
+    val marketExists: Boolean? = null,
+    val marketEntries: List<InspectionAreaEntry>? = null,
+    val presentDemand: List<String>? = null,
+    val futureDemand: List<String>? = null,
+    val targetClients: List<String>? = null,
+    val landlordPrice: Double? = null,
+    val landlordPriceUnit: String? = null,
+    val recommendationPrice: Double? = null,
+    val recommendationPriceUnit: String? = null,
+    val priceCanSell: Double? = null,
+    val priceCanSellUnit: String? = null,
+    val conclusion: String? = null,
+    val competitors: List<InspectionCompetitor>? = null,
+)
+
+data class InspectionSaveResponse(
+    val success: Boolean,
+    val reportId: String? = null,
+    val error: String? = null,
+)
+
+data class InspectionAcceptRequest(
+    val propertyId: String,
+)
+
+data class InspectionRescheduleRequest(
+    val propertyId: String,
+    val requestedDate: String,
+    val remarks: String? = null,
+)
+
+data class InspectionActionResponse(
+    val success: Boolean,
+    val error: String? = null,
+)
+
+// One legal-clearance verification query, flattened from a property's
+// landLegalClearance.verificationQueries (the web "Verification & Queries"
+// section). propertyId + queryIndex identify the row for updates.
+data class QueryListItem(
+    val propertyId: String,
+    val referenceNo: String? = null,
+    val queryIndex: Int = 0,
+    val query: String? = null,
+    val remarks: String? = null,
+    val resolved: Boolean = false,
+    val createdOn: String? = null,
+)
+
+data class QueryListResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val items: List<QueryListItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class QueryUpdateRequest(
+    val propertyId: String,
+    val queryIndex: Int,
+    val remarks: String? = null,
+    val resolved: Boolean? = null,
 )

@@ -191,12 +191,12 @@
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
 
-            <ProgressBar
-                android:id="@+id/progressVerify"
+            <View
+                android:id="@+id/skeletonVerify"
                 android:layout_width="22dp"
                 android:layout_height="22dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="#FFFFFF"
+                android:background="@drawable/bg_skeleton_circle_inverse"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>

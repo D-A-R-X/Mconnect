@@ -56,6 +56,19 @@
             android:fontFamily="@font/geist_mono_regular"
             android:textColor="?attr/colorForegroundMuted"
             android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvStaffGeoTrackHealth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_badge_error"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:textColor="?attr/colorError"
+            android:textSize="10sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Status badge -->

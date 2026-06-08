@@ -21,6 +21,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSelfieClockInDetailBinding
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -80,15 +81,15 @@ class SelfieClockInDetailFragment : Fragment() {
         collectEvents()
 
         binding.btnBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnHeaderRefresh.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnRetakePhoto.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateUp()
         }
 
         binding.btnClockInAction.setOnClickListener {
@@ -221,13 +222,30 @@ class SelfieClockInDetailFragment : Fragment() {
                             }
                         }
 
-                        // Background failure after optimistic Success — usually delivered
-                        // after this fragment has already popped, but handled defensively.
-                        is AttendanceFlowEvent.SubmissionFailed -> Unit
+                        // Submission failed after upload — treat the same as a
+                        // pre-flight Error: re-enable the button so the user
+                        // can retry and surface the server's error message.
+                        is AttendanceFlowEvent.SubmissionFailed -> {
+                            if (event.mode == mode) {
+                                binding.btnClockInAction.isEnabled = true
+                                binding.btnClockInAction.text =
+                                    if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_LONG).show()
+                                // Server says there's no open session — the UI
+                                // got into this screen because of a stale
+                                // clocked-in flag. Send the user back to the
+                                // dashboard, which will refresh and show the
+                                // right button.
+                                if (event.message.contains("No active punch-in", ignoreCase = true)) {
+                                    navigateUp()
+                                }
+                            }
+                        }
 
                         is AttendanceFlowEvent.Success -> {
                             if (event.mode == mode) {
-                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                                // No success toast — the success sheet already
+                                // confirms the punch.
                                 parentFragmentManager.setFragmentResult(
                                     RESULT_KEY_PUNCH_COMPLETED,
                                     bundleOf(KEY_MODE to mode.name),

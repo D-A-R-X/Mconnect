@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_leave_sheet"
+    android:orientation="vertical">
+
+    <!-- Bottom sheet drag handle -->
+    <View
+        android:layout_width="52dp"
+        android:layout_height="5dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:background="#D9D9D9"
+        android:backgroundTint="#D9D9D9" />
+
+    <!-- Title and description header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:layout_marginBottom="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Create Salary Advance"
+            android:textColor="#101828"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Information about Salary Advance"
+            android:textColor="#667085"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Scrollable content area -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="24dp">
+
+        <!-- Salary Requirement Field -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Salary Requirement *"
+            android:textColor="#344054"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_loan_input_box"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_vuesax_linear_coin"
+                android:contentDescription="@null" />
+
+            <EditText
+                android:id="@+id/etSalaryRequirement"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Enter Amount"
+                android:textColorHint="#98A2B3"
+                android:inputType="numberDecimal"
+                android:textColor="#101828"
+                android:textSize="14sp"
+                android:fontFamily="@font/inter_regular"
+                android:importantForAutofill="no" />
+        </LinearLayout>
+
+        <!-- Purpose Field -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Purpose (Optional)"
+            android:textColor="#344054"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_loan_input_box"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:layout_marginBottom="24dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_loan_document"
+                android:contentDescription="@null" />
+
+            <EditText
+                android:id="@+id/etPurpose"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Enter Details"
+                android:textColorHint="#98A2B3"
+                android:inputType="text"
+                android:textColor="#101828"
+                android:textSize="14sp"
+                android:fontFamily="@font/inter_regular"
+                android:importantForAutofill="no" />
+        </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Top border and bottom button -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#D0D5DD" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="14dp">
+
+        <TextView
+            android:id="@+id/btnSubmitAdvance"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_loan_submit_button_disabled"
+            android:clickable="false"
+            android:focusable="false"
+            android:enabled="false"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Submit Now"
+            android:textColor="#98A2B3"
+            android:textSize="15sp" />
+    </FrameLayout>
+</LinearLayout>

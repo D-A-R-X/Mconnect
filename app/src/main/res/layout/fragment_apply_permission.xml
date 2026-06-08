@@ -166,12 +166,12 @@
                     android:textColor="?attr/colorForegroundInverse"
                     android:textSize="15sp" />
 
-                <ProgressBar
-                    android:id="@+id/progressSubmit"
+                <View
+                    android:id="@+id/skeletonSubmit"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_gravity="center"
-                    android:indeterminateTint="?attr/colorForegroundInverse"
+                    android:background="@drawable/bg_skeleton_circle_inverse"
                     android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>

@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.ui.hr
 
 import android.animation.ObjectAnimator
+import com.manjugroups.m_connect.ui.common.BottomActionInsets
+import com.manjugroups.m_connect.ui.common.dismissRefresh
+import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -21,6 +24,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentPermissionsBinding
 import com.manjugroups.m_connect.network.PermissionData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -32,6 +36,10 @@ class PermissionsFragment : Fragment() {
 
     private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
     private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
+    // Top-level scope inside History mode: My own permissions vs the
+    // user's reporting-team's pending approvals. Team is only
+    // available when canApprove() is true. Default = MY.
+    private enum class Scope { MY, TEAM }
 
     private var _binding: FragmentPermissionsBinding? = null
     private val binding get() = _binding!!
@@ -40,6 +48,7 @@ class PermissionsFragment : Fragment() {
     private var screenMode: String = MODE_HISTORY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
 
     companion object {
@@ -77,8 +86,9 @@ class PermissionsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        binding.btnBack.setOnClickListener { navigateUp() }
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ApplyPermissionFragment())
@@ -95,19 +105,31 @@ class PermissionsFragment : Fragment() {
             binding.tvSectionTitle.text = "Permission Approvals"
             binding.tvSectionSubtitle.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
+            binding.scopeRow.visibility = View.GONE
         } else {
             binding.tvHeaderTitle.text = "Permission Summary"
             binding.tvHeaderSubtitle.text = "Submit Permission"
             binding.tvSectionTitle.text = "Recent Requests"
             binding.tvSectionSubtitle.visibility = View.VISIBLE
             binding.filterRow.visibility = View.VISIBLE
+            // My/Team scope switch is only meaningful to staff who
+            // can approve. Plain employees stay on the (default) My
+            // scope with no extra control on screen.
+            val canApprove = session.hasPermission("permissions.approve")
+            binding.scopeRow.visibility = if (canApprove) View.VISIBLE else View.GONE
+            setupScopeTabs()
             setupFilterTabs()
+            updateScopeUi()
             updateFilterUi()
         }
 
         collectState()
         collectEvents()
         viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+
+        binding.permissionsRefresh.setupPullToRefresh {
+            viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+        }
     }
 
     private fun setupFilterTabs() {
@@ -126,6 +148,30 @@ class PermissionsFragment : Fragment() {
             updateFilterUi()
             renderState(viewModel.uiState.value)
         }
+    }
+
+    private fun setupScopeTabs() {
+        binding.tabScopeMy.setOnClickListener {
+            scope = Scope.MY
+            updateScopeUi()
+            renderState(viewModel.uiState.value)
+        }
+        binding.tabScopeTeam.setOnClickListener {
+            scope = Scope.TEAM
+            updateScopeUi()
+            renderState(viewModel.uiState.value)
+        }
+    }
+
+    private fun updateScopeUi() {
+        styleFilterTab(binding.tabScopeMy, scope == Scope.MY)
+        styleFilterTab(binding.tabScopeTeam, scope == Scope.TEAM)
+        // Status filter chips are only meaningful for My (which has
+        // a full history of approved/rejected rows). Team scope shows
+        // the pending-approvals pile straight through — server only
+        // returns pending rows there, so Approved / Rejected chips
+        // would always read empty.
+        binding.filterRow.visibility = if (scope == Scope.MY) View.VISIBLE else View.GONE
     }
 
     private fun updateFilterUi() {
@@ -154,12 +200,21 @@ class PermissionsFragment : Fragment() {
 
     private fun renderState(state: PermissionsState) {
         val canApprove = session.hasPermission("permissions.approve")
+        // Approval-mode entry from notifications still renders the
+        // pendingApprovals pile with Approve/Reject buttons.
+        // History-mode now routes by the user's Scope toggle:
+        //   • Scope.MY   → user's own permissions, status-filtered
+        //   • Scope.TEAM → team pending approvals (Approve/Reject UI),
+        //                   skipping the status filter since the
+        //                   server only returns pending rows there.
         val displayPermissions = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
-        } else {
-            filterHistoryPermissions(state.myPermissions)
+        } else when (scope) {
+            Scope.MY -> filterHistoryPermissions(state.myPermissions)
+            Scope.TEAM -> state.pendingApprovals
         }
         val isLoading = state.isLoading
+        if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
@@ -180,7 +235,12 @@ class PermissionsFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayPermissions.isEmpty())
-        renderPermissions(displayPermissions, canApprove && screenMode == MODE_APPROVAL)
+        // Approval mode (notification deep-link) AND History-mode Team
+        // scope both show Approve/Reject; Team scope is only entered
+        // when the user has the permission, so this is safe.
+        val showApprovalActions = (screenMode == MODE_APPROVAL && canApprove)
+            || (screenMode == MODE_HISTORY && scope == Scope.TEAM && canApprove)
+        renderPermissions(displayPermissions, showApprovalActions)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
@@ -222,6 +282,11 @@ class PermissionsFragment : Fragment() {
         if (screenMode == MODE_APPROVAL) {
             binding.tvEmpty.text = "No Permission Approvals"
             binding.tvEmptyHint.text = "There are no pending permission requests in review right now."
+            return
+        }
+        if (scope == Scope.TEAM) {
+            binding.tvEmpty.text = "No Team Permissions"
+            binding.tvEmptyHint.text = "No pending permission requests from your team."
             return
         }
         when (historyFilter) {
@@ -351,6 +416,38 @@ class PermissionsFragment : Fragment() {
                 actionRow.visibility = View.GONE
             }
 
+            // Per-row cancel affordance — visible ONLY on the user's
+            // own pending requests on the My scope of History mode.
+            // Approver-mode rows already get Approve/Reject; cancelled
+            // rows live in REJECTED/APPROVED buckets and shouldn't
+            // re-surface a trash icon there.
+            val cancelIcon = card.findViewById<ImageView>(R.id.ivPermCancel)
+            val canCancel = !approvalMode
+                && screenMode == MODE_HISTORY
+                && scope == Scope.MY
+                && bucket == StatusBucket.REVIEW
+                && perm.id != null
+            cancelIcon.visibility = if (canCancel) View.VISIBLE else View.GONE
+            if (canCancel) {
+                cancelIcon.setOnClickListener {
+                    val id = perm.id ?: return@setOnClickListener
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Cancel permission request?")
+                        .setMessage("This will withdraw your pending request.")
+                        .setPositiveButton("Cancel Request") { _, _ ->
+                            viewModel.cancelPermission(
+                                session.bearerToken,
+                                id,
+                                session.hasPermission("permissions.approve"),
+                            )
+                        }
+                        .setNegativeButton("Keep", null)
+                        .show()
+                }
+            } else {
+                cancelIcon.setOnClickListener(null)
+            }
+
             if (perm.id == focusedEntityId) {
                 card.alpha = 1f
             }
@@ -421,19 +518,16 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun startSkeletonPulse() {
-        if (skeletonAnimator?.isRunning == true) return
-        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
-            duration = 650L
-            repeatMode = ObjectAnimator.REVERSE
-            repeatCount = ObjectAnimator.INFINITE
-            start()
-        }
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
     }
 
     private fun stopSkeletonPulse() {
-        skeletonAnimator?.cancel()
-        skeletonAnimator = null
-        binding.skeletonContainer.alpha = 1f
+        com.manjugroups.m_connect.ui.common.SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onDestroyView() {

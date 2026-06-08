@@ -14,7 +14,11 @@ data class StaffItem(
     val phone: String,
     val role: String,
     val designation: String,
-    val status: String
+    val status: String,
+    val geoTrackingEnabled: Boolean = false,
+    val trackingHealthStatus: String? = null,
+    val trackingHealthMissing: List<String> = emptyList(),
+    val trackingHealthLastSyncedAt: Long? = null,
 )
 
 sealed interface HrStaffUiState {
@@ -57,7 +61,11 @@ class HrStaffViewModel : ViewModel() {
                             phone = s.phone ?: "",
                             role = s.role ?: "",
                             designation = s.designation ?: "",
-                            status = s.status ?: "active"
+                            status = s.status ?: "active",
+                            geoTrackingEnabled = s.geoTrackingEnabled,
+                            trackingHealthStatus = s.trackingDeviceHealth?.status,
+                            trackingHealthMissing = s.trackingDeviceHealth?.missing ?: emptyList(),
+                            trackingHealthLastSyncedAt = s.trackingDeviceHealth?.lastSyncedAt,
                         )
                     }.toMutableList()
                     cursor = response.continueCursor
@@ -91,7 +99,11 @@ class HrStaffViewModel : ViewModel() {
                             phone = s.phone ?: "",
                             role = s.role ?: "",
                             designation = s.designation ?: "",
-                            status = s.status ?: "active"
+                            status = s.status ?: "active",
+                            geoTrackingEnabled = s.geoTrackingEnabled,
+                            trackingHealthStatus = s.trackingDeviceHealth?.status,
+                            trackingHealthMissing = s.trackingDeviceHealth?.missing ?: emptyList(),
+                            trackingHealthLastSyncedAt = s.trackingDeviceHealth?.lastSyncedAt,
                         )
                     }
                     allStaff.addAll(newItems)
@@ -130,7 +142,11 @@ class HrStaffViewModel : ViewModel() {
                             phone = s.phone ?: "",
                             role = s.role ?: "",
                             designation = s.designation ?: "",
-                            status = s.status ?: "active"
+                            status = s.status ?: "active",
+                            geoTrackingEnabled = s.geoTrackingEnabled,
+                            trackingHealthStatus = s.trackingDeviceHealth?.status,
+                            trackingHealthMissing = s.trackingDeviceHealth?.missing ?: emptyList(),
+                            trackingHealthLastSyncedAt = s.trackingDeviceHealth?.lastSyncedAt,
                         )
                     }
                     _uiState.value = HrStaffUiState.Loaded(

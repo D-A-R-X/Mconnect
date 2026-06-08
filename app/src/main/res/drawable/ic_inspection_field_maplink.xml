@@ -1,0 +1,13 @@
+<!-- Google Map Link — chain-link glyph. Converted from link.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12.49,14.58 H13.75 C16.27,14.58 18.33,12.53 18.33,10 C18.33,7.48 16.28,5.42 13.75,5.42 H12.49" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#0B61CA" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.5,5.42 H6.25 C3.73,5.42 1.67,7.47 1.67,10 C1.67,12.52 3.73,14.58 6.25,14.58 H7.5" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#19B900" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M6.67,10 H13.33" />
+</vector>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Coming Soon" illustration for the empty Outcome Information body.
+     A clipboard with a clock badge — same vibe as the Pencil reference,
+     drawn as a single composable vector so it scales cleanly on any device. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Faint background blob -->
+    <path
+        android:fillColor="#E0EAF7"
+        android:pathData="M60,8 C90,8 110,30 110,60 C110,90 90,112 60,112 C30,112 10,90 10,60 C10,30 30,8 60,8 Z" />
+    <!-- Clipboard body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,28 H78 A4,4 0 0 1 82,32 V92 A4,4 0 0 1 78,96 H36 A4,4 0 0 1 32,92 V32 A4,4 0 0 1 36,28 Z" />
+    <path
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M36,28 H78 A4,4 0 0 1 82,32 V92 A4,4 0 0 1 78,96 H36 A4,4 0 0 1 32,92 V32 A4,4 0 0 1 36,28 Z" />
+    <!-- Clipboard clip -->
+    <path
+        android:fillColor="#0B61CA"
+        android:pathData="M48,22 H66 A2,2 0 0 1 68,24 V32 H46 V24 A2,2 0 0 1 48,22 Z" />
+    <!-- Lines -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M40,48 L70,48 M40,56 L66,56 M40,64 L72,64 M40,72 L60,72" />
+    <!-- Clock badge -->
+    <path
+        android:fillColor="#FFD66B"
+        android:pathData="M84,72 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0 Z" />
+    <path
+        android:strokeColor="#A86A1F"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M84,66 L84,72 L88,76" />
+</vector>
