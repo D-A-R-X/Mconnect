@@ -388,15 +388,24 @@ class HrDashboardFragment : Fragment() {
                         binding.todayPunchSummary.visibility = View.VISIBLE
                         binding.tvTodayClockedInAt.text =
                             AttendanceFlowViewModel.formatIsoToTime(firstPunchIso)
-                        binding.tvTodayClockedOutAt.text = when {
-                            !lastPunchIso.isNullOrBlank() ->
+                        // Show "Clocked out" ONLY when there's a real
+                        // punch-out that's different from the punch-in
+                        // (the backend can occasionally echo the
+                        // punch-in iso into lastPunchOutIso the moment
+                        // the row is created — that produced the
+                        // "Clocked in 2:17 PM / Clocked out 2:17 PM"
+                        // confusion in the screenshot). The Today /
+                        // Pay Period hour counters and the history
+                        // strip below still surface the clock-out
+                        // time once it's real.
+                        val hasRealClockOut = !lastPunchIso.isNullOrBlank() &&
+                            lastPunchIso != firstPunchIso
+                        if (hasRealClockOut) {
+                            binding.todayClockedOutGroup.visibility = View.VISIBLE
+                            binding.tvTodayClockedOutAt.text =
                                 AttendanceFlowViewModel.formatIsoToTime(lastPunchIso)
-                            // While the session is still open we show
-                            // a dash for clock-out — the live ticker
-                            // on tvTodayHours already conveys "still
-                            // running". Showing "Now" or current time
-                            // here would be misleading.
-                            else -> "—"
+                        } else {
+                            binding.todayClockedOutGroup.visibility = View.GONE
                         }
                     } else {
                         binding.todayPunchSummary.visibility = View.GONE
