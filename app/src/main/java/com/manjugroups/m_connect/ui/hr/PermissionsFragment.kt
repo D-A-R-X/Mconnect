@@ -120,7 +120,6 @@ class PermissionsFragment : Fragment() {
             setupScopeTabs()
             setupFilterTabs()
             updateScopeUi()
-            updateFilterUi()
         }
 
         collectState()
@@ -133,61 +132,28 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun setupFilterTabs() {
-        binding.tabReview.setOnClickListener {
-            historyFilter = HistoryFilter.REVIEW
-            updateFilterUi()
-            renderState(viewModel.uiState.value)
-        }
-        binding.tabApproved.setOnClickListener {
-            historyFilter = HistoryFilter.APPROVED
-            updateFilterUi()
-            renderState(viewModel.uiState.value)
-        }
-        binding.tabRejected.setOnClickListener {
-            historyFilter = HistoryFilter.REJECTED
-            updateFilterUi()
+        binding.filterRow.setTabs(
+            listOf("Review", "Approved", "Rejected"),
+            historyFilter.ordinal
+        ) { position ->
+            historyFilter = HistoryFilter.values()[position]
             renderState(viewModel.uiState.value)
         }
     }
 
     private fun setupScopeTabs() {
-        binding.tabScopeMy.setOnClickListener {
-            scope = Scope.MY
-            updateScopeUi()
-            renderState(viewModel.uiState.value)
-        }
-        binding.tabScopeTeam.setOnClickListener {
-            scope = Scope.TEAM
+        binding.scopeRow.setTabs(
+            listOf("My Permissions", "Team Permissions"),
+            scope.ordinal
+        ) { position ->
+            scope = Scope.values()[position]
             updateScopeUi()
             renderState(viewModel.uiState.value)
         }
     }
 
     private fun updateScopeUi() {
-        styleFilterTab(binding.tabScopeMy, scope == Scope.MY)
-        styleFilterTab(binding.tabScopeTeam, scope == Scope.TEAM)
-        // Status filter chips are only meaningful for My (which has
-        // a full history of approved/rejected rows). Team scope shows
-        // the pending-approvals pile straight through — server only
-        // returns pending rows there, so Approved / Rejected chips
-        // would always read empty.
         binding.filterRow.visibility = if (scope == Scope.MY) View.VISIBLE else View.GONE
-    }
-
-    private fun updateFilterUi() {
-        styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
-        styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
-        styleFilterTab(binding.tabRejected, historyFilter == HistoryFilter.REJECTED)
-    }
-
-    private fun styleFilterTab(tab: TextView, selected: Boolean) {
-        if (selected) {
-            tab.setBackgroundResource(R.drawable.bg_leave_filter_active)
-            tab.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
-        } else {
-            tab.background = null
-            tab.setTextColor(resolveColor(R.attr.colorForegroundSecondary))
-        }
     }
 
     private fun collectState() {
@@ -280,28 +246,29 @@ class PermissionsFragment : Fragment() {
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return
         if (screenMode == MODE_APPROVAL) {
-            binding.tvEmpty.text = "No Permission Approvals"
-            binding.tvEmptyHint.text = "There are no pending permission requests in review right now."
+            binding.emptyState.setTitle("No Permission Approvals")
+            binding.emptyState.setDescription("There are no pending permission requests in review right now.")
             return
         }
         if (scope == Scope.TEAM) {
-            binding.tvEmpty.text = "No Team Permissions"
-            binding.tvEmptyHint.text = "No pending permission requests from your team."
+            binding.emptyState.setTitle("No Team Permissions")
+            binding.emptyState.setDescription("No pending permission requests from your team.")
             return
         }
         when (historyFilter) {
             HistoryFilter.REVIEW -> {
-                binding.tvEmpty.text = "No Permissions Yet!"
-                binding.tvEmptyHint.text =
+                binding.emptyState.setTitle("No Permissions Yet!")
+                binding.emptyState.setDescription(
                     "Need a short break? Tap 'Apply Permission' and we'll handle the rest!"
+                )
             }
             HistoryFilter.APPROVED -> {
-                binding.tvEmpty.text = "No Approved Permissions"
-                binding.tvEmptyHint.text = "Your approved permission requests will appear here."
+                binding.emptyState.setTitle("No Approved Permissions")
+                binding.emptyState.setDescription("Your approved permission requests will appear here.")
             }
             HistoryFilter.REJECTED -> {
-                binding.tvEmpty.text = "No Rejected Permissions"
-                binding.tvEmptyHint.text = "If any permission gets rejected, you'll find it listed here."
+                binding.emptyState.setTitle("No Rejected Permissions")
+                binding.emptyState.setDescription("If any permission gets rejected, you'll find it listed here.")
             }
         }
     }

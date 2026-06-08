@@ -6,7 +6,7 @@
     android:background="@drawable/bg_leave_history_card"
     android:orientation="vertical"
     android:paddingHorizontal="12dp"
-    android:paddingVertical="16dp">
+    android:paddingVertical="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,13 +18,13 @@
             android:layout_width="20dp"
             android:layout_height="20dp"
             android:contentDescription="Date"
-            android:src="@drawable/ic_leave_calendar_small" />
+            android:src="@drawable/ic_leave_ticket_blue" />
 
         <TextView
             android:id="@+id/tvLeaveDate"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:fontFamily="@font/inter_semibold"
             android:textColor="#101828"
@@ -32,8 +32,8 @@
 
         <FrameLayout
             android:id="@+id/btnDeleteLeave"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:background="@drawable/bg_leave_delete_icon"
             android:clickable="true"
             android:focusable="true"
@@ -41,11 +41,11 @@
             android:visibility="gone">
 
             <ImageView
-                android:layout_width="12dp"
-                android:layout_height="12dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_leave_card_trash" />
+                android:src="@drawable/ic_leave_trash_red" />
         </FrameLayout>
     </LinearLayout>
 
@@ -60,50 +60,54 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_weight="1.2"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvLeaveReasonLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_medium"
-                android:text="Leave Date"
-                android:textColor="#667085"
-                android:textSize="12sp" />
+                android:fontFamily="@font/inter_bold"
+                android:textColor="#101828"
+                android:textSize="14sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/tvLeaveType"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:fontFamily="@font/inter_medium"
-                android:textColor="#344054"
-                android:textSize="16sp" />
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="80dp"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="0.8"
+            android:gravity="end"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvLeaveTypeLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_medium"
-                android:text="Total Leave"
-                android:textColor="#667085"
-                android:textSize="12sp" />
+                android:fontFamily="@font/inter_bold"
+                android:textColor="#101828"
+                android:textSize="14sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/tvLeaveStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:fontFamily="@font/inter_medium"
-                android:textColor="#344054"
-                android:textSize="16sp" />
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -203,40 +207,74 @@
 
     <LinearLayout
         android:id="@+id/leaveActionRow"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/btnApproveLeave"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_chip_active"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="8dp"
-            android:text="Approve"
-            android:textColor="?attr/colorForegroundInverse"
-            android:textSize="12sp" />
+        <!-- Team Leaves - Review State Actions -->
+        <LinearLayout
+            android:id="@+id/layoutTeamReviewActions"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
 
+            <TextView
+                android:id="@+id/btnRejectLeave"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_leave_action_reject"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="✕ Reject"
+                android:textColor="#EF4444"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/btnApproveLeave"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_leave_action_accept"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="✓ Accept"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Team Leaves - Approved State Label -->
         <TextView
-            android:id="@+id/btnRejectLeave"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/bg_chip_inactive"
-            android:clickable="true"
-            android:focusable="true"
+            android:id="@+id/btnTeamAccepted"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_leave_decision_accepted"
+            android:gravity="center"
             android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="8dp"
-            android:text="Reject"
-            android:textColor="?attr/colorError"
-            android:textSize="12sp" />
+            android:text="✓ Accepted"
+            android:textColor="#1BCA0B"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Team Leaves - Rejected State Label -->
+        <TextView
+            android:id="@+id/btnTeamRejected"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_leave_decision_rejected"
+            android:gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="✕ Rejected"
+            android:textColor="#EF4444"
+            android:textSize="13sp"
+            android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>

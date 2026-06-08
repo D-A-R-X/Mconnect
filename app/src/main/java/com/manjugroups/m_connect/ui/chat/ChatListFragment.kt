@@ -354,22 +354,53 @@ class ChatListFragment : Fragment() {
     }
 
     private fun renderFilterState() {
-        bindFilterChip(binding.chipAll, activeFilter == ChatFilter.ALL)
-        bindFilterChip(binding.chipUnread, activeFilter == ChatFilter.UNREAD)
-        bindFilterChip(binding.chipChannels, activeFilter == ChatFilter.GROUPS)
-        bindFilterChip(binding.chipDirect, activeFilter == ChatFilter.DM)
-        bindFilterChip(binding.chipFavourites, activeFilter == ChatFilter.FAVOURITES)
+        val allCount = allConversations.size + allChannels.size
+        
+        val unreadCount = allConversations.count { (it.unreadCount ?: 0) > 0 } + 
+                          allChannels.count { (it.unreadCount ?: 0) > 0 }
+                          
+        val favouritesCount = (allConversations.mapNotNull { it.id } + allChannels.mapNotNull { it.id })
+            .count { favouriteIds.contains(it) }
+            
+        val groupsCount = allChannels.size
+        val dmCount = allConversations.size
+
+        bindFilterChip(binding.chipAll, binding.chipAllLabel, binding.chipAllBadge, activeFilter == ChatFilter.ALL, allCount)
+        bindFilterChip(binding.chipUnread, binding.chipUnreadLabel, binding.chipUnreadBadge, activeFilter == ChatFilter.UNREAD, unreadCount)
+        bindFilterChip(binding.chipFavourites, binding.chipFavouritesLabel, binding.chipFavouritesBadge, activeFilter == ChatFilter.FAVOURITES, favouritesCount)
+        bindFilterChip(binding.chipChannels, binding.chipChannelsLabel, binding.chipChannelsBadge, activeFilter == ChatFilter.GROUPS, groupsCount)
+        bindFilterChip(binding.chipDirect, binding.chipDirectLabel, binding.chipDirectBadge, activeFilter == ChatFilter.DM, dmCount)
     }
 
-    private fun bindFilterChip(view: TextView, isActive: Boolean) {
-        view.setBackgroundResource(
+    private fun bindFilterChip(
+        container: android.view.View,
+        labelView: TextView,
+        badgeView: TextView,
+        isActive: Boolean,
+        count: Int
+    ) {
+        container.setBackgroundResource(
             if (isActive) R.drawable.bg_chat_filter_active
             else R.drawable.bg_chat_filter_inactive
         )
-        view.setTextColor(
+        labelView.setTextColor(
             if (isActive) ContextCompat.getColor(requireContext(), R.color.lt_foreground_inverse)
             else ContextCompat.getColor(requireContext(), R.color.chat_text_secondary)
         )
+        if (count > 0) {
+            badgeView.visibility = View.VISIBLE
+            badgeView.text = if (count > 99) "99+" else count.toString()
+            badgeView.setBackgroundResource(
+                if (isActive) R.drawable.bg_chat_tab_badge_white
+                else R.drawable.bg_chat_tab_badge_blue
+            )
+            badgeView.setTextColor(
+                if (isActive) Color.parseColor("#0B61CA")
+                else Color.parseColor("#FFFFFF")
+            )
+        } else {
+            badgeView.visibility = View.GONE
+        }
     }
 
     private var isLoadingChats = false
@@ -412,6 +443,7 @@ class ChatListFragment : Fragment() {
 
     private fun renderCurrentList() {
         if (_binding == null) return
+        renderFilterState()
         val items = buildItems()
 
         if (items.isEmpty()) {
@@ -517,9 +549,11 @@ class ChatListFragment : Fragment() {
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
             val title = conversation.displayName?.ifBlank { null } ?: "Chat"
-            val subtitle = conversation.lastMessagePreview?.ifBlank { null }
-                ?: conversation.lastMessage?.body?.ifBlank { null }
-                ?: "No messages yet"
+            
+            // Resolve last message preview text and icon
+            val previewResult = conversation.lastMessage?.let { resolveMessagePreview(it) }
+                ?: conversation.lastMessagePreview?.let { resolveRawPreviewText(it) }
+                ?: MessagePreviewResult("No messages yet", null)
             
             val lastActive = conversation.lastMessageAt ?: 0L
             val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
@@ -528,35 +562,41 @@ class ChatListFragment : Fragment() {
                 id = id,
                 kind = ChatListItem.Kind.DIRECT,
                 title = title,
-                subtitle = subtitle,
+                subtitle = previewResult.text,
                 timestamp = conversation.lastMessageAt,
                 unreadCount = conversation.unreadCount ?: 0,
                 avatarText = initialsFor(title),
                 avatarSeed = title.length,
                 isMuted = conversation.muted ?: false,
-                isOnline = isOnline
+                isOnline = isOnline,
+                previewIconRes = previewResult.iconResId
             )
         }
 
         val channelItems = allChannels.mapNotNull { channel ->
             val id = channel.id ?: return@mapNotNull null
             val title = channel.name?.ifBlank { null } ?: "Channel"
-            val descriptor = channel.lastMessagePreview?.ifBlank { null }
-                ?: channel.description?.ifBlank { null }
+            
+            // Resolve last message preview text and icon
+            val previewResult = channel.lastMessagePreview?.let { resolveRawPreviewText(it) }
+                ?: channel.description?.let { MessagePreviewResult(it, null) }
                 ?: run {
                     val memberCount = channel.memberCount ?: 0
-                    if (memberCount > 0) "$memberCount members" else "Channel"
+                    val text = if (memberCount > 0) "$memberCount members" else "Channel"
+                    MessagePreviewResult(text, null)
                 }
+                
             ChatListItem(
                 id = id,
                 kind = ChatListItem.Kind.CHANNEL,
                 title = title,
-                subtitle = descriptor,
+                subtitle = previewResult.text,
                 timestamp = channel.lastMessageAt,
                 unreadCount = channel.unreadCount ?: 0,
                 avatarText = "#",
                 avatarSeed = title.length + 7,
-                isMuted = channel.muted ?: false
+                isMuted = channel.muted ?: false,
+                previewIconRes = previewResult.iconResId
             )
         }
 

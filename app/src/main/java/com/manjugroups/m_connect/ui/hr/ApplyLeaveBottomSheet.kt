@@ -1,35 +1,38 @@
 package com.manjugroups.m_connect.ui.hr
 
+import android.app.Dialog
+import android.graphics.Color
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.gson.Gson
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.databinding.FragmentApplyLeaveBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyLeaveRequest
-import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
-import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-class ApplyLeaveFragment : Fragment() {
+class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     private data class ApiErrorResponse(
         val success: Boolean? = null,
@@ -37,8 +40,6 @@ class ApplyLeaveFragment : Fragment() {
         val message: String? = null
     )
 
-    private var _binding: FragmentApplyLeaveBinding? = null
-    private val binding get() = _binding!!
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val gson = Gson()
@@ -51,28 +52,49 @@ class ApplyLeaveFragment : Fragment() {
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val labelDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val dialog = BottomSheetDialog(requireContext(), theme)
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog)
+                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundColor(Color.TRANSPARENT)
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                behavior.isDraggable = true
+            }
+        }
+        return dialog
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View {
-        _binding = FragmentApplyLeaveBinding.inflate(inflater, container, false)
-        return binding.root
-    }
+    ): View = inflater.inflate(R.layout.bottom_sheet_apply_leave, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { navigateUp() }
-        BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnSubmit)
-        binding.fieldLeaveCategory.setOnClickListener { showCategorySheet() }
-        binding.fieldLeaveDuration.setOnClickListener { showDurationSheet() }
-        // Submit Now now opens the confirmation modal; the real
-        // applyLeave call only fires after the user picks "Yes, Submit"
-        // in the sheet. Mirrors the design's third frame in the apply
-        // flow ("Double-check your leave details…").
-        binding.btnSubmit.setOnClickListener { promptSubmitConfirmation() }
+        val fieldLeaveCategory = view.findViewById<View>(R.id.fieldLeaveCategory)
+        val fieldLeaveDuration = view.findViewById<View>(R.id.fieldLeaveDuration)
+        val etReason = view.findViewById<EditText>(R.id.etReason)
+        val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
+
+        fieldLeaveCategory.setOnClickListener { showCategorySheet() }
+        fieldLeaveDuration.setOnClickListener { showDurationSheet() }
+        btnSubmit.setOnClickListener { promptSubmitConfirmation() }
+
+        // Setup real-time validation text watcher on reason input
+        etReason.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                updateSubmitButtonState()
+            }
+        })
 
         // Listen once at view-create so multiple sheet opens reuse the
         // same handler. The sheet emits a single boolean signalling
@@ -83,8 +105,32 @@ class ApplyLeaveFragment : Fragment() {
             if (confirmed) submitLeave()
         }
 
+        setFragmentResultListener(LeaveSubmittedSuccessSheet.RESULT_KEY) { _, bundle ->
+            val ok = bundle.getBoolean(LeaveSubmittedSuccessSheet.KEY_OK, false)
+            if (ok) {
+                parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
+                dismissAllowingStateLoss()
+            }
+        }
+
         updateDurationLabel()
         loadLeaveTypes()
+        updateSubmitButtonState() // Initial disable
+    }
+
+    private fun updateSubmitButtonState() {
+        val view = view ?: return
+        val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
+
+        val isEnabled = selectedFromMillis != null && selectedToMillis != null
+
+        if (isEnabled) {
+            btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
+            btnSubmit.isEnabled = true
+        } else {
+            btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_disabled)
+            btnSubmit.isEnabled = false
+        }
     }
 
     /**
@@ -96,17 +142,13 @@ class ApplyLeaveFragment : Fragment() {
     private fun promptSubmitConfirmation() {
         val fromMillis = selectedFromMillis
         val toMillis = selectedToMillis
-        val reason = binding.etReason.text.toString().trim()
+        
         if (fromMillis == null || toMillis == null) {
             Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
             return
         }
         if (toMillis < fromMillis) {
             Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (reason.isBlank()) {
-            Toast.makeText(requireContext(), "Enter leave description", Toast.LENGTH_SHORT).show()
             return
         }
         SubmitLeaveConfirmSheet
@@ -130,28 +172,22 @@ class ApplyLeaveFragment : Fragment() {
                     leaveTypes = types
                 }
             } catch (ce: kotlinx.coroutines.CancellationException) {
-                // Coroutine cancelled by view-lifecycle teardown. Rethrow
-                // so structured concurrency unwinds correctly — swallowing
-                // it here previously made the coroutine resume past the
-                // catch and touch `binding` after _binding was already
-                // null on onDestroyView.
                 throw ce
             } catch (_: Exception) {
                 // Keep defaults when policy isn't available.
             }
 
             selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
-            // Belt-and-suspenders: if for any reason the view was torn
-            // down between the await and here (race, slow device), use
-            // _binding? so the assignment no-ops instead of NPE-ing.
-            _binding?.tvLeaveCategoryValue?.text = prettyType(selectedLeaveType)
+            view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selectedLeaveType)
+            updateSubmitButtonState()
         }
     }
 
     private fun submitLeave() {
         val fromMillis = selectedFromMillis
         val toMillis = selectedToMillis
-        val reason = binding.etReason.text.toString().trim()
+        val etReason = view?.findViewById<EditText>(R.id.etReason)
+        val reason = etReason?.text?.toString()?.trim().orEmpty()
 
         if (fromMillis == null || toMillis == null) {
             Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
@@ -161,18 +197,18 @@ class ApplyLeaveFragment : Fragment() {
             Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
             return
         }
-        if (reason.isBlank()) {
-            Toast.makeText(requireContext(), "Enter leave description", Toast.LENGTH_SHORT).show()
-            return
-        }
 
         val from = apiDateFormat.format(fromMillis)
         val to = apiDateFormat.format(toMillis)
 
-        binding.tvSubmit.visibility = View.INVISIBLE
-        binding.skeletonSubmit.visibility = View.VISIBLE
-        SkeletonUtils.startSkeletonPulse(binding.skeletonSubmit)
-        binding.btnSubmit.isClickable = false
+        val tvSubmit = view?.findViewById<TextView>(R.id.tvSubmit)
+        val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
+        val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
+
+        tvSubmit?.visibility = View.INVISIBLE
+        skeletonSubmit?.visibility = View.VISIBLE
+        skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
+        btnSubmit?.isClickable = false
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -188,18 +224,17 @@ class ApplyLeaveFragment : Fragment() {
                     )
                 )
                 if (resp.success) {
-                    Toast.makeText(requireContext(), "Leave applied!", Toast.LENGTH_SHORT).show()
-                    navigateUp()
+                    LeaveSubmittedSuccessSheet.newInstance().show(parentFragmentManager, "leave_submitted_success")
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
             }
-            _binding?.tvSubmit?.visibility = View.VISIBLE
-            _binding?.skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-            _binding?.skeletonSubmit?.visibility = View.GONE
-            _binding?.btnSubmit?.isClickable = true
+            tvSubmit?.visibility = View.VISIBLE
+            skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+            skeletonSubmit?.visibility = View.GONE
+            btnSubmit?.isClickable = true
         }
     }
 
@@ -212,36 +247,61 @@ class ApplyLeaveFragment : Fragment() {
         val closeButton = content.findViewById<TextView>(R.id.btnCloseSheet)
         val submitButton = content.findViewById<TextView>(R.id.btnSubmitSheet)
 
-        var selectedIndex = leaveTypes.indexOf(selectedLeaveType).coerceAtLeast(0)
+        var selectedIndex = leaveTypes.indexOf(selectedLeaveType)
 
         val rows = mutableListOf<View>()
         leaveTypes.forEachIndexed { index, type ->
             val row = layoutInflater.inflate(R.layout.item_leave_sheet_option, container, false)
             row.findViewById<TextView>(R.id.tvOption).text = prettyType(type)
+            
+            val isSelected = index == selectedIndex
+            row.setBackgroundResource(
+                if (isSelected) R.drawable.bg_leave_sheet_option_selected
+                else R.drawable.bg_leave_sheet_option
+            )
+            row.findViewById<ImageView>(R.id.ivOptionCheck).setImageResource(
+                if (isSelected) R.drawable.ic_leave_radio_selected
+                else R.drawable.ic_leave_radio_unselected
+            )
+
             row.setOnClickListener {
                 selectedIndex = index
                 rows.forEachIndexed { rowIndex, view ->
-                    val icon = view.findViewById<ImageView>(R.id.ivOptionCheck)
-                    icon.setImageResource(
-                        if (rowIndex == selectedIndex) R.drawable.ic_leave_radio_selected
+                    val isRowSelected = rowIndex == selectedIndex
+                    view.setBackgroundResource(
+                        if (isRowSelected) R.drawable.bg_leave_sheet_option_selected
+                        else R.drawable.bg_leave_sheet_option
+                    )
+                    view.findViewById<ImageView>(R.id.ivOptionCheck).setImageResource(
+                        if (isRowSelected) R.drawable.ic_leave_radio_selected
                         else R.drawable.ic_leave_radio_unselected
                     )
                 }
+                submitButton.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
+                submitButton.isEnabled = true
             }
-            row.findViewById<ImageView>(R.id.ivOptionCheck).setImageResource(
-                if (index == selectedIndex) R.drawable.ic_leave_radio_selected
-                else R.drawable.ic_leave_radio_unselected
-            )
             rows.add(row)
             container.addView(row)
         }
 
+        // Set initial state for submit button
+        if (selectedIndex >= 0) {
+            submitButton.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
+            submitButton.isEnabled = true
+        } else {
+            submitButton.setBackgroundResource(R.drawable.bg_apply_leave_btn_disabled)
+            submitButton.isEnabled = false
+        }
+
         closeButton.setOnClickListener { dialog.dismiss() }
         submitButton.setOnClickListener {
-            val selected = leaveTypes.getOrElse(selectedIndex) { leaveTypes.firstOrNull() ?: "casual" }
-            selectedLeaveType = selected
-            binding.tvLeaveCategoryValue.text = prettyType(selected)
-            dialog.dismiss()
+            if (selectedIndex >= 0) {
+                val selected = leaveTypes[selectedIndex]
+                selectedLeaveType = selected
+                view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selected)
+                dialog.dismiss()
+                updateSubmitButtonState()
+            }
         }
 
         dialog.show()
@@ -390,6 +450,7 @@ class ApplyLeaveFragment : Fragment() {
             selectedToMillis = maxOf(pickedFrom, pickedTo)
             updateDurationLabel()
             dialog.dismiss()
+            updateSubmitButtonState()
         }
 
         closeButton.setOnClickListener { dialog.dismiss() }
@@ -401,7 +462,8 @@ class ApplyLeaveFragment : Fragment() {
     private fun updateDurationLabel() {
         val fromMillis = selectedFromMillis
         val toMillis = selectedToMillis
-        binding.tvLeaveDurationValue.text = when {
+        val tvLeaveDurationValue = view?.findViewById<TextView>(R.id.tvLeaveDurationValue) ?: return
+        tvLeaveDurationValue.text = when {
             fromMillis == null || toMillis == null -> "Select Duration"
             sameDay(fromMillis, toMillis) -> labelDateFormat.format(fromMillis)
             else -> "${labelDateFormat.format(fromMillis)} - ${labelDateFormat.format(toMillis)}"
@@ -409,7 +471,7 @@ class ApplyLeaveFragment : Fragment() {
     }
 
     private fun prettyType(value: String): String {
-        return value
+        val base = value
             .replace('_', ' ')
             .split(" ")
             .filter { it.isNotBlank() }
@@ -418,6 +480,7 @@ class ApplyLeaveFragment : Fragment() {
                     if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
                 }
             }
+        return if (base.lowercase().contains("leave")) base else "$base Leave"
     }
 
     private fun parseErrorMessage(error: Throwable): String {
@@ -453,13 +516,9 @@ class ApplyLeaveFragment : Fragment() {
         return (value * resources.displayMetrics.density).toInt()
     }
 
-    override fun onResume() {
-        super.onResume()
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
+    companion object {
+        const val RESULT_KEY_APPLIED = "apply_leave_applied_result"
+        
+        fun newInstance(): ApplyLeaveBottomSheet = ApplyLeaveBottomSheet()
     }
 }

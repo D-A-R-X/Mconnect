@@ -4,10 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.fragment.app.DialogFragment
 import com.manjugroups.m_connect.databinding.FragmentChatMessageActionsBinding
 
-class ChatMessageActionsFragment : BottomSheetDialogFragment() {
+import com.manjugroups.m_connect.R
+
+class ChatMessageActionsFragment : DialogFragment() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setStyle(STYLE_NO_TITLE, R.style.ChatMessageActionsDialogTheme)
+    }
+
 
     interface Callback {
         fun onReply(messageId: String)
@@ -47,14 +55,6 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
             callback?.onCopy(body)
             dismiss()
         }
-        binding.btnSelectMore.setOnClickListener {
-            callback?.onSelectMore(messageId)
-            dismiss()
-        }
-        binding.btnInfo.setOnClickListener {
-            callback?.onInfo(messageId)
-            dismiss()
-        }
         binding.btnDelete.setOnClickListener {
             callback?.onDelete(messageId)
             dismiss()
@@ -62,10 +62,10 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
         
         val reactions = listOf(
             binding.reactFire to "🔥",
-            binding.reactClap to "🙌",
+            binding.reactClap to "👏",
             binding.reactHeart to "❤️",
-            binding.reactSmile to "😄",
-            binding.reactAngry to "😠",
+            binding.reactSmile to "😊",
+            binding.reactAngry to "😫",
             binding.reactThumb to "👍"
         )
         
@@ -87,6 +87,19 @@ class ChatMessageActionsFragment : BottomSheetDialogFragment() {
                 putString("messageId", messageId)
                 putString("body", body)
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                setElevation(0f)
+            }
+            val width = (resources.displayMetrics.widthPixels * 0.9).toInt()
+            setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(android.view.Gravity.CENTER)
         }
     }
 

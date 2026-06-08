@@ -54,44 +54,15 @@
                 android:textSize="18sp" />
         </LinearLayout>
 
-        <LinearLayout
+        <com.manjugroups.m_connect.ui.common.EmptyStateView
+            android:id="@+id/loansEmptyContent"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingTop="80dp">
-
-            <ImageView
-                android:layout_width="182dp"
-                android:layout_height="142dp"
-                android:alpha="0.6"
-                android:contentDescription="@null"
-                android:scaleType="fitCenter"
-                android:src="@drawable/j3kagn" />
-
-            <TextView
-                android:id="@+id/tvLoansEmptyTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="No Loans Yet"
-                android:textColor="#161B23"
-                android:textSize="18sp" />
-
-            <TextView
-                android:id="@+id/tvLoansEmptyDesc"
-                android:layout_width="280dp"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:fontFamily="@font/inter_regular"
-                android:gravity="center"
-                android:lineSpacingMultiplier="1.35"
-                android:text="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
-                android:textColor="#777F8C"
-                android:textSize="12sp" />
-        </LinearLayout>
+            android:paddingTop="80dp"
+            app:es_image="@drawable/img_loans_empty"
+            app:es_title="No Loans Yet"
+            app:es_description="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history." />
     </LinearLayout>
 
     <!-- Populated state: scroll the whole thing as one unit.
