@@ -102,36 +102,15 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
 
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.EmptyStateView
                     android:id="@+id/emptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    android:gravity="center"
-                    android:orientation="vertical"
                     android:paddingVertical="16dp"
-                    android:visibility="gone">
-
-                    <TextView
-                        android:id="@+id/tvEmpty"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="No attendance to review"
-                        android:textColor="#344054"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:id="@+id/tvEmptyHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center"
-                        android:fontFamily="@font/inter_regular"
-                        android:text="Pending punches from your team will land here."
-                        android:textColor="#667085"
-                        android:textSize="12sp" />
-                </LinearLayout>
+                    android:visibility="gone"
+                    app:es_title="No attendance to review"
+                    app:es_description="Pending punches from your team will land here." />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

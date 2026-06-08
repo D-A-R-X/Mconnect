@@ -1,19 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_chat_action_sheet"
+    android:background="@drawable/bg_chat_action_sheet_floating"
     android:orientation="vertical"
     android:padding="20dp">
-
-    <!-- Drag handle -->
-    <View
-        android:layout_width="40dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
-        android:background="#EAECF0" />
 
     <TextView
         android:id="@+id/tvMessagePreview"
@@ -46,10 +37,10 @@
         android:weightSum="6">
 
         <TextView android:id="@+id/reactFire" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="🔥" />
-        <TextView android:id="@+id/reactClap" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="🙌" />
+        <TextView android:id="@+id/reactClap" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="👏" />
         <TextView android:id="@+id/reactHeart" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="❤️" />
-        <TextView android:id="@+id/reactSmile" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="😄" />
-        <TextView android:id="@+id/reactAngry" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="😠" />
+        <TextView android:id="@+id/reactSmile" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="😊" />
+        <TextView android:id="@+id/reactAngry" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="😫" />
         <TextView android:id="@+id/reactThumb" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textSize="24sp" android:text="👍" />
     </LinearLayout>
 
@@ -62,7 +53,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Reply" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_reply" app:tint="#667085" />
+        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_reply_bubble" />
     </LinearLayout>
 
     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
@@ -74,7 +65,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Forward" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_forward" app:tint="#667085" />
+        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_forward_bubble" />
     </LinearLayout>
 
     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
@@ -87,30 +78,6 @@
         android:orientation="horizontal">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Copy" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
         <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_copy" app:tint="#667085" />
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
-
-    <LinearLayout
-        android:id="@+id/btnSelectMore"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Select more" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_check_double" app:tint="#667085" />
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />
-
-    <LinearLayout
-        android:id="@+id/btnInfo"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Info" android:textColor="#344054" android:textSize="14sp" android:fontFamily="@font/inter_medium" />
-        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chat_info" app:tint="#667085" />
     </LinearLayout>
 
     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F2F4F7" />

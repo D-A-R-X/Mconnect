@@ -188,11 +188,26 @@
                             android:textSize="15sp" />
                     </LinearLayout>
 
+                    <!--
+                      Right-half "Clocked out" cell. Hidden by default
+                      because today's clocked-out time is misleading
+                      while the session is still open — the backend can
+                      report a same-time stamp the moment the row is
+                      created, which on screen reads "Clocked in 2:17 PM
+                      / Clocked out 2:17 PM" and looks like a zero-hour
+                      shift. HrDashboardFragment flips this back to
+                      VISIBLE only after a real punch-out exists for
+                      today (lastPunchOutIso > firstPunchInIso). Yesterday
+                      and earlier rows still render their clock-out in
+                      the history strip below.
+                    -->
                     <LinearLayout
+                        android:id="@+id/todayClockedOutGroup"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:orientation="vertical"
+                        android:visibility="gone">
 
                         <TextView
                             android:layout_width="wrap_content"

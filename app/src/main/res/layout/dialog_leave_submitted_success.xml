@@ -7,18 +7,16 @@
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:paddingHorizontal="8dp"
-    android:paddingTop="32dp">
+    android:layout_height="wrap_content">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:background="@drawable/bg_stat_card"
+        android:layout_marginTop="50dp"
+        android:background="@drawable/bg_apply_leave_sheet"
         android:orientation="vertical"
         android:paddingHorizontal="24dp"
-        android:paddingTop="48dp"
+        android:paddingTop="70dp"
         android:paddingBottom="24dp">
 
         <TextView
@@ -27,7 +25,7 @@
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
             android:text="Leave Submitted!"
-            android:textColor="?attr/colorForegroundPrimary"
+            android:textColor="#101828"
             android:textSize="22sp" />
 
         <TextView
@@ -37,15 +35,15 @@
             android:fontFamily="@font/inter_regular"
             android:gravity="center"
             android:text="Your leave request has been sent for review!\nWait for HR to review your request."
-            android:textColor="?attr/colorForegroundMuted"
+            android:textColor="#667085"
             android:textSize="13sp" />
 
         <FrameLayout
-            android:id="@+id/btnViewLeaveApprovers"
+            android:id="@+id/btnViewLeaveApproved"
             android:layout_width="match_parent"
             android:layout_height="46dp"
             android:layout_marginTop="20dp"
-            android:background="@drawable/bg_leave_sheet_button_filled"
+            android:background="@drawable/bg_apply_leave_btn_enabled"
             android:clickable="true"
             android:focusable="true">
 
@@ -54,23 +52,17 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:fontFamily="@font/inter_semibold"
-                android:text="View Leave Approves"
+                android:text="View Leave Approved"
                 android:textColor="@android:color/white"
                 android:textSize="13sp" />
         </FrameLayout>
     </LinearLayout>
 
-    <FrameLayout
-        android:layout_width="72dp"
-        android:layout_height="72dp"
+    <!-- Blue layer chip centered overlapping top border by exactly 50% -->
+    <ImageView
+        android:layout_width="106dp"
+        android:layout_height="130dp"
         android:layout_gravity="center_horizontal|top"
-        android:background="@drawable/bg_leave_dialog_icon">
-
-        <ImageView
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_gravity="center"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_leave_dialog_stack" />
-    </FrameLayout>
+        android:contentDescription="@null"
+        android:src="@drawable/ic_leave_confirm_layer" />
 </FrameLayout>

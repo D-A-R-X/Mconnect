@@ -29,43 +29,29 @@
             <FrameLayout
                 android:id="@+id/headerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="202dp"
+                android:layout_height="195dp"
                 android:background="@drawable/bg_attendance_header_gradient"
-                android:paddingStart="28dp"
-                android:paddingTop="24dp">
+                android:paddingStart="24dp"
+                android:paddingTop="20dp">
 
-                <FrameLayout
+                <!-- 3D Banner Illustration aligned to the right -->
+                <ImageView
                     android:id="@+id/ivLeaveBanner"
-                    android:layout_width="181dp"
-                    android:layout_height="93dp"
-                    android:layout_gravity="top|start"
-                    android:layout_marginStart="250dp"
-                    android:layout_marginTop="45dp"
-                    android:contentDescription="Leave banner">
+                    android:layout_width="120dp"
+                    android:layout_height="92dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginEnd="8dp"
+                    android:layout_marginTop="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/img_leave_3d_banner"
+                    android:contentDescription="Leave banner" />
 
-                    <ImageView
-                        android:layout_width="181dp"
-                        android:layout_height="93dp"
-                        android:adjustViewBounds="true"
-                        android:contentDescription="Leave rainbow"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/leavebannergroup" />
-
-                    <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="83dp"
-                        android:layout_gravity="top|start"
-                        android:layout_marginStart="53dp"
-                        android:layout_marginTop="-1dp"
-                        android:adjustViewBounds="true"
-                        android:contentDescription="Leave suitcase"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/leave_banner_suitcase" />
-                </FrameLayout>
-
+                <!-- Left Content: Title & Subtitle -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="top|start"
+                    android:layout_marginTop="32dp"
                     android:orientation="vertical">
 
                     <ImageView
@@ -83,21 +69,20 @@
                         android:id="@+id/tvHeaderTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
                         android:fontFamily="@font/inter_bold"
                         android:text="Leave Summary"
                         android:textColor="@android:color/white"
-                        android:textSize="22sp" />
+                        android:textSize="24sp" />
 
                     <TextView
                         android:id="@+id/tvHeaderSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:fontFamily="@font/inter_regular"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_semibold"
                         android:text="Submit Leave"
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="12sp" />
+                        android:textColor="#E2E8F0"
+                        android:textSize="14sp" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -112,10 +97,13 @@
                     android:id="@+id/balanceCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="8dp"
-                    android:background="@drawable/bg_stat_card"
+                    android:layout_marginHorizontal="0dp"
+                    android:background="@drawable/bg_leave_balance_card"
                     android:orientation="vertical"
-                    android:padding="12dp">
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:paddingTop="20dp"
+                    android:paddingBottom="16dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -133,157 +121,168 @@
                                 android:id="@+id/tvBalanceTitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:fontFamily="@font/inter_semibold"
+                                android:fontFamily="@font/inter_bold"
                                 android:text="Total Leave"
                                 android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="13sp" />
+                                android:textSize="14sp" />
 
                             <TextView
                                 android:id="@+id/tvYear"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="1dp"
+                                android:layout_marginTop="2dp"
                                 android:fontFamily="@font/inter_regular"
                                 android:textColor="?attr/colorForegroundMuted"
-                                android:textSize="10sp" />
+                                android:textSize="11sp" />
                         </LinearLayout>
 
+                        <!-- Dropdown Chip Selector -->
+                        <LinearLayout
+                            android:id="@+id/dropdownScopeSelector"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_scope_chip"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="6dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:visibility="gone">
+
+                            <TextView
+                                android:id="@+id/tvSelectedScope"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="My Leaves"
+                                android:textColor="?attr/colorForegroundPrimary"
+                                android:textSize="12sp" />
+
+                            <View
+                                android:id="@+id/dotScopeBadge"
+                                android:layout_width="6dp"
+                                android:layout_height="6dp"
+                                android:layout_marginStart="6dp"
+                                android:background="@drawable/bg_scope_dot_red"
+                                android:visibility="gone" />
+
+                            <ImageView
+                                android:id="@+id/ivScopeChevron"
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:layout_marginStart="6dp"
+                                android:src="@drawable/ic_leave_chevron_down"
+                                app:tint="?attr/colorForegroundPrimary" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="12dp"
                         android:orientation="horizontal">
 
+                        <!-- Available Metric Box -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_leave_metric_card"
+                            android:background="@drawable/bg_leave_metric_box"
                             android:orientation="vertical"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="8dp">
+                            android:paddingHorizontal="14dp"
+                            android:paddingVertical="12dp">
 
                             <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:gravity="center_vertical">
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
 
                                 <View
-                                    android:layout_width="6dp"
-                                    android:layout_height="6dp"
-                                    android:background="@drawable/bg_icon_success" />
+                                    android:layout_width="8dp"
+                                    android:layout_height="8dp"
+                                    android:background="@drawable/bg_leave_status_dot_success" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginStart="4dp"
-                                    android:fontFamily="@font/inter_regular"
+                                    android:layout_marginStart="6dp"
+                                    android:fontFamily="@font/inter_semibold"
                                     android:text="Available"
                                     android:textColor="?attr/colorForegroundSecondary"
-                                    android:textSize="9sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
 
                             <TextView
                                 android:id="@+id/tvLeaveAvailable"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="3dp"
-                                android:fontFamily="@font/inter_semibold"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_bold"
                                 android:text="0"
                                 android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="30sp" />
+                                android:textSize="32sp" />
                         </LinearLayout>
 
+                        <!-- Leave Used Metric Box -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
+                            android:layout_marginStart="12dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_leave_metric_card"
+                            android:background="@drawable/bg_leave_metric_box"
                             android:orientation="vertical"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="8dp">
+                            android:paddingHorizontal="14dp"
+                            android:paddingVertical="12dp">
 
                             <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:gravity="center_vertical">
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
 
                                 <View
-                                    android:layout_width="6dp"
-                                    android:layout_height="6dp"
-                                    android:background="@drawable/bg_icon_accent" />
+                                    android:layout_width="8dp"
+                                    android:layout_height="8dp"
+                                    android:background="@drawable/bg_leave_status_dot_blue" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginStart="4dp"
-                                    android:fontFamily="@font/inter_regular"
+                                    android:layout_marginStart="6dp"
+                                    android:fontFamily="@font/inter_semibold"
                                     android:text="Leave Used"
                                     android:textColor="?attr/colorForegroundSecondary"
-                                    android:textSize="9sp" />
+                                    android:textSize="11sp" />
                             </LinearLayout>
 
                             <TextView
                                 android:id="@+id/tvLeaveUsed"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="3dp"
-                                android:fontFamily="@font/inter_semibold"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_bold"
                                 android:text="0"
                                 android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="30sp" />
+                                android:textSize="32sp" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.SegmentedControlView
                     android:id="@+id/filterRow"
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
-                    android:layout_marginHorizontal="8dp"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="14dp"
                     android:background="@drawable/bg_leave_filter_container"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:padding="3dp">
-
-                    <TextView
-                        android:id="@+id/tabReview"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_leave_filter_active"
-                        android:fontFamily="@font/inter_semibold"
-                        android:gravity="center"
-                        android:text="Review"
-                        android:textColor="@android:color/white"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tabApproved"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:text="Approved"
-                        android:textColor="?attr/colorForegroundSecondary"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tabRejected"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:text="Rejected"
-                        android:textColor="?attr/colorForegroundSecondary"
-                        android:textSize="11sp" />
-                </LinearLayout>
+                    android:padding="3dp"
+                    app:scv_active_background="@drawable/bg_leave_filter_active"
+                    app:scv_text_color_selected="@android:color/white"
+                    app:scv_text_color_unselected="?attr/colorForegroundSecondary"
+                    app:scv_text_size="11sp"
+                    app:scv_font_family="@font/inter_semibold" />
             </LinearLayout>
 
             <LinearLayout
@@ -297,24 +296,7 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <TextView
-                    android:id="@+id/tvSectionTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="Leave Submitted"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="20sp" />
 
-                <TextView
-                    android:id="@+id/tvSectionSubtitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:fontFamily="@font/inter_regular"
-                    android:text="Leave information"
-                    android:textColor="?attr/colorForegroundMuted"
-                    android:textSize="11sp" />
 
                 <LinearLayout
                     android:id="@+id/skeletonContainer"
@@ -367,44 +349,17 @@
                     android:layout_marginTop="8dp"
                     android:orientation="vertical" />
 
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.EmptyStateView
                     android:id="@+id/emptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
                     android:paddingTop="16dp"
                     android:paddingBottom="12dp"
-                    android:visibility="gone">
-
-                    <ImageView
-                        android:layout_width="74dp"
-                        android:layout_height="74dp"
-                        android:contentDescription="No leaves"
-                        android:src="@drawable/ic_leave_empty_js1pm" />
-
-                    <TextView
-                        android:id="@+id/tvEmpty"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="No Leave Submitted!"
-                        android:textColor="?attr/colorForegroundPrimary"
-                        android:textSize="27sp" />
-
-                    <TextView
-                        android:id="@+id/tvEmptyHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:gravity="center"
-                        android:text="Ready to catch some fresh air? Click 'Submit Leave' and take that well-deserved break!"
-                        android:textColor="?attr/colorForegroundMuted"
-                        android:textSize="10sp" />
-                </LinearLayout>
+                    android:visibility="gone"
+                    app:es_image="@drawable/leave_banner_suitcase"
+                    app:es_title="No Leave Submitted!"
+                    app:es_description="Ready to catch some fresh air? Click “Submit Leave” and take that well-deserved break!" />
             </LinearLayout>
 
             <Space
@@ -434,7 +389,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:fontFamily="@font/inter_semibold"
-            android:text="Apply Leave"
+            android:text="Submit Leave"
             android:textColor="@android:color/white"
             android:textSize="13sp" />
     </FrameLayout>

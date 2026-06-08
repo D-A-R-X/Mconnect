@@ -783,8 +783,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // project picker). Keep the existing tvTitle behaviour but
         // render "—" instead of the generic "Site Visit" placeholder
         // when there is truly nothing to show.
+        // Project / Plot pulls strictly from `visit.project.name`. The
+        // previous fallback to `visit.clientPlace?.name` leaked the
+        // client's name into the Project field whenever the linked CP's
+        // clientPlace was named after the client (which is the default
+        // for residential CPs — the place.name is just the client name).
+        // Backend now resolves the SV's own projectId in the CP-linked
+        // path of getForMobileId, so the project field arrives populated
+        // (e.g. "Green Spot") and never needs the place-name fallback.
         val projectName = visit.project?.name?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
         tvProject?.text = projectName ?: "—"
         if (!projectName.isNullOrBlank()) {
             tvTitle?.text = projectName

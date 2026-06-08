@@ -46,6 +46,7 @@
             android:orientation="horizontal">
 
             <TextView
+                android:id="@+id/tvMenuTeamLeaves"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
@@ -53,12 +54,17 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
 
-            <View
+            <TextView
                 android:id="@+id/dotTeamBadge"
-                android:layout_width="6dp"
-                android:layout_height="6dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:layout_marginStart="6dp"
-                android:background="@drawable/bg_scope_dot_red"
+                android:background="@drawable/bg_red_dot"
+                android:gravity="center"
+                android:fontFamily="@font/inter_bold"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:includeFontPadding="false"
                 android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>

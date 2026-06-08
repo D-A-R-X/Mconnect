@@ -227,87 +227,34 @@
                      Permissions. Team tab is only made visible at
                      runtime when the user has permissions.approve so a
                      non-approver never sees an empty Team list. -->
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.SegmentedControlView
                     android:id="@+id/scopeRow"
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:layout_marginHorizontal="8dp"
                     android:layout_marginTop="10dp"
                     android:background="@drawable/bg_leave_filter_container"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
                     android:padding="3dp"
-                    android:visibility="gone">
+                    android:visibility="gone"
+                    app:scv_active_background="@drawable/bg_leave_filter_active"
+                    app:scv_text_color_selected="@android:color/white"
+                    app:scv_text_color_unselected="?attr/colorForegroundSecondary"
+                    app:scv_text_size="11sp"
+                    app:scv_font_family="@font/inter_semibold" />
 
-                    <TextView
-                        android:id="@+id/tabScopeMy"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_leave_filter_active"
-                        android:fontFamily="@font/inter_semibold"
-                        android:gravity="center"
-                        android:text="My Permissions"
-                        android:textColor="@android:color/white"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tabScopeTeam"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:text="Team Permissions"
-                        android:textColor="?attr/colorForegroundSecondary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.SegmentedControlView
                     android:id="@+id/filterRow"
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:layout_marginHorizontal="8dp"
                     android:layout_marginTop="10dp"
                     android:background="@drawable/bg_leave_filter_container"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:padding="3dp">
-
-                    <TextView
-                        android:id="@+id/tabReview"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_leave_filter_active"
-                        android:fontFamily="@font/inter_semibold"
-                        android:gravity="center"
-                        android:text="Review"
-                        android:textColor="@android:color/white"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tabApproved"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:text="Approved"
-                        android:textColor="?attr/colorForegroundSecondary"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tabRejected"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/inter_medium"
-                        android:gravity="center"
-                        android:text="Rejected"
-                        android:textColor="?attr/colorForegroundSecondary"
-                        android:textSize="11sp" />
-                </LinearLayout>
+                    android:padding="3dp"
+                    app:scv_active_background="@drawable/bg_leave_filter_active"
+                    app:scv_text_color_selected="@android:color/white"
+                    app:scv_text_color_unselected="?attr/colorForegroundSecondary"
+                    app:scv_text_size="11sp"
+                    app:scv_font_family="@font/inter_semibold" />
             </LinearLayout>
 
             <LinearLayout
@@ -391,44 +338,17 @@
                     android:layout_marginTop="8dp"
                     android:orientation="vertical" />
 
-                <LinearLayout
+                <com.manjugroups.m_connect.ui.common.EmptyStateView
                     android:id="@+id/emptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
                     android:paddingTop="16dp"
                     android:paddingBottom="12dp"
-                    android:visibility="gone">
-
-                    <ImageView
-                        android:layout_width="74dp"
-                        android:layout_height="74dp"
-                        android:contentDescription="No permissions"
-                        android:src="@drawable/ic_leave_empty_js1pm" />
-
-                    <TextView
-                        android:id="@+id/tvEmpty"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="No Permissions Yet!"
-                        android:textColor="?attr/colorForegroundPrimary"
-                        android:textSize="27sp" />
-
-                    <TextView
-                        android:id="@+id/tvEmptyHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:gravity="center"
-                        android:text="Need a short break? Tap 'Apply for Permission' and we'll handle the rest!"
-                        android:textColor="?attr/colorForegroundMuted"
-                        android:textSize="10sp" />
-                </LinearLayout>
+                    android:visibility="gone"
+                    app:es_image="@drawable/ic_leave_empty_js1pm"
+                    app:es_title="No Permissions Yet!"
+                    app:es_description="Need a short break? Tap 'Apply for Permission' and we'll handle the rest!" />
             </LinearLayout>
 
             <Space

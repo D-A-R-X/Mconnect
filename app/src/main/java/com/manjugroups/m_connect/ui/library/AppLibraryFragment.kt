@@ -40,7 +40,7 @@ class AppLibraryFragment : Fragment() {
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, SETTINGS }
+    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SETTINGS }
     // Tracked so the IAM-bus listener can re-apply whichever filter
     // the user is currently looking at when tiles re-bind; otherwise
     // an IAM update would silently snap the filter back to ALL.
@@ -146,7 +146,7 @@ class AppLibraryFragment : Fragment() {
         //    a small "items dropping into place" rhythm.
         val pillIcons = listOf(
             binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
-            binding.pillProjectIcon, binding.pillLandIcon, binding.pillSettingsIcon
+            binding.pillProjectIcon, binding.pillLandIcon, binding.pillFleetIcon, binding.pillSettingsIcon
         )
         pillIcons.forEachIndexed { i, icon ->
             icon.animate().cancel()
@@ -241,6 +241,7 @@ class AppLibraryFragment : Fragment() {
                     binding.pillMarketing,
                     binding.pillProject,
                     binding.pillLand,
+                    binding.pillFleet,
                     binding.pillSettings,
                 ).forEach { pill ->
                     val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
@@ -444,6 +445,14 @@ class AppLibraryFragment : Fragment() {
             // the inspection workflow.
             allowed = hasAny(listOf("land.view", "land.inspect", "land.inspection.view")),
         ) { openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment()) }
+
+        // ── Fleet Management ──────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemFleetMyTrips,
+            allowed = session.isDriverMode || session.hasPermission("marketing.siteVisits.view") || session.hasPermission("fleet.view"),
+        ) {
+            openScreen(MyTripsFragment())
+        }
     }
 
     private fun setupFilterPills() {
@@ -452,6 +461,7 @@ class AppLibraryFragment : Fragment() {
         binding.pillMarketing.setOnClickListener { applyFilter(Filter.MARKETING) }
         binding.pillProject.setOnClickListener { applyFilter(Filter.PROJECT) }
         binding.pillLand.setOnClickListener { applyFilter(Filter.LAND) }
+        binding.pillFleet.setOnClickListener { applyFilter(Filter.FLEET) }
         binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
     }
 
@@ -476,6 +486,7 @@ class AppLibraryFragment : Fragment() {
         binding.cardMarketing.visibility = show(binding.cardMarketing, filter == Filter.ALL || filter == Filter.MARKETING, Filter.MARKETING)
         binding.cardProject.visibility = show(binding.cardProject, filter == Filter.ALL || filter == Filter.PROJECT, Filter.PROJECT)
         binding.cardLand.visibility = show(binding.cardLand, filter == Filter.ALL || filter == Filter.LAND, Filter.LAND)
+        binding.cardFleet.visibility = show(binding.cardFleet, filter == Filter.ALL || filter == Filter.FLEET, Filter.FLEET)
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
@@ -483,6 +494,7 @@ class AppLibraryFragment : Fragment() {
         styleTab(binding.pillMarketingIcon, binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
         styleTab(binding.pillProjectIcon, binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
         styleTab(binding.pillLandIcon, binding.pillLandText, binding.pillLandIndicator, filter == Filter.LAND)
+        styleTab(binding.pillFleetIcon, binding.pillFleetText, binding.pillFleetIndicator, filter == Filter.FLEET)
         styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
@@ -560,6 +572,10 @@ class AppLibraryFragment : Fragment() {
             Triple(
                 Filter.LAND, binding.cardLand,
                 listOf(R.id.itemLandInspection, R.id.itemLandQueries),
+            ),
+            Triple(
+                Filter.FLEET, binding.cardFleet,
+                listOf(R.id.itemFleetMyTrips),
             ),
             // Settings card: itemSettings is never IAM-gated (every
             // staff can edit their own profile), so this section is
@@ -657,6 +673,7 @@ class AppLibraryFragment : Fragment() {
         Filter.MARKETING -> binding.pillMarketing
         Filter.PROJECT -> binding.pillProject
         Filter.LAND -> binding.pillLand
+        Filter.FLEET -> binding.pillFleet
         Filter.SETTINGS -> binding.pillSettings
     }
 

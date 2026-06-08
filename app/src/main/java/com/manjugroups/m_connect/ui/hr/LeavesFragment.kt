@@ -37,12 +37,14 @@ class LeavesFragment : Fragment() {
 
     private enum class HistoryFilter { REVIEW, APPROVED, REJECTED }
     private enum class StatusBucket { REVIEW, APPROVED, REJECTED }
+    private enum class LeaveScope { MY, TEAM, ALL }
 
     private var _binding: FragmentLeavesBinding? = null
     private val binding get() = _binding!!
     private val viewModel: LeavesViewModel by viewModels()
     private lateinit var session: SessionManager
     private var screenMode: String = MODE_HISTORY
+    private var activeScope: LeaveScope = LeaveScope.MY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
     private var skeletonAnimator: ObjectAnimator? = null
@@ -86,34 +88,42 @@ class LeavesFragment : Fragment() {
         binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnApplyLeave.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, ApplyLeaveFragment())
-                .addToBackStack(null)
-                .commit()
+            parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
+                val success = bundle.getBoolean("success", false)
+                if (success) {
+                    viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+                }
+            }
+            ApplyLeaveBottomSheet.newInstance().show(parentFragmentManager, "apply_leave_sheet")
         }
 
         val year = Calendar.getInstance().get(Calendar.YEAR)
         binding.tvYear.text = "Period 1 Jan $year - 30 Dec $year"
 
+        val canApprove = session.hasPermission("leaves.approve")
         if (screenMode == MODE_APPROVAL) {
             binding.tvHeaderTitle.text = "Leave Approvals"
             binding.tvHeaderSubtitle.text = "In Review"
-            binding.tvSectionTitle.text = "Leave Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
+            binding.dropdownScopeSelector.visibility = View.GONE
         } else {
             binding.tvHeaderTitle.text = "Leave Summary"
             binding.tvHeaderSubtitle.text = "Submit Leave"
-            binding.tvSectionTitle.text = "Leave Submitted"
-            binding.tvSectionSubtitle.visibility = View.VISIBLE
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
-            updateFilterUi()
+            if (canApprove) {
+                binding.dropdownScopeSelector.visibility = View.VISIBLE
+                binding.dropdownScopeSelector.setOnClickListener {
+                    showScopePopupMenu(it)
+                }
+            } else {
+                binding.dropdownScopeSelector.visibility = View.GONE
+            }
         }
 
         collectState()
         collectEvents()
-        viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+        viewModel.load(session.bearerToken, canApprove)
 
         // Pull-to-refresh re-runs viewModel.load() so balance + history
         // come back fresh. The spinner is dismissed in collectState() the
@@ -124,38 +134,12 @@ class LeavesFragment : Fragment() {
     }
 
     private fun setupFilterTabs() {
-        binding.tabReview.setOnClickListener {
-            historyFilter = HistoryFilter.REVIEW
-            updateFilterUi()
+        binding.filterRow.setTabs(
+            listOf("Review", "Approved", "Rejected"),
+            historyFilter.ordinal
+        ) { position ->
+            historyFilter = HistoryFilter.values()[position]
             renderState(viewModel.uiState.value)
-        }
-        binding.tabApproved.setOnClickListener {
-            historyFilter = HistoryFilter.APPROVED
-            updateFilterUi()
-            renderState(viewModel.uiState.value)
-        }
-        binding.tabRejected.setOnClickListener {
-            historyFilter = HistoryFilter.REJECTED
-            updateFilterUi()
-            renderState(viewModel.uiState.value)
-        }
-    }
-
-
-
-    private fun updateFilterUi() {
-        styleFilterTab(binding.tabReview, historyFilter == HistoryFilter.REVIEW)
-        styleFilterTab(binding.tabApproved, historyFilter == HistoryFilter.APPROVED)
-        styleFilterTab(binding.tabRejected, historyFilter == HistoryFilter.REJECTED)
-    }
-
-    private fun styleFilterTab(tab: TextView, selected: Boolean) {
-        if (selected) {
-            tab.setBackgroundResource(R.drawable.bg_leave_filter_active)
-            tab.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white))
-        } else {
-            tab.background = null
-            tab.setTextColor(resolveColor(R.attr.colorForegroundSecondary))
         }
     }
 
@@ -169,21 +153,36 @@ class LeavesFragment : Fragment() {
 
     private fun renderState(state: LeavesState) {
         val canApprove = session.hasPermission("leaves.approve")
-        // Notification deep-link → approver pile (unchanged).
-        // History mode now routes by scope:
-        //   • MY   → own leaves, status-filtered
-        //   • TEAM → team pending approvals, Approve/Reject inline
-        //   • ALL  → own + status filter applied (passthrough until
-        //            a dedicated "all-leaves" endpoint exists)
+        
+        // Update red dot in dropdown if visible
+        if (screenMode == MODE_HISTORY && canApprove) {
+            binding.dotScopeBadge.visibility = if (state.pendingApprovals.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else {
-            filterHistoryLeaves(state.myLeaves)
+            if (canApprove && activeScope == LeaveScope.TEAM) {
+                filterHistoryLeaves(state.pendingApprovals)
+            } else {
+                filterHistoryLeaves(state.myLeaves)
+            }
         }
         val isLoading = state.isLoading
 
         if (screenMode == MODE_HISTORY) {
             binding.filterRow.visibility = View.VISIBLE
+            val listForCounts = if (canApprove && activeScope == LeaveScope.TEAM) state.pendingApprovals else state.myLeaves
+            val reviewCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.REVIEW }
+            val approvedCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.APPROVED }
+            val rejectedCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.REJECTED }
+            binding.filterRow.updateTabLabels(
+                listOf(
+                    "Review ($reviewCount)",
+                    "Approved ($approvedCount)",
+                    "Rejected ($rejectedCount)"
+                )
+            )
         }
 
         // Clear the pull-refresh spinner as soon as a non-loading state
@@ -218,35 +217,13 @@ class LeavesFragment : Fragment() {
 
         stopSkeletonPulse()
         setEmptyCopy(displayLeaves.isEmpty())
-        val isApprovalForRender = canApprove && screenMode == MODE_APPROVAL
+        val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope == LeaveScope.TEAM)
         renderLeaves(displayLeaves, isApprovalForRender)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
         val isTeamScope = screenMode == MODE_APPROVAL
         val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
-        binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-        binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-
-        if (isTeamScope) {
-            binding.tvSectionTitle.text = "Leave Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
-        } else {
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> {
-                    binding.tvSectionTitle.text = "Leave Submitted"
-                    binding.tvSectionSubtitle.text = "Leave information"
-                }
-                HistoryFilter.APPROVED -> {
-                    binding.tvSectionTitle.text = "Approved Leave"
-                    binding.tvSectionSubtitle.text = "Approved leave information"
-                }
-                HistoryFilter.REJECTED -> {
-                    binding.tvSectionTitle.text = "Rejected Leave"
-                    binding.tvSectionSubtitle.text = "Rejected leave information"
-                }
-            }
-        }
 
         if (showHeader) {
             binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
@@ -259,26 +236,16 @@ class LeavesFragment : Fragment() {
 
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return
-        if (screenMode == MODE_APPROVAL) {
-            binding.tvEmpty.text = "No Leave Approvals"
-            binding.tvEmptyHint.text = "There are no pending leave requests in review right now."
+        val isTeam = screenMode == MODE_APPROVAL || (session.hasPermission("leaves.approve") && activeScope == LeaveScope.TEAM)
+        if (isTeam) {
+            binding.emptyState.setTitle("No Leave Approvals")
+            binding.emptyState.setDescription("There are no pending leave requests in review right now.")
             return
         }
-        when (historyFilter) {
-            HistoryFilter.REVIEW -> {
-                binding.tvEmpty.text = "No Leave Submitted!"
-                binding.tvEmptyHint.text =
-                    "Ready to catch some fresh air? Click 'Submit Leave' and take that well-deserved break!"
-            }
-            HistoryFilter.APPROVED -> {
-                binding.tvEmpty.text = "No Approved Leave"
-                binding.tvEmptyHint.text = "Your approved leave requests will appear here."
-            }
-            HistoryFilter.REJECTED -> {
-                binding.tvEmpty.text = "No Rejected Leave"
-                binding.tvEmptyHint.text = "If any leave gets rejected, you'll find it listed here."
-            }
-        }
+        binding.emptyState.setTitle("No Leave Submitted!")
+        binding.emptyState.setDescription(
+            "Ready to catch some fresh air? Click “Submit Leave” and take that well-deserved break!"
+        )
     }
 
     private fun collectEvents() {
@@ -358,8 +325,8 @@ class LeavesFragment : Fragment() {
                 }
                 StatusBucket.REVIEW -> {
                     statusNote = "In Review"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
-                    statusIconRes = R.drawable.ic_leave_status_review
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
+                    statusIconRes = R.drawable.ic_leave_spinner_blue
                 }
             }
 
@@ -385,8 +352,11 @@ class LeavesFragment : Fragment() {
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.leaveActionRow)
+            val layoutTeamReviewActions = card.findViewById<View>(R.id.layoutTeamReviewActions)
             val approveButton = card.findViewById<TextView>(R.id.btnApproveLeave)
             val rejectButton = card.findViewById<TextView>(R.id.btnRejectLeave)
+            val btnTeamAccepted = card.findViewById<View>(R.id.btnTeamAccepted)
+            val btnTeamRejected = card.findViewById<View>(R.id.btnTeamRejected)
 
             // For Approved/Rejected rows show the decision-maker (the
             // approver who acted on the request) instead of the
@@ -427,17 +397,34 @@ class LeavesFragment : Fragment() {
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
-                approveButton.setOnClickListener {
-                    leave.id?.let { id ->
-                        viewModel.approveLeave(
-                            session.bearerToken,
-                            id,
-                            session.hasPermission("leaves.approve")
-                        )
+                when (bucket) {
+                    StatusBucket.REVIEW -> {
+                        layoutTeamReviewActions.visibility = View.VISIBLE
+                        btnTeamAccepted.visibility = View.GONE
+                        btnTeamRejected.visibility = View.GONE
+                        approveButton.setOnClickListener {
+                            leave.id?.let { id ->
+                                viewModel.approveLeave(
+                                    session.bearerToken,
+                                    id,
+                                    session.hasPermission("leaves.approve")
+                                )
+                            }
+                        }
+                        rejectButton.setOnClickListener {
+                            leave.id?.let { id -> showRejectDialog(id) }
+                        }
                     }
-                }
-                rejectButton.setOnClickListener {
-                    leave.id?.let { id -> showRejectDialog(id) }
+                    StatusBucket.APPROVED -> {
+                        layoutTeamReviewActions.visibility = View.GONE
+                        btnTeamAccepted.visibility = View.VISIBLE
+                        btnTeamRejected.visibility = View.GONE
+                    }
+                    StatusBucket.REJECTED -> {
+                        layoutTeamReviewActions.visibility = View.GONE
+                        btnTeamAccepted.visibility = View.GONE
+                        btnTeamRejected.visibility = View.VISIBLE
+                    }
                 }
             } else {
                 actionRow.visibility = View.GONE
@@ -595,6 +582,123 @@ class LeavesFragment : Fragment() {
         skeletonAnimator?.cancel()
         skeletonAnimator = null
         binding.skeletonContainer.alpha = 1f
+    }
+
+    private fun showScopePopupMenu(anchor: View) {
+        val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu, null)
+        val popup = android.widget.PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = dp(8).toFloat()
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+
+        val menuMy = popupView.findViewById<TextView>(R.id.menuMyLeaves)
+        val menuTeam = popupView.findViewById<View>(R.id.menuTeamLeaves)
+        val tvMenuTeam = popupView.findViewById<TextView>(R.id.tvMenuTeamLeaves)
+        val menuAll = popupView.findViewById<TextView>(R.id.menuAllLeaves)
+
+        if (activeScope == LeaveScope.MY) {
+            menuMy.setTypeface(null, android.graphics.Typeface.BOLD)
+            menuMy.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
+            
+            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
+            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+
+            menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
+            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+        } else if (activeScope == LeaveScope.TEAM) {
+            menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
+            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            
+            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.BOLD)
+            tvMenuTeam?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
+
+            menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
+            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+        } else {
+            menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
+            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            
+            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
+            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+
+            menuAll?.setTypeface(null, android.graphics.Typeface.BOLD)
+            menuAll?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
+        }
+
+        val pendingCount = viewModel.uiState.value.pendingApprovals.size
+        val dotBadge = popupView.findViewById<TextView>(R.id.dotTeamBadge)
+        if (dotBadge != null) {
+            if (pendingCount > 0) {
+                dotBadge.visibility = View.VISIBLE
+                dotBadge.text = pendingCount.toString()
+            } else {
+                dotBadge.visibility = View.GONE
+            }
+        }
+
+        menuMy.setOnClickListener {
+            popup.dismiss()
+            if (activeScope != LeaveScope.MY) {
+                switchScope(LeaveScope.MY)
+            }
+        }
+
+        menuTeam.setOnClickListener {
+            popup.dismiss()
+            if (activeScope != LeaveScope.TEAM) {
+                switchScope(LeaveScope.TEAM)
+            }
+        }
+
+        menuAll?.setOnClickListener {
+            popup.dismiss()
+            if (activeScope != LeaveScope.ALL) {
+                switchScope(LeaveScope.ALL)
+            }
+        }
+
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val xOffset = anchor.width - popupView.measuredWidth
+        popup.showAsDropDown(anchor, xOffset, dp(4))
+
+        popupView.alpha = 0f
+        popupView.scaleX = 0.9f
+        popupView.scaleY = 0.9f
+        popupView.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(150)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+    }
+
+    private fun switchScope(scope: LeaveScope) {
+        activeScope = scope
+        if (scope == LeaveScope.MY) {
+            binding.tvBalanceTitle.text = "Total Leave"
+            binding.tvSelectedScope.text = "My Leaves"
+        } else if (scope == LeaveScope.TEAM) {
+            binding.tvBalanceTitle.text = "Team Leaves"
+            binding.tvSelectedScope.text = "Team Leaves"
+        } else {
+            binding.tvBalanceTitle.text = "Total Leave"
+            binding.tvSelectedScope.text = "All Leaves"
+        }
+
+        // Animate transition on contentscroll
+        android.transition.TransitionManager.beginDelayedTransition(binding.contentScroll, android.transition.AutoTransition())
+
+        renderState(viewModel.uiState.value)
     }
 
     override fun onDestroyView() {

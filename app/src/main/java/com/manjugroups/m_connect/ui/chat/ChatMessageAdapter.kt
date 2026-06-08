@@ -32,7 +32,7 @@ sealed class ChatItem {
 class ChatMessageAdapter(
     private val onMessageReactionClick: (MessageData, View) -> Unit,
     private val onReactionPillClick: (MessageData, View) -> Unit,
-    private val onAttachmentClick: (url: String, mime: String, storageId: String?) -> Unit,
+    private val onAttachmentClick: (url: String, mime: String, storageId: String?, fileName: String?) -> Unit,
     private val onReplyClick: (messageId: String) -> Unit,
     private val onMessageTap: ((MessageData) -> Boolean)? = null
 ) : ListAdapter<ChatItem, RecyclerView.ViewHolder>(ChatItemDiffCallback()) {
@@ -84,17 +84,6 @@ class ChatMessageAdapter(
             return
         }
         onMessageReactionClick(data, anchorView)
-        val id = data.id
-        if (id != null) {
-            // Enter selection mode AFTER the reaction sheet is invoked so the
-            // sheet can still anchor to the bubble's current visual state.
-            if (!selectionMode) {
-                selectionMode = true
-            }
-            if (id !in selectedIds) selectedIds.add(id)
-            notifyDataSetChanged()
-            onMessageTap?.invoke(data)
-        }
     }
 
     fun applySelectionVisual(rootView: View, messageId: String?) {
@@ -229,7 +218,8 @@ class ChatMessageAdapter(
                     creationTime = item.data.creationTime,
                     replyContainer = binding.replyContainer,
                     attachments = binding.attachmentsContainer,
-                    reactions = binding.reactionsLayout
+                    reactions = binding.reactionsLayout,
+                    isSent = true
                 )
                 binding.root.setOnLongClickListener { true }
                 return
@@ -322,7 +312,8 @@ class ChatMessageAdapter(
                     creationTime = item.data.creationTime,
                     replyContainer = binding.replyContainer,
                     attachments = binding.attachmentsContainer,
-                    reactions = binding.reactionsLayout
+                    reactions = binding.reactionsLayout,
+                    isSent = false
                 )
                 binding.root.setOnLongClickListener { true }
                 return
@@ -406,6 +397,7 @@ class ChatMessageAdapter(
         )
         body.typeface = androidx.core.content.res.ResourcesCompat
             .getFont(body.context, R.font.inter_regular)
+        body.setCompoundDrawables(null, null, null, null)
     }
 
     private fun applyBubbleChrome(
@@ -415,7 +407,7 @@ class ChatMessageAdapter(
         isSent: Boolean
     ) {
         val isDeleted = item.data.isDeleted == true
-        if (isVoiceOnly(item.data) || isDeleted) {
+        if (isVoiceOnly(item.data)) {
             bubbleFrame.background = null
             bubbleFrame.setPadding(0, 0, 0, 0)
         } else {
@@ -462,16 +454,33 @@ class ChatMessageAdapter(
         creationTime: Double?,
         replyContainer: View,
         attachments: ViewGroup,
-        reactions: LinearLayout
+        reactions: LinearLayout,
+        isSent: Boolean
     ) {
-        body.text = "🚫 This message was deleted"
+        body.text = if (isSent) "You deleted this message" else "This message was deleted"
         body.isVisible = true
         body.alpha = 1f
-        body.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
+        val textColor = if (isSent) "#D1E9FF" else "#8E8E93"
+        body.setTextColor(android.graphics.Color.parseColor(textColor))
         body.textSize = 13f
         body.typeface = androidx.core.content.res.ResourcesCompat
             .getFont(body.context, R.font.inter_regular)
         body.setTypeface(body.typeface, android.graphics.Typeface.ITALIC)
+        
+        // Load a clean deleted/trash icon next to the text
+        val deleteDrawable = androidx.core.content.res.ResourcesCompat.getDrawable(
+            body.resources,
+            R.drawable.ic_chat_delete,
+            body.context.theme
+        )?.mutate()?.apply {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                setTint(android.graphics.Color.parseColor(textColor))
+            }
+            setBounds(0, 0, dp(body.context, 16), dp(body.context, 16))
+        }
+        body.setCompoundDrawables(deleteDrawable, null, null, null)
+        body.compoundDrawablePadding = dp(body.context, 6)
+
         timeView.text = ""
         (timeView.parent as? View)?.visibility = View.GONE
         replyContainer.visibility = View.GONE
@@ -505,24 +514,16 @@ class ChatMessageAdapter(
         nameView.text = if (parent.senderId == ownSenderId) "You" else parent.senderName
 
         val imageAttachment = parent.attachments?.firstOrNull { it.fileType?.startsWith("image/") == true }
-        val hasAudio = parent.attachments?.any { isAudioAttachment(it) } == true
+        val previewText = getMessagePreviewText(parent)
+        bodyView.text = previewText.ifBlank { "Attachment" }
 
-        when {
-            hasAudio -> {
-                bodyView.text = "🎙️ Voice message"
-                previewView.visibility = View.GONE
+        if (imageAttachment != null && parent.isDeleted != true) {
+            previewView.visibility = View.VISIBLE
+            previewView.load(imageAttachment.url ?: imageAttachment.storageId) {
+                transformations(coil.transform.RoundedCornersTransformation(8f))
             }
-            imageAttachment != null -> {
-                bodyView.text = "📷 Photo"
-                previewView.visibility = View.VISIBLE
-                previewView.load(imageAttachment.url ?: imageAttachment.storageId) {
-                    transformations(coil.transform.RoundedCornersTransformation(8f))
-                }
-            }
-            else -> {
-                bodyView.text = parent.body.orEmpty().ifBlank { "Attachment" }
-                previewView.visibility = View.GONE
-            }
+        } else {
+            previewView.visibility = View.GONE
         }
         container.setOnClickListener { onReplyClick(parentId) }
     }
@@ -713,7 +714,7 @@ class ChatMessageAdapter(
         }
 
         val click = View.OnClickListener {
-            onAttachmentClick(url, "audio/mp4", storageId)
+            onAttachmentClick(url, "audio/mp4", storageId, attachment.fileName)
         }
         playBtn.setOnClickListener(click)
         container.setOnClickListener(click)
@@ -772,7 +773,7 @@ class ChatMessageAdapter(
         }
         container.addView(play)
 
-        container.setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
+        container.setOnClickListener { onAttachmentClick(url, mime, attachment.storageId, attachment.fileName) }
         // Long-press is wired by createAttachmentView (which delegates to the
         // bubble's selection/reaction handler), so we leave the container
         // long-clickable here.
@@ -791,13 +792,13 @@ class ChatMessageAdapter(
         val mime = attachment.fileType.orEmpty().lowercase()
         val fileName = attachment.fileName.orEmpty().lowercase()
 
-        val isAudio = isAudioAttachment(attachment)
+        val isAudio = isAudioAttachment(attachment) && mime != "application/octet-stream"
 
         // NOTE: must be evaluated AFTER isAudio because `.webm` and `.mp4`
         // are valid containers for both audio and video; voice notes from the
         // web composer arrive as `voice_message_*.webm` which would otherwise
         // collide with the video-extension list below.
-        val isVideo = !isAudio && (
+        val isVideo = !isAudio && mime != "application/octet-stream" && (
             mime.startsWith("video/") ||
                 fileName.endsWith(".mp4") ||
                 fileName.endsWith(".mov") ||
@@ -845,7 +846,7 @@ class ChatMessageAdapter(
                     }
                 }
                 addView(img)
-                setOnClickListener { onAttachmentClick(url, mime, attachment.storageId) }
+                setOnClickListener { onAttachmentClick(url, mime, attachment.storageId, attachment.fileName) }
             }
         } else if (isVideo) {
             createVideoPreview(context, url, attachment, mime)
@@ -1005,7 +1006,7 @@ class ChatMessageAdapter(
 
         // Action row: Open | Save as
         val openClick = View.OnClickListener {
-            onAttachmentClick(url, mime, attachment.storageId)
+            onAttachmentClick(url, mime, attachment.storageId, attachment.fileName)
         }
         val actionsRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
