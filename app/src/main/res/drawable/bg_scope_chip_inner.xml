@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Compact white card for the scope dropdown popup.
-  Figma: white fill, 8dp radius, subtle drop shadow
-  (applied via PopupWindow elevation in code).
-  No border stroke — shadow alone provides the edge.
+  Inner white pill for the scope dropdown chip.
+  Figma: white fill, 8dp corner radius, sits inside the
+  gray outer container, giving the "card inside track" look.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">

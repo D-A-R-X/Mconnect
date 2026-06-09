@@ -1,39 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Custom dropdown shown when the scope chip is tapped. Replaces the
-  default Material PopupMenu (which was a styling mismatch with the
-  rest of the leave UI) with a rounded white card per the design.
+  Compact dropdown shown when the scope chip is tapped.
+  Figma: white card with 8dp radius, subtle drop shadow.
+  Three centered text rows separated by gradient dividers.
 
-  Each row is a centered label. The "Team Leaves" row carries a small
-  red badge that lights up when the team queue has pending items —
-  same dot-style as the chip itself, so the two stay consistent.
+  Text: Inter Regular, 14sp, #061D3D, tracking -0.28px.
+  Team Leaves row includes a 13dp red count badge.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_scope_popup"
-    android:minWidth="180dp"
+    android:minWidth="140dp"
     android:orientation="vertical"
-    android:paddingVertical="8dp">
+    android:paddingVertical="6dp">
 
     <TextView
         android:id="@+id/menuMyLeaves"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="wrap_content"
         android:background="?attr/selectableItemBackground"
         android:clickable="true"
         android:focusable="true"
-        android:fontFamily="@font/inter_medium"
+        android:fontFamily="@font/inter_regular"
         android:gravity="center"
-        android:paddingHorizontal="24dp"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
         android:text="My Leaves"
-        android:textColor="#344054"
-        android:textSize="15sp" />
+        android:textColor="#061D3D"
+        android:textSize="14sp"
+        android:letterSpacing="-0.02" />
+
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
 
     <FrameLayout
         android:id="@+id/menuTeamLeaves"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="wrap_content"
         android:background="?attr/selectableItemBackground"
         android:clickable="true"
         android:focusable="true">
@@ -43,25 +50,28 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="8dp">
 
             <TextView
                 android:id="@+id/tvMenuTeamLeaves"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_medium"
+                android:fontFamily="@font/inter_regular"
                 android:text="Team Leaves"
-                android:textColor="#344054"
-                android:textSize="15sp" />
+                android:textColor="#061D3D"
+                android:textSize="14sp"
+                android:letterSpacing="-0.02" />
 
             <TextView
                 android:id="@+id/dotTeamBadge"
                 android:layout_width="18dp"
                 android:layout_height="18dp"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="5dp"
                 android:background="@drawable/bg_red_dot"
                 android:gravity="center"
-                android:fontFamily="@font/inter_bold"
+                android:fontFamily="@font/inter_regular"
                 android:textColor="@android:color/white"
                 android:textSize="10sp"
                 android:includeFontPadding="false"
@@ -69,17 +79,25 @@
         </LinearLayout>
     </FrameLayout>
 
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
+
     <TextView
         android:id="@+id/menuAllLeaves"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="wrap_content"
         android:background="?attr/selectableItemBackground"
         android:clickable="true"
         android:focusable="true"
-        android:fontFamily="@font/inter_medium"
+        android:fontFamily="@font/inter_regular"
         android:gravity="center"
-        android:paddingHorizontal="24dp"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
         android:text="All Leaves"
-        android:textColor="#344054"
-        android:textSize="15sp" />
+        android:textColor="#061D3D"
+        android:textSize="14sp"
+        android:letterSpacing="-0.02" />
 </LinearLayout>
