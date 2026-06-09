@@ -97,6 +97,8 @@ class PermissionsFragment : Fragment() {
         }
 
         val cal = Calendar.getInstance()
+        val year = cal.get(Calendar.YEAR)
+        binding.tvYear.text = "Period 1 Jan $year - 30 Dec $year"
 
         if (screenMode == MODE_APPROVAL) {
             binding.summaryHeader.setTitle("Permission Approvals")
