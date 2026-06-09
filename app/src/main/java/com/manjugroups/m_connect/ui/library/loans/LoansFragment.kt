@@ -322,6 +322,8 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
+                
+                updateTrackerState(loan.approvalStatus)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
@@ -338,6 +340,45 @@ class LoansFragment : Fragment() {
         } else {
             "—"
         }
+    }
+
+    private fun updateTrackerState(approvalStatus: String?) {
+        val status = approvalStatus?.lowercase() ?: "pending_nominee_1"
+        
+        // Define sequence
+        val n1Done = !status.contains("nominee_1")
+        val n2Done = n1Done && !status.contains("nominee_2")
+        val gmDone = n2Done && !status.contains("gm")
+        val avpDone = gmDone && !status.contains("avp") && !status.contains("vp")
+        val hrDone = avpDone && !status.contains("hr")
+        
+        fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
+            frame.setBackgroundResource(R.drawable.bg_loan_track_active)
+            icon.setImageResource(R.drawable.ic_loan_track_check)
+            text.setTextColor(Color.parseColor("#0B61CA"))
+            text.setTypeface(null, Typeface.BOLD)
+        }
+        fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
+            frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
+            icon.setImageResource(defaultIcon)
+            text.setTextColor(Color.parseColor("#98A2B3"))
+            text.setTypeface(null, Typeface.NORMAL)
+        }
+
+        if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
+        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_loan_track_shield)
+        
+        if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
+        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_loan_track_shield)
+        
+        if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
+        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_loan_track_person)
+        
+        if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
+        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_loan_track_person)
+        
+        if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
+        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_loan_track_group)
     }
 
     private fun playContentEntryAnim(activeHero: Loan?) {
