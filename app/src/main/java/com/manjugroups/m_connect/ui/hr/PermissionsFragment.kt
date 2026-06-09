@@ -86,8 +86,8 @@ class PermissionsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { navigateUp() }
-        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        binding.summaryHeader.setOnBackClickListener { navigateUp() }
+        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()
@@ -99,14 +99,17 @@ class PermissionsFragment : Fragment() {
         val cal = Calendar.getInstance()
 
         if (screenMode == MODE_APPROVAL) {
-            binding.tvHeaderTitle.text = "Permission Approvals"
-            binding.tvHeaderSubtitle.text = "In Review"
+            binding.summaryHeader.setTitle("Permission Approvals")
+            binding.summaryHeader.setSubtitle("Review Requests")
+            binding.permissionsRefresh.isEnabled = false
+            binding.btnApplyPermission.visibility = View.GONE
             binding.tvSectionTitle.text = "Permission Approvals"
             binding.tvSectionSubtitle.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
         } else {
-            binding.tvHeaderTitle.text = "Permission Summary"
-            binding.tvHeaderSubtitle.text = "Submit Permission"
+            binding.summaryHeader.setTitle("Permission Summary")
+            binding.summaryHeader.setSubtitle("Submit Permission")
+            binding.permissionsRefresh.isEnabled = true
             binding.tvSectionTitle.text = "Recent Requests"
             binding.tvSectionSubtitle.visibility = View.VISIBLE
             binding.filterRow.visibility = View.VISIBLE

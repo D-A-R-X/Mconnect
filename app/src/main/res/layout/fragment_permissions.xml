@@ -27,64 +27,13 @@
                 android:orientation="vertical">
 
                 <!-- Header -->
-                <FrameLayout
-                    android:id="@+id/headerContainer"
+                <com.manjugroups.m_connect.ui.common.SummaryHeaderView
+                    android:id="@+id/summaryHeader"
                     android:layout_width="match_parent"
-                    android:layout_height="195dp"
-                    android:background="@drawable/bg_attendance_header_gradient"
-                    android:paddingStart="24dp"
-                    android:paddingTop="20dp">
-
-                    <ImageView
-                        android:id="@+id/ivPermissionBanner"
-                        android:layout_width="166dp"
-                        android:layout_height="125dp"
-                        android:layout_gravity="top|end"
-                        android:layout_marginTop="30dp"
-                        android:layout_marginEnd="6dp"
-                        android:adjustViewBounds="true"
-                        android:contentDescription="Permission banner"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/img_permission_3d_banner" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <ImageView
-                            android:id="@+id/btnBack"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:clickable="true"
-                            android:contentDescription="Back"
-                            android:focusable="true"
-                            android:src="@drawable/ic_arrow_left"
-                            android:visibility="gone"
-                            app:tint="@android:color/white" />
-
-                        <TextView
-                            android:id="@+id/tvHeaderTitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:fontFamily="@font/inter_bold"
-                            android:letterSpacing="-0.02"
-                            android:text="Permission Summary"
-                            android:textColor="@android:color/white"
-                            android:textSize="24sp" />
-
-                        <TextView
-                            android:id="@+id/tvHeaderSubtitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_semibold"
-                            android:text="Submit Permission"
-                            android:textColor="#CCFFFFFF"
-                            android:textSize="14sp" />
-                    </LinearLayout>
-                </FrameLayout>
+                    android:layout_height="wrap_content"
+                    app:sh_title="Permission Summary"
+                    app:sh_subtitle="Submit Permission"
+                    app:sh_banner_image="@drawable/img_permission_3d_banner" />
 
                 <LinearLayout
                     android:id="@+id/topContent"
