@@ -34,15 +34,21 @@
              at runtime ONLY for the user's own pending requests on the
              My Permissions view; hidden everywhere else (approved /
              rejected / Team view / approver-mode). -->
-        <ImageView
+        <FrameLayout
             android:id="@+id/ivPermCancel"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Cancel request"
-            android:padding="2dp"
-            android:src="@drawable/ic_trash"
-            android:visibility="gone" />
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/bg_leave_delete_icon"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_leave_trash_red" />
+        </FrameLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -60,12 +66,15 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvPermReasonLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_regular"
                 android:text="Permission Time"
                 android:textColor="#667085"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/tvPermTime"
@@ -123,7 +132,7 @@
                 android:src="@drawable/ic_leave_status_review" />
 
             <TextView
-                android:id="@+id/tvPermReason"
+                android:id="@+id/tvPermStatusNote"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"

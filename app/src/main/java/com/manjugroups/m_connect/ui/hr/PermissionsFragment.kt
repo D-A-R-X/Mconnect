@@ -426,7 +426,7 @@ class PermissionsFragment : Fragment() {
                     statusIconRes = R.drawable.ic_leave_status_rejected
                 }
                 StatusBucket.REVIEW -> {
-                    statusNote = "In Review"
+                    statusNote = if (statusDateText.isNullOrBlank()) "In Review" else "In Review at $statusDateText"
                     statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
                     statusIconRes = R.drawable.ic_leave_status_review
                 }
@@ -436,9 +436,12 @@ class PermissionsFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvPermTime).text = rangeText
             card.findViewById<TextView>(R.id.tvPermHours).text = hoursText
 
-            val reasonText = card.findViewById<TextView>(R.id.tvPermReason)
-            reasonText.text = statusNote
-            reasonText.setTextColor(statusColor)
+            val reasonLabel = card.findViewById<TextView>(R.id.tvPermReasonLabel)
+            reasonLabel.text = perm.reason.takeUnless { it.isNullOrBlank() } ?: "Permission Time"
+
+            val statusNoteView = card.findViewById<TextView>(R.id.tvPermStatusNote)
+            statusNoteView.text = statusNote
+            statusNoteView.setTextColor(statusColor)
             card.findViewById<ImageView>(R.id.ivPermStatusIcon).setImageResource(statusIconRes)
 
             val staffName = card.findViewById<TextView>(R.id.tvPermStaffName)
@@ -482,7 +485,7 @@ class PermissionsFragment : Fragment() {
             // Approver-mode rows already get Approve/Reject; cancelled
             // rows live in REJECTED/APPROVED buckets and shouldn't
             // re-surface a trash icon there.
-            val cancelIcon = card.findViewById<ImageView>(R.id.ivPermCancel)
+            val cancelIcon = card.findViewById<android.widget.FrameLayout>(R.id.ivPermCancel)
             val canCancel = !approvalMode
                 && screenMode == MODE_HISTORY
                 && scope == Scope.MY
