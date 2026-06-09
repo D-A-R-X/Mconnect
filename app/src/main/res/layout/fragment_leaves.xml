@@ -124,16 +124,16 @@
                                 android:fontFamily="@font/inter_bold"
                                 android:text="Total Leave"
                                 android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="14sp" />
+                                android:textSize="18sp" />
 
                             <TextView
                                 android:id="@+id/tvYear"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
+                                android:layout_marginTop="4dp"
                                 android:fontFamily="@font/inter_regular"
                                 android:textColor="?attr/colorForegroundMuted"
-                                android:textSize="11sp" />
+                                android:textSize="13sp" />
                         </LinearLayout>
 
                         <!-- Dropdown Chip Selector -->
@@ -144,8 +144,8 @@
                             android:background="@drawable/bg_scope_chip"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="6dp"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp"
                             android:clickable="true"
                             android:focusable="true"
                             android:visibility="gone">
@@ -156,24 +156,24 @@
                                 android:layout_height="wrap_content"
                                 android:fontFamily="@font/inter_semibold"
                                 android:text="My Leaves"
-                                android:textColor="?attr/colorForegroundPrimary"
-                                android:textSize="12sp" />
+                                android:textColor="#344054"
+                                android:textSize="14sp" />
 
                             <View
                                 android:id="@+id/dotScopeBadge"
-                                android:layout_width="6dp"
-                                android:layout_height="6dp"
-                                android:layout_marginStart="6dp"
+                                android:layout_width="8dp"
+                                android:layout_height="8dp"
+                                android:layout_marginStart="8dp"
                                 android:background="@drawable/bg_scope_dot_red"
                                 android:visibility="gone" />
 
                             <ImageView
                                 android:id="@+id/ivScopeChevron"
-                                android:layout_width="12dp"
-                                android:layout_height="12dp"
-                                android:layout_marginStart="6dp"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="8dp"
                                 android:src="@drawable/ic_leave_chevron_down"
-                                app:tint="?attr/colorForegroundPrimary" />
+                                app:tint="#344054" />
                         </LinearLayout>
                     </LinearLayout>
 

@@ -27,8 +27,8 @@
         android:gravity="center"
         android:paddingHorizontal="24dp"
         android:text="My Leaves"
-        android:textColor="?attr/colorForegroundPrimary"
-        android:textSize="14sp" />
+        android:textColor="#344054"
+        android:textSize="15sp" />
 
     <FrameLayout
         android:id="@+id/menuTeamLeaves"
@@ -51,8 +51,8 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
                 android:text="Team Leaves"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp" />
+                android:textColor="#344054"
+                android:textSize="15sp" />
 
             <TextView
                 android:id="@+id/dotTeamBadge"
@@ -80,6 +80,6 @@
         android:gravity="center"
         android:paddingHorizontal="24dp"
         android:text="All Leaves"
-        android:textColor="?attr/colorForegroundPrimary"
-        android:textSize="14sp" />
+        android:textColor="#344054"
+        android:textSize="15sp" />
 </LinearLayout>

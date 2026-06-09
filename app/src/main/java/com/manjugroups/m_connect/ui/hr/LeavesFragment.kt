@@ -607,25 +607,25 @@ class LeavesFragment : Fragment() {
             menuMy.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
             
             tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            tvMenuTeam?.setTextColor(android.graphics.Color.parseColor("#344054"))
 
             menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            menuAll?.setTextColor(android.graphics.Color.parseColor("#344054"))
         } else if (activeScope == LeaveScope.TEAM) {
             menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            menuMy.setTextColor(android.graphics.Color.parseColor("#344054"))
             
             tvMenuTeam?.setTypeface(null, android.graphics.Typeface.BOLD)
             tvMenuTeam?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
 
             menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            menuAll?.setTextColor(android.graphics.Color.parseColor("#344054"))
         } else {
             menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            menuMy.setTextColor(android.graphics.Color.parseColor("#344054"))
             
             tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+            tvMenuTeam?.setTextColor(android.graphics.Color.parseColor("#344054"))
 
             menuAll?.setTypeface(null, android.graphics.Typeface.BOLD)
             menuAll?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
