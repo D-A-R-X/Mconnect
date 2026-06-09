@@ -320,11 +320,15 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Pending Advance" else "Pending"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_status_pending)
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
+                binding.heroActiveDetails.visibility = View.GONE
+                binding.heroPendingTracker.visibility = View.VISIBLE
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_active_pill)
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
+                binding.heroActiveDetails.visibility = View.VISIBLE
+                binding.heroPendingTracker.visibility = View.GONE
             }
         }
 
