@@ -716,7 +716,7 @@ class HomeFragment : Fragment() {
                 actionBtn.setOnClickListener(openDetail)
             } else if (!isInProgress && canStartTrip) {
                 val startTrip: (View) -> Unit = {
-                    DriverStartTripBottomSheet.newInstance(visit.id)
+                    DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
                         .show(parentFragmentManager, "driver_start_trip")
                 }
                 itemView.isClickable = true

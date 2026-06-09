@@ -28,7 +28,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_semibold"
-            android:text="Create Loans"
+            android:text="Request Loan"
             android:textColor="#101828"
             android:textSize="16sp" />
 

@@ -27,6 +27,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEmployeePasswordLoginBinding
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+    private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
     private val gson = Gson()
     private var passwordVisible = false
 
@@ -130,6 +131,22 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             session.shouldTrackNow = false
             session.activeTrackingSessionId = null
 
+            // Cache designation from the login response immediately —
+            // see OtpActivity.bootstrapSession for the rationale. The
+            // old runCatching wrapper around getStaffDetail silently
+            // dropped designation whenever the secondary fetch failed,
+            // leaving driver-role staff stuck in field-executive mode.
+            user.designation?.takeIf { it.isNotBlank() }?.let {
+                session.designation = it
+            }
+
+            // Backend fleet-driver probe — see OtpActivity for context.
+            // Lets the app honour the backend's "fleetDrivers row by
+            // phone" path even when designation isn't literally "Driver".
+            session.fleetDriverByBackend = runCatching {
+                geoApi.getMmsFleetDriverTrips(session.bearerToken)
+            }.map { it.success }.getOrDefault(false)
+
             runCatching {
                 api.getMyIamPermissions(session.bearerToken)
             }.onSuccess { iam ->
@@ -144,10 +161,13 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                     resp.staff?.let { staff ->
                         session.reportingToId = staff.reportingTo
                         session.reportingToName = staff.reportingToName
-                        // Designation drives SessionManager.isDriverMode —
-                        // see the SessionManager comment for the broader
-                        // rationale (auto-detect, no user toggle).
-                        session.designation = staff.designation
+                        // Refresh designation only if the staff-detail
+                        // call returned a non-blank value; otherwise
+                        // keep the good value already cached from the
+                        // login payload above.
+                        staff.designation?.takeIf { it.isNotBlank() }?.let {
+                            session.designation = it
+                        }
                     }
                 }
             }

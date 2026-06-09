@@ -92,6 +92,21 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 validateForm()
             }
         })
+        // Hard cap the Tenure field at 6 (matching web: LOAN_TENURE_MAX_MONTHS).
+        // Filter rejects any keystroke or paste that would produce a value > 6,
+        // so the user can never type or paste "70", "7", "12", etc. This is
+        // the input-level guard; validateForm() and submitLoanRequest() keep
+        // their existing semantic checks as a defence in depth.
+        binding.etTenure.filters = arrayOf(
+            android.text.InputFilter { source, start, end, dest, dstart, dend ->
+                val resulting = StringBuilder(dest)
+                    .replace(dstart, dend, source.subSequence(start, end).toString())
+                    .toString()
+                if (resulting.isEmpty()) return@InputFilter null
+                val n = resulting.toIntOrNull() ?: return@InputFilter ""
+                if (n in 0..6) null else ""
+            }
+        )
         binding.etTenure.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}

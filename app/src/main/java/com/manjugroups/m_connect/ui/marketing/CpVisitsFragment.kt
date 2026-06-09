@@ -277,23 +277,12 @@ class CpVisitsFragment : Fragment() {
                         compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
-                // Diagnostic: surface server-reported count alongside
-                // the client-mapped count so the user can tell "0 from
-                // server" apart from "server returned N but mapper
-                // dropped them all".
-                if (resp.visits.isEmpty()) {
-                    Toast.makeText(
-                        requireContext(),
-                        "CP /my: server returned 0 visits for your account",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                } else if (allVisits.isEmpty()) {
-                    Toast.makeText(
-                        requireContext(),
-                        "CP /my: server sent ${resp.visits.size} but mapper dropped all",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
+                // Empty-state diagnostic toasts removed — the
+                // "No Cp Visits Yet" empty-state UI already conveys
+                // the same information, and the "server sent N but
+                // mapper dropped all" debug toast was leaking dev
+                // noise into the user-facing app. Both branches
+                // collapse to a no-op render call below.
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)

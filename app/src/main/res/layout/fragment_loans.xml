@@ -148,7 +148,7 @@
                         android:layout_marginTop="4dp"
                         android:fontFamily="@font/inter_medium"
                         android:letterSpacing="0.01"
-                        android:text="Manage Loans and Salary Advance"
+                        android:text="Manage Loans and Advances"
                         android:textColor="#D9D6FE"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -358,7 +358,7 @@
                         android:background="@null"
                         android:gravity="center"
                         android:fontFamily="@font/inter_medium"
-                        android:text="Salary"
+                        android:text="Advance"
                         android:textColor="#475467"
                         android:textSize="15sp"
                         android:clickable="true"
@@ -429,6 +429,30 @@
                 android:overScrollMode="never"
                 android:paddingHorizontal="16dp"
                 android:paddingBottom="32dp" />
+
+            <!--
+              Inline empty state — sits BELOW the tabs + create-loan
+              button so the operator can still tap "Loans" / "Salary"
+              and the + button to apply for a new loan / advance even
+              when no loans exist yet. Replaces the previous behaviour
+              of swapping the entire loansContent NestedScrollView out
+              for a separate `loansEmptyState` container (which hid the
+              tabs and the + button too — there was no path to create
+              a first loan from that screen). When `render()` decides
+              the active+previous lists are both empty, this view goes
+              VISIBLE and the hero + previous-loans header + rvLoans
+              go GONE; otherwise this view is GONE.
+            -->
+            <com.manjugroups.m_connect.ui.common.EmptyStateView
+                android:id="@+id/inlineLoansEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="48dp"
+                android:paddingBottom="80dp"
+                android:visibility="gone"
+                app:es_image="@drawable/img_loans_empty"
+                app:es_title="No Loans Yet"
+                app:es_description="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history." />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </FrameLayout>

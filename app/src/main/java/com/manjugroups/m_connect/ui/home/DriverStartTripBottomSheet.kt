@@ -50,6 +50,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
     private var visitId: String = ""
+    private var scheduledDate: String? = null
     private var currentPhotoFile: File? = null
     private var currentPhotoUri: Uri? = null
 
@@ -118,6 +119,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
         visitId = requireArguments().getString(ARG_VISIT_ID).orEmpty()
+        scheduledDate = requireArguments().getString(ARG_SCHEDULED_DATE)
 
         etStartKm = view.findViewById(R.id.etStartKm)
         btnUploadImage = view.findViewById(R.id.btnUploadImage)
@@ -176,6 +178,26 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun performSubmit() {
+        // Pre-empt the backend's "Trip actions are only available on the
+        // assignment date (...)" throw so the driver doesn't waste a
+        // photo upload + two HTTP calls only to see the same error in a
+        // toast. We do the local check using the IST calendar day to
+        // match the server's `toIndiaDateString()` — the backend gate
+        // lives in lib/driverTripAssignment.ts and compares the visit's
+        // scheduledDate (YYYY-MM-DD) against that exact string.
+        val sd = scheduledDate
+        val todayInIndia = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+        }.format(Date())
+        if (!sd.isNullOrBlank() && sd != todayInIndia) {
+            Toast.makeText(
+                requireContext(),
+                "This trip is scheduled for $sd. You can start it on that day (today is $todayInIndia).",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+
         val kmText = etStartKm.text.toString().trim()
         if (kmText.isEmpty()) {
             Toast.makeText(requireContext(), "Please enter starting Km", Toast.LENGTH_SHORT).show()
@@ -227,7 +249,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
                 btnSubmit.isEnabled = true
-                Toast.makeText(requireContext(), "Failed to start trip: ${readApiError(e)}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), readApiError(e), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -245,17 +267,95 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         val serverMessage = raw?.let {
             runCatching { JSONObject(it).optString("error").takeIf { msg -> msg.isNotBlank() } }.getOrNull()
         }
-        return serverMessage ?: error.message ?: "Network error"
+        val message = serverMessage ?: error.message ?: "Network error"
+        return cleanDriverErrorMessage(message)
+    }
+
+    /**
+     * Strip Convex's noisy wrappers from the message we got back from
+     * the HTTP route and rewrite a few well-known business errors into
+     * concise human copy. The backend throws `new Error("Trip actions
+     * are only available on the assignment date (…)")` which Convex
+     * surfaces as `Uncaught Error: Trip actions are only available …`
+     * — useful for a stack trace, miserable for a driver staring at a
+     * toast. Same idea for `[CONVEX M(…)]` prefixes that come back on
+     * server validation throws.
+     */
+    private fun cleanDriverErrorMessage(raw: String): String {
+        var msg = raw.trim()
+        // Drop common Convex prefixes: "Uncaught Error: ", "Error: ",
+        // "[CONVEX M(...)] ", "ConvexError: ".
+        val noisePrefixes = listOf(
+            "Uncaught Error:",
+            "ConvexError:",
+            "Convex error:",
+            "Error:",
+        )
+        var changed = true
+        while (changed) {
+            changed = false
+            for (prefix in noisePrefixes) {
+                if (msg.startsWith(prefix, ignoreCase = true)) {
+                    msg = msg.removePrefix(prefix).trim()
+                    changed = true
+                }
+            }
+            // Strip [CONVEX M(name)] prefix that wraps mutation throws.
+            val bracketMatch = Regex("^\\[CONVEX [A-Z]\\([^)]*\\)]\\s*").find(msg)
+            if (bracketMatch != null) {
+                msg = msg.removePrefix(bracketMatch.value).trim()
+                changed = true
+            }
+        }
+        // Trim trailing "..." or whitespace that callers append to
+        // help-line text.
+        msg = msg.trimEnd('.', ' ', '…')
+        if (msg.isEmpty()) return "Something went wrong. Try again."
+
+        // Rewrite the two well-known driver-flow errors into clean
+        // copy that tells the driver what to do next.
+        val assignmentDateRegex = Regex(
+            "Trip actions are only available on the assignment date \\(([^)]+)\\)\\.\\s*Today is ([^.]+)",
+            RegexOption.IGNORE_CASE,
+        )
+        assignmentDateRegex.find(msg)?.let { m ->
+            val assignmentDate = m.groupValues.getOrNull(1)?.trim().orEmpty()
+            val today = m.groupValues.getOrNull(2)?.trim().orEmpty()
+            return if (assignmentDate.isNotEmpty()) {
+                "This trip is scheduled for $assignmentDate." +
+                    if (today.isNotEmpty()) " You can start it on that day (today is $today)." else ""
+            } else {
+                "This trip can only be started on its assignment date."
+            }
+        }
+        if (msg.contains("Mark arrived at client location", ignoreCase = true)) {
+            return "Mark arrival at the client location before starting the trip."
+        }
+        if (msg.contains("Trip is already completed", ignoreCase = true)) {
+            return "This trip is already marked completed."
+        }
+        if (msg.contains("Trip has already started", ignoreCase = true)) {
+            return "This trip has already been started."
+        }
+        if (msg.contains("Driver access only", ignoreCase = true)) {
+            return "Your account isn't registered as a fleet driver. Ask the admin to set your designation or add a fleet driver entry."
+        }
+        return msg
     }
 
     companion object {
         const val RESULT_KEY = "driver_start_trip_result"
         private const val ARG_VISIT_ID = "arg_visit_id"
+        private const val ARG_SCHEDULED_DATE = "arg_scheduled_date"
 
-        fun newInstance(visitId: String): DriverStartTripBottomSheet {
+        fun newInstance(
+            visitId: String,
+            scheduledDate: String? = null,
+        ): DriverStartTripBottomSheet {
             return DriverStartTripBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_VISIT_ID, visitId)
+                    putString(ARG_SCHEDULED_DATE, scheduledDate)
                 }
             }
         }

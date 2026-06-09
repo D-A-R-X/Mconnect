@@ -120,8 +120,29 @@ class SessionManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_DESIGNATION, value).apply()
 
     /**
+     * Set at login bootstrap to mirror the backend's authoritative
+     * answer to "is this account a fleet driver?". The web's
+     * `requireMmsFleetDriverStaff` (convex/lib/mmsFleetDriverSessionLib.ts)
+     * accepts TWO paths: designation === "Driver" OR a fleetDrivers
+     * row whose phone matches the staff's phone. The designation
+     * string alone misses the second path — a staff IAM-provisioned
+     * as a driver by adding a fleetDrivers row never flipped into
+     * driver mode on the app even though the backend would happily
+     * return their trips.
+     *
+     * Bootstrap pokes /api/mms-fleet/driver/trips once after OTP /
+     * password login and writes true here when it returns success,
+     * regardless of HTTP body. False / unset means either not a
+     * driver or the probe failed (we fall back to designation in
+     * that case).
+     */
+    var fleetDriverByBackend: Boolean
+        get() = prefs.getBoolean(KEY_FLEET_DRIVER_BY_BACKEND, false)
+        set(value) = prefs.edit().putBoolean(KEY_FLEET_DRIVER_BY_BACKEND, value).apply()
+
+    /**
      * True when the logged-in staff is a Driver — derived from
-     * designation, NOT a user-toggled preference. The old Executive /
+     * designation OR the backend-probe flag above. The old Executive /
      * Driver dropdown on the Home tab let any operator flip this
      * flag, which broke the audit story (a Site Supervisor could
      * impersonate the driver view) and didn't match the web, where
@@ -129,7 +150,8 @@ class SessionManager(context: Context) {
      * is "Driver". Read-only by design.
      */
     val isDriverMode: Boolean
-        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true)
+        get() = fleetDriverByBackend ||
+            (designation ?: "").trim().equals("Driver", ignoreCase = true)
 
     var isNotificationEnabled: Boolean
         get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
@@ -362,6 +384,7 @@ class SessionManager(context: Context) {
         // the migration path stays grep-able.
         private const val KEY_IS_DRIVER_MODE = "is_driver_mode"
         private const val KEY_DESIGNATION = "designation"
+        private const val KEY_FLEET_DRIVER_BY_BACKEND = "fleet_driver_by_backend"
         private const val KEY_DRIVER_TRIPS = "driver_trips"
         private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
     }

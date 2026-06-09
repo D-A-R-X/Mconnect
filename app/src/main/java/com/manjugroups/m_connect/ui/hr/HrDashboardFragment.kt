@@ -668,7 +668,41 @@ class HrDashboardFragment : Fragment() {
 
     private fun bindRecentHistoryCards(records: List<AttendanceRecord>) {
         recentHistoryRecords = records
-        val sorted = records.sortedByDescending { it.date ?: "" }
+        // Fill gaps: walk every date from the start of the current
+        // month to today and inject a placeholder AttendanceRecord
+        // for any day the backend didn't return. The backend's
+        // getMyAttendance only includes days that have a row in the
+        // staffAttendance table — if a staff didn't clock in
+        // yesterday, yesterday silently vanished from this list,
+        // which read as "yesterday's attendance is not showing"
+        // even though the real cause was "no row was ever created".
+        // With this fill, every day in the period appears with
+        // 00:00:00 hrs / "-- - --" so the gap is visible and
+        // actionable instead of invisible.
+        val byDate = records.associateBy { it.date.orEmpty() }
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = Calendar.getInstance()
+        val today = ymd.format(cal.time)
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        val filled = mutableListOf<AttendanceRecord>()
+        while (true) {
+            val day = ymd.format(cal.time)
+            if (day > today) break
+            filled.add(
+                byDate[day] ?: AttendanceRecord(
+                    date = day,
+                    status = null,
+                    totalMinutes = 0,
+                    approvedAttendance = null,
+                    punchInTime = null,
+                    punchOutTime = null,
+                    hasOpenSession = false,
+                    sessions = emptyList(),
+                ),
+            )
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        val sorted = filled.sortedByDescending { it.date ?: "" }
         val primary = sorted.getOrNull(0)
         if (primary != null) {
             binding.tvHistoryDate1.text = formatDashboardDate(primary.date)

@@ -78,6 +78,14 @@ class HomeViewModel : ViewModel() {
     private val _isVisitsLoading = MutableStateFlow(false)
     val isVisitsLoading: StateFlow<Boolean> = _isVisitsLoading.asStateFlow()
 
+    // Last error from /api/mms-fleet/driver/trips, surfaced so the driver
+    // mode My Trips screen can explain why the list is empty instead of
+    // pretending nothing came back. null when the driver call succeeded
+    // (or wasn't applicable for the current session). Cleared on a fresh
+    // load attempt.
+    private val _driverTripsError = MutableStateFlow<String?>(null)
+    val driverTripsError: StateFlow<String?> = _driverTripsError.asStateFlow()
+
     private var cachedState: HomeUiState.Loaded? = null
 
     fun loadHomeData(bearerToken: String, context: Context? = null) {
@@ -313,34 +321,84 @@ class HomeViewModel : ViewModel() {
                 Log.d(TAG, "CP merge skipped for driver mode")
             }
 
-            if (isDriverMode) {
+            // Speculatively probe driver-trips even when the cached
+            // isDriverMode flag is false. The backend's gate is
+            // authoritative; if it returns success, this account IS a
+            // driver per the backend (a designation-or-fleetDrivers
+            // match) and we should both show the trips AND persist the
+            // backend-driver flag so subsequent navigation lights up
+            // the driver UI immediately. Skips the probe only when we
+            // already know the account is a driver — saves the round
+            // trip on every refresh for confirmed drivers and avoids
+            // it entirely for clearly-non-driver flows after the first
+            // miss.
+            val shouldProbeDriverTrips = isDriverMode ||
+                session?.fleetDriverByBackend != true
+            if (shouldProbeDriverTrips) {
+                // Reset before re-attempting so the surfaced banner
+                // doesn't go stale on a refresh that now succeeds.
+                _driverTripsError.value = null
                 try {
                     val driverResp = geoApi.getMmsFleetDriverTrips(bearerToken)
+                    // Persist the backend's verdict so the rest of the
+                    // app (SessionManager.isDriverMode) reflects it on
+                    // the very next access, without waiting for a
+                    // logout/login cycle.
+                    if (session != null) {
+                        session.fleetDriverByBackend = driverResp.success
+                    }
                     if (driverResp.success) {
                         val existingIds = merged.map { it.id }.toHashSet()
                         val driverTrips = driverResp.trips
                             .mapNotNull { it.toTodayVisitOrNull() }
                             .filter { it.id !in existingIds }
+                        Log.d(
+                            TAG,
+                            "MMS fleet driver trips: server=${driverResp.trips.size} " +
+                                "kept=${driverTrips.size}",
+                        )
                         if (driverTrips.isNotEmpty()) {
-                            Log.d(TAG, "Today visits (MMS fleet driver): +${driverTrips.size}")
                             merged.addAll(driverTrips)
+                        } else if (driverResp.trips.isEmpty()) {
+                            // Endpoint authorised the driver but returned
+                            // zero rows — most often a driverPhone mismatch
+                            // between the assigned siteVisit and the
+                            // staff phone we're logged in with.
+                            _driverTripsError.value =
+                                "No fleet trips found for your phone. " +
+                                "Make sure the dispatcher assigned the vehicle " +
+                                "to this driver's phone number."
                         }
                     } else {
-                        Log.w(TAG, "MMS fleet driver trips failed: ${driverResp.error}")
+                        val msg = driverResp.error ?: "Unknown error"
+                        Log.w(TAG, "MMS fleet driver trips failed: $msg")
+                        _driverTripsError.value =
+                            "Driver trips couldn't load: $msg"
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "MMS fleet driver trips failed: ${e.message}")
+                    val msg = e.message ?: e.javaClass.simpleName
+                    Log.w(TAG, "MMS fleet driver trips failed: $msg")
+                    _driverTripsError.value = "Driver trips couldn't load: $msg"
                 }
             }
 
-            // Sort newest-first so a freshly-fixed SV-cum-CP lands at
-            // the top of Today's Trip instead of getting pushed below
-            // older legacy fieldVisits rows. Falls back to scheduled
-            // start time and then id for stability when creationTime
-            // is missing on either side (shouldn't happen post-fix but
-            // keeps the comparator total).
+            // Push completed trips to the bottom of every category-
+            // agnostic list, then sort the rest newest-first so a
+            // freshly-fixed SV-cum-CP lands at the top of Today's Trip
+            // instead of getting pushed below older legacy fieldVisits
+            // rows. The completed-last primary key keeps actionable
+            // work (Enroute, Ready, Upcoming) above the day's history
+            // on the Home dashboard and the My Trips "All" tab; the
+            // explicit "Completed" filter tab still surfaces them
+            // because it filters by status, not position. Falls back
+            // to scheduled start time and then id for stability when
+            // creationTime is missing on either side.
+            val completedStatuses = setOf("completed", "complete", "done", "closed")
             val sortedMerged = merged.sortedWith(
-                compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                compareBy<TodayVisit> {
+                    if (it.status.lowercase(Locale.getDefault()) in completedStatuses) 1 else 0
+                }
+                    .thenByDescending { it.creationTime ?: 0.0 }
                     .thenByDescending { it.scheduledStartTime ?: "" }
                     .thenBy { it.id }
             )
@@ -479,7 +537,14 @@ class HomeViewModel : ViewModel() {
     private fun MmsFleetDriverTrip.toTodayVisitOrNull(): TodayVisit? {
         val tripId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        if (this.canOperateToday == false) return null
+        // canOperateToday is a "can the driver hit Start now" flag —
+        // backend sets it false when the trip's scheduledDate isn't
+        // today (e.g. trip is for tomorrow). It is NOT a visibility
+        // flag. Dropping the row here meant a driver assigned to a
+        // trip dated for tomorrow saw an empty My Trips screen, even
+        // though both the dispatcher and the staff knew the trip
+        // existed. We now keep every row; the card's status pill /
+        // action button reflects whether the trip is actionable.
         val status = when (this.phase?.lowercase(Locale.getDefault())) {
             "completed" -> "completed"
             "on_site" -> "on_site"

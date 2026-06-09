@@ -28,7 +28,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_semibold"
-            android:text="Create Salary Advance"
+            android:text="Request Advance"
             android:textColor="#101828"
             android:textSize="16sp" />
 
@@ -37,7 +37,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:fontFamily="@font/inter_regular"
-            android:text="Information about Salary Advance"
+            android:text="Information about Advance"
             android:textColor="#667085"
             android:textSize="12sp" />
     </LinearLayout>

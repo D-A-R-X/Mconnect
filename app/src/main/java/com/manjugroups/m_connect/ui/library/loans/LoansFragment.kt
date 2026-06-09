@@ -194,101 +194,53 @@ class LoansFragment : Fragment() {
         active.clear()
         previous.clear()
 
-        // Filter the staff's real loans into this tab's bucket.
-        // The dummy-fallback block that previously seeded "Home Loan
-        // LN00123" / "Medical Expenses LN00115" entries here has been
-        // removed — those values looked like real disbursements and
-        // confused employees into thinking they had outstanding debt
-        // they hadn't taken. When both buckets are empty, the proper
-        // "No Loans Yet" / "No Advances Yet" empty state (below) takes
-        // over instead.
+        // Real data only — the previous "if empty, seed dummy Home Loan
+        // LN00123 / Medical Expenses LN00115 rows" fallback was removed.
+        // Those values looked like real disbursements on screen and were
+        // making employees think they owed money they'd never borrowed.
+        // When both buckets are empty the proper "No Loans Yet" /
+        // "No Advances Yet" empty state below takes over instead.
         if (selectedTab == TAB_LOANS) {
             active.addAll(allActive.filter { !it.isAdvance })
             previous.addAll(allPrevious.filter { !it.isAdvance })
-
-            if (active.isEmpty() && previous.isEmpty()) {
-                active.add(Loan(
-                    id = "dummy_active_loan",
-                    title = "Home Loan",
-                    loanId = "LN00123",
-                    type = LoanType.HOME,
-                    status = LoanStatus.ACTIVE,
-                    outstandingBalance = 625000L,
-                    nextEmiAmount = 15000L,
-                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
-                    principal = 1500000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = false
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_loan",
-                    title = "Home Loan",
-                    loanId = "LN00123",
-                    type = LoanType.HOME,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 1500000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = false
-                ))
-            }
         } else {
             active.addAll(allActive.filter { it.isAdvance })
             previous.addAll(allPrevious.filter { it.isAdvance })
-
-            if (active.isEmpty() && previous.isEmpty()) {
-                active.add(Loan(
-                    id = "dummy_active_advance",
-                    title = "Medical Expenses",
-                    loanId = "LN00123",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.ACTIVE,
-                    outstandingBalance = 25000L,
-                    nextEmiAmount = 0L,
-                    nextEmiDueMillis = 1714867200000L, // 05 May 2024
-                    principal = 25000L,
-                    disbursedMillis = 1641772800000L,
-                    isAdvance = true
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_advance_1",
-                    title = "Medical Expenses",
-                    loanId = "LN00123",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 15000L,
-                    disbursedMillis = 1641772800000L, // 10 Jan 2022
-                    isAdvance = true
-                ))
-                previous.add(Loan(
-                    id = "dummy_prev_advance_2",
-                    title = "Medical Expenses",
-                    loanId = "LN00115",
-                    type = LoanType.OTHER,
-                    status = LoanStatus.REPAID,
-                    outstandingBalance = 0L,
-                    principal = 15000L,
-                    disbursedMillis = 1616025600000L, // 18 Mar 2021
-                    isAdvance = true
-                ))
-            }
         }
 
-        if (active.isEmpty() && previous.isEmpty()) {
-            binding.loansContent.visibility = View.GONE
-            binding.loansEmptyState.visibility = View.VISIBLE
-            binding.loansEmptyContent.setTitle(if (selectedTab == TAB_LOANS) "No Loans Yet" else "No Advances Yet")
-            binding.loansEmptyContent.setDescription(if (selectedTab == TAB_LOANS) {
-                "When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
-            } else {
-                "When your finance team disburses a salary advance, you'll see it grouped here with due dates."
-            })
+        // Keep loansContent always visible — the blue header, tabs,
+        // and create-loan/advance + button live inside it, and the
+        // user needs all three to be reachable even when they have
+        // zero loans yet (they need a path to APPLY for their first
+        // loan or advance). The legacy `loansEmptyState` container
+        // hid everything; we now use an `inlineLoansEmptyState`
+        // EmptyStateView that sits below the tabs+button row instead.
+        binding.loansEmptyState.visibility = View.GONE
+        binding.loansContent.visibility = View.VISIBLE
+
+        val bothEmpty = active.isEmpty() && previous.isEmpty()
+        if (bothEmpty) {
+            binding.inlineLoansEmptyState.visibility = View.VISIBLE
+            binding.inlineLoansEmptyState.setTitle(
+                if (selectedTab == TAB_LOANS) "No Loans Yet" else "No Advances Yet"
+            )
+            binding.inlineLoansEmptyState.setDescription(
+                if (selectedTab == TAB_LOANS) {
+                    "When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
+                } else {
+                    "When your finance team disburses a salary advance, you'll see it grouped here with due dates."
+                },
+            )
+            binding.heroActiveCard.visibility = View.GONE
+            binding.heroActiveCard.setOnClickListener(null)
+            binding.previousLoansHeaderRow.visibility = View.GONE
+            binding.rvLoans.visibility = View.GONE
+            adapter.submit(emptyList())
             playEmptyStateEntryAnim()
             return
         }
-        binding.loansEmptyState.visibility = View.GONE
-        binding.loansContent.visibility = View.VISIBLE
+        binding.inlineLoansEmptyState.visibility = View.GONE
+        binding.rvLoans.visibility = View.VISIBLE
 
         val hero = active.firstOrNull()
         if (hero != null) {
