@@ -398,7 +398,7 @@ class PermissionsFragment : Fragment() {
                 }
                 StatusBucket.REVIEW -> {
                     statusNote = if (statusDateText.isNullOrBlank()) "In Review" else "In Review at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
                     statusIconRes = R.drawable.ic_leave_status_review
                 }
             }
@@ -466,18 +466,7 @@ class PermissionsFragment : Fragment() {
             if (canCancel) {
                 cancelIcon.setOnClickListener {
                     val id = perm.id ?: return@setOnClickListener
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Cancel permission request?")
-                        .setMessage("This will withdraw your pending request.")
-                        .setPositiveButton("Cancel Request") { _, _ ->
-                            viewModel.cancelPermission(
-                                session.bearerToken,
-                                id,
-                                session.hasPermission("permissions.approve"),
-                            )
-                        }
-                        .setNegativeButton("Keep", null)
-                        .show()
+                    showCancelPermissionDialog(id)
                 }
             } else {
                 cancelIcon.setOnClickListener(null)
@@ -489,6 +478,30 @@ class PermissionsFragment : Fragment() {
 
             binding.permissionList.addView(card)
         }
+    }
+
+    private fun showCancelPermissionDialog(permissionId: String) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            viewModel.cancelPermission(
+                session.bearerToken,
+                permissionId,
+                session.hasPermission("permissions.approve"),
+            )
+        }
+
+        dialog.show()
     }
 
     private fun parseServerDate(parseFmt: SimpleDateFormat, raw: String?): Date? {
