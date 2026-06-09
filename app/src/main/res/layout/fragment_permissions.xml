@@ -142,9 +142,10 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:background="@drawable/bg_leave_metric_box"
                                 android:orientation="vertical"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="10dp">
+                                android:paddingHorizontal="14dp"
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="wrap_content"
@@ -152,9 +153,9 @@
                                     android:gravity="center_vertical">
 
                                     <View
-                                        android:layout_width="6dp"
-                                        android:layout_height="6dp"
-                                        android:background="@drawable/bg_circle_green" />
+                                        android:layout_width="8dp"
+                                        android:layout_height="8dp"
+                                        android:background="@drawable/bg_leave_status_dot_success" />
 
                                     <TextView
                                         android:layout_width="wrap_content"
@@ -163,7 +164,7 @@
                                         android:fontFamily="@font/inter_semibold"
                                         android:text="Available Permission"
                                         android:textColor="?attr/colorForegroundSecondary"
-                                        android:textSize="10sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
 
                                 <TextView
@@ -177,20 +178,15 @@
                                     android:textSize="32sp" />
                             </LinearLayout>
 
-                            <View
-                                android:layout_width="1dp"
-                                android:layout_height="match_parent"
-                                android:layout_marginVertical="8dp"
-                                android:background="#E2E8F0" />
-
                             <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
+                                android:layout_marginStart="12dp"
                                 android:layout_weight="1"
+                                android:background="@drawable/bg_leave_metric_box"
                                 android:orientation="vertical"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="10dp">
+                                android:paddingHorizontal="14dp"
+                                android:paddingVertical="12dp">
 
                                 <LinearLayout
                                     android:layout_width="wrap_content"
@@ -198,9 +194,9 @@
                                     android:gravity="center_vertical">
 
                                     <View
-                                        android:layout_width="6dp"
-                                        android:layout_height="6dp"
-                                        android:background="@drawable/bg_circle_blue" />
+                                        android:layout_width="8dp"
+                                        android:layout_height="8dp"
+                                        android:background="@drawable/bg_leave_status_dot_blue" />
 
                                     <TextView
                                         android:layout_width="wrap_content"
@@ -209,7 +205,7 @@
                                         android:fontFamily="@font/inter_semibold"
                                         android:text="Used Permission"
                                         android:textColor="?attr/colorForegroundSecondary"
-                                        android:textSize="10sp" />
+                                        android:textSize="11sp" />
                                 </LinearLayout>
 
                                 <TextView
