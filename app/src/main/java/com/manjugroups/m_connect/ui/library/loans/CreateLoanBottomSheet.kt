@@ -281,7 +281,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                         interestType = interestType ?: "Flat",
                         disbursedDate = disDate,
                         repaymentStartMonth = repMonth,
-                        tenureMonths = tenure,
+                        tenureMonths = tenure.toInt(),
                         originalDocument = doc,
                         purpose = purpose,
                         notes = notes.ifBlank { null }

@@ -1337,7 +1337,7 @@ data class ApplyLoanRequest(
     val interestType: String? = null,
     val disbursedDate: String? = null,
     val repaymentStartMonth: String? = null,
-    val tenureMonths: Double? = null,
+    val tenureMonths: Int? = null,
     val originalDocument: String? = null,
     val purpose: String? = null,
     val notes: String? = null
