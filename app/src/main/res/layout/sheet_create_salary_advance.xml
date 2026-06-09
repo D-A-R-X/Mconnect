@@ -157,15 +157,15 @@
             android:id="@+id/btnSubmitAdvance"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:background="@drawable/bg_loan_submit_button_disabled"
-            android:clickable="false"
-            android:focusable="false"
-            android:enabled="false"
+            android:background="@drawable/bg_leave_submit_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:enabled="true"
             android:foreground="?attr/selectableItemBackgroundBorderless"
             android:gravity="center"
             android:fontFamily="@font/inter_semibold"
             android:text="Submit Now"
-            android:textColor="#98A2B3"
+            android:textColor="#FFFFFF"
             android:textSize="15sp" />
     </FrameLayout>
 </LinearLayout>
