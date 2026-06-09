@@ -9,7 +9,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -585,16 +584,40 @@ class LeavesFragment : Fragment() {
     }
 
     private fun showScopePopupMenu(anchor: View) {
+        // Show backdrop
+        binding.scopeBackdrop.visibility = View.VISIBLE
+        binding.scopeBackdrop.alpha = 0f
+        binding.scopeBackdrop.animate().alpha(1f).setDuration(200).start()
+
         val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu, null)
+
+        // Measure the popup so we can position it correctly
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+
         val popup = android.widget.PopupWindow(
             popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            popupView.measuredWidth,
+            popupView.measuredHeight,
             true
         ).apply {
-            elevation = dp(8).toFloat()
+            elevation = dp(12).toFloat()
             isOutsideTouchable = true
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setOnDismissListener {
+                binding.scopeBackdrop.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction { binding.scopeBackdrop.visibility = View.GONE }
+                    .start()
+            }
+        }
+
+        // Dismiss popup when backdrop is tapped
+        binding.scopeBackdrop.setOnClickListener {
+            popup.dismiss()
         }
 
         val menuMy = popupView.findViewById<TextView>(R.id.menuMyLeaves)
@@ -602,34 +625,14 @@ class LeavesFragment : Fragment() {
         val tvMenuTeam = popupView.findViewById<TextView>(R.id.tvMenuTeamLeaves)
         val menuAll = popupView.findViewById<TextView>(R.id.menuAllLeaves)
 
-        if (activeScope == LeaveScope.MY) {
-            menuMy.setTypeface(null, android.graphics.Typeface.BOLD)
-            menuMy.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
-            
-            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
+        // Figma keeps all items in Inter Regular — highlight the active
+        // item with the accent blue, others stay #061D3D.
+        val activeColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
+        val defaultColor = android.graphics.Color.parseColor("#061D3D")
 
-            menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-        } else if (activeScope == LeaveScope.TEAM) {
-            menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-            
-            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.BOLD)
-            tvMenuTeam?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
-
-            menuAll?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuAll?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-        } else {
-            menuMy.setTypeface(null, android.graphics.Typeface.NORMAL)
-            menuMy.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-            
-            tvMenuTeam?.setTypeface(null, android.graphics.Typeface.NORMAL)
-            tvMenuTeam?.setTextColor(resolveColor(R.attr.colorForegroundPrimary))
-
-            menuAll?.setTypeface(null, android.graphics.Typeface.BOLD)
-            menuAll?.setTextColor(ContextCompat.getColor(requireContext(), R.color.chat_blue_top))
-        }
+        menuMy.setTextColor(if (activeScope == LeaveScope.MY) activeColor else defaultColor)
+        tvMenuTeam?.setTextColor(if (activeScope == LeaveScope.TEAM) activeColor else defaultColor)
+        menuAll?.setTextColor(if (activeScope == LeaveScope.ALL) activeColor else defaultColor)
 
         val pendingCount = viewModel.uiState.value.pendingApprovals.size
         val dotBadge = popupView.findViewById<TextView>(R.id.dotTeamBadge)
@@ -663,16 +666,12 @@ class LeavesFragment : Fragment() {
             }
         }
 
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
         val xOffset = anchor.width - popupView.measuredWidth
         popup.showAsDropDown(anchor, xOffset, dp(4))
 
         popupView.alpha = 0f
-        popupView.scaleX = 0.9f
-        popupView.scaleY = 0.9f
+        popupView.scaleX = 0.95f
+        popupView.scaleY = 0.95f
         popupView.animate()
             .alpha(1f)
             .scaleX(1f)

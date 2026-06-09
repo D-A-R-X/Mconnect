@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Pill background for the My/Team/All Leaves dropdown inside the balance
-  card. White fill + light gray border, matching the design's quiet chip
-  that sits next to the bold card title without competing with it.
+  Outer gray container for the scope dropdown chip.
+  Figma: #F2F2F2 fill, 12dp corner radius, acts as the
+  "track" for the inner white pill.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@android:color/white" />
-    <stroke
-        android:width="1dp"
-        android:color="?attr/colorBorder" />
-    <corners android:radius="100dp" />
+    <solid android:color="#F2F2F2" />
+    <corners android:radius="12dp" />
 </shape>
