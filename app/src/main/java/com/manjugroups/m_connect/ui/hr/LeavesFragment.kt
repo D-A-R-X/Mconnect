@@ -205,8 +205,6 @@ class LeavesFragment : Fragment() {
             binding.tvLeaveUsed.text = "0"
         }
 
-        configureHistoryCard(displayLeaves.isEmpty() && !isLoading)
-
         binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
         binding.leaveList.visibility = if (isLoading) View.GONE else View.VISIBLE
         if (isLoading) {
@@ -221,18 +219,7 @@ class LeavesFragment : Fragment() {
         renderLeaves(displayLeaves, isApprovalForRender)
     }
 
-    private fun configureHistoryCard(isEmpty: Boolean) {
-        val isTeamScope = screenMode == MODE_APPROVAL
-        val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
 
-        if (showHeader) {
-            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
-            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
-        } else {
-            binding.historyCard.background = null
-            binding.historyCard.setPadding(0, 0, 0, 0)
-        }
-    }
 
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return
