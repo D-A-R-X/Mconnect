@@ -105,15 +105,11 @@ class PermissionsFragment : Fragment() {
             binding.summaryHeader.setSubtitle("Review Requests")
             binding.permissionsRefresh.isEnabled = false
             binding.btnApplyPermission.visibility = View.GONE
-            binding.tvSectionTitle.text = "Permission Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
         } else {
             binding.summaryHeader.setTitle("Permission Summary")
             binding.summaryHeader.setSubtitle("Submit Permission")
             binding.permissionsRefresh.isEnabled = true
-            binding.tvSectionTitle.text = "Recent Requests"
-            binding.tvSectionSubtitle.visibility = View.VISIBLE
             binding.filterRow.visibility = View.VISIBLE
             // My/Team scope switch is only meaningful to staff who
             // can approve. Plain employees stay on the (default) My
@@ -307,37 +303,7 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
-        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
-        binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-        binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-
-        if (screenMode == MODE_APPROVAL) {
-            binding.tvSectionTitle.text = "Permission Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
-        } else {
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> {
-                    binding.tvSectionTitle.text = "Recent Requests"
-                    binding.tvSectionSubtitle.text = "Permission information"
-                }
-                HistoryFilter.APPROVED -> {
-                    binding.tvSectionTitle.text = "Approved Permissions"
-                    binding.tvSectionSubtitle.text = "Approved permission information"
-                }
-                HistoryFilter.REJECTED -> {
-                    binding.tvSectionTitle.text = "Rejected Permissions"
-                    binding.tvSectionSubtitle.text = "Rejected permission information"
-                }
-            }
-        }
-
-        if (showHeader) {
-            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
-            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
-        } else {
-            binding.historyCard.background = null
-            binding.historyCard.setPadding(0, 0, 0, 0)
-        }
+        // No-op: section title/subtitle removed per design
     }
 
     private fun setEmptyCopy(isEmpty: Boolean) {
