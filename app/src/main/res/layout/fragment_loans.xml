@@ -218,16 +218,46 @@
                     </LinearLayout>
 
                     <TextView
-                        android:id="@+id/tvHeroBadge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_loan_active_pill"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/bg_loan_filter_pill"
+                        android:drawableEnd="@drawable/ic_chevron_down"
+                        android:drawablePadding="8dp"
                         android:fontFamily="@font/inter_medium"
                         android:paddingHorizontal="12dp"
-                        android:paddingVertical="4dp"
-                        android:text="Active Loan"
-                        android:textColor="#0B61CA"
-                        android:textSize="12sp" />
+                        android:paddingVertical="6dp"
+                        android:text="User"
+                        android:textColor="#344054"
+                        android:textSize="13sp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="end">
+
+                        <TextView
+                            android:id="@+id/tvHeroBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_loan_active_pill"
+                            android:fontFamily="@font/inter_medium"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="4dp"
+                            android:text="Active Loan"
+                            android:textColor="#0B61CA"
+                            android:textSize="12sp" />
+
+                        <ImageView
+                            android:id="@+id/btnCancelLoan"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginTop="8dp"
+                            android:layout_marginEnd="4dp"
+                            android:src="@drawable/ic_leave_card_trash"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <View
@@ -357,7 +387,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_shield" />
+                                    android:src="@drawable/ic_track_shield" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextNominee1"
@@ -387,7 +417,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_shield" />
+                                    android:src="@drawable/ic_track_shield" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextNominee2"
@@ -417,7 +447,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_person" />
+                                    android:src="@drawable/ic_track_gm" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextGm"
@@ -447,7 +477,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_person" />
+                                    android:src="@drawable/ic_track_avp" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextAvp"
@@ -477,7 +507,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_group" />
+                                    android:src="@drawable/ic_track_hr" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextHr"
@@ -507,7 +537,7 @@
                                     android:layout_width="20dp"
                                     android:layout_height="20dp"
                                     android:layout_gravity="center"
-                                    android:src="@drawable/ic_loan_track_calc" />
+                                    android:src="@drawable/ic_track_accs" />
                             </FrameLayout>
                             <TextView
                                 android:id="@+id/trackTextAccs"

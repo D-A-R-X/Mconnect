@@ -323,6 +323,11 @@ class LoansFragment : Fragment() {
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
                 
+                binding.btnCancelLoan.visibility = View.VISIBLE
+                binding.btnCancelLoan.setOnClickListener {
+                    cancelLoan(loan.id)
+                }
+                
                 updateTrackerState(loan.approvalStatus)
             }
             else -> {
@@ -331,6 +336,8 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
                 binding.heroActiveDetails.visibility = View.VISIBLE
                 binding.heroPendingTracker.visibility = View.GONE
+                
+                binding.btnCancelLoan.visibility = View.GONE
             }
         }
 
@@ -343,14 +350,15 @@ class LoansFragment : Fragment() {
     }
 
     private fun updateTrackerState(approvalStatus: String?) {
-        val status = approvalStatus?.lowercase() ?: "pending_nominee_1"
+        val status = approvalStatus?.lowercase() ?: ""
         
-        // Define sequence
-        val n1Done = !status.contains("nominee_1")
-        val n2Done = n1Done && !status.contains("nominee_2")
-        val gmDone = n2Done && !status.contains("gm")
-        val avpDone = gmDone && !status.contains("avp") && !status.contains("vp")
-        val hrDone = avpDone && !status.contains("hr")
+        // Define sequence: if the string contains the *next* stage, the previous stage is done.
+        // Also if it says "approved" or "active", all are done.
+        val n1Done = listOf("nominee_2", "gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val n2Done = listOf("gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val gmDone = listOf("avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val avpDone = listOf("hr", "account", "finance", "approved").any { status.contains(it) }
+        val hrDone = listOf("account", "finance", "approved").any { status.contains(it) }
         
         fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
             frame.setBackgroundResource(R.drawable.bg_loan_track_active)
@@ -366,19 +374,37 @@ class LoansFragment : Fragment() {
         }
 
         if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
-        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_loan_track_shield)
+        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
         
         if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
-        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_loan_track_shield)
+        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
         
         if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
-        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_loan_track_person)
+        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
         
         if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
-        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_loan_track_person)
+        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
         
         if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
-        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_loan_track_group)
+        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
+        
+        // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
+        setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+    }
+
+    private fun cancelLoan(loanId: String) {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.cancelLoan(token, com.manjugroups.m_connect.network.IdRequest(loanId)) }
+                .onSuccess {
+                    android.widget.Toast.makeText(requireContext(), "Loan cancelled", android.widget.Toast.LENGTH_SHORT).show()
+                    loadFromApi()
+                }
+                .onFailure { err ->
+                    android.widget.Toast.makeText(requireContext(), "Failed to cancel loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+        }
     }
 
     private fun playContentEntryAnim(activeHero: Loan?) {

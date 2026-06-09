@@ -196,6 +196,12 @@ interface ApiService {
         @Body body: ApplyLoanRequest
     ): ApplyLoanResponse
 
+    @POST("api/hr/loans/cancel")
+    suspend fun cancelLoan(
+        @Header("Authorization") token: String,
+        @Body body: IdRequest
+    ): SimpleResponse
+
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
         @Header("Authorization") token: String,
