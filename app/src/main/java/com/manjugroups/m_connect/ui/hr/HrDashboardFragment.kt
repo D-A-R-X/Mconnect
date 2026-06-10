@@ -176,7 +176,32 @@ class HrDashboardFragment : Fragment() {
         }
 
         binding.btnClockOut.setOnClickListener {
-            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
+            // Show the SAME "Today" figure the dashboard card displays.
+            // While the session is open the API's todayMinutes is 0 (it
+            // only sums CLOSED sessions), so reading it directly made the
+            // sheet say 00:00:00 even after hours on the clock. The card
+            // instead runs a live ticker of `now - firstPunchIn`; mirror
+            // that here so the confirm sheet and the card always agree.
+            // Once clocked out, the ticker stops and todayMinutes holds
+            // the real total, so we fall back to it. Standard workday =
+            // 8h (480m); anything above lands in the overtime bucket.
+            val state = flowViewModel.uiState.value
+            val firstIso = state.firstPunchInIso
+            val today = if (state.isClockedIn && !firstIso.isNullOrBlank()) {
+                val firstMs = parseIsoMillisOrNull(firstIso)
+                if (firstMs != null) {
+                    ((System.currentTimeMillis() - firstMs).coerceAtLeast(0) / 60_000L).toInt()
+                } else {
+                    state.todayMinutes
+                }
+            } else {
+                state.todayMinutes
+            }
+            val overtime = (today - 480).coerceAtLeast(0)
+            ClockOutConfirmBottomSheet.newInstance(
+                todayMinutes = today,
+                overtimeMinutes = overtime,
+            ).show(parentFragmentManager, "clock_out_confirm")
         }
 
         parentFragmentManager.setFragmentResultListener(

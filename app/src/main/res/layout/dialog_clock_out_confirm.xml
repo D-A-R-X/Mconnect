@@ -1,18 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Confirm Clockout sheet. Built on the SAME component shape as
+  "Have you seen the client?" (dialog_cp_client_seen): a clip-free root,
+  a white 20dp-rounded card pushed down so the floating blue badge sits
+  half above / half inside its top edge, and the badge as a sibling
+  FrameLayout with elevation so it casts a clean drop-shadow (no gray
+  band). Clock-out specific content — Today/Overtime stats + the two
+  CTAs — fills the card.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="58dp"
-        android:background="@drawable/bg_attendance_sheet"
+        android:layout_marginTop="32dp"
+        android:background="@drawable/bg_cp_seen_sheet"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingStart="31dp"
-        android:paddingTop="85dp"
-        android:paddingEnd="31dp"
-        android:paddingBottom="32dp">
+        android:paddingStart="20dp"
+        android:paddingTop="50dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="24dp">
 
         <TextView
             android:id="@+id/tvDialogTitle"
@@ -22,94 +35,132 @@
             android:gravity="center"
             android:text="Confirm Clockout"
             android:textColor="#101828"
-            android:textSize="22sp" />
+            android:textSize="20sp" />
 
         <TextView
             android:id="@+id/tvDialogSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:fontFamily="@font/inter_medium"
             android:gravity="center"
+            android:lineSpacingMultiplier="1.3"
             android:text="Once you clock out, you won’t be able to edit this time. Please double-check your hours before proceeding."
             android:textColor="#475467"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:orientation="horizontal">
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="72dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attendance_metric_box"
-                android:orientation="vertical"
-                android:paddingStart="12dp"
-                android:paddingTop="11dp"
-                android:paddingEnd="12dp">
+                android:background="@drawable/bg_attendance_metric_box">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Today"
-                    android:textColor="#475467"
-                    android:textSize="11sp" />
+                    android:layout_marginStart="11dp"
+                    android:layout_marginTop="11dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_clock_bold"
+                        app:tint="#475467" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:letterSpacing="-0.04"
+                        android:text="Today"
+                        android:textColor="#475467"
+                        android:textSize="12sp" />
+                </LinearLayout>
 
                 <TextView
+                    android:id="@+id/tvTodayHoursValue"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
+                    android:layout_gravity="bottom|start"
+                    android:layout_marginStart="11dp"
+                    android:layout_marginBottom="9dp"
                     android:fontFamily="@font/inter_regular"
-                    android:text="08:00:00 Hrs"
+                    android:letterSpacing="-0.025"
+                    android:text="00:00:00 Hrs"
                     android:textColor="#161B23"
-                    android:textSize="18sp" />
-            </LinearLayout>
+                    android:textSize="20sp" />
+            </FrameLayout>
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="72dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attendance_metric_box"
-                android:orientation="vertical"
-                android:paddingStart="12dp"
-                android:paddingTop="11dp"
-                android:paddingEnd="12dp">
+                android:background="@drawable/bg_attendance_metric_box">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Overtime"
-                    android:textColor="#475467"
-                    android:textSize="11sp" />
+                    android:layout_marginStart="11dp"
+                    android:layout_marginTop="11dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_clock_bold"
+                        app:tint="#475467" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:letterSpacing="-0.04"
+                        android:text="Overtime"
+                        android:textColor="#475467"
+                        android:textSize="12sp" />
+                </LinearLayout>
 
                 <TextView
+                    android:id="@+id/tvOvertimeHoursValue"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
+                    android:layout_gravity="bottom|start"
+                    android:layout_marginStart="11dp"
+                    android:layout_marginBottom="9dp"
                     android:fontFamily="@font/inter_regular"
+                    android:letterSpacing="-0.025"
                     android:text="00:00:00 Hrs"
                     android:textColor="#161B23"
-                    android:textSize="18sp" />
-            </LinearLayout>
+                    android:textSize="20sp" />
+            </FrameLayout>
         </LinearLayout>
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnConfirmClockOut"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:background="@drawable/bg_attendance_btn_primary"
             android:fontFamily="@font/inter_medium"
+            android:letterSpacing="0.007"
             android:text="Yes, Clock Out"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="13sp" />
+            android:textSize="14sp" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnCancelClockOut"
@@ -118,25 +169,29 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_attendance_btn_secondary"
             android:fontFamily="@font/inter_medium"
+            android:letterSpacing="0.007"
             android:text="No, Let me check"
             android:textAllCaps="false"
-            android:textColor="#6938EF"
-            android:textSize="13sp" />
+            android:textColor="#1BCA0B"
+            android:textSize="14sp" />
     </LinearLayout>
 
+    <!-- Floating blue clock badge — sibling of the card, anchored
+         top|center_horizontal so half overflows above the card. 64dp +
+         elevation 8dp matches the "Have you seen the client?" avatar. -->
     <FrameLayout
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="5dp"
-        android:background="@drawable/bg_attendance_badge">
+        android:background="@drawable/bg_attendance_badge"
+        android:elevation="8dp">
 
         <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:layout_gravity="center"
-            android:src="@drawable/ic_clock"
-            android:tint="#FFFFFF" />
+            android:contentDescription="@null"
+            android:src="@drawable/ic_clock_bold" />
     </FrameLayout>
 
 </FrameLayout>

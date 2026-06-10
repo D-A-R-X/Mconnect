@@ -27,9 +27,20 @@ class ClockOutSuccessBottomSheet : BottomSheetDialogFragment() {
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
+                // Same float treatment as CpClientSeenBottomSheet — see
+                // ClockOutConfirmBottomSheet for the rationale.
+                it.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                if (it is ViewGroup) {
+                    it.clipChildren = false
+                    it.clipToPadding = false
+                }
+                (it.parent as? ViewGroup)?.let { parent ->
+                    parent.clipChildren = false
+                    parent.clipToPadding = false
+                }
             }
         }
         return dialog
