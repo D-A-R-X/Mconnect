@@ -5,13 +5,16 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_bottom_sheet"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="24dp">
 
     <View
         android:layout_width="48dp"
         android:layout_height="4dp"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="20dp"
         android:background="@drawable/bg_sheet_handle" />
 
     <TextView
@@ -20,7 +23,7 @@
         android:fontFamily="@font/inter_bold"
         android:text="Remarks My Attendance"
         android:textColor="#101828"
-        android:textSize="20sp" />
+        android:textSize="18sp" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -28,9 +31,9 @@
         android:layout_marginTop="4dp"
         android:fontFamily="@font/inter_medium"
         android:text="Want to Remark Todays Attendance"
-        android:textColor="#667085"
-        android:textSize="14sp"
-        android:layout_marginBottom="24dp" />
+        android:textColor="#0B61CA"
+        android:textSize="13sp"
+        android:layout_marginBottom="20dp" />
 
     <!-- In Time -->
     <TextView
@@ -46,24 +49,24 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="12dp"
-        app:boxCornerRadiusBottomStart="12dp"
-        app:boxCornerRadiusTopEnd="12dp"
-        app:boxCornerRadiusTopStart="12dp"
+        app:boxCornerRadiusBottomEnd="10dp"
+        app:boxCornerRadiusBottomStart="10dp"
+        app:boxCornerRadiusTopEnd="10dp"
+        app:boxCornerRadiusTopStart="10dp"
         app:boxStrokeColor="#D0D5DD"
         app:boxStrokeWidth="1dp"
-        app:boxStrokeWidthFocused="1dp"
+        app:boxStrokeWidthFocused="1.5dp"
         app:hintEnabled="false"
         app:startIconDrawable="@drawable/ic_clock_custom"
         app:startIconTint="@null"
         app:endIconMode="custom"
-        app:endIconDrawable="@drawable/ic_chevron_down"
-        app:endIconTint="#475467">
+        app:endIconDrawable="@drawable/ic_chevron_down_outline"
+        app:endIconTint="@null">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etInTime"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:clickable="true"
             android:focusable="false"
             android:fontFamily="@font/inter_semibold"
@@ -71,14 +74,14 @@
             android:inputType="none"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- Out Time -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="16dp"
         android:fontFamily="@font/inter_medium"
         android:text="Out Time"
         android:textColor="#475467"
@@ -89,24 +92,24 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="12dp"
-        app:boxCornerRadiusBottomStart="12dp"
-        app:boxCornerRadiusTopEnd="12dp"
-        app:boxCornerRadiusTopStart="12dp"
+        app:boxCornerRadiusBottomEnd="10dp"
+        app:boxCornerRadiusBottomStart="10dp"
+        app:boxCornerRadiusTopEnd="10dp"
+        app:boxCornerRadiusTopStart="10dp"
         app:boxStrokeColor="#D0D5DD"
         app:boxStrokeWidth="1dp"
-        app:boxStrokeWidthFocused="1dp"
+        app:boxStrokeWidthFocused="1.5dp"
         app:hintEnabled="false"
         app:startIconDrawable="@drawable/ic_clock_custom"
         app:startIconTint="@null"
         app:endIconMode="custom"
-        app:endIconDrawable="@drawable/ic_chevron_down"
-        app:endIconTint="#475467">
+        app:endIconDrawable="@drawable/ic_chevron_down_outline"
+        app:endIconTint="@null">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etOutTime"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:clickable="true"
             android:focusable="false"
             android:fontFamily="@font/inter_semibold"
@@ -114,14 +117,14 @@
             android:inputType="none"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- Remarks (Optional) -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="16dp"
         android:fontFamily="@font/inter_medium"
         android:text="Remarks (Optional)"
         android:textColor="#475467"
@@ -132,13 +135,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="12dp"
-        app:boxCornerRadiusBottomStart="12dp"
-        app:boxCornerRadiusTopEnd="12dp"
-        app:boxCornerRadiusTopStart="12dp"
+        app:boxCornerRadiusBottomEnd="10dp"
+        app:boxCornerRadiusBottomStart="10dp"
+        app:boxCornerRadiusTopEnd="10dp"
+        app:boxCornerRadiusTopStart="10dp"
         app:boxStrokeColor="#D0D5DD"
         app:boxStrokeWidth="1dp"
-        app:boxStrokeWidthFocused="1dp"
+        app:boxStrokeWidthFocused="1.5dp"
         app:hintEnabled="false">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -151,6 +154,7 @@
             android:minHeight="100dp"
             android:lines="4"
             android:gravity="top|start"
+            android:paddingTop="14dp"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
             android:textSize="14sp" />
@@ -159,14 +163,14 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSubmitEdit"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="32dp"
+        android:layout_height="52dp"
+        android:layout_marginTop="28dp"
         android:fontFamily="@font/inter_bold"
         android:text="Submit Now"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
         android:textSize="15sp"
-        app:cornerRadius="28dp"
+        app:cornerRadius="26dp"
         app:elevation="0dp" />
 
 </LinearLayout>
