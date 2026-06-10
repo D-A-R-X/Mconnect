@@ -24,13 +24,14 @@
 
             <ImageView
                 android:id="@+id/btnBack"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_arrow_left"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/frame_21472"
+                android:src="@drawable/ic_back_blue"
+                android:scaleType="centerInside"
                 android:contentDescription="Back"
                 android:clickable="true"
-                android:focusable="true"
-                app:tint="?attr/colorForegroundPrimary" />
+                android:focusable="true" />
 
             <TextView
                 android:layout_width="0dp"
@@ -45,19 +46,16 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="18sp" />
 
-            <TextView
+            <ImageView
                 android:id="@+id/btnAttendanceFilter"
-                android:layout_width="wrap_content"
+                android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:background="@drawable/bg_leave_filter_active"
+                android:background="@drawable/frame_21472"
+                android:src="@drawable/ic_filter_blue"
+                android:scaleType="centerInside"
+                android:contentDescription="Filter"
                 android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:paddingHorizontal="14dp"
-                android:text="Filter"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
+                android:focusable="true" />
         </LinearLayout>
 
         <TextView

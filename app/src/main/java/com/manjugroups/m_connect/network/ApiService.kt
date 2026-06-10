@@ -1058,6 +1058,9 @@ data class AttendanceRecord(
     val approverPhotoUrl: String? = null,
     /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
     val decidedAt: String? = null,
+    // Fines / Late info
+    val lateMinutes: Int? = null,
+    val fineAmount: Double? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
