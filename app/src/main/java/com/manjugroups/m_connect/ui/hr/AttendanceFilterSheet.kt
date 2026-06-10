@@ -46,6 +46,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                it.elevation = 0f
             }
         }
         return dialog

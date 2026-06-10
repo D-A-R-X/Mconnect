@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import android.app.Dialog
 import android.app.TimePickerDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -8,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.databinding.BottomSheetEditAttendanceBinding
 import com.manjugroups.m_connect.network.AttendanceRecord
@@ -23,6 +25,14 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
 
     private var isInTimeSelected = false
     private var isOutTimeSelected = false
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val dialog = super.onCreateDialog(savedInstanceState)
+        dialog.setOnShowListener { di ->
+            (di as? BottomSheetDialog)?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.elevation = 0f
+        }
+        return dialog
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
