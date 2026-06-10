@@ -202,6 +202,21 @@ interface ApiService {
         @Body body: IdRequest
     ): SimpleResponse
 
+    @GET("api/hr/loans/pending-approvals")
+    suspend fun getPendingLoanApprovals(@Header("Authorization") token: String): MyLoansResponse
+
+    @POST("api/hr/loans/approve")
+    suspend fun approveLoan(
+        @Header("Authorization") token: String,
+        @Body body: ApproveLoanRequest
+    ): SimpleResponse
+
+    @POST("api/hr/loans/reject")
+    suspend fun rejectLoan(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest
+    ): SimpleResponse
+
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
         @Header("Authorization") token: String,
@@ -1353,6 +1368,11 @@ data class ApplyLoanResponse(
     val success: Boolean = false,
     val loanId: String? = null,
     val error: String? = null
+)
+
+data class ApproveLoanRequest(
+    val id: String,
+    val eSignatureId: String? = null
 )
 
 data class IdRequest(val id: String)

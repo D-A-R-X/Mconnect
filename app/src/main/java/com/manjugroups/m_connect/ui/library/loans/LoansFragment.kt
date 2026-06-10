@@ -46,6 +46,9 @@ class LoansFragment : Fragment() {
     private var selectedTab = TAB_LOANS
 
     private lateinit var adapter: LoansAdapter
+    private lateinit var requestedLoansAdapter: RequestedLoansAdapter
+
+    private var mockPendingList: MutableList<com.manjugroups.m_connect.network.LoanData>? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -64,6 +67,52 @@ class LoansFragment : Fragment() {
         binding.rvLoans.layoutManager = LinearLayoutManager(requireContext())
         binding.rvLoans.adapter = adapter
         binding.rvLoans.itemAnimator = null
+
+        requestedLoansAdapter = RequestedLoansAdapter(
+            onAcceptClick = { loan ->
+                val bottomSheet = AcceptLoanBottomSheet(loan) {
+                    val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                    if (idx != -1) {
+                        mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
+                    }
+                    loadPendingApprovals()
+                }
+                bottomSheet.show(childFragmentManager, "AcceptLoanBottomSheet")
+            },
+            onRejectClick = { loan ->
+                rejectLoanRequest(loan)
+            }
+        )
+        binding.rvRequestedLoans.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvRequestedLoans.adapter = requestedLoansAdapter
+        binding.rvRequestedLoans.itemAnimator = null
+
+        binding.btnUserDropdown.setOnClickListener { view ->
+            val popup = android.widget.PopupMenu(requireContext(), view)
+            popup.menu.add(0, 0, 0, "User")
+            popup.menu.add(0, 1, 1, "Nominee 1")
+            popup.menu.add(0, 2, 2, "Nominee 2")
+            popup.menu.add(0, 3, 3, "GM")
+            popup.menu.add(0, 4, 4, "AVP")
+            popup.menu.add(0, 5, 5, "HR")
+            popup.setOnMenuItemClickListener { item ->
+                binding.btnUserDropdown.text = item.title
+                if (item.itemId == 0) {
+                    binding.layoutRequestedLoans.visibility = View.GONE
+                    binding.layoutPreviousLoans.visibility = View.VISIBLE
+                    binding.heroActiveCard.visibility = View.VISIBLE
+                    loadFromApi()
+                } else {
+                    binding.layoutRequestedLoans.visibility = View.VISIBLE
+                    binding.layoutPreviousLoans.visibility = View.GONE
+                    binding.heroActiveCard.visibility = View.VISIBLE
+                    binding.loansEmptyState.visibility = View.GONE
+                    loadPendingApprovals()
+                }
+                true
+            }
+            popup.show()
+        }
 
         binding.btnLoansBack.setOnClickListener { navigateUp() }
         binding.btnLoansEmptyBack.setOnClickListener { navigateUp() }
@@ -403,6 +452,79 @@ class LoansFragment : Fragment() {
                 }
                 .onFailure { err ->
                     android.widget.Toast.makeText(requireContext(), "Failed to cancel loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    private fun loadPendingApprovals() {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.getPendingLoanApprovals(token) }
+                .onSuccess { response ->
+                    if (_binding == null) return@onSuccess
+                    // Use response.pending for requested loans
+                    requestedLoansAdapter.submitList(response.pending)
+                }
+                .onFailure { err ->
+                    if (_binding == null) return@onFailure
+                    if (err.message?.contains("404") == true) {
+                        // Mock data for UI demonstration since backend endpoint is missing
+                        if (mockPendingList == null) {
+                            mockPendingList = mutableListOf(
+                                com.manjugroups.m_connect.network.LoanData(
+                                    id = "mock_1",
+                                    loanId = "LN000021",
+                                    staffId = "s1",
+                                    staffName = "Manju",
+                                    employeeId = "EMP001",
+                                    principalAmount = 250000.0,
+                                    purpose = "Home Loan",
+                                    disbursedDate = "25 Apr 2024",
+                                    status = "PENDING"
+                                ),
+                                com.manjugroups.m_connect.network.LoanData(
+                                    id = "mock_2",
+                                    loanId = "LN000022",
+                                    staffId = "s2",
+                                    staffName = "Siva",
+                                    employeeId = "EMP002",
+                                    principalAmount = 15000.0,
+                                    interestType = "Salary Advance",
+                                    purpose = "Salary Advance",
+                                    disbursedDate = "25 Apr 2024",
+                                    status = "PENDING"
+                                )
+                            )
+                        }
+                        requestedLoansAdapter.submitList(mockPendingList?.toList())
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Failed to load requests: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+        }
+    }
+
+    private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.rejectLoan(token, com.manjugroups.m_connect.network.RejectRequest(loan.id!!, reason = "Rejected")) }
+                .onSuccess {
+                    android.widget.Toast.makeText(requireContext(), "Loan rejected", android.widget.Toast.LENGTH_SHORT).show()
+                    loadPendingApprovals()
+                }
+                .onFailure { err ->
+                    if (err.message?.contains("404") == true) {
+                        android.widget.Toast.makeText(requireContext(), "Loan rejected (Mock)", android.widget.Toast.LENGTH_SHORT).show()
+                        val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                        if (idx != -1) {
+                            mockPendingList!!.removeAt(idx)
+                        }
+                        loadPendingApprovals()
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Failed to reject loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
         }
     }

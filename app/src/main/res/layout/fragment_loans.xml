@@ -218,6 +218,7 @@
                     </LinearLayout>
 
                     <TextView
+                        android:id="@+id/btnUserDropdown"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="12dp"
@@ -255,7 +256,7 @@
                             android:layout_height="24dp"
                             android:layout_marginTop="8dp"
                             android:layout_marginEnd="4dp"
-                            android:src="@drawable/ic_leave_card_trash"
+                            android:src="@drawable/ic_trash_red"
                             android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
@@ -622,7 +623,41 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/previousLoansHeaderRow"
+                android:id="@+id/layoutRequestedLoans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="22dp"
+                    android:paddingBottom="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Requested Loans"
+                    android:textColor="#111827"
+                    android:textSize="18sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvRequestedLoans"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never"
+                    android:paddingHorizontal="16dp"
+                    android:paddingBottom="32dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutPreviousLoans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/previousLoansHeaderRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
@@ -654,14 +689,15 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvLoans"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                android:overScrollMode="never"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="32dp" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvLoans"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never"
+                    android:paddingHorizontal="16dp"
+                    android:paddingBottom="32dp" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </FrameLayout>
