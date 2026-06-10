@@ -66,7 +66,7 @@
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etInTime"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="52dp"
             android:clickable="true"
             android:focusable="false"
             android:fontFamily="@font/inter_semibold"
@@ -109,7 +109,7 @@
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etOutTime"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="52dp"
             android:clickable="true"
             android:focusable="false"
             android:fontFamily="@font/inter_semibold"
@@ -163,14 +163,14 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSubmitEdit"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="54dp"
         android:layout_marginTop="20dp"
         android:fontFamily="@font/inter_semibold"
         android:text="Submit Now"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
-        app:cornerRadius="24dp"
+        app:cornerRadius="27dp"
         app:elevation="0dp" />
 
 </LinearLayout>

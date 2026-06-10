@@ -52,11 +52,8 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         (view.parent as? View)?.setBackgroundColor(Color.TRANSPARENT)
 
-        val inTimeStr = record?.punchInTime ?: record?.sessions?.firstOrNull()?.punchInTime
-        val outTimeStr = record?.punchOutTime ?: record?.sessions?.lastOrNull()?.punchOutTime
+        // Leave fields empty so hint text ("Select In Time" / "Select Out Time") shows
 
-        binding.etInTime.setText(inTimeStr?.let(::formatIsoTime) ?: "")
-        binding.etOutTime.setText(outTimeStr?.let(::formatIsoTime) ?: "")
 
         binding.etInTime.setOnClickListener {
             showTimePicker(true)
