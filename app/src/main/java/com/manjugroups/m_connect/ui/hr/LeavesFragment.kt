@@ -83,8 +83,8 @@ class LeavesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { navigateUp() }
-        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        binding.summaryHeader.setOnBackClickListener { navigateUp() }
+        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
@@ -101,13 +101,14 @@ class LeavesFragment : Fragment() {
 
         val canApprove = session.hasPermission("leaves.approve")
         if (screenMode == MODE_APPROVAL) {
-            binding.tvHeaderTitle.text = "Leave Approvals"
-            binding.tvHeaderSubtitle.text = "In Review"
-            binding.filterRow.visibility = View.GONE
-            binding.dropdownScopeSelector.visibility = View.GONE
+            binding.summaryHeader.setTitle("Leave Approvals")
+            binding.summaryHeader.setSubtitle("Review Requests")
+            binding.leavesRefresh.isEnabled = false
+            binding.btnApplyLeave.visibility = View.GONE
         } else {
-            binding.tvHeaderTitle.text = "Leave Summary"
-            binding.tvHeaderSubtitle.text = "Submit Leave"
+            binding.summaryHeader.setTitle("Leave Summary")
+            binding.summaryHeader.setSubtitle("Submit Leave")
+            binding.leavesRefresh.isEnabled = true
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
             if (canApprove) {
@@ -204,8 +205,6 @@ class LeavesFragment : Fragment() {
             binding.tvLeaveUsed.text = "0"
         }
 
-        configureHistoryCard(displayLeaves.isEmpty() && !isLoading)
-
         binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
         binding.leaveList.visibility = if (isLoading) View.GONE else View.VISIBLE
         if (isLoading) {
@@ -220,18 +219,7 @@ class LeavesFragment : Fragment() {
         renderLeaves(displayLeaves, isApprovalForRender)
     }
 
-    private fun configureHistoryCard(isEmpty: Boolean) {
-        val isTeamScope = screenMode == MODE_APPROVAL
-        val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
 
-        if (showHeader) {
-            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
-            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
-        } else {
-            binding.historyCard.background = null
-            binding.historyCard.setPadding(0, 0, 0, 0)
-        }
-    }
 
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return

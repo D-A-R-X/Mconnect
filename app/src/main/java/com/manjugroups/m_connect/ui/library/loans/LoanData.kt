@@ -21,7 +21,8 @@ data class Loan(
     val principal: Long = 0L,
     val disbursedMillis: Long = 0L,
     val repayments: List<Repayment> = emptyList(),
-    val isAdvance: Boolean = false
+    val isAdvance: Boolean = false,
+    val approvalStatus: String? = null
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
@@ -95,7 +96,8 @@ object LoanMapper {
             principal = (remote.loanAmount ?: remote.principalAmount ?: 0.0).toLong(),
             disbursedMillis = parseDay(remote.disbursedDate) ?: 0L,
             repayments = repayments,
-            isAdvance = isAdvance
+            isAdvance = isAdvance,
+            approvalStatus = remote.approvalStatus
         )
     }
 

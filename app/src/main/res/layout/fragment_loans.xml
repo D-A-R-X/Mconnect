@@ -218,16 +218,47 @@
                     </LinearLayout>
 
                     <TextView
-                        android:id="@+id/tvHeroBadge"
+                        android:id="@+id/btnUserDropdown"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_loan_active_pill"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/bg_loan_filter_pill"
+                        android:drawableEnd="@drawable/ic_chevron_down"
+                        android:drawablePadding="8dp"
                         android:fontFamily="@font/inter_medium"
                         android:paddingHorizontal="12dp"
-                        android:paddingVertical="4dp"
-                        android:text="Active Loan"
-                        android:textColor="#0B61CA"
-                        android:textSize="12sp" />
+                        android:paddingVertical="6dp"
+                        android:text="User"
+                        android:textColor="#344054"
+                        android:textSize="13sp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="end">
+
+                        <TextView
+                            android:id="@+id/tvHeroBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_loan_active_pill"
+                            android:fontFamily="@font/inter_medium"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="4dp"
+                            android:text="Active Loan"
+                            android:textColor="#0B61CA"
+                            android:textSize="12sp" />
+
+                        <ImageView
+                            android:id="@+id/btnCancelLoan"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginTop="8dp"
+                            android:layout_marginEnd="4dp"
+                            android:src="@drawable/ic_trash_red"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <View
@@ -238,6 +269,7 @@
                     android:layerType="software" />
 
                 <LinearLayout
+                    android:id="@+id/heroActiveDetails"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
@@ -318,6 +350,208 @@
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/heroPendingTracker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="20dp"
+                        android:layout_marginHorizontal="30dp"
+                        android:background="#EAECF0" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <!-- Item 1: Nominee 1 -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameNominee1"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconNominee1"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_shield" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextNominee1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="NOMINEE 1"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+
+                        <!-- Item 2: Nominee 2 -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameNominee2"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconNominee2"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_shield" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextNominee2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="NOMINEE 2"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+
+                        <!-- Item 3: GM -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameGm"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconGm"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_gm" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextGm"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="GM"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+
+                        <!-- Item 4: AVP -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameAvp"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconAvp"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_avp" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextAvp"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="AVP"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+
+                        <!-- Item 5: HR -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameHr"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconHr"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_hr" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextHr"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="HR"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+
+                        <!-- Item 6: ACC'S -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+                            <FrameLayout
+                                android:id="@+id/trackFrameAccs"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_loan_icon_tile">
+                                <ImageView
+                                    android:id="@+id/trackIconAccs"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_track_accs" />
+                            </FrameLayout>
+                            <TextView
+                                android:id="@+id/trackTextAccs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="ACC'S"
+                                android:textColor="#98A2B3"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </FrameLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -389,7 +623,41 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/previousLoansHeaderRow"
+                android:id="@+id/layoutRequestedLoans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="22dp"
+                    android:paddingBottom="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Requested Loans"
+                    android:textColor="#111827"
+                    android:textSize="18sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvRequestedLoans"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never"
+                    android:paddingHorizontal="16dp"
+                    android:paddingBottom="32dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutPreviousLoans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/previousLoansHeaderRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
@@ -421,27 +689,24 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvLoans"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                android:overScrollMode="never"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="32dp" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvLoans"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never"
+                    android:paddingHorizontal="16dp"
+                    android:paddingBottom="32dp" />
+            </LinearLayout>
 
             <!--
-              Inline empty state — sits BELOW the tabs + create-loan
-              button so the operator can still tap "Loans" / "Salary"
-              and the + button to apply for a new loan / advance even
-              when no loans exist yet. Replaces the previous behaviour
-              of swapping the entire loansContent NestedScrollView out
-              for a separate `loansEmptyState` container (which hid the
-              tabs and the + button too — there was no path to create
-              a first loan from that screen). When `render()` decides
-              the active+previous lists are both empty, this view goes
-              VISIBLE and the hero + previous-loans header + rvLoans
-              go GONE; otherwise this view is GONE.
+              Inline empty state — sits BELOW the previous-loans block so
+              the operator can still tap "Loans" / "Advance" and the +
+              button to apply for a new loan / advance even when no loans
+              exist yet. render() toggles this VISIBLE (and hides the hero
+              + previous-loans header + rvLoans) when the active+previous
+              lists are both empty; otherwise it stays GONE. Keeps the
+              darx layoutPreviousLoans wrapper above intact.
             -->
             <com.manjugroups.m_connect.ui.common.EmptyStateView
                 android:id="@+id/inlineLoansEmptyState"

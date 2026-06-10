@@ -46,6 +46,9 @@ class LoansFragment : Fragment() {
     private var selectedTab = TAB_LOANS
 
     private lateinit var adapter: LoansAdapter
+    private lateinit var requestedLoansAdapter: RequestedLoansAdapter
+
+    private var mockPendingList: MutableList<com.manjugroups.m_connect.network.LoanData>? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -64,6 +67,52 @@ class LoansFragment : Fragment() {
         binding.rvLoans.layoutManager = LinearLayoutManager(requireContext())
         binding.rvLoans.adapter = adapter
         binding.rvLoans.itemAnimator = null
+
+        requestedLoansAdapter = RequestedLoansAdapter(
+            onAcceptClick = { loan ->
+                val bottomSheet = AcceptLoanBottomSheet(loan) {
+                    val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                    if (idx != -1) {
+                        mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
+                    }
+                    loadPendingApprovals()
+                }
+                bottomSheet.show(childFragmentManager, "AcceptLoanBottomSheet")
+            },
+            onRejectClick = { loan ->
+                rejectLoanRequest(loan)
+            }
+        )
+        binding.rvRequestedLoans.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvRequestedLoans.adapter = requestedLoansAdapter
+        binding.rvRequestedLoans.itemAnimator = null
+
+        binding.btnUserDropdown.setOnClickListener { view ->
+            val popup = android.widget.PopupMenu(requireContext(), view)
+            popup.menu.add(0, 0, 0, "User")
+            popup.menu.add(0, 1, 1, "Nominee 1")
+            popup.menu.add(0, 2, 2, "Nominee 2")
+            popup.menu.add(0, 3, 3, "GM")
+            popup.menu.add(0, 4, 4, "AVP")
+            popup.menu.add(0, 5, 5, "HR")
+            popup.setOnMenuItemClickListener { item ->
+                binding.btnUserDropdown.text = item.title
+                if (item.itemId == 0) {
+                    binding.layoutRequestedLoans.visibility = View.GONE
+                    binding.layoutPreviousLoans.visibility = View.VISIBLE
+                    binding.heroActiveCard.visibility = View.VISIBLE
+                    loadFromApi()
+                } else {
+                    binding.layoutRequestedLoans.visibility = View.VISIBLE
+                    binding.layoutPreviousLoans.visibility = View.GONE
+                    binding.heroActiveCard.visibility = View.VISIBLE
+                    binding.loansEmptyState.visibility = View.GONE
+                    loadPendingApprovals()
+                }
+                true
+            }
+            popup.show()
+        }
 
         binding.btnLoansBack.setOnClickListener { navigateUp() }
         binding.btnLoansEmptyBack.setOnClickListener { navigateUp() }
@@ -272,11 +321,24 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Pending Advance" else "Pending"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_status_pending)
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
+                binding.heroActiveDetails.visibility = View.GONE
+                binding.heroPendingTracker.visibility = View.VISIBLE
+                
+                binding.btnCancelLoan.visibility = View.VISIBLE
+                binding.btnCancelLoan.setOnClickListener {
+                    cancelLoan(loan.id)
+                }
+                
+                updateTrackerState(loan.approvalStatus)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_active_pill)
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
+                binding.heroActiveDetails.visibility = View.VISIBLE
+                binding.heroPendingTracker.visibility = View.GONE
+                
+                binding.btnCancelLoan.visibility = View.GONE
             }
         }
 
@@ -285,6 +347,137 @@ class LoansFragment : Fragment() {
             SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(loan.nextEmiDueMillis))
         } else {
             "—"
+        }
+    }
+
+    private fun updateTrackerState(approvalStatus: String?) {
+        val status = approvalStatus?.lowercase() ?: ""
+        
+        // Define sequence: if the string contains the *next* stage, the previous stage is done.
+        // Also if it says "approved" or "active", all are done.
+        val n1Done = listOf("nominee_2", "gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val n2Done = listOf("gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val gmDone = listOf("avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
+        val avpDone = listOf("hr", "account", "finance", "approved").any { status.contains(it) }
+        val hrDone = listOf("account", "finance", "approved").any { status.contains(it) }
+        
+        fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
+            frame.setBackgroundResource(R.drawable.bg_loan_track_active)
+            icon.setImageResource(R.drawable.ic_loan_track_check)
+            text.setTextColor(Color.parseColor("#0B61CA"))
+            text.setTypeface(null, Typeface.BOLD)
+        }
+        fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
+            frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
+            icon.setImageResource(defaultIcon)
+            text.setTextColor(Color.parseColor("#98A2B3"))
+            text.setTypeface(null, Typeface.NORMAL)
+        }
+
+        if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
+        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
+        
+        if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
+        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
+        
+        if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
+        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
+        
+        if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
+        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
+        
+        if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
+        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
+        
+        // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
+        setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+    }
+
+    private fun cancelLoan(loanId: String) {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.cancelLoan(token, com.manjugroups.m_connect.network.IdRequest(loanId)) }
+                .onSuccess {
+                    android.widget.Toast.makeText(requireContext(), "Loan cancelled", android.widget.Toast.LENGTH_SHORT).show()
+                    loadFromApi()
+                }
+                .onFailure { err ->
+                    android.widget.Toast.makeText(requireContext(), "Failed to cancel loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    private fun loadPendingApprovals() {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.getPendingLoanApprovals(token) }
+                .onSuccess { response ->
+                    if (_binding == null) return@onSuccess
+                    // Use response.pending for requested loans
+                    requestedLoansAdapter.submitList(response.pending)
+                }
+                .onFailure { err ->
+                    if (_binding == null) return@onFailure
+                    if (err.message?.contains("404") == true) {
+                        // Mock data for UI demonstration since backend endpoint is missing
+                        if (mockPendingList == null) {
+                            mockPendingList = mutableListOf(
+                                com.manjugroups.m_connect.network.LoanData(
+                                    id = "mock_1",
+                                    loanId = "LN000021",
+                                    staffId = "s1",
+                                    staffName = "Manju",
+                                    employeeId = "EMP001",
+                                    principalAmount = 250000.0,
+                                    purpose = "Home Loan",
+                                    disbursedDate = "25 Apr 2024",
+                                    status = "PENDING"
+                                ),
+                                com.manjugroups.m_connect.network.LoanData(
+                                    id = "mock_2",
+                                    loanId = "LN000022",
+                                    staffId = "s2",
+                                    staffName = "Siva",
+                                    employeeId = "EMP002",
+                                    principalAmount = 15000.0,
+                                    interestType = "Salary Advance",
+                                    purpose = "Salary Advance",
+                                    disbursedDate = "25 Apr 2024",
+                                    status = "PENDING"
+                                )
+                            )
+                        }
+                        requestedLoansAdapter.submitList(mockPendingList?.toList())
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Failed to load requests: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+        }
+    }
+
+    private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.rejectLoan(token, com.manjugroups.m_connect.network.RejectRequest(loan.id!!, reason = "Rejected")) }
+                .onSuccess {
+                    android.widget.Toast.makeText(requireContext(), "Loan rejected", android.widget.Toast.LENGTH_SHORT).show()
+                    loadPendingApprovals()
+                }
+                .onFailure { err ->
+                    if (err.message?.contains("404") == true) {
+                        android.widget.Toast.makeText(requireContext(), "Loan rejected (Mock)", android.widget.Toast.LENGTH_SHORT).show()
+                        val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                        if (idx != -1) {
+                            mockPendingList!!.removeAt(idx)
+                        }
+                        loadPendingApprovals()
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Failed to reject loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
         }
     }
 
