@@ -55,6 +55,10 @@ class CpVisitsFragment : Fragment() {
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
+    // True once the first CP-visit fetch has rendered. Gates the skeleton
+    // so refreshes / re-opens with data already on screen don't flash the
+    // list back to placeholders.
+    private var hasLoadedOnce = false
     // True once the user has punched in at least once today — sticky for the
     // rest of the day even after subsequent clock-outs. Mid-day clock-outs
     // (the user steps away, locks the punch-out time at midnight) must NOT
@@ -226,9 +230,14 @@ class CpVisitsFragment : Fragment() {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<View>(R.id.cpvEmptyState)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
-        SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        empty.visibility = View.GONE
-        list.removeAllViews()
+        // Skeleton only on the first load. On a pull-to-refresh / return
+        // the existing rows stay put until renderList() rebuilds them —
+        // no flash back to placeholders over data that's already there.
+        if (!hasLoadedOnce) {
+            SkeletonUtils.startSkeletonPulse(skeletonContainer)
+            empty.visibility = View.GONE
+            list.removeAllViews()
+        }
 
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val cal = Calendar.getInstance()
@@ -252,6 +261,7 @@ class CpVisitsFragment : Fragment() {
                     toDate = null,
                 )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                hasLoadedOnce = true
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load CP visits")
                     Toast.makeText(

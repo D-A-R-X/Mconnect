@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.ui.home.DriverTripCompletedBottomSheet
 import com.manjugroups.m_connect.ui.home.HomeUiState
 import com.manjugroups.m_connect.ui.home.HomeViewModel
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.CompletedVisitDetailFragment
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -62,6 +63,28 @@ class MyTripsFragment : Fragment() {
     private var selectedTab: TabType = TabType.ALL
     private var searchQuery: String = ""
     private var allVisits: List<TodayVisit> = emptyList()
+
+    // --- Loading state machine ---
+    // The screen shares the activity-scoped HomeViewModel, whose uiState
+    // is often ALREADY Loaded (from the Home tab) with empty/stale trips
+    // when My Trips opens. We must not let that replayed state resolve to
+    // the empty view before THIS screen's fresh load finishes — that was
+    // the empty→skeleton→data flicker.
+    //   loadStarted        : this screen's load cycle has begun (isVisitsLoading true)
+    //   initialLoadResolved: we have a definitive result to render (cache
+    //                        hit, or a completed load cycle). Until true,
+    //                        replayed uiState/error emissions are ignored
+    //                        and the skeleton stays up.
+    private var loadStarted = false
+    private var initialLoadResolved = false
+
+    // Deferred skeleton: we only show the skeleton if the load is STILL
+    // running after this grace period. A cached or fast load resolves
+    // first, cancels the timer, and goes straight to the data/empty view —
+    // so the skeleton never flashes for quick loads (the glitch). Slow
+    // loads still get a skeleton once the timer fires.
+    private var pendingSkeleton: Runnable? = null
+    private val skeletonDelayMs = 200L
 
     // Staff's last-known location, fetched once when the screen opens.
     // Used by every viewholder to compute haversine distance to that
@@ -92,10 +115,31 @@ class MyTripsFragment : Fragment() {
         setupSearch()
         setupTabs()
         setupRecyclerView()
+
+        // Render any cached trips immediately (this fragment is recreated
+        // on back-navigation but the activity-scoped HomeViewModel keeps
+        // the last result) so content shows at once instead of blanking.
+        val cached = (viewModel.uiState.value as? HomeUiState.Loaded)?.todayVisits.orEmpty()
+        if (cached.isNotEmpty()) {
+            allVisits = cached
+            initialLoadResolved = true
+            filterAndDisplayTrips()
+        } else {
+            // Nothing cached → arm the deferred skeleton. If the load
+            // finishes within the grace period the timer is cancelled and
+            // we go straight to data/empty (no flash); if it's slow the
+            // skeleton appears.
+            scheduleSkeleton()
+        }
+
         collectState()
 
-        // Load or refresh data
-        viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+        // Load ONLY the trips — not the whole home dashboard. My Trips
+        // shows trips and nothing else, so it must not wait behind the
+        // four sequential attendance/permission calls + GeoTrack sync
+        // that loadHomeData does before it reaches the visits. This is
+        // the main reason the screen felt slow.
+        viewModel.loadTodayVisits(session.bearerToken, requireContext().applicationContext)
 
         // Resolve the staff's current location once. We avoid asking every
         // viewholder to fetch — fused-location is a single shared signal
@@ -107,7 +151,7 @@ class MyTripsFragment : Fragment() {
             val success = bundle.getBoolean("success")
             if (success) {
                 val visitId = bundle.getString("visitId").orEmpty()
-                viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+                viewModel.loadTodayVisits(session.bearerToken, requireContext().applicationContext)
                 val state = viewModel.uiState.value
                 if (state is HomeUiState.Loaded) {
                     state.todayVisits.firstOrNull { it.id == visitId }?.let { visit ->
@@ -211,6 +255,37 @@ class MyTripsFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     if (state is HomeUiState.Loaded) {
                         allVisits = state.todayVisits
+                        // Only repaint once we have a definitive result.
+                        // Before that, store the data but keep the
+                        // skeleton — a replayed Loaded-but-empty state from
+                        // the Home tab must not flash the empty view.
+                        if (initialLoadResolved) filterAndDisplayTrips()
+                    }
+                }
+            }
+        }
+        // Skeleton while the FIRST today-visits fetch is in flight. We
+        // only show it when we have nothing to display yet (allVisits
+        // empty) — a pull-to-refresh or a re-open with data already on
+        // screen must NOT blank the list back to a skeleton. When the
+        // fetch finishes, filterAndDisplayTrips() resolves to the list
+        // or the empty state and stops the skeleton.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.isVisitsLoading.collect { loading ->
+                    if (_binding == null) return@collect
+                    if (loading) {
+                        loadStarted = true
+                        // Arm the deferred skeleton — it only appears if the
+                        // load is still running after the grace period.
+                        if (!initialLoadResolved && allVisits.isEmpty()) {
+                            scheduleSkeleton()
+                        }
+                    } else if (loadStarted) {
+                        // THIS screen's load cycle finished — now (and only
+                        // now) it's safe to resolve to the list or the
+                        // empty state.
+                        initialLoadResolved = true
                         filterAndDisplayTrips()
                     }
                 }
@@ -223,13 +298,55 @@ class MyTripsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.driverTripsError.collect {
-                    filterAndDisplayTrips()
+                    if (_binding == null) return@collect
+                    // Only refresh the empty-state hint once a result has
+                    // resolved; never tear down the initial skeleton.
+                    if (initialLoadResolved) {
+                        filterAndDisplayTrips()
+                    }
                 }
             }
         }
     }
 
+    private fun showTripsSkeleton() {
+        binding.emptyState.visibility = View.GONE
+        binding.rvTrips.visibility = View.GONE
+        binding.tripsSkeleton.visibility = View.VISIBLE
+        SkeletonUtils.startSkeletonPulse(binding.tripsSkeleton)
+    }
+
+    /**
+     * Arms the deferred skeleton. No-op if it's already showing or already
+     * armed, or if a result is already resolved. The skeleton only paints
+     * if [skeletonDelayMs] elapses before the load resolves — so quick
+     * loads never see it.
+     */
+    private fun scheduleSkeleton() {
+        if (_binding == null || initialLoadResolved) return
+        if (binding.tripsSkeleton.visibility == View.VISIBLE) return
+        if (pendingSkeleton != null) return
+        val r = Runnable {
+            pendingSkeleton = null
+            if (_binding != null && !initialLoadResolved && allVisits.isEmpty()) {
+                showTripsSkeleton()
+            }
+        }
+        pendingSkeleton = r
+        binding.root.postDelayed(r, skeletonDelayMs)
+    }
+
+    private fun cancelPendingSkeleton() {
+        pendingSkeleton?.let { _binding?.root?.removeCallbacks(it) }
+        pendingSkeleton = null
+    }
+
     private fun filterAndDisplayTrips() {
+        if (_binding == null) return
+        // We have a definitive answer (list or empty state) — cancel any
+        // armed skeleton and stop one that's already showing.
+        cancelPendingSkeleton()
+        SkeletonUtils.stopSkeletonPulse(binding.tripsSkeleton)
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
         val filtered = allVisits.filter { visit ->
@@ -388,6 +505,8 @@ class MyTripsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        cancelPendingSkeleton()
+        _binding?.tripsSkeleton?.let { SkeletonUtils.stopSkeletonPulse(it) }
         super.onDestroyView()
         _binding = null
     }

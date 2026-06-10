@@ -329,7 +329,7 @@ class LoansFragment : Fragment() {
                     cancelLoan(loan.id)
                 }
                 
-                updateTrackerState(loan.approvalStatus)
+                updateTrackerState(loan)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
@@ -350,17 +350,43 @@ class LoansFragment : Fragment() {
         }
     }
 
-    private fun updateTrackerState(approvalStatus: String?) {
-        val status = approvalStatus?.lowercase() ?: ""
-        
-        // Define sequence: if the string contains the *next* stage, the previous stage is done.
-        // Also if it says "approved" or "active", all are done.
-        val n1Done = listOf("nominee_2", "gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
-        val n2Done = listOf("gm", "avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
-        val gmDone = listOf("avp", "vp", "hr", "account", "finance", "approved").any { status.contains(it) }
-        val avpDone = listOf("hr", "account", "finance", "approved").any { status.contains(it) }
-        val hrDone = listOf("account", "finance", "approved").any { status.contains(it) }
-        
+    private fun updateTrackerState(loan: Loan) {
+        // The web drives the loan approval chain through `currentStage`,
+        // NOT `approvalStatus` (which is only pending/approved/rejected).
+        // Stages, in order:
+        //   nominee_pending → gm_pending → avp_pending → hr_pending
+        //   → accountant_pending → disbursed   (or "rejected")
+        // A stage's dot is "done" once the loan has advanced to a LATER
+        // stage. Nominee 1 / Nominee 2 are additionally lit independently
+        // off their per-nominee signature status while still in
+        // nominee_pending, so the operator sees one nominee sign before
+        // the other. Salary advances start at hr_pending (they skip the
+        // nominee/GM/AVP chain), so those earlier dots read as done —
+        // matching "it's already past those" semantics.
+        val stage = loan.currentStage?.lowercase()?.trim().orEmpty()
+        // Numeric rank of the current stage; -1 for unknown/blank so an
+        // un-stamped legacy row lights nothing rather than everything.
+        val rank = when (stage) {
+            "nominee_pending" -> 0
+            "gm_pending" -> 1
+            "avp_pending" -> 2
+            "hr_pending" -> 3
+            "accountant_pending", "accounts_pending" -> 4
+            "disbursed", "completed", "active", "approved" -> 5
+            else -> if (loan.status == LoanStatus.ACTIVE) 5 else -1
+        }
+        val nominee1Signed = loan.nominee1Status.equals("approved", ignoreCase = true)
+        val nominee2Signed = loan.nominee2Status.equals("approved", ignoreCase = true)
+
+        // A nominee dot lights when the chain has moved past nominees
+        // (rank >= 1, i.e. gm_pending or later) OR that specific nominee
+        // has individually signed while still in nominee_pending.
+        val n1Done = rank >= 1 || nominee1Signed
+        val n2Done = rank >= 1 || nominee2Signed
+        val gmDone = rank >= 2
+        val avpDone = rank >= 3
+        val hrDone = rank >= 4
+
         fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
             frame.setBackgroundResource(R.drawable.bg_loan_track_active)
             icon.setImageResource(R.drawable.ic_loan_track_check)
@@ -584,6 +610,15 @@ class LoansFragment : Fragment() {
                 false,
                 fullBleed = true
             )
+        }
+        // Re-fetch when the user comes back to this screen so the pending
+        // tracker reflects any approval an approver made on the web while
+        // they were away. Guarded on `loaded` so this doesn't double-fire
+        // alongside the initial onViewCreated load (loaded is still false
+        // until that first fetch returns). Only refreshes the default
+        // "User" view; the role-filter dropdown drives its own load.
+        if (loaded && _binding != null) {
+            loadFromApi()
         }
     }
 

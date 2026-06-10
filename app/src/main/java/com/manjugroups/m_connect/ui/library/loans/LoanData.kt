@@ -22,7 +22,11 @@ data class Loan(
     val disbursedMillis: Long = 0L,
     val repayments: List<Repayment> = emptyList(),
     val isAdvance: Boolean = false,
-    val approvalStatus: String? = null
+    val approvalStatus: String? = null,
+    // Workflow stage that drives the pending tracker (see ApiService.LoanData).
+    val currentStage: String? = null,
+    val nominee1Status: String? = null,
+    val nominee2Status: String? = null
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
@@ -97,7 +101,10 @@ object LoanMapper {
             disbursedMillis = parseDay(remote.disbursedDate) ?: 0L,
             repayments = repayments,
             isAdvance = isAdvance,
-            approvalStatus = remote.approvalStatus
+            approvalStatus = remote.approvalStatus,
+            currentStage = remote.currentStage,
+            nominee1Status = remote.nominee1Status,
+            nominee2Status = remote.nominee2Status
         )
     }
 

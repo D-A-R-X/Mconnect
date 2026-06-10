@@ -50,6 +50,9 @@ class PermissionsFragment : Fragment() {
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
     private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
+    // Gates the skeleton to the first load so a refresh doesn't blank the
+    // list back to placeholders.
+    private var hasRenderedPermissionsOnce = false
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -284,15 +287,18 @@ class PermissionsFragment : Fragment() {
 
         configureHistoryCard(displayPermissions.isEmpty() && !isLoading)
 
-        binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
-        binding.permissionList.visibility = if (isLoading) View.GONE else View.VISIBLE
-        if (isLoading) {
+        // Only skeleton on the first load; a refresh keeps the list up.
+        val showSkeleton = isLoading && !hasRenderedPermissionsOnce
+        binding.skeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
+        binding.permissionList.visibility = if (showSkeleton) View.GONE else View.VISIBLE
+        if (showSkeleton) {
             startSkeletonPulse()
             binding.emptyState.visibility = View.GONE
             return
         }
 
         stopSkeletonPulse()
+        if (!isLoading) hasRenderedPermissionsOnce = true
         setEmptyCopy(displayPermissions.isEmpty())
         // Approval mode (notification deep-link) AND History-mode Team/All
         // scope both show Approve/Reject; Team/All scope is only entered

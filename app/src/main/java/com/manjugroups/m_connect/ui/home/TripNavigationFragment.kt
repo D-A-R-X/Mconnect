@@ -911,12 +911,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         val origin = currentLocation
         if (origin != null) {
-            map.addMarker(
-                MarkerOptions()
-                    .position(origin)
-                    .title("You")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-            )
+            // The live "My Location" blue dot (map.isMyLocationEnabled,
+            // enabled in onMapReady) already marks the user and tracks
+            // their real position as they move. Dropping a second STATIC
+            // azure pin at the one-time fix sat on top of that dot and
+            // read as "the app thinks I'm parked here" — which is what
+            // looked wrong. Only add a fallback "You" pin when the live
+            // layer is unavailable (location permission not granted), so
+            // the user still sees their start point in that case.
+            if (!hasLocationPermission()) {
+                map.addMarker(
+                    MarkerOptions()
+                        .position(origin)
+                        .title("You")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                )
+            }
             // Show a quick straight-line preview, then upgrade to road route.
             drawStraightFallback(origin, dest)
             updateDistanceAndEtaFromHaversine(origin, dest)
