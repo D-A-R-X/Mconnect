@@ -120,11 +120,7 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
         val outTimeText = binding.etOutTime.text.toString().trim()
         val isValid = isInTimeSelected && isOutTimeSelected && inTimeText.isNotEmpty() && outTimeText.isNotEmpty()
         binding.btnSubmitEdit.isEnabled = isValid
-        if (isValid) {
-            binding.btnSubmitEdit.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#15B058"))
-        } else {
-            binding.btnSubmitEdit.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#A6E69C"))
-        }
+        binding.btnSubmitEdit.alpha = if (isValid) 1f else 0.5f
     }
 
     private fun formatIsoTime(iso: String): String {
