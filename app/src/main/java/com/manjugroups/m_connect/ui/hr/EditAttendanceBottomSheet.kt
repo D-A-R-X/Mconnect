@@ -29,7 +29,13 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState)
         dialog.setOnShowListener { di ->
-            (di as? BottomSheetDialog)?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.elevation = 0f
+            val sheet = (di as? BottomSheetDialog)
+                ?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundColor(Color.TRANSPARENT)
+                it.elevation = 0f
+                it.outlineProvider = null
+            }
         }
         return dialog
     }

@@ -39,98 +39,106 @@
         android:fontFamily="@font/inter_medium"
         android:text="In Time"
         android:textColor="#475467"
-        android:textSize="12sp" />
+        android:textSize="13sp" />
 
     <com.google.android.material.textfield.TextInputLayout
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="8dp"
-        app:boxCornerRadiusBottomStart="8dp"
-        app:boxCornerRadiusTopEnd="8dp"
-        app:boxCornerRadiusTopStart="8dp"
+        app:boxCornerRadiusBottomEnd="12dp"
+        app:boxCornerRadiusBottomStart="12dp"
+        app:boxCornerRadiusTopEnd="12dp"
+        app:boxCornerRadiusTopStart="12dp"
         app:boxStrokeColor="#D0D5DD"
+        app:boxStrokeWidth="1dp"
+        app:boxStrokeWidthFocused="1dp"
         app:hintEnabled="false"
         app:startIconDrawable="@drawable/ic_clock_custom"
         app:startIconTint="@null"
+        app:endIconMode="custom"
         app:endIconDrawable="@drawable/ic_chevron_down"
         app:endIconTint="#475467">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etInTime"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:clickable="true"
             android:focusable="false"
-            android:fontFamily="@font/inter_medium"
+            android:fontFamily="@font/inter_semibold"
             android:hint="Select In Time"
             android:inputType="none"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
-            android:textSize="14sp" />
+            android:textSize="16sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- Out Time -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="18dp"
         android:fontFamily="@font/inter_medium"
         android:text="Out Time"
         android:textColor="#475467"
-        android:textSize="12sp" />
+        android:textSize="13sp" />
 
     <com.google.android.material.textfield.TextInputLayout
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="8dp"
-        app:boxCornerRadiusBottomStart="8dp"
-        app:boxCornerRadiusTopEnd="8dp"
-        app:boxCornerRadiusTopStart="8dp"
+        app:boxCornerRadiusBottomEnd="12dp"
+        app:boxCornerRadiusBottomStart="12dp"
+        app:boxCornerRadiusTopEnd="12dp"
+        app:boxCornerRadiusTopStart="12dp"
         app:boxStrokeColor="#D0D5DD"
+        app:boxStrokeWidth="1dp"
+        app:boxStrokeWidthFocused="1dp"
         app:hintEnabled="false"
         app:startIconDrawable="@drawable/ic_clock_custom"
         app:startIconTint="@null"
+        app:endIconMode="custom"
         app:endIconDrawable="@drawable/ic_chevron_down"
         app:endIconTint="#475467">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etOutTime"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:clickable="true"
             android:focusable="false"
-            android:fontFamily="@font/inter_medium"
+            android:fontFamily="@font/inter_semibold"
             android:hint="Select Out Time"
             android:inputType="none"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
-            android:textSize="14sp" />
+            android:textSize="16sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- Remarks (Optional) -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="18dp"
         android:fontFamily="@font/inter_medium"
         android:text="Remarks (Optional)"
         android:textColor="#475467"
-        android:textSize="12sp" />
+        android:textSize="13sp" />
 
     <com.google.android.material.textfield.TextInputLayout
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        app:boxCornerRadiusBottomEnd="8dp"
-        app:boxCornerRadiusBottomStart="8dp"
-        app:boxCornerRadiusTopEnd="8dp"
-        app:boxCornerRadiusTopStart="8dp"
+        app:boxCornerRadiusBottomEnd="12dp"
+        app:boxCornerRadiusBottomStart="12dp"
+        app:boxCornerRadiusTopEnd="12dp"
+        app:boxCornerRadiusTopStart="12dp"
         app:boxStrokeColor="#D0D5DD"
+        app:boxStrokeWidth="1dp"
+        app:boxStrokeWidthFocused="1dp"
         app:hintEnabled="false">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -140,7 +148,8 @@
             android:fontFamily="@font/inter_medium"
             android:hint="Enter Remarks"
             android:inputType="textMultiLine"
-            android:lines="3"
+            android:minHeight="100dp"
+            android:lines="4"
             android:gravity="top|start"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
