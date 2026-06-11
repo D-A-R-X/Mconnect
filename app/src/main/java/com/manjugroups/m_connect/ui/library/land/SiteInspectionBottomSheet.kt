@@ -78,6 +78,12 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): android.app.Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Resize the sheet when the keyboard appears so the focused field
+        // scrolls into view above it (and the pinned "Next" button stays
+        // visible) instead of the keyboard just overlaying the form.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)

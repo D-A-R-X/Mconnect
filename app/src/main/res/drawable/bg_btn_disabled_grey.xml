@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive/disabled Submit state — clearly distinct from the green
+     gradient active state (bg_btn_gradient_green). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E4E7EC" />
+    <corners android:radius="27dp" />
+</shape>

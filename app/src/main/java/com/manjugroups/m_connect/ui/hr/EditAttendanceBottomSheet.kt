@@ -177,7 +177,7 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
         }
 
         submitting = true
-        binding.btnSubmitEdit.isEnabled = false
+        validateForm()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.submitAttendanceRequest(session.bearerToken, body)
@@ -263,8 +263,20 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
                     binding.etInTime.setText(formattedTime)
                     isInTimeSelected = true
                 } else {
-                    binding.etOutTime.setText(formattedTime)
-                    isOutTimeSelected = true
+                    // Mirror web: out time can't be at/before the in time on
+                    // the same day — reject the pick rather than accept it.
+                    val inMs = timeFieldMillis(binding.etInTime.text.toString())
+                    val outMs = timeFieldMillis(formattedTime)
+                    if (inMs != null && outMs != null && outMs <= inMs) {
+                        Toast.makeText(
+                            requireContext(),
+                            "Out time must be later than in time",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        binding.etOutTime.setText(formattedTime)
+                        isOutTimeSelected = true
+                    }
                 }
                 validateForm()
             },
@@ -276,14 +288,48 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun validateForm() {
-        // Keep Submit active at all times (only greyed while a request is
-        // in flight). Notes are optional, and the one structural rule —
-        // a Time Correction needs at least one corrected time — is checked
-        // on tap in submitRequest() with a clear toast. A perpetually
-        // greyed button read as "stuck / not working".
-        val enabled = !submitting
-        binding.btnSubmitEdit.isEnabled = enabled
-        binding.btnSubmitEdit.alpha = if (enabled) 1f else 0.5f
+        val valid = when (requestType) {
+            "correction" -> isCorrectionValid()
+            else -> true // Remark: notes optional, nothing mandatory.
+        } && !submitting
+        setSubmitEnabled(valid)
+    }
+
+    /**
+     * Time-correction validity, mirroring the web rule: at least one
+     * corrected time, and when BOTH the effective in & out are known the
+     * out must be strictly LATER than the in (same calendar day).
+     */
+    private fun isCorrectionValid(): Boolean {
+        val inMs = timeFieldMillis(binding.etInTime.text.toString())
+        val outMs = timeFieldMillis(binding.etOutTime.text.toString())
+        if (inMs == null && outMs == null) return false
+        if (inMs != null && outMs != null && outMs <= inMs) return false
+        return true
+    }
+
+    /** Combine the record's date with an "hh:mm a" field into epoch millis. */
+    private fun timeFieldMillis(time: String): Long? {
+        val date = record?.date ?: return null
+        val t = time.trim()
+        if (t.isEmpty()) return null
+        return runCatching {
+            SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.US).parse("$date $t")?.time
+        }.getOrNull()
+    }
+
+    /** Active = green gradient + white text; inactive = grey + muted text. */
+    private fun setSubmitEnabled(enabled: Boolean) {
+        val b = _binding ?: return
+        b.btnSubmitEdit.isEnabled = enabled
+        b.btnSubmitEdit.alpha = 1f
+        b.btnSubmitEdit.background = androidx.core.content.ContextCompat.getDrawable(
+            requireContext(),
+            if (enabled) R.drawable.bg_btn_gradient_green else R.drawable.bg_btn_disabled_grey,
+        )
+        b.btnSubmitEdit.setTextColor(
+            if (enabled) Color.WHITE else Color.parseColor("#98A2B3"),
+        )
     }
 
     private fun formatIsoTime(iso: String): String {
