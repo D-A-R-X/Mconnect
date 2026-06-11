@@ -373,6 +373,7 @@
 
                         <!-- Item 1: Nominee 1 -->
                         <LinearLayout
+                            android:id="@+id/trackStepNominee1"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -403,6 +404,7 @@
 
                         <!-- Item 2: Nominee 2 -->
                         <LinearLayout
+                            android:id="@+id/trackStepNominee2"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -433,6 +435,7 @@
 
                         <!-- Item 3: GM -->
                         <LinearLayout
+                            android:id="@+id/trackStepGm"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -463,6 +466,7 @@
 
                         <!-- Item 4: AVP -->
                         <LinearLayout
+                            android:id="@+id/trackStepAvp"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"

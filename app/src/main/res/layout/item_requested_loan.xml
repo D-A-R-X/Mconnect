@@ -4,15 +4,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
     android:layout_marginBottom="16dp">
 
     <LinearLayout
-        android:layout_width="342dp"
-        android:layout_height="231dp"
-        android:layout_gravity="center_horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:background="@drawable/bg_loan_card"
         android:orientation="vertical"
-        android:gravity="center_vertical"
         android:padding="12dp">
 
     <RelativeLayout
@@ -40,14 +39,18 @@
             android:layout_height="wrap_content"
             android:layout_centerVertical="true"
             android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
             android:layout_toEndOf="@id/iconTile"
+            android:layout_toStartOf="@id/rightStatusBlock"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvLoanTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
                 android:fontFamily="@font/inter_semibold"
+                android:maxLines="1"
                 android:textColor="#101828"
                 android:textSize="16sp"
                 tools:text="Home Loan" />
@@ -56,7 +59,9 @@
                 android:id="@+id/tvLoanId"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
                 android:fontFamily="@font/inter_regular"
+                android:maxLines="1"
                 android:textColor="#667085"
                 android:textSize="13sp"
                 tools:text="LN00123" />
@@ -64,6 +69,7 @@
 
         <!-- Right Side: Status and User -->
         <LinearLayout
+            android:id="@+id/rightStatusBlock"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
@@ -121,7 +127,10 @@
                     android:id="@+id/tvRequesterName"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:ellipsize="end"
                     android:fontFamily="@font/inter_medium"
+                    android:maxLines="1"
+                    android:maxWidth="120dp"
                     android:textColor="#101828"
                     android:textSize="13sp"
                     tools:text="Elaine" />
@@ -209,7 +218,8 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReject"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="146dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="48dp"
             android:layout_marginEnd="8dp"
             android:fontFamily="@font/inter_medium"
@@ -225,7 +235,8 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAccept"
-            android:layout_width="146dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="48dp"
             android:layout_marginStart="8dp"
             android:fontFamily="@font/inter_medium"
