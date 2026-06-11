@@ -202,6 +202,8 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.Message) {
             val isDeleted = item.data.isDeleted == true
             resetBodyStyle(binding.tvMessageBody, isSent = true)
+            binding.tvMessageTime.setTextColor(android.graphics.Color.parseColor("#CCFFFFFF"))
+            binding.ivSeenStatus.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#80FFFFFF"))
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = true)
             applyBodyMaxWidth(binding.tvMessageBody)
             binding.ivSeenStatus.visibility = if (isDeleted) View.GONE else View.VISIBLE
@@ -231,6 +233,18 @@ class ChatMessageAdapter(
             binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
                 .getFont(binding.root.context, R.font.inter_regular)
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
+
+            // Apply animated emoji style if body contains only 1-3 emojis
+            item.data.body?.let { bodyText ->
+                applyEmojiOnlyStyle(
+                    body = binding.tvMessageBody,
+                    bubbleFrame = binding.bubbleFrame,
+                    timeView = binding.tvMessageTime,
+                    tickIcon = binding.ivSeenStatus,
+                    text = bodyText,
+                    isMine = true
+                )
+            }
 
             bindReplyQuote(
                 parentId = item.data.parentMessageId,
@@ -282,6 +296,7 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.Message) {
             val isDeleted = item.data.isDeleted == true
             resetBodyStyle(binding.tvMessageBody, isSent = false)
+            binding.tvMessageTime.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = false)
             applyBodyMaxWidth(binding.tvMessageBody)
 
@@ -325,6 +340,18 @@ class ChatMessageAdapter(
             binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
                 .getFont(binding.root.context, R.font.inter_regular)
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
+
+            // Apply animated emoji style if body contains only 1-3 emojis
+            item.data.body?.let { bodyText ->
+                applyEmojiOnlyStyle(
+                    body = binding.tvMessageBody,
+                    bubbleFrame = binding.bubbleFrame,
+                    timeView = binding.tvMessageTime,
+                    tickIcon = null,
+                    text = bodyText,
+                    isMine = false
+                )
+            }
 
             bindReplyQuote(
                 parentId = item.data.parentMessageId,
@@ -389,6 +416,9 @@ class ChatMessageAdapter(
     }
 
     private fun resetBodyStyle(body: TextView, isSent: Boolean) {
+        body.clearAnimation()
+        body.scaleX = 1f
+        body.scaleY = 1f
         body.alpha = 1f
         body.textSize = 14f
         body.setTextColor(
@@ -1120,6 +1150,85 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.DateSeparator) {
             binding.tvDateLabel.text = item.date
         }
+    }
+
+    private fun applyEmojiOnlyStyle(
+        body: TextView,
+        bubbleFrame: FrameLayout,
+        timeView: TextView,
+        tickIcon: View?,
+        text: String,
+        isMine: Boolean
+    ) {
+        val emojiCount = getEmojiCountIfOnlyEmojis(text)
+        if (emojiCount in 1..3) {
+            bubbleFrame.background = null
+            bubbleFrame.setPadding(0, 0, 0, 0)
+            timeView.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
+            if (tickIcon is ImageView) {
+                tickIcon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#8E8E93"))
+            }
+
+            when (emojiCount) {
+                1 -> {
+                    body.textSize = 48f
+                    val pulse = android.view.animation.ScaleAnimation(
+                        0.9f, 1.1f,
+                        0.9f, 1.1f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f
+                    ).apply {
+                        duration = 700
+                        repeatMode = android.view.animation.Animation.REVERSE
+                        repeatCount = android.view.animation.Animation.INFINITE
+                        interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                    }
+                    body.startAnimation(pulse)
+                }
+                2 -> {
+                    body.textSize = 36f
+                }
+                3 -> {
+                    body.textSize = 28f
+                }
+            }
+        }
+    }
+
+    private fun getEmojiCountIfOnlyEmojis(text: String): Int {
+        if (text.isBlank()) return 0
+        var emojiCount = 0
+        var i = 0
+        val len = text.length
+        while (i < len) {
+            val codePoint = text.codePointAt(i)
+            val charCount = Character.charCount(codePoint)
+            if (isEmoji(codePoint)) {
+                emojiCount++
+            } else if (!isWhitespaceOrEmojiModifier(codePoint)) {
+                return 0
+            }
+            i += charCount
+        }
+        return emojiCount
+    }
+
+    private fun isEmoji(codePoint: Int): Boolean {
+        return (codePoint in 0x1F600..0x1F64F) || // Emoticons
+               (codePoint in 0x1F300..0x1F5FF) || // Misc Symbols and Pictographs
+               (codePoint in 0x1F680..0x1F6FF) || // Transport and Map
+               (codePoint in 0x1F1E6..0x1F1FF) || // Regional Flags
+               (codePoint in 0x2600..0x26FF) ||     // Misc Symbols
+               (codePoint in 0x2700..0x27BF) ||     // Dingbats
+               (codePoint in 0xFE00..0xFE0F) ||     // Variation Selectors
+               (codePoint in 0x1F900..0x1F9FF) || // Supplemental Symbols and Pictographs
+               (codePoint in 0x1FA70..0x1FAFF)    // Symbols and Pictographs Extended-A
+    }
+
+    private fun isWhitespaceOrEmojiModifier(codePoint: Int): Boolean {
+        return Character.isWhitespace(codePoint) ||
+               codePoint == 0x200D || // Zero Width Joiner
+               (codePoint in 0x1F3FB..0x1F3FF) // Fitzpatrick skin tone modifiers
     }
 
     private fun formatTime(timestamp: Double?): String {
