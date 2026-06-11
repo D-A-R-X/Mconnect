@@ -1346,19 +1346,17 @@ data class LoanData(
     val purpose: String? = null,
     val notes: String? = null,
     val approvalStatus: String? = null,
-    // Workflow stage that actually drives the pending-loan tracker
-    // (Nominee 1 → Nominee 2 → GM → AVP → HR → Accounts). The web sets
-    // this on the loans row: nominee_pending → gm_pending → avp_pending
-    // → hr_pending → accountant_pending → disbursed (or rejected). The
-    // `/api/hr/loans/my` endpoint returns the full loan object so this
-    // field is already in the JSON — it just needs deserializing.
     val currentStage: String? = null,
-    // Per-nominee signature state ("pending" | "approved" | "rejected"),
-    // used to light Nominee 1 / Nominee 2 independently while the loan is
-    // still in the nominee_pending stage.
     val nominee1Status: String? = null,
     val nominee2Status: String? = null,
-    val repayments: List<LoanRepaymentData>? = null
+    val repayments: List<LoanRepaymentData>? = null,
+    // Nominee fields for approval chain
+    val nominee1Id: String? = null,
+    val nominee1Name: String? = null,
+    val nominee1ESignature: String? = null,
+    val nominee2Id: String? = null,
+    val nominee2Name: String? = null,
+    val nominee2ESignature: String? = null
 )
 
 data class LoanRepaymentData(

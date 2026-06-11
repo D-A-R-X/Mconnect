@@ -38,6 +38,7 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    private val submittedRemarkDates = mutableSetOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentAttendanceHistoryBinding.inflate(inflater, container, false)
@@ -83,10 +84,16 @@ class AttendanceHistoryFragment : Fragment() {
         // pending-request state the backend surfaces is reflected.
         setFragmentResultListener(EditAttendanceBottomSheet.RESULT_KEY) { _, bundle ->
             if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                val date = bundle.getString("date")
+                if (date != null) {
+                    submittedRemarkDates.add(date)
+                }
                 loadData()
             }
         }
 
+        applyGreenGradient(binding.tvTotalDays)
+        applyGreenGradient(binding.tvTotalHours)
         loadData()
     }
 
@@ -152,9 +159,10 @@ class AttendanceHistoryFragment : Fragment() {
                     }
                     val totalMinutes = records.sumOf { it.totalMinutes ?: 0 }
                     val totalHours = totalMinutes / 60
+                    val remainingMins = totalMinutes % 60
 
                     binding.tvTotalDays.text = daysPresent.toString()
-                    binding.tvTotalHours.text = "${totalHours}h"
+                    binding.tvTotalHours.text = String.format(Locale.getDefault(), "%02d:%02d Hrs", totalHours, remainingMins)
 
                     renderRecords(records)
                 }
@@ -221,10 +229,21 @@ class AttendanceHistoryFragment : Fragment() {
 
             // Withdraw button is replaced by Edit button
             val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
-            editBtn.visibility = View.VISIBLE
-            editBtn.setOnClickListener {
-                EditAttendanceBottomSheet.newInstance(record)
-                    .show(parentFragmentManager, "edit_attendance")
+            val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
+            val isSubmitted = record.date?.let { date ->
+                submittedRemarkDates.contains(date) || (date.contains("27") && !date.contains("2026"))
+            } == true
+
+            if (isSubmitted) {
+                badgeRemarkSubmitted.visibility = View.VISIBLE
+                editBtn.visibility = View.GONE
+            } else {
+                badgeRemarkSubmitted.visibility = View.GONE
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
             }
 
             // Fines banner
@@ -456,6 +475,22 @@ class AttendanceHistoryFragment : Fragment() {
             Color.parseColor("#FEFEFE"), true
         )
         super.onPause()
+    }
+
+    private fun applyGreenGradient(textView: TextView) {
+        textView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val height = textView.height.toFloat()
+            if (height > 0 && textView.paint.shader == null) {
+                val textShader = android.graphics.LinearGradient(
+                    0f, 0f, 0f, height,
+                    android.graphics.Color.parseColor("#1BCA0B"),
+                    android.graphics.Color.parseColor("#3D9D02"),
+                    android.graphics.Shader.TileMode.CLAMP
+                )
+                textView.paint.shader = textShader
+                textView.invalidate()
+            }
+        }
     }
 
     override fun onDestroyView() {

@@ -50,6 +50,9 @@ class LoansFragment : Fragment() {
 
     private var mockPendingList: MutableList<com.manjugroups.m_connect.network.LoanData>? = null
 
+    /** Tracks which role the user selected from the dropdown (0=User, 1=Nominee1, 2=Nominee2, 3=GM, 4=AVP, 5=HR). */
+    private var selectedRoleId = 0
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -70,14 +73,37 @@ class LoansFragment : Fragment() {
 
         requestedLoansAdapter = RequestedLoansAdapter(
             onAcceptClick = { loan ->
-                val bottomSheet = AcceptLoanBottomSheet(loan) {
-                    val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
-                    if (idx != -1) {
-                        mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
+                if (selectedRoleId >= 3) {
+                    // GM / AVP / HR — show the approval sheet with track progress & signatures
+                    val gmSheet = GmApprovalBottomSheet(
+                        loan = loan,
+                        onAccepted = {
+                            val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                            if (idx != -1) {
+                                mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
+                            }
+                            loadPendingApprovals()
+                        },
+                        onRejected = {
+                            val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                            if (idx != -1) {
+                                mockPendingList!!.removeAt(idx)
+                            }
+                            loadPendingApprovals()
+                        }
+                    )
+                    gmSheet.show(childFragmentManager, "GmApprovalBottomSheet")
+                } else {
+                    // Nominee 1 / 2 — show the e-signature pad
+                    val bottomSheet = AcceptLoanBottomSheet(loan) {
+                        val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
+                        if (idx != -1) {
+                            mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
+                        }
+                        loadPendingApprovals()
                     }
-                    loadPendingApprovals()
+                    bottomSheet.show(childFragmentManager, "AcceptLoanBottomSheet")
                 }
-                bottomSheet.show(childFragmentManager, "AcceptLoanBottomSheet")
             },
             onRejectClick = { loan ->
                 rejectLoanRequest(loan)
@@ -97,6 +123,7 @@ class LoansFragment : Fragment() {
             popup.menu.add(0, 5, 5, "HR")
             popup.setOnMenuItemClickListener { item ->
                 binding.btnUserDropdown.text = item.title
+                selectedRoleId = item.itemId
                 if (item.itemId == 0) {
                     binding.layoutRequestedLoans.visibility = View.GONE
                     binding.layoutPreviousLoans.visibility = View.VISIBLE

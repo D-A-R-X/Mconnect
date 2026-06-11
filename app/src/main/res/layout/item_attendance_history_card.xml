@@ -34,6 +34,33 @@
             android:textColor="#101828"
             android:textSize="13sp" />
 
+        <LinearLayout
+            android:id="@+id/badgeRemarkSubmitted"
+            android:layout_width="wrap_content"
+            android:layout_height="22dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_remark_submitted_badge"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:src="@drawable/ic_remark_submitted_check" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Remark Submitted"
+                android:textColor="#12B76A"
+                android:textSize="10sp" />
+        </LinearLayout>
+
         <!--
           Withdraw button — shown only on rows that the calling staffer
           submitted but HR hasn't reviewed yet (status=pending). The
@@ -44,6 +71,7 @@
             android:id="@+id/btnHistoryItemEdit"
             android:layout_width="24dp"
             android:layout_height="24dp"
+            android:layout_marginStart="8dp"
             android:background="@drawable/bg_edit_btn_outline"
             android:clickable="true"
             android:contentDescription="Edit attendance"

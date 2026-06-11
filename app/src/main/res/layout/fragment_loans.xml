@@ -95,8 +95,7 @@
                     android:id="@+id/ivLoansHeaderArt"
                     android:layout_width="150dp"
                     android:layout_height="110dp"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="14dp"
+                    android:layout_gravity="center_vertical|end"
                     android:layout_marginEnd="-8dp"
                     android:adjustViewBounds="true"
                     android:contentDescription="@null"
@@ -106,6 +105,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
                     android:layout_marginEnd="140dp"
                     android:orientation="vertical">
 
@@ -134,7 +134,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginTop="36dp"
+                        android:layout_marginTop="4dp"
                         android:fontFamily="@font/inter_semibold"
                         android:letterSpacing="-0.02"
                         android:text="My Loans"
@@ -646,7 +646,6 @@
                     android:layout_height="wrap_content"
                     android:nestedScrollingEnabled="false"
                     android:overScrollMode="never"
-                    android:paddingHorizontal="16dp"
                     android:paddingBottom="32dp" />
             </LinearLayout>
 
