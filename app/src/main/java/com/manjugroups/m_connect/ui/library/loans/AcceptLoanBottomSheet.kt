@@ -1,14 +1,15 @@
 package com.manjugroups.m_connect.ui.library.loans
 
-import android.net.Uri
+import android.app.Dialog
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.BottomSheetAcceptLoanBinding
@@ -31,13 +32,16 @@ class AcceptLoanBottomSheet(
     private var _binding: BottomSheetAcceptLoanBinding? = null
     private val binding get() = _binding!!
     private val api = ApiService.create()
-    
-    private var selectedFile: File? = null
 
-    private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            handleSelectedUri(uri)
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(
+                com.google.android.material.R.id.design_bottom_sheet
+            )
+            bottomSheet?.setBackgroundColor(Color.TRANSPARENT)
         }
+        return dialog
     }
 
     override fun onCreateView(
@@ -50,36 +54,18 @@ class AcceptLoanBottomSheet(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        (view.parent as? View)?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        (view.parent as? View)?.setBackgroundColor(Color.TRANSPARENT)
 
-        binding.btnUploadBox.setOnClickListener {
-            pickImage.launch("image/*")
+        binding.btnClear.setOnClickListener {
+            binding.signaturePad.clear()
         }
 
         binding.btnSubmit.setOnClickListener {
-            if (selectedFile == null) {
-                Toast.makeText(requireContext(), "Please upload an E-Signature", Toast.LENGTH_SHORT).show()
+            if (binding.signaturePad.isEmpty()) {
+                Toast.makeText(requireContext(), "Please draw your signature first", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             submitApproval()
-        }
-    }
-
-    private fun handleSelectedUri(uri: Uri) {
-        try {
-            val inputStream = requireContext().contentResolver.openInputStream(uri)
-            val file = File(requireContext().cacheDir, "signature_${System.currentTimeMillis()}.jpg")
-            val outputStream = FileOutputStream(file)
-            inputStream?.copyTo(outputStream)
-            inputStream?.close()
-            outputStream.close()
-            
-            selectedFile = file
-            binding.ivPreview.setImageURI(uri)
-            binding.ivPreview.isVisible = true
-            binding.tvUploadStatus.text = "Image selected"
-        } catch (e: Exception) {
-            Toast.makeText(requireContext(), "Failed to load image", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -87,21 +73,30 @@ class AcceptLoanBottomSheet(
         binding.btnSubmit.isEnabled = false
         binding.btnSubmit.text = "Uploading..."
         val token = SessionManager(requireContext()).bearerToken
-        
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // 1. Upload photo
-                val requestBody = selectedFile!!.asRequestBody("image/jpeg".toMediaType())
+                // 1. Export signature to file
+                val bitmap = binding.signaturePad.getSignatureBitmap()
+                val file = File(requireContext().cacheDir, "signature_${System.currentTimeMillis()}.png")
+                withContext(Dispatchers.IO) {
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                }
+
+                // 2. Upload signature image
+                val requestBody = file.asRequestBody("image/png".toMediaType())
                 val uploadResp = withContext(Dispatchers.IO) {
                     api.uploadStorageFile(token, requestBody)
                 }
-                
+
                 val storageId = uploadResp.storageId
                 if (storageId == null) {
                     throw Exception("Upload failed, storage ID is null")
                 }
 
-                // 2. Call approve API
+                // 3. Call approve API
                 binding.btnSubmit.text = "Approving..."
                 val req = ApproveLoanRequest(id = loan.id!!, eSignatureId = storageId)
                 withContext(Dispatchers.IO) {
