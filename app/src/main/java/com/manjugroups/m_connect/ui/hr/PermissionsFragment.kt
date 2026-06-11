@@ -93,10 +93,13 @@ class PermissionsFragment : Fragment() {
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, ApplyPermissionFragment())
-                .addToBackStack(null)
-                .commit()
+            parentFragmentManager.setFragmentResultListener(ApplyPermissionBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
+                val success = bundle.getBoolean("success", false)
+                if (success) {
+                    viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+                }
+            }
+            ApplyPermissionBottomSheet.newInstance().show(parentFragmentManager, "apply_permission_sheet")
         }
 
         val cal = Calendar.getInstance()
