@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="342dp"
-    android:layout_height="231dp"
-    android:layout_gravity="center_horizontal"
-    android:layout_marginBottom="16dp"
-    android:background="@drawable/bg_loan_card"
-    android:elevation="1dp"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp">
+
+    <LinearLayout
+        android:layout_width="342dp"
+        android:layout_height="231dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_loan_card"
+        android:elevation="1dp"
+        android:orientation="vertical"
+        android:padding="12dp">
 
     <RelativeLayout
         android:layout_width="match_parent"
@@ -129,11 +133,12 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_grey_rounded"
         android:baselineAligned="false"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -197,7 +202,7 @@
         android:id="@+id/layoutActionButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_horizontal"
         android:orientation="horizontal">
 
@@ -254,4 +259,5 @@
         android:enabled="false"
         android:visibility="gone" />
 
-</LinearLayout>
+    </LinearLayout>
+</FrameLayout>
