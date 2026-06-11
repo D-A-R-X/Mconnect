@@ -6,38 +6,42 @@
     android:background="?attr/colorSurfacePrimary"
     android:orientation="vertical">
 
-    <!-- Header (two rows so title never wraps) -->
-    <LinearLayout
+    <!-- Header (Relative layout so title and date are centered) -->
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurfacePrimary"
-        android:orientation="vertical"
         android:paddingHorizontal="20dp"
         android:paddingTop="8dp"
         android:paddingBottom="10dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/frame_21472"
+            android:src="@drawable/ic_back_blue"
+            android:scaleType="centerInside"
+            android:contentDescription="Back"
+            android:clickable="true"
+            android:focusable="true" />
 
-            <ImageView
-                android:id="@+id/btnBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/frame_21472"
-                android:src="@drawable/ic_back_blue"
-                android:scaleType="centerInside"
-                android:contentDescription="Back"
-                android:clickable="true"
-                android:focusable="true" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:layout_toEndOf="@id/btnBack"
+            android:layout_toStartOf="@id/btnAttendanceFilter"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp">
 
             <TextView
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
                 android:ellipsize="end"
                 android:fontFamily="@font/inter_bold"
                 android:maxLines="1"
@@ -46,28 +50,29 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="18sp" />
 
-            <ImageView
-                android:id="@+id/btnAttendanceFilter"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/frame_21472"
-                android:src="@drawable/ic_filter_blue"
-                android:scaleType="centerInside"
-                android:contentDescription="Filter"
-                android:clickable="true"
-                android:focusable="true" />
+            <TextView
+                android:id="@+id/tvMonth"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#0B61CA"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tvMonth"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="36dp"
-            android:layout_marginTop="2dp"
-            android:fontFamily="@font/inter_medium"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="13sp" />
-    </LinearLayout>
+        <ImageView
+            android:id="@+id/btnAttendanceFilter"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/frame_21472"
+            android:src="@drawable/ic_filter_blue"
+            android:scaleType="centerInside"
+            android:contentDescription="Filter"
+            android:clickable="true"
+            android:focusable="true" />
+    </RelativeLayout>
 
     <!-- Summary stats -->
     <LinearLayout
@@ -75,61 +80,94 @@
         android:layout_height="wrap_content"
         android:paddingHorizontal="20dp"
         android:paddingVertical="12dp"
+        android:gravity="center_horizontal"
         android:orientation="horizontal">
 
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_width="163dp"
+            android:layout_height="72dp"
             android:background="@drawable/bg_stat_card"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp">
 
+            <!-- Top Row: Icon + Label -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_clock_gradient_blue"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Present"
+                    android:textColor="#0B61CA"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Bottom Row: Count -->
             <TextView
                 android:id="@+id/tvTotalDays"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_bold"
                 android:text="0"
-                android:textColor="?attr/colorSuccess"
+                android:textColor="#1BCA0B"
                 android:textSize="22sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_regular"
-                android:text="Present"
-                android:textColor="?attr/colorForegroundSecondary"
-                android:textSize="11sp" />
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_width="163dp"
+            android:layout_height="72dp"
             android:layout_marginStart="12dp"
-            android:layout_weight="1"
             android:background="@drawable/bg_stat_card"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp">
 
+            <!-- Top Row: Icon + Label -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_clock_gradient_blue"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Total Hours"
+                    android:textColor="#0B61CA"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Bottom Row: Count -->
             <TextView
                 android:id="@+id/tvTotalHours"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_bold"
-                android:text="0h"
-                android:textColor="?attr/colorAccentPrimary"
+                android:text="00:00 Hrs"
+                android:textColor="#1BCA0B"
                 android:textSize="22sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_regular"
-                android:text="Total Hours"
-                android:textColor="?attr/colorForegroundSecondary"
-                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
 
