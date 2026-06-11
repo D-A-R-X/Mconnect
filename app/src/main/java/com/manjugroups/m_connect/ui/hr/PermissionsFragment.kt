@@ -170,15 +170,11 @@ class PermissionsFragment : Fragment() {
         binding.scopeBackdrop.animate().alpha(1f).setDuration(200).start()
 
         val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu_perm, null)
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-
+        val popupWidth = dp(180)
         val popup = android.widget.PopupWindow(
             popupView,
-            popupView.measuredWidth,
-            popupView.measuredHeight,
+            popupWidth,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         ).apply {
             elevation = dp(12).toFloat()
@@ -233,7 +229,7 @@ class PermissionsFragment : Fragment() {
             if (scope != Scope.ALL) switchScope(Scope.ALL)
         }
 
-        val xOffset = anchor.width - popupView.measuredWidth
+        val xOffset = anchor.width - popupWidth
         popup.showAsDropDown(anchor, xOffset, dp(4))
 
         popupView.alpha = 0f
