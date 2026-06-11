@@ -231,6 +231,17 @@ class HrDashboardFragment : Fragment() {
             }
         }
 
+        // Reload the attendance cards after a correction/remark request is
+        // submitted from a day card's edit icon.
+        parentFragmentManager.setFragmentResultListener(
+            EditAttendanceBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                loadRecentHistoryCards()
+            }
+        }
+
         collectState()
         collectEvents()
         flowViewModel.loadTodayAttendance(session.bearerToken)
@@ -754,6 +765,21 @@ class HrDashboardFragment : Fragment() {
                 formatMinutesAsPeriod(record.totalMinutes ?: 0)
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
                 buildPunchRange(record)
+
+            // Pencil → Remark / Time Correction request, same sheet as the
+            // My Attendance history screen. Gap-filled placeholder days
+            // have no backend row (id == null) to attach a request to, so
+            // hide the icon for those.
+            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+            if (record.id.isNullOrBlank()) {
+                editBtn.visibility = View.GONE
+            } else {
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
+            }
             binding.historyListContainer.addView(card)
         }
     }

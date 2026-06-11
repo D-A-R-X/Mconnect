@@ -48,7 +48,7 @@
             android:clickable="true"
             android:contentDescription="Edit attendance"
             android:focusable="true"
-            android:padding="4dp"
+            android:padding="2dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_edit_white"
             app:tint="#444CE7" />

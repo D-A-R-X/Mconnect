@@ -8,9 +8,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.R
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.auth.SessionManager
@@ -79,11 +81,20 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
             isOutTimeSelected = true
         }
 
-        // Request Type dropdown — Remark (default) | Time Correction,
-        // matching the web attendance dialog. The time fields only show
-        // for Time Correction.
+        // Request Type exposed dropdown — Remark (default) | Time
+        // Correction, matching the web attendance dialog. The time fields
+        // only show for Time Correction.
+        binding.etRequestType.setAdapter(
+            ArrayAdapter(
+                requireContext(),
+                R.layout.item_dropdown_request_type,
+                listOf("Remark", "Time Correction"),
+            )
+        )
+        binding.etRequestType.setOnItemClickListener { _, _, position, _ ->
+            setRequestType(if (position == 1) "correction" else "remark")
+        }
         setRequestType("remark")
-        binding.etRequestType.setOnClickListener { showRequestTypePicker() }
 
         binding.etInTime.setOnClickListener {
             showTimePicker(true)
@@ -107,20 +118,14 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
         validateForm()
     }
 
-    private fun showRequestTypePicker() {
-        val popup = android.widget.PopupMenu(requireContext(), binding.etRequestType)
-        popup.menu.add(0, 0, 0, "Remark")
-        popup.menu.add(0, 1, 1, "Time Correction")
-        popup.setOnMenuItemClickListener { item ->
-            setRequestType(if (item.itemId == 1) "correction" else "remark")
-            true
-        }
-        popup.show()
-    }
-
     private fun setRequestType(type: String) {
         requestType = type
-        binding.etRequestType.setText(if (type == "correction") "Time Correction" else "Remark")
+        // setText(.., false) sets the value without re-filtering the
+        // dropdown (which would otherwise hide the other option).
+        binding.etRequestType.setText(
+            if (type == "correction") "Time Correction" else "Remark",
+            false,
+        )
         binding.timeCorrectionFields.visibility =
             if (type == "correction") View.VISIBLE else View.GONE
         validateForm()
@@ -271,16 +276,14 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun validateForm() {
-        // Notes are always optional. A Time Correction still needs at
-        // least one corrected time; a Remark has no mandatory field.
-        val isValid = when (requestType) {
-            "correction" ->
-                (isInTimeSelected && binding.etInTime.text.toString().isNotBlank()) ||
-                    (isOutTimeSelected && binding.etOutTime.text.toString().isNotBlank())
-            else -> true
-        } && !submitting
-        binding.btnSubmitEdit.isEnabled = isValid
-        binding.btnSubmitEdit.alpha = if (isValid) 1f else 0.5f
+        // Keep Submit active at all times (only greyed while a request is
+        // in flight). Notes are optional, and the one structural rule —
+        // a Time Correction needs at least one corrected time — is checked
+        // on tap in submitRequest() with a clear toast. A perpetually
+        // greyed button read as "stuck / not working".
+        val enabled = !submitting
+        binding.btnSubmitEdit.isEnabled = enabled
+        binding.btnSubmitEdit.alpha = if (enabled) 1f else 0.5f
     }
 
     private fun formatIsoTime(iso: String): String {
