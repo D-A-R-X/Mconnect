@@ -59,6 +59,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 it.setBackgroundColor(Color.TRANSPARENT)
+                it.elevation = 0f
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
@@ -240,6 +241,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     private fun showCategorySheet() {
         val dialog = BottomSheetDialog(requireContext())
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog).findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundColor(Color.TRANSPARENT)
+                it.elevation = 0f
+            }
+        }
         val content = layoutInflater.inflate(R.layout.bottom_sheet_leave_category, null)
         dialog.setContentView(content)
 
@@ -309,6 +317,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     private fun showDurationSheet() {
         val dialog = BottomSheetDialog(requireContext())
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog).findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundColor(Color.TRANSPARENT)
+                it.elevation = 0f
+            }
+        }
         val content = layoutInflater.inflate(R.layout.bottom_sheet_leave_duration, null)
         dialog.setContentView(content)
 

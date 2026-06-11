@@ -79,6 +79,14 @@ class AttendanceHistoryFragment : Fragment() {
             loadData()
         }
 
+        // A submitted correction/remark request reloads the list so any
+        // pending-request state the backend surfaces is reflected.
+        setFragmentResultListener(EditAttendanceBottomSheet.RESULT_KEY) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                loadData()
+            }
+        }
+
         loadData()
     }
 
@@ -211,20 +219,32 @@ class AttendanceHistoryFragment : Fragment() {
                     .show(parentFragmentManager, "attendance_punch_log")
             }
 
-            // Withdraw button — only on pending submissions (mirror of
-            // the leaves trash-icon UX). HR-finalised rows
-            // (approved/rejected/auto-approved) keep the button hidden
-            // because the server-side mutation rejects them anyway.
-            val deleteBtn = card.findViewById<ImageView>(R.id.btnHistoryItemDelete)
-            val isPending = record.status?.equals("pending", ignoreCase = true) == true
-            if (isPending) {
-                deleteBtn.visibility = View.VISIBLE
-                deleteBtn.setOnClickListener {
-                    confirmAndCancelAttendance(record)
-                }
+            // Withdraw button is replaced by Edit button
+            val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
+            editBtn.visibility = View.VISIBLE
+            editBtn.setOnClickListener {
+                EditAttendanceBottomSheet.newInstance(record)
+                    .show(parentFragmentManager, "edit_attendance")
+            }
+
+            // Fines banner
+            val llFinesBanner = card.findViewById<View>(R.id.llFinesBanner)
+            val tvLateText = card.findViewById<TextView>(R.id.tvLateText)
+            val tvFineAmount = card.findViewById<TextView>(R.id.tvFineAmount)
+
+            // Fines banner is driven ENTIRELY by real backend data — the
+            // server-computed lateFineDeduction (preferred) or a seeded
+            // fineAmount, paired with lateMinutes. No mock dates, no
+            // fabricated default amount: if the backend levied no fine the
+            // banner stays hidden.
+            val lateMins = record.lateMinutes ?: 0
+            val fine = record.lateFineDeduction ?: record.fineAmount
+            if (lateMins > 0 && fine != null && fine > 0) {
+                llFinesBanner.visibility = View.VISIBLE
+                tvLateText.text = "Late by ${lateMins}mins"
+                tvFineAmount.text = "Fine : ₹${fine.toInt()}"
             } else {
-                deleteBtn.visibility = View.GONE
-                deleteBtn.setOnClickListener(null)
+                llFinesBanner.visibility = View.GONE
             }
 
             // Decision footer — surfaces "Approved/Rejected at <date>

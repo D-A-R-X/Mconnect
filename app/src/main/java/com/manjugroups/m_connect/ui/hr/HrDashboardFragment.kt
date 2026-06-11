@@ -176,7 +176,32 @@ class HrDashboardFragment : Fragment() {
         }
 
         binding.btnClockOut.setOnClickListener {
-            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
+            // Show the SAME "Today" figure the dashboard card displays.
+            // While the session is open the API's todayMinutes is 0 (it
+            // only sums CLOSED sessions), so reading it directly made the
+            // sheet say 00:00:00 even after hours on the clock. The card
+            // instead runs a live ticker of `now - firstPunchIn`; mirror
+            // that here so the confirm sheet and the card always agree.
+            // Once clocked out, the ticker stops and todayMinutes holds
+            // the real total, so we fall back to it. Standard workday =
+            // 8h (480m); anything above lands in the overtime bucket.
+            val state = flowViewModel.uiState.value
+            val firstIso = state.firstPunchInIso
+            val today = if (state.isClockedIn && !firstIso.isNullOrBlank()) {
+                val firstMs = parseIsoMillisOrNull(firstIso)
+                if (firstMs != null) {
+                    ((System.currentTimeMillis() - firstMs).coerceAtLeast(0) / 60_000L).toInt()
+                } else {
+                    state.todayMinutes
+                }
+            } else {
+                state.todayMinutes
+            }
+            val overtime = (today - 480).coerceAtLeast(0)
+            ClockOutConfirmBottomSheet.newInstance(
+                todayMinutes = today,
+                overtimeMinutes = overtime,
+            ).show(parentFragmentManager, "clock_out_confirm")
         }
 
         parentFragmentManager.setFragmentResultListener(
@@ -203,6 +228,17 @@ class HrDashboardFragment : Fragment() {
                     ClockInSuccessBottomSheet().show(parentFragmentManager, "clock_in_success")
                 }
                 null -> Unit
+            }
+        }
+
+        // Reload the attendance cards after a correction/remark request is
+        // submitted from a day card's edit icon.
+        parentFragmentManager.setFragmentResultListener(
+            EditAttendanceBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                loadRecentHistoryCards()
             }
         }
 
@@ -729,6 +765,21 @@ class HrDashboardFragment : Fragment() {
                 formatMinutesAsPeriod(record.totalMinutes ?: 0)
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
                 buildPunchRange(record)
+
+            // Pencil → Remark / Time Correction request, same sheet as the
+            // My Attendance history screen. Gap-filled placeholder days
+            // have no backend row (id == null) to attach a request to, so
+            // hide the icon for those.
+            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+            if (record.id.isNullOrBlank()) {
+                editBtn.visibility = View.GONE
+            } else {
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
+            }
             binding.historyListContainer.addView(card)
         }
     }

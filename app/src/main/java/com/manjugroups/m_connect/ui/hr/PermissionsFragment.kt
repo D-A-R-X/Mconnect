@@ -39,7 +39,7 @@ class PermissionsFragment : Fragment() {
     // Top-level scope inside History mode: My own permissions vs the
     // user's reporting-team's pending approvals. Team is only
     // available when canApprove() is true. Default = MY.
-    private enum class Scope { MY, TEAM }
+    private enum class Scope { MY, TEAM, ALL }
 
     private var _binding: FragmentPermissionsBinding? = null
     private val binding get() = _binding!!
@@ -50,6 +50,9 @@ class PermissionsFragment : Fragment() {
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
     private var scope: Scope = Scope.MY
     private var skeletonAnimator: ObjectAnimator? = null
+    // Gates the skeleton to the first load so a refresh doesn't blank the
+    // list back to placeholders.
+    private var hasRenderedPermissionsOnce = false
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -86,8 +89,8 @@ class PermissionsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { navigateUp() }
-        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        binding.summaryHeader.setOnBackClickListener { navigateUp() }
+        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.beginTransaction()
@@ -97,27 +100,30 @@ class PermissionsFragment : Fragment() {
         }
 
         val cal = Calendar.getInstance()
-        binding.tvMonth.text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+        val year = cal.get(Calendar.YEAR)
+        binding.tvYear.text = "Period 1 Jan $year - 30 Dec $year"
 
         if (screenMode == MODE_APPROVAL) {
-            binding.tvHeaderTitle.text = "Permission Approvals"
-            binding.tvHeaderSubtitle.text = "In Review"
-            binding.tvSectionTitle.text = "Permission Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
+            binding.summaryHeader.setTitle("Permission Approvals")
+            binding.summaryHeader.setSubtitle("Review Requests")
+            binding.permissionsRefresh.isEnabled = false
+            binding.btnApplyPermission.visibility = View.GONE
             binding.filterRow.visibility = View.GONE
-            binding.scopeRow.visibility = View.GONE
         } else {
-            binding.tvHeaderTitle.text = "Permission Summary"
-            binding.tvHeaderSubtitle.text = "Submit Permission"
-            binding.tvSectionTitle.text = "Recent Requests"
-            binding.tvSectionSubtitle.visibility = View.VISIBLE
+            binding.summaryHeader.setTitle("Permission Summary")
+            binding.summaryHeader.setSubtitle("Submit Permission")
+            binding.permissionsRefresh.isEnabled = true
             binding.filterRow.visibility = View.VISIBLE
             // My/Team scope switch is only meaningful to staff who
             // can approve. Plain employees stay on the (default) My
             // scope with no extra control on screen.
             val canApprove = session.hasPermission("permissions.approve")
-            binding.scopeRow.visibility = if (canApprove) View.VISIBLE else View.GONE
-            setupScopeTabs()
+            if (canApprove) {
+                binding.dropdownScopeSelector.setOnClickListener { showScopePopupMenu(it) }
+            } else {
+                binding.ivScopeChevron.visibility = View.GONE
+            }
+            binding.tvScopeLabel.text = "My Permission"
             setupFilterTabs()
             updateScopeUi()
         }
@@ -141,19 +147,105 @@ class PermissionsFragment : Fragment() {
         }
     }
 
-    private fun setupScopeTabs() {
-        binding.scopeRow.setTabs(
-            listOf("My Permissions", "Team Permissions"),
-            scope.ordinal
-        ) { position ->
-            scope = Scope.values()[position]
-            updateScopeUi()
-            renderState(viewModel.uiState.value)
+    private fun updateScopeUi() {
+        val label = when (scope) {
+            Scope.MY -> "My Permission"
+            Scope.TEAM -> "Team Permission"
+            Scope.ALL -> "All Permission"
         }
+        binding.tvScopeLabel.text = label
+        // Figma shows filters on all tabs. However, team approvals API currently only returns pending.
+        binding.filterRow.visibility = View.VISIBLE
     }
 
-    private fun updateScopeUi() {
-        binding.filterRow.visibility = if (scope == Scope.MY) View.VISIBLE else View.GONE
+    private fun switchScope(newScope: Scope) {
+        scope = newScope
+        updateScopeUi()
+        renderState(viewModel.uiState.value)
+    }
+
+    private fun showScopePopupMenu(anchor: View) {
+        binding.scopeBackdrop.visibility = View.VISIBLE
+        binding.scopeBackdrop.alpha = 0f
+        binding.scopeBackdrop.animate().alpha(1f).setDuration(200).start()
+
+        val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu_perm, null)
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+
+        val popup = android.widget.PopupWindow(
+            popupView,
+            popupView.measuredWidth,
+            popupView.measuredHeight,
+            true
+        ).apply {
+            elevation = dp(12).toFloat()
+            isOutsideTouchable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setOnDismissListener {
+                binding.scopeBackdrop.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction { binding.scopeBackdrop.visibility = View.GONE }
+                    .start()
+            }
+        }
+
+        binding.scopeBackdrop.setOnClickListener { popup.dismiss() }
+
+        val menuMy = popupView.findViewById<TextView>(R.id.menuMyPerm)
+        val menuTeam = popupView.findViewById<View>(R.id.menuTeamPerm)
+        val tvMenuTeam = popupView.findViewById<TextView>(R.id.tvMenuTeamPerm)
+        val menuAll = popupView.findViewById<TextView>(R.id.menuAllPerm)
+
+        val activeColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
+        val defaultColor = android.graphics.Color.parseColor("#061D3D")
+
+        menuMy.setTextColor(if (scope == Scope.MY) activeColor else defaultColor)
+        tvMenuTeam?.setTextColor(if (scope == Scope.TEAM) activeColor else defaultColor)
+        menuAll?.setTextColor(if (scope == Scope.ALL) activeColor else defaultColor)
+
+        val pendingCount = viewModel.uiState.value.pendingApprovals.size
+        val dotBadge = popupView.findViewById<TextView>(R.id.dotTeamBadge)
+        if (dotBadge != null) {
+            if (pendingCount > 0) {
+                dotBadge.visibility = View.VISIBLE
+                dotBadge.text = pendingCount.toString()
+            } else {
+                dotBadge.visibility = View.GONE
+            }
+        }
+
+        menuMy.setOnClickListener {
+            popup.dismiss()
+            if (scope != Scope.MY) switchScope(Scope.MY)
+        }
+
+        menuTeam.setOnClickListener {
+            popup.dismiss()
+            if (scope != Scope.TEAM) switchScope(Scope.TEAM)
+        }
+
+        menuAll?.setOnClickListener {
+            popup.dismiss()
+            if (scope != Scope.ALL) switchScope(Scope.ALL)
+        }
+
+        val xOffset = anchor.width - popupView.measuredWidth
+        popup.showAsDropDown(anchor, xOffset, dp(4))
+
+        popupView.alpha = 0f
+        popupView.scaleX = 0.95f
+        popupView.scaleY = 0.95f
+        popupView.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(150)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
     }
 
     private fun collectState() {
@@ -177,7 +269,11 @@ class PermissionsFragment : Fragment() {
             state.pendingApprovals
         } else when (scope) {
             Scope.MY -> filterHistoryPermissions(state.myPermissions)
-            Scope.TEAM -> state.pendingApprovals
+            Scope.TEAM -> filterHistoryPermissions(state.pendingApprovals)
+            Scope.ALL -> {
+                val combined = state.myPermissions + state.pendingApprovals
+                filterHistoryPermissions(combined.distinctBy { it.id })
+            }
         }
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
@@ -191,56 +287,29 @@ class PermissionsFragment : Fragment() {
 
         configureHistoryCard(displayPermissions.isEmpty() && !isLoading)
 
-        binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
-        binding.permissionList.visibility = if (isLoading) View.GONE else View.VISIBLE
-        if (isLoading) {
+        // Only skeleton on the first load; a refresh keeps the list up.
+        val showSkeleton = isLoading && !hasRenderedPermissionsOnce
+        binding.skeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
+        binding.permissionList.visibility = if (showSkeleton) View.GONE else View.VISIBLE
+        if (showSkeleton) {
             startSkeletonPulse()
             binding.emptyState.visibility = View.GONE
             return
         }
 
         stopSkeletonPulse()
+        if (!isLoading) hasRenderedPermissionsOnce = true
         setEmptyCopy(displayPermissions.isEmpty())
-        // Approval mode (notification deep-link) AND History-mode Team
-        // scope both show Approve/Reject; Team scope is only entered
+        // Approval mode (notification deep-link) AND History-mode Team/All
+        // scope both show Approve/Reject; Team/All scope is only entered
         // when the user has the permission, so this is safe.
         val showApprovalActions = (screenMode == MODE_APPROVAL && canApprove)
-            || (screenMode == MODE_HISTORY && scope == Scope.TEAM && canApprove)
+            || (screenMode == MODE_HISTORY && (scope == Scope.TEAM || scope == Scope.ALL) && canApprove)
         renderPermissions(displayPermissions, showApprovalActions)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {
-        val showHeader = screenMode == MODE_APPROVAL || historyFilter == HistoryFilter.REVIEW || isEmpty
-        binding.tvSectionTitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-        binding.tvSectionSubtitle.visibility = if (showHeader) View.VISIBLE else View.GONE
-
-        if (screenMode == MODE_APPROVAL) {
-            binding.tvSectionTitle.text = "Permission Approvals"
-            binding.tvSectionSubtitle.visibility = View.GONE
-        } else {
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> {
-                    binding.tvSectionTitle.text = "Recent Requests"
-                    binding.tvSectionSubtitle.text = "Permission information"
-                }
-                HistoryFilter.APPROVED -> {
-                    binding.tvSectionTitle.text = "Approved Permissions"
-                    binding.tvSectionSubtitle.text = "Approved permission information"
-                }
-                HistoryFilter.REJECTED -> {
-                    binding.tvSectionTitle.text = "Rejected Permissions"
-                    binding.tvSectionSubtitle.text = "Rejected permission information"
-                }
-            }
-        }
-
-        if (showHeader) {
-            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
-            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
-        } else {
-            binding.historyCard.background = null
-            binding.historyCard.setPadding(0, 0, 0, 0)
-        }
+        // No-op: section title/subtitle removed per design
     }
 
     private fun setEmptyCopy(isEmpty: Boolean) {
@@ -334,8 +403,8 @@ class PermissionsFragment : Fragment() {
                     statusIconRes = R.drawable.ic_leave_status_rejected
                 }
                 StatusBucket.REVIEW -> {
-                    statusNote = "In Review"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_accent_primary)
+                    statusNote = if (statusDateText.isNullOrBlank()) "In Review" else "In Review at $statusDateText"
+                    statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
                     statusIconRes = R.drawable.ic_leave_status_review
                 }
             }
@@ -344,9 +413,12 @@ class PermissionsFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvPermTime).text = rangeText
             card.findViewById<TextView>(R.id.tvPermHours).text = hoursText
 
-            val reasonText = card.findViewById<TextView>(R.id.tvPermReason)
-            reasonText.text = statusNote
-            reasonText.setTextColor(statusColor)
+            val reasonLabel = card.findViewById<TextView>(R.id.tvPermReasonLabel)
+            reasonLabel.text = perm.reason.takeUnless { it.isNullOrBlank() } ?: "Permission Time"
+
+            val statusNoteView = card.findViewById<TextView>(R.id.tvPermStatusNote)
+            statusNoteView.text = statusNote
+            statusNoteView.setTextColor(statusColor)
             card.findViewById<ImageView>(R.id.ivPermStatusIcon).setImageResource(statusIconRes)
 
             val staffName = card.findViewById<TextView>(R.id.tvPermStaffName)
@@ -365,7 +437,9 @@ class PermissionsFragment : Fragment() {
             staffName.text = displayName
             staffInitial.text = initial
 
-            if (approvalMode) {
+            if (approvalMode && perm.staffName != null) {
+                // Only show approve/reject if this is a team permission (has staffName).
+                // My own permissions shouldn't be approvable by me.
                 actionRow.visibility = View.VISIBLE
                 approveButton.setOnClickListener {
                     perm.id?.let { id ->
@@ -388,7 +462,7 @@ class PermissionsFragment : Fragment() {
             // Approver-mode rows already get Approve/Reject; cancelled
             // rows live in REJECTED/APPROVED buckets and shouldn't
             // re-surface a trash icon there.
-            val cancelIcon = card.findViewById<ImageView>(R.id.ivPermCancel)
+            val cancelIcon = card.findViewById<android.widget.FrameLayout>(R.id.ivPermCancel)
             val canCancel = !approvalMode
                 && screenMode == MODE_HISTORY
                 && scope == Scope.MY
@@ -398,18 +472,7 @@ class PermissionsFragment : Fragment() {
             if (canCancel) {
                 cancelIcon.setOnClickListener {
                     val id = perm.id ?: return@setOnClickListener
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Cancel permission request?")
-                        .setMessage("This will withdraw your pending request.")
-                        .setPositiveButton("Cancel Request") { _, _ ->
-                            viewModel.cancelPermission(
-                                session.bearerToken,
-                                id,
-                                session.hasPermission("permissions.approve"),
-                            )
-                        }
-                        .setNegativeButton("Keep", null)
-                        .show()
+                    showCancelPermissionDialog(id)
                 }
             } else {
                 cancelIcon.setOnClickListener(null)
@@ -421,6 +484,30 @@ class PermissionsFragment : Fragment() {
 
             binding.permissionList.addView(card)
         }
+    }
+
+    private fun showCancelPermissionDialog(permissionId: String) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            viewModel.cancelPermission(
+                session.bearerToken,
+                permissionId,
+                session.hasPermission("permissions.approve"),
+            )
+        }
+
+        dialog.show()
     }
 
     private fun parseServerDate(parseFmt: SimpleDateFormat, raw: String?): Date? {

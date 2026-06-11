@@ -66,39 +66,14 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.etSalaryRequirement.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                validateForm()
-            }
-        })
-
         binding.btnSubmitAdvance.setOnClickListener {
             submitAdvance()
         }
-        validateForm()
+        
+        restoreDraft()
     }
 
-    private fun validateForm() {
-        val amountStr = binding.etSalaryRequirement.text.toString().trim()
-        val amount = amountStr.toDoubleOrNull()
-        val isValid = amount != null && amount > 0
 
-        if (isValid) {
-            binding.btnSubmitAdvance.isEnabled = true
-            binding.btnSubmitAdvance.isClickable = true
-            binding.btnSubmitAdvance.isFocusable = true
-            binding.btnSubmitAdvance.setBackgroundResource(R.drawable.bg_leave_submit_button)
-            binding.btnSubmitAdvance.setTextColor(android.graphics.Color.WHITE)
-        } else {
-            binding.btnSubmitAdvance.isEnabled = false
-            binding.btnSubmitAdvance.isClickable = false
-            binding.btnSubmitAdvance.isFocusable = false
-            binding.btnSubmitAdvance.setBackgroundResource(R.drawable.bg_loan_submit_button_disabled)
-            binding.btnSubmitAdvance.setTextColor(android.graphics.Color.parseColor("#98A2B3"))
-        }
-    }
 
     private fun submitAdvance() {
         val amountStr = binding.etSalaryRequirement.text.toString().trim()
@@ -124,6 +99,7 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
+                    clearDraft()
                     setFragmentResult(RESULT_KEY, Bundle.EMPTY)
                     Toast.makeText(requireContext(), "Salary advance requested successfully", Toast.LENGTH_SHORT).show()
                     dismissAllowingStateLoss()
@@ -132,6 +108,19 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                     binding.btnSubmitAdvance.isEnabled = true
                     binding.btnSubmitAdvance.alpha = 1f
                 }
+            } catch (e: retrofit2.HttpException) {
+                val errorStr = try {
+                    e.response()?.errorBody()?.string()?.take(200) ?: e.message()
+                } catch (ex: Exception) {
+                    e.message()
+                }
+                android.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Server Error")
+                    .setMessage(errorStr)
+                    .setPositiveButton("OK", null)
+                    .show()
+                binding.btnSubmitAdvance.isEnabled = true
+                binding.btnSubmitAdvance.alpha = 1f
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
                 binding.btnSubmitAdvance.isEnabled = true
@@ -143,6 +132,32 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveDraft()
+    }
+
+    private fun saveDraft() {
+        if (_binding == null) return
+        val prefs = requireContext().getSharedPreferences("advance_draft", android.content.Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("amount", binding.etSalaryRequirement.text.toString())
+            putString("purpose", binding.etPurpose.text.toString())
+        }.apply()
+    }
+
+    private fun restoreDraft() {
+        if (_binding == null) return
+        val prefs = requireContext().getSharedPreferences("advance_draft", android.content.Context.MODE_PRIVATE)
+        binding.etSalaryRequirement.setText(prefs.getString("amount", ""))
+        binding.etPurpose.setText(prefs.getString("purpose", ""))
+    }
+
+    private fun clearDraft() {
+        requireContext().getSharedPreferences("advance_draft", android.content.Context.MODE_PRIVATE)
+            .edit().clear().apply()
     }
 
     companion object {

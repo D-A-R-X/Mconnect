@@ -122,6 +122,24 @@
         app:scv_text_size="11sp"
         app:scv_font_family="@font/inter_semibold" />
 
+    <!-- Skeleton placeholder — shown while today's trips load so the
+         screen reads as "loading" instead of looking empty. Three
+         card-shaped placeholders pulse via SkeletonUtils. -->
+    <LinearLayout
+        android:id="@+id/tripsSkeleton"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:visibility="gone">
+
+        <include layout="@layout/skeleton_trip_card" />
+
+        <include layout="@layout/skeleton_trip_card" />
+
+        <include layout="@layout/skeleton_trip_card" />
+    </LinearLayout>
+
     <!-- Empty State -->
     <com.manjugroups.m_connect.ui.common.EmptyStateView
         android:id="@+id/emptyState"

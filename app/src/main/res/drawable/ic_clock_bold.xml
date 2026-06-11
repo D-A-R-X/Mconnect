@@ -1,0 +1,15 @@
+<!-- vuesax/bold/clock — the bold, filled clock used in the attendance
+     clock-out badge (Figma 420:52704 / 420:52618). White solid face
+     with the hands carved as negative space (evenOdd) so the blue
+     badge shows through, giving the richer, heavier look the thin
+     outline ic_clock lacked. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#FEFEFE"
+        android:fillType="evenOdd"
+        android:pathData="M24,4C12.98,4 4,12.98 4,24C4,35.02 12.98,44 24,44C35.02,44 44,35.02 44,24C44,12.98 35.02,4 24,4ZM32.7,31.14C32.42,31.62 31.92,31.88 31.4,31.88C31.14,31.88 30.88,31.82 30.64,31.66L24.44,27.96C22.9,27.04 21.76,25.02 21.76,23.24V15.04C21.76,14.22 22.44,13.54 23.26,13.54C24.08,13.54 24.76,14.22 24.76,15.04V23.24C24.76,23.96 25.36,25.02 25.98,25.38L32.18,29.08C32.9,29.5 33.14,30.42 32.7,31.14Z" />
+</vector>

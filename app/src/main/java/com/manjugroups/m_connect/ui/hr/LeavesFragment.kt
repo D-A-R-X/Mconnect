@@ -25,6 +25,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
 import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -47,6 +48,10 @@ class LeavesFragment : Fragment() {
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
     private var skeletonAnimator: ObjectAnimator? = null
+    // True once leaves have rendered at least once. Gates the skeleton so
+    // a pull-to-refresh doesn't hide the list and flash placeholders over
+    // data that's already on screen.
+    private var hasRenderedLeavesOnce = false
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -83,8 +88,8 @@ class LeavesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        binding.btnBack.setOnClickListener { navigateUp() }
-        binding.btnBack.visibility = if (screenMode == MODE_APPROVAL) View.VISIBLE else View.GONE
+        binding.summaryHeader.setOnBackClickListener { navigateUp() }
+        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
@@ -101,13 +106,14 @@ class LeavesFragment : Fragment() {
 
         val canApprove = session.hasPermission("leaves.approve")
         if (screenMode == MODE_APPROVAL) {
-            binding.tvHeaderTitle.text = "Leave Approvals"
-            binding.tvHeaderSubtitle.text = "In Review"
-            binding.filterRow.visibility = View.GONE
-            binding.dropdownScopeSelector.visibility = View.GONE
+            binding.summaryHeader.setTitle("Leave Approvals")
+            binding.summaryHeader.setSubtitle("Review Requests")
+            binding.leavesRefresh.isEnabled = false
+            binding.btnApplyLeave.visibility = View.GONE
         } else {
-            binding.tvHeaderTitle.text = "Leave Summary"
-            binding.tvHeaderSubtitle.text = "Submit Leave"
+            binding.summaryHeader.setTitle("Leave Summary")
+            binding.summaryHeader.setSubtitle("Submit Leave")
+            binding.leavesRefresh.isEnabled = true
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
             if (canApprove) {
@@ -204,34 +210,26 @@ class LeavesFragment : Fragment() {
             binding.tvLeaveUsed.text = "0"
         }
 
-        configureHistoryCard(displayLeaves.isEmpty() && !isLoading)
-
-        binding.skeletonContainer.visibility = if (isLoading) View.VISIBLE else View.GONE
-        binding.leaveList.visibility = if (isLoading) View.GONE else View.VISIBLE
-        if (isLoading) {
+        // Only skeleton on the FIRST load. A refresh keeps the existing
+        // list visible while the new data arrives instead of blanking to
+        // placeholders.
+        val showSkeleton = isLoading && !hasRenderedLeavesOnce
+        binding.skeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
+        binding.leaveList.visibility = if (showSkeleton) View.GONE else View.VISIBLE
+        if (showSkeleton) {
             startSkeletonPulse()
             binding.emptyState.visibility = View.GONE
             return
         }
 
         stopSkeletonPulse()
+        if (!isLoading) hasRenderedLeavesOnce = true
         setEmptyCopy(displayLeaves.isEmpty())
         val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope == LeaveScope.TEAM)
         renderLeaves(displayLeaves, isApprovalForRender)
     }
 
-    private fun configureHistoryCard(isEmpty: Boolean) {
-        val isTeamScope = screenMode == MODE_APPROVAL
-        val showHeader = isTeamScope || historyFilter == HistoryFilter.REVIEW || isEmpty
 
-        if (showHeader) {
-            binding.historyCard.setBackgroundResource(R.drawable.bg_stat_card)
-            binding.historyCard.setPadding(dp(12), dp(12), dp(12), dp(12))
-        } else {
-            binding.historyCard.background = null
-            binding.historyCard.setPadding(0, 0, 0, 0)
-        }
-    }
 
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return
@@ -568,19 +566,14 @@ class LeavesFragment : Fragment() {
     }
 
     private fun startSkeletonPulse() {
-        if (skeletonAnimator?.isRunning == true) return
-        skeletonAnimator = ObjectAnimator.ofFloat(binding.skeletonContainer, View.ALPHA, 0.55f, 1f).apply {
-            duration = 650L
-            repeatMode = ObjectAnimator.REVERSE
-            repeatCount = ObjectAnimator.INFINITE
-            start()
-        }
+        // Delegate to the shared shimmer (breathes the placeholder blocks,
+        // keeps the container opaque) instead of fading the whole
+        // container — the old whole-container fade read as a blink.
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
     }
 
     private fun stopSkeletonPulse() {
-        skeletonAnimator?.cancel()
-        skeletonAnimator = null
-        binding.skeletonContainer.alpha = 1f
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
     }
 
     private fun showScopePopupMenu(anchor: View) {

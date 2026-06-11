@@ -1,11 +1,14 @@
 package com.manjugroups.m_connect.ui.profile
 
+import android.Manifest
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import coil.load
@@ -17,6 +20,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentProfileBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
+import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import kotlinx.coroutines.launch
 
@@ -26,6 +30,27 @@ class ProfileFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+
+    // Android 13+ runtime notification-permission request, triggered when
+    // the user flips Manage Notification ON without it. Granted → finish
+    // enabling (register the push token); denied → revert the toggle and
+    // point them at system settings.
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (_binding == null) return@registerForActivityResult
+        if (granted) {
+            enableNotifications()
+        } else {
+            session.isNotificationEnabled = false
+            setSwitchCheckedSilently(false)
+            Toast.makeText(
+                requireContext(),
+                "Allow notifications in system settings to turn them on.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -64,7 +89,16 @@ class ProfileFragment : Fragment() {
         binding.tvProfileAvatar.text = initialsFor(cachedName)
         binding.tvProfilePhone.text = session.userPhone?.trim().orEmpty().ifBlank { "—" }
         binding.tvAppVersion.text = "v.${BuildConfig.VERSION_NAME}"
-        binding.switchNotification.isChecked = session.isNotificationEnabled
+        // The toggle is ON only when the user opted in AND the OS still
+        // grants notification permission. If permission was revoked in
+        // system settings while the flag was on, reconcile the flag so the
+        // UI and reality agree.
+        val effectiveEnabled = session.isNotificationEnabled &&
+            PushTokenManager.hasNotificationPermission(requireContext())
+        if (session.isNotificationEnabled && !effectiveEnabled) {
+            session.isNotificationEnabled = false
+        }
+        setSwitchCheckedSilently(effectiveEnabled)
 
         val url = session.userPhotoUrl
         val resolved = ProfilePhotos.resolve(url)
@@ -141,19 +175,68 @@ class ProfileFragment : Fragment() {
                 .commit()
         }
 
-        binding.switchNotification.setOnCheckedChangeListener { _, isChecked ->
-            session.isNotificationEnabled = isChecked
-            Toast.makeText(
-                requireContext(),
-                if (isChecked) "Notifications Enabled" else "Notifications Disabled",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        bindNotificationToggle()
 
         binding.rowLogout.setOnClickListener {
             val logoutSheet = LogoutBottomSheet.newInstance()
             logoutSheet.show(childFragmentManager, "LogoutBottomSheet")
         }
+    }
+
+    private fun bindNotificationToggle() {
+        binding.switchNotification.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                // Android 13+ needs the runtime permission before we can
+                // actually deliver notifications — request it first; the
+                // launcher callback finishes the enable on grant.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !PushTokenManager.hasNotificationPermission(requireContext())
+                ) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    enableNotifications()
+                }
+            } else {
+                disableNotifications()
+            }
+        }
+    }
+
+    /** Sets the switch state without re-triggering the change listener. */
+    private fun setSwitchCheckedSilently(checked: Boolean) {
+        if (_binding == null) return
+        binding.switchNotification.setOnCheckedChangeListener(null)
+        binding.switchNotification.isChecked = checked
+        bindNotificationToggle()
+    }
+
+    /**
+     * Persists the opt-in AND registers this device's push token with the
+     * backend so it actually starts receiving notifications. Without the
+     * token registration the toggle was cosmetic — the server had no way
+     * to target this device.
+     */
+    private fun enableNotifications() {
+        session.isNotificationEnabled = true
+        val appContext = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { PushTokenManager.syncCurrentToken(appContext, session) }
+        }
+        Toast.makeText(requireContext(), "Notifications Enabled", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Persists the opt-out AND unregisters the push token so the backend
+     * stops sending pushes to this device. The FCM service also suppresses
+     * display while the flag is off, covering the unregister round-trip.
+     */
+    private fun disableNotifications() {
+        session.isNotificationEnabled = false
+        val appContext = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { PushTokenManager.unregisterCurrentToken(appContext, session) }
+        }
+        Toast.makeText(requireContext(), "Notifications Disabled", Toast.LENGTH_SHORT).show()
     }
 
     private fun initialsFor(name: String): String {

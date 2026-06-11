@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Muted grey "Accepted" state — shown after this inspector has accepted,
+     so the (now non-actionable) button reads as done rather than a live
+     green CTA. Same 12dp shape as the green Accept button. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#9CA3AF" />
+    <corners android:radius="12dp" />
+</shape>

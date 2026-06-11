@@ -32,6 +32,8 @@ class SiteVisitsListFragment : Fragment() {
 
     private val geoApi = GeoTrackApi.create()
     private lateinit var session: SessionManager
+    // Gates the skeleton to the first load; refresh keeps the list.
+    private var hasLoadedOnce = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -77,9 +79,11 @@ class SiteVisitsListFragment : Fragment() {
         val list = root.findViewById<LinearLayout>(R.id.siteVisitsList)
         val countText = root.findViewById<TextView>(R.id.tvSiteVisitsCount)
 
-        SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        empty.visibility = View.GONE
-        list.removeAllViews()
+        if (!hasLoadedOnce) {
+            SkeletonUtils.startSkeletonPulse(skeletonContainer)
+            empty.visibility = View.GONE
+            list.removeAllViews()
+        }
 
         // Default range: last 30 days through end of next 30 days, so the
         // staff sees recently-completed and upcoming-scheduled visits.
@@ -94,6 +98,11 @@ class SiteVisitsListFragment : Fragment() {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                hasLoadedOnce = true
+                // Rebuild from scratch every time so a refresh replaces the
+                // rows instead of appending duplicates (the top-level clear
+                // now only runs on the first load alongside the skeleton).
+                list.removeAllViews()
                 if (!resp.success) {
                     empty.text = resp.error ?: "Failed to load site visits"
                     empty.visibility = View.VISIBLE
@@ -107,6 +116,7 @@ class SiteVisitsListFragment : Fragment() {
                     empty.visibility = View.VISIBLE
                     return@launch
                 }
+                empty.visibility = View.GONE
                 visits.forEach { v ->
                     val row = createVisitItem(v, list)
                     list.addView(row)

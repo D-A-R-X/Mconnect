@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -40,17 +41,17 @@
           rows don't carry the affordance.
         -->
         <ImageView
-            android:id="@+id/btnHistoryItemDelete"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:id="@+id/btnHistoryItemEdit"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="@drawable/bg_edit_btn_outline"
             android:clickable="true"
-            android:contentDescription="Withdraw attendance"
+            android:contentDescription="Edit attendance"
             android:focusable="true"
-            android:padding="4dp"
+            android:padding="2dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_attendance_delete"
-            android:visibility="gone" />
+            android:src="@drawable/ic_edit_white"
+            app:tint="#444CE7" />
     </LinearLayout>
 
     <LinearLayout
@@ -111,6 +112,53 @@
                 android:textColor="#344054"
                 android:textSize="13sp" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- Late / Fines Banner -->
+    <LinearLayout
+        android:id="@+id/llFinesBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_fines_banner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_clock"
+            app:tint="#D92D20" />
+
+        <TextView
+            android:id="@+id/tvLateText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#D92D20"
+            android:textSize="12sp"
+            tools:text="Late by 20mins" />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_receipt_red"
+            app:tint="#D92D20" />
+
+        <TextView
+            android:id="@+id/tvFineAmount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#D92D20"
+            android:textSize="12sp"
+            tools:text="Fine : ₹700" />
     </LinearLayout>
 
     <!--

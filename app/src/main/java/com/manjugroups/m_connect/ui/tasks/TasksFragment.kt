@@ -145,9 +145,15 @@ class TasksFragment : Fragment() {
             androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         >(R.id.tasksRefresh)
         val isPullRefresh = tasksRefresh?.isRefreshing == true
-        if (!isPullRefresh) startSkeleton()
-        emptyState?.visibility = View.GONE
-        taskListContainer?.removeAllViews()
+        // Skeleton + clear only on the genuine first load. A pull-refresh
+        // or the onResume reload (coming back from a task detail) keeps the
+        // existing rows on screen — renderTasks() rebuilds them in place,
+        // so we never blank loaded content back to a skeleton.
+        if (!isPullRefresh && allTasks.isEmpty()) {
+            startSkeleton()
+            emptyState?.visibility = View.GONE
+            taskListContainer?.removeAllViews()
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val tasksResp = api.getMyTasks(session.bearerToken)
