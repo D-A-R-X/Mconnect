@@ -433,8 +433,8 @@ class PermissionsFragment : Fragment() {
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.permissionActionRow)
-            val approveButton = card.findViewById<TextView>(R.id.btnApprovePermission)
-            val rejectButton = card.findViewById<TextView>(R.id.btnRejectPermission)
+            val approveButton = card.findViewById<View>(R.id.btnApprovePermission)
+            val rejectButton = card.findViewById<View>(R.id.btnRejectPermission)
 
             val displayName = perm.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
             val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
