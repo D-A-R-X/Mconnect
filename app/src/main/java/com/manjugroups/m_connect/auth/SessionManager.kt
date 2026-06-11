@@ -270,13 +270,18 @@ class SessionManager(context: Context) {
     fun purgeIfBaseUrlChanged(): Boolean {
         val current = com.manjugroups.m_connect.BuildConfig.BASE_URL
         val bound = boundBaseUrl
-        // Wipe when (a) the bound URL no longer matches the current build, or
-        // (b) the session predates this guard (no bound URL recorded). The
-        // second case treats legacy tokens as untrusted because we can't be
-        // sure which backend they were minted against — safer to re-auth.
-        if (token != null && bound != current) {
-            clearSession()
-            return true
+        if (token != null) {
+            if (bound == null) {
+                // First time running with this guard or legacy session.
+                // Bind the current URL so we can detect future changes,
+                // but do NOT clear the session.
+                boundBaseUrl = current
+                return false
+            }
+            if (bound != current) {
+                clearSession()
+                return true
+            }
         }
         return false
     }

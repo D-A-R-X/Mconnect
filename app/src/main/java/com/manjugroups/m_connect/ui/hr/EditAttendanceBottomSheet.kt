@@ -187,7 +187,10 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
                         "Request sent for approval",
                         Toast.LENGTH_SHORT,
                     ).show()
-                    setFragmentResult(RESULT_KEY, Bundle().apply { putBoolean(KEY_SUBMITTED, true) })
+                    setFragmentResult(RESULT_KEY, Bundle().apply {
+                        putBoolean(KEY_SUBMITTED, true)
+                        putString("date", date)
+                    })
                     dismiss()
                 } else {
                     Toast.makeText(
