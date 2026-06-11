@@ -78,6 +78,13 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         fieldPermissionDuration.setOnClickListener { showDurationPicker() }
         btnSubmit.setOnClickListener { submitPermission() }
 
+        setFragmentResultListener(PermDurationPickerBottomSheet.RESULT_KEY_DURATION) { _, bundle ->
+            selectedFromTime = bundle.getString(PermDurationPickerBottomSheet.KEY_FROM_TIME)
+            selectedToTime = bundle.getString(PermDurationPickerBottomSheet.KEY_TO_TIME)
+            updateDurationLabel()
+            updateSubmitButtonState()
+        }
+
         updateDateLabel()
         updateDurationLabel()
         updateSubmitButtonState()
@@ -88,10 +95,10 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
         val isEnabled = selectedDate != null && selectedFromTime != null && selectedToTime != null
         if (isEnabled) {
-            btnSubmit.setBackgroundResource(R.drawable.bg_btn_submit_perm_active)
+            btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
             btnSubmit.isEnabled = true
         } else {
-            btnSubmit.setBackgroundResource(R.drawable.bg_btn_disabled_grey)
+            btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_disabled)
             btnSubmit.isEnabled = false
         }
     }
@@ -114,24 +121,9 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showDurationPicker() {
-        val cal = Calendar.getInstance()
-        TimePickerDialog(requireContext(), { _, fromHour, fromMinute ->
-            val fromStr = String.format(Locale.US, "%02d:%02d", fromHour, fromMinute)
-            
-            TimePickerDialog(requireContext(), { _, toHour, toMinute ->
-                val toStr = String.format(Locale.US, "%02d:%02d", toHour, toMinute)
-                
-                if (isValidTimeRange(fromStr, toStr)) {
-                    selectedFromTime = fromStr
-                    selectedToTime = toStr
-                    updateDurationLabel()
-                    updateSubmitButtonState()
-                } else {
-                    Toast.makeText(requireContext(), "To time must be after from time", Toast.LENGTH_SHORT).show()
-                }
-            }, fromHour + 1, fromMinute, true).show()
-            
-        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+        PermDurationPickerBottomSheet
+            .newInstance(selectedFromTime, selectedToTime)
+            .show(parentFragmentManager, "perm_duration_picker")
     }
 
     private fun updateDateLabel() {
