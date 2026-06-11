@@ -79,6 +79,14 @@ class AttendanceHistoryFragment : Fragment() {
             loadData()
         }
 
+        // A submitted correction/remark request reloads the list so any
+        // pending-request state the backend surfaces is reflected.
+        setFragmentResultListener(EditAttendanceBottomSheet.RESULT_KEY) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                loadData()
+            }
+        }
+
         loadData()
     }
 
@@ -224,18 +232,17 @@ class AttendanceHistoryFragment : Fragment() {
             val tvLateText = card.findViewById<TextView>(R.id.tvLateText)
             val tvFineAmount = card.findViewById<TextView>(R.id.tvFineAmount)
 
-            val lateMins = record.lateMinutes
-            val fine = record.fineAmount ?: if (lateMins != null && lateMins > 0) 50.0 else null
-
-            if (lateMins != null && lateMins > 0 && fine != null) {
+            // Fines banner is driven ENTIRELY by real backend data — the
+            // server-computed lateFineDeduction (preferred) or a seeded
+            // fineAmount, paired with lateMinutes. No mock dates, no
+            // fabricated default amount: if the backend levied no fine the
+            // banner stays hidden.
+            val lateMins = record.lateMinutes ?: 0
+            val fine = record.lateFineDeduction ?: record.fineAmount
+            if (lateMins > 0 && fine != null && fine > 0) {
                 llFinesBanner.visibility = View.VISIBLE
                 tvLateText.text = "Late by ${lateMins}mins"
                 tvFineAmount.text = "Fine : ₹${fine.toInt()}"
-            } else if (record.date?.contains("27") == true || record.date?.contains("24") == true) {
-                // Mock for visual demonstration
-                llFinesBanner.visibility = View.VISIBLE
-                tvLateText.text = "Late by 20mins"
-                tvFineAmount.text = "Fine : ₹700"
             } else {
                 llFinesBanner.visibility = View.GONE
             }

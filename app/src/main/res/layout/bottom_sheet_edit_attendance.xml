@@ -35,10 +35,59 @@
         android:textSize="12sp"
         android:layout_marginBottom="12dp" />
 
+    <!-- Request Type -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:text="Request Type"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        app:boxCornerRadiusBottomEnd="10dp"
+        app:boxCornerRadiusBottomStart="10dp"
+        app:boxCornerRadiusTopEnd="10dp"
+        app:boxCornerRadiusTopStart="10dp"
+        app:boxStrokeColor="#D0D5DD"
+        app:boxStrokeWidth="1dp"
+        app:boxStrokeWidthFocused="1.5dp"
+        app:hintEnabled="false"
+        app:endIconMode="custom"
+        app:endIconDrawable="@drawable/ic_chevron_down_outline"
+        app:endIconTint="@null">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etRequestType"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:clickable="true"
+            android:focusable="false"
+            android:fontFamily="@font/inter_semibold"
+            android:inputType="none"
+            android:text="Remark"
+            android:textColor="#101828"
+            android:textColorHint="#98A2B3"
+            android:textSize="15sp" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Time-correction fields — shown only when "Time Correction" is picked. -->
+    <LinearLayout
+        android:id="@+id/timeCorrectionFields"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
     <!-- In Time -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
         android:fontFamily="@font/inter_medium"
         android:text="In Time"
         android:textColor="#475467"
@@ -119,6 +168,7 @@
             android:textColorHint="#98A2B3"
             android:textSize="15sp" />
     </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
 
     <!-- Remarks (Optional) -->
     <TextView

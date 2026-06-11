@@ -87,6 +87,18 @@ interface ApiService {
      * Mirrors /api/hr/leaves/cancel — same delete affordance on the
      * mobile attendance history page. Server rejects non-pending dates.
      */
+    /**
+     * Raise an attendance correction / remark request for HR approval.
+     * Mirrors the web attendance "Request Time Correction / Remark" dialog
+     * (attendanceRequests.submit). Used by the mobile Edit Attendance
+     * sheet to request a punch-timing update on a past day.
+     */
+    @POST("api/hr/attendance/request")
+    suspend fun submitAttendanceRequest(
+        @Header("Authorization") token: String,
+        @Body body: AttendanceRequestBody
+    ): AttendanceRequestResponse
+
     @POST("api/hr/attendance/cancel")
     suspend fun cancelMyAttendance(
         @Header("Authorization") token: String,
@@ -1042,7 +1054,31 @@ data class MyAttendanceResponse(val success: Boolean, val total: Int?, val recor
 
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
+
+/**
+ * Body for /api/hr/attendance/request. type is "remark" (just remark) or
+ * "correction" (corrected punch in/out times + reason). The server derives
+ * staffId/staffName from the bearer token, so they're not sent here.
+ */
+data class AttendanceRequestBody(
+    val attendanceId: String,
+    val date: String,
+    val type: String,
+    val remark: String? = null,
+    val correctedPunchIn: String? = null,
+    val correctedPunchOut: String? = null,
+    val correctionReason: String? = null,
+)
+
+data class AttendanceRequestResponse(
+    val success: Boolean = false,
+    val requestId: String? = null,
+    val error: String? = null,
+)
 data class AttendanceRecord(
+    // Convex document id of the staffAttendance row — required to raise a
+    // correction/remark request against it (/api/hr/attendance/request).
+    @SerializedName("_id") val id: String? = null,
     val date: String?,
     val status: String?,
     val totalMinutes: Int?,
@@ -1058,9 +1094,13 @@ data class AttendanceRecord(
     val approverPhotoUrl: String? = null,
     /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
     val decidedAt: String? = null,
-    // Fines / Late info
+    // Fines / Late info.
+    // lateFineDeduction is the server-computed fine (₹) returned by
+    // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
+    // is only present on some seeded rows; prefer lateFineDeduction.
     val lateMinutes: Int? = null,
     val fineAmount: Double? = null,
+    val lateFineDeduction: Double? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
