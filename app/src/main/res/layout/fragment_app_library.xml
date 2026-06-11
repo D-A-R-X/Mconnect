@@ -26,11 +26,12 @@
 
                 <LinearLayout
                     android:id="@+id/libraryHeaderContent"
-                    android:layout_width="234dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|start"
                     android:layout_marginStart="20dp"
                     android:layout_marginTop="60dp"
+                    android:layout_marginEnd="120dp"
                     android:orientation="vertical">
 
                     <TextView
@@ -51,7 +52,9 @@
                         android:includeFontPadding="false"
                         android:text="Everything grouped for quick access"
                         android:textColor="#D9D6FE"
-                        android:textSize="14sp" />
+                        android:textSize="12sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
                 </LinearLayout>
 
                 <ImageView
