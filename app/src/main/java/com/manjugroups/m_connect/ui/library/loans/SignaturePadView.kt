@@ -42,6 +42,7 @@ class SignaturePadView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
                 currentPath = Path()
                 currentPath.moveTo(event.x, event.y)
                 invalidate()
