@@ -51,6 +51,7 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-video = { group = "io.coil-kt", name = "coil-video", version.ref = "coil" }
+coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 emoji2-emojipicker = { group = "androidx.emoji2", name = "emoji2-emojipicker", version.ref = "emoji2" }
 
 [plugins]

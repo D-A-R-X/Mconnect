@@ -123,6 +123,7 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.coil)
     implementation(libs.coil.video)
+    implementation(libs.coil.gif)
     implementation(libs.emoji2.emojipicker)
     implementation("androidx.media3:media3-exoplayer:1.6.0")
     implementation("androidx.media3:media3-ui:1.6.0")
