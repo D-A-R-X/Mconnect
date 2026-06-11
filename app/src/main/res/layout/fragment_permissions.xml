@@ -317,7 +317,7 @@
                         android:paddingTop="16dp"
                         android:paddingBottom="12dp"
                         android:visibility="gone"
-                        app:es_image="@drawable/ic_leave_empty_js1pm"
+                        app:es_image="@drawable/ic_permission_empty"
                         app:es_title="No Permissions Yet!"
                         app:es_description="Need a short break? Tap 'Apply Permission' and we'll handle the rest!" />
                 </LinearLayout>
