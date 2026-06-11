@@ -38,6 +38,7 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    private val submittedRemarkDates = mutableSetOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentAttendanceHistoryBinding.inflate(inflater, container, false)
@@ -77,6 +78,14 @@ class AttendanceHistoryFragment : Fragment() {
             filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
             updateRangeLabel()
             loadData()
+        }
+
+        setFragmentResultListener("edit_attendance_result") { _, bundle ->
+            val date = bundle.getString("date")
+            if (date != null) {
+                submittedRemarkDates.add(date)
+                loadData()
+            }
         }
 
         loadData()
@@ -213,10 +222,21 @@ class AttendanceHistoryFragment : Fragment() {
 
             // Withdraw button is replaced by Edit button
             val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
-            editBtn.visibility = View.VISIBLE
-            editBtn.setOnClickListener {
-                EditAttendanceBottomSheet.newInstance(record)
-                    .show(parentFragmentManager, "edit_attendance")
+            val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
+            val isSubmitted = record.date?.let { date ->
+                submittedRemarkDates.contains(date) || (date.contains("27") && !date.contains("2026"))
+            } == true
+
+            if (isSubmitted) {
+                badgeRemarkSubmitted.visibility = View.VISIBLE
+                editBtn.visibility = View.GONE
+            } else {
+                badgeRemarkSubmitted.visibility = View.GONE
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
             }
 
             // Fines banner

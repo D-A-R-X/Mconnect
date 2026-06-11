@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.fragment.app.setFragmentResult
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.databinding.BottomSheetEditAttendanceBinding
@@ -66,6 +67,12 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
             val inTime = binding.etInTime.text.toString().trim()
             val outTime = binding.etOutTime.text.toString().trim()
             val remarks = binding.etRemarks.text.toString().trim()
+
+            record?.date?.let { date ->
+                setFragmentResult("edit_attendance_result", Bundle().apply {
+                    putString("date", date)
+                })
+            }
 
             Toast.makeText(context, "Edit submitted", Toast.LENGTH_SHORT).show()
             dismiss()
