@@ -33,4 +33,24 @@
     <attr name="colorWarningLight" format="color" />
     <attr name="colorErrorLight" format="color" />
     <attr name="colorInfoLight" format="color" />
+
+    <declare-styleable name="SegmentedControlView">
+        <attr name="scv_active_background" format="reference" />
+        <attr name="scv_text_color_selected" format="color" />
+        <attr name="scv_text_color_unselected" format="color" />
+        <attr name="scv_text_size" format="dimension" />
+        <attr name="scv_font_family" format="reference" />
+    </declare-styleable>
+
+    <declare-styleable name="EmptyStateView">
+        <attr name="es_image" format="reference" />
+        <attr name="es_title" format="string" />
+        <attr name="es_description" format="string" />
+    </declare-styleable>
+
+    <declare-styleable name="SummaryHeaderView">
+        <attr name="sh_title" format="string" />
+        <attr name="sh_subtitle" format="string" />
+        <attr name="sh_banner_image" format="reference" />
+    </declare-styleable>
 </resources>

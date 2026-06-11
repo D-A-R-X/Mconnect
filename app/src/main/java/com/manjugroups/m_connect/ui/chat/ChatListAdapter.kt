@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.databinding.ItemChatBinding
+import com.manjugroups.m_connect.R
 
 data class ChatListItem(
     val id: String,
@@ -20,7 +21,8 @@ data class ChatListItem(
     val avatarSeed: Int,
     val isMuted: Boolean,
     val isOnline: Boolean = false,
-    val isFavourite: Boolean = false
+    val isFavourite: Boolean = false,
+    val previewIconRes: Int? = null
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }
@@ -46,6 +48,16 @@ class ChatListAdapter(
         fun bind(item: ChatListItem) {
             binding.tvChatName.text = item.title
             binding.tvChatLastMsg.text = item.subtitle
+            
+            if (item.previewIconRes != null) {
+                binding.ivPreviewIcon.visibility = View.VISIBLE
+                binding.ivPreviewIcon.setImageResource(item.previewIconRes)
+                binding.ivPreviewIcon.setColorFilter(
+                    androidx.core.content.ContextCompat.getColor(binding.root.context, R.color.chat_text_secondary)
+                )
+            } else {
+                binding.ivPreviewIcon.visibility = View.GONE
+            }
 
             // Find the inner FrameLayout that has the background in item_chat.xml
             val avatarContainer = binding.avatarContainer as ViewGroup

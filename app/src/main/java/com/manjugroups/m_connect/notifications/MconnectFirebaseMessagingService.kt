@@ -122,6 +122,14 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
     @SuppressLint("MissingPermission")
     private fun showNotification(id: Int, notification: android.app.Notification) {
+        // Respect the in-app "Manage Notification" toggle. The backend
+        // also stops targeting this device once it unregisters the push
+        // token, but a push can still arrive in the gap between the user
+        // toggling off and the unregister landing — suppress it here so
+        // the toggle is honoured immediately.
+        if (!com.manjugroups.m_connect.auth.SessionManager(this).isNotificationEnabled) {
+            return
+        }
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=

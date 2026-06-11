@@ -60,6 +60,9 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                it.setBackgroundColor(Color.TRANSPARENT)
+                it.elevation = 0f
+                it.outlineProvider = null
             }
         }
         return dialog

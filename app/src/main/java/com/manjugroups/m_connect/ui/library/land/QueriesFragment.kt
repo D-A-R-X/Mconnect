@@ -90,9 +90,16 @@ class QueriesFragment : Fragment() {
         binding.btnQueriesBack.setOnClickListener { navigateUp() }
         applyStatusBarInset()
 
-        binding.chipQueriesAll.setOnClickListener { setFilter(Filter.ALL) }
-        binding.chipQueriesPending.setOnClickListener { setFilter(Filter.PENDING) }
-        binding.chipQueriesCompleted.setOnClickListener { setFilter(Filter.COMPLETED) }
+        binding.segmentedTabs.setTabs(
+            listOf("All", "Pending", "Completed"),
+            activeFilter.ordinal
+        ) { position ->
+            val filter = Filter.values()[position]
+            if (activeFilter != filter) {
+                activeFilter = filter
+                renderList()
+            }
+        }
 
         binding.etQueriesSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -274,32 +281,6 @@ class QueriesFragment : Fragment() {
         }.getOrDefault(raw)
     }
 
-    private fun setFilter(filter: Filter) {
-        activeFilter = filter
-        styleChip(binding.chipQueriesAll, filter == Filter.ALL)
-        styleChip(binding.chipQueriesPending, filter == Filter.PENDING)
-        styleChip(binding.chipQueriesCompleted, filter == Filter.COMPLETED)
-        renderList()
-    }
-
-    private fun styleChip(chip: TextView, active: Boolean) {
-        val ctx = context ?: return
-        // Segmented control inside the outer white pill track. Active
-        // segment paints the solid blue pill; inactive segments stay
-        // transparent so the track's white background shows through.
-        val padH = chip.paddingLeft
-        val padV = chip.paddingTop
-        if (active) {
-            chip.setBackgroundResource(R.drawable.bg_inspection_chip_active)
-            chip.setTextColor(ContextCompat.getColor(ctx, android.R.color.white))
-            chip.typeface = androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.inter_semibold)
-        } else {
-            chip.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            chip.setTextColor(android.graphics.Color.parseColor("#101828"))
-            chip.typeface = androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.inter_medium)
-        }
-        chip.setPadding(padH, padV, padH, padV)
-    }
 
     private fun renderList() {
         val list = binding.queriesLogList

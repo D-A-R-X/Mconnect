@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_scope_popup"
+    android:minWidth="140dp"
+    android:orientation="vertical"
+    android:paddingVertical="6dp">
+
+    <TextView
+        android:id="@+id/menuMyPerm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
+        android:text="My Permission"
+        android:textColor="#061D3D"
+        android:textSize="14sp"
+        android:letterSpacing="-0.02" />
+
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
+
+    <FrameLayout
+        android:id="@+id/menuTeamPerm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/tvMenuTeamPerm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="Team Permission"
+                android:textColor="#061D3D"
+                android:textSize="14sp"
+                android:letterSpacing="-0.02" />
+
+            <TextView
+                android:id="@+id/dotTeamBadge"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="5dp"
+                android:background="@drawable/bg_red_dot"
+                android:gravity="center"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:includeFontPadding="false"
+                android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
+
+    <TextView
+        android:id="@+id/menuAllPerm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
+        android:text="All Permission"
+        android:textColor="#061D3D"
+        android:textSize="14sp"
+        android:letterSpacing="-0.02" />
+</LinearLayout>

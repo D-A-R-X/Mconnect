@@ -298,11 +298,9 @@
             android:paddingTop="16dp"
             android:visibility="gone">
 
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_trip_card" />
+            <include layout="@layout/skeleton_trip_card" />
+            <include layout="@layout/skeleton_trip_card" />
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

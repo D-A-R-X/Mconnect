@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inner white pill for the scope dropdown chip.
+  Figma: white fill, 8dp corner radius, sits inside the
+  gray outer container, giving the "card inside track" look.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/white" />
+    <corners android:radius="8dp" />
+</shape>

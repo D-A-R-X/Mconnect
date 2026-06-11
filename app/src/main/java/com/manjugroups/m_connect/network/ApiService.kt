@@ -87,6 +87,18 @@ interface ApiService {
      * Mirrors /api/hr/leaves/cancel — same delete affordance on the
      * mobile attendance history page. Server rejects non-pending dates.
      */
+    /**
+     * Raise an attendance correction / remark request for HR approval.
+     * Mirrors the web attendance "Request Time Correction / Remark" dialog
+     * (attendanceRequests.submit). Used by the mobile Edit Attendance
+     * sheet to request a punch-timing update on a past day.
+     */
+    @POST("api/hr/attendance/request")
+    suspend fun submitAttendanceRequest(
+        @Header("Authorization") token: String,
+        @Body body: AttendanceRequestBody
+    ): AttendanceRequestResponse
+
     @POST("api/hr/attendance/cancel")
     suspend fun cancelMyAttendance(
         @Header("Authorization") token: String,
@@ -134,6 +146,18 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: RequestBody
     ): StorageUploadResponse
+
+    // ── Staff digital signature (reused for loan e-sign) ──
+    @GET("api/hr/staff/digital-sign")
+    suspend fun getDigitalSign(
+        @Header("Authorization") token: String
+    ): DigitalSignResponse
+
+    @POST("api/hr/staff/digital-sign")
+    suspend fun saveDigitalSign(
+        @Header("Authorization") token: String,
+        @Body body: DigitalSignRequest
+    ): DigitalSignResponse
 
     // Leaves
     @GET("api/hr/leaves/balance")
@@ -195,6 +219,27 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: ApplyLoanRequest
     ): ApplyLoanResponse
+
+    @POST("api/hr/loans/cancel")
+    suspend fun cancelLoan(
+        @Header("Authorization") token: String,
+        @Body body: IdRequest
+    ): SimpleResponse
+
+    @GET("api/hr/loans/pending-approvals")
+    suspend fun getPendingLoanApprovals(@Header("Authorization") token: String): MyLoansResponse
+
+    @POST("api/hr/loans/approve")
+    suspend fun approveLoan(
+        @Header("Authorization") token: String,
+        @Body body: ApproveLoanRequest
+    ): SimpleResponse
+
+    @POST("api/hr/loans/reject")
+    suspend fun rejectLoan(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest
+    ): SimpleResponse
 
     @POST("api/hr/leaves/reject")
     suspend fun rejectLeave(
@@ -1021,7 +1066,31 @@ data class MyAttendanceResponse(val success: Boolean, val total: Int?, val recor
 
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
+
+/**
+ * Body for /api/hr/attendance/request. type is "remark" (just remark) or
+ * "correction" (corrected punch in/out times + reason). The server derives
+ * staffId/staffName from the bearer token, so they're not sent here.
+ */
+data class AttendanceRequestBody(
+    val attendanceId: String,
+    val date: String,
+    val type: String,
+    val remark: String? = null,
+    val correctedPunchIn: String? = null,
+    val correctedPunchOut: String? = null,
+    val correctionReason: String? = null,
+)
+
+data class AttendanceRequestResponse(
+    val success: Boolean = false,
+    val requestId: String? = null,
+    val error: String? = null,
+)
 data class AttendanceRecord(
+    // Convex document id of the staffAttendance row — required to raise a
+    // correction/remark request against it (/api/hr/attendance/request).
+    @SerializedName("_id") val id: String? = null,
     val date: String?,
     val status: String?,
     val totalMinutes: Int?,
@@ -1037,6 +1106,13 @@ data class AttendanceRecord(
     val approverPhotoUrl: String? = null,
     /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
     val decidedAt: String? = null,
+    // Fines / Late info.
+    // lateFineDeduction is the server-computed fine (₹) returned by
+    // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
+    // is only present on some seeded rows; prefer lateFineDeduction.
+    val lateMinutes: Int? = null,
+    val fineAmount: Double? = null,
+    val lateFineDeduction: Double? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -1148,6 +1224,19 @@ data class PunchResponse(
 // Storage models
 data class UploadUrlResponse(val success: Boolean, val uploadUrl: String?)
 data class StorageUrlResponse(val success: Boolean, val url: String?)
+
+/** GET /api/hr/staff/digital-sign — the caller's saved signature, if any. */
+data class DigitalSignResponse(
+    val success: Boolean = false,
+    val hasSignature: Boolean = false,
+    val storageId: String? = null,
+    val url: String? = null,
+    val fileName: String? = null,
+    val error: String? = null,
+)
+
+/** POST /api/hr/staff/digital-sign — persist a freshly-drawn signature. */
+data class DigitalSignRequest(val storageId: String, val fileName: String? = null)
 data class StorageUploadResponse(
     val success: Boolean,
     val storageId: String? = null,
@@ -1282,7 +1371,20 @@ data class LoanData(
     val purpose: String? = null,
     val notes: String? = null,
     val approvalStatus: String? = null,
-    val repayments: List<LoanRepaymentData>? = null
+    // "loan" | "salary_advance" — the authoritative type flag from the
+    // backend (drives the Loans vs Advance split, not interestType/purpose).
+    val requestType: String? = null,
+    val currentStage: String? = null,
+    val nominee1Status: String? = null,
+    val nominee2Status: String? = null,
+    val repayments: List<LoanRepaymentData>? = null,
+    // Nominee fields for approval chain
+    val nominee1Id: String? = null,
+    val nominee1Name: String? = null,
+    val nominee1ESignature: String? = null,
+    val nominee2Id: String? = null,
+    val nominee2Name: String? = null,
+    val nominee2ESignature: String? = null
 )
 
 data class LoanRepaymentData(
@@ -1337,7 +1439,7 @@ data class ApplyLoanRequest(
     val interestType: String? = null,
     val disbursedDate: String? = null,
     val repaymentStartMonth: String? = null,
-    val tenureMonths: Double? = null,
+    val tenureMonths: Int? = null,
     val originalDocument: String? = null,
     val purpose: String? = null,
     val notes: String? = null
@@ -1347,6 +1449,11 @@ data class ApplyLoanResponse(
     val success: Boolean = false,
     val loanId: String? = null,
     val error: String? = null
+)
+
+data class ApproveLoanRequest(
+    val id: String,
+    val eSignatureId: String? = null
 )
 
 data class IdRequest(val id: String)

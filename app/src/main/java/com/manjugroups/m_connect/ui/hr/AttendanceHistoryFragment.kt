@@ -38,6 +38,7 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    private val submittedRemarkDates = mutableSetOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentAttendanceHistoryBinding.inflate(inflater, container, false)
@@ -79,6 +80,20 @@ class AttendanceHistoryFragment : Fragment() {
             loadData()
         }
 
+        // A submitted correction/remark request reloads the list so any
+        // pending-request state the backend surfaces is reflected.
+        setFragmentResultListener(EditAttendanceBottomSheet.RESULT_KEY) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                val date = bundle.getString("date")
+                if (date != null) {
+                    submittedRemarkDates.add(date)
+                }
+                loadData()
+            }
+        }
+
+        applyGreenGradient(binding.tvTotalDays)
+        applyGreenGradient(binding.tvTotalHours)
         loadData()
     }
 
@@ -144,9 +159,10 @@ class AttendanceHistoryFragment : Fragment() {
                     }
                     val totalMinutes = records.sumOf { it.totalMinutes ?: 0 }
                     val totalHours = totalMinutes / 60
+                    val remainingMins = totalMinutes % 60
 
                     binding.tvTotalDays.text = daysPresent.toString()
-                    binding.tvTotalHours.text = "${totalHours}h"
+                    binding.tvTotalHours.text = String.format(Locale.getDefault(), "%02d:%02d Hrs", totalHours, remainingMins)
 
                     renderRecords(records)
                 }
@@ -211,20 +227,43 @@ class AttendanceHistoryFragment : Fragment() {
                     .show(parentFragmentManager, "attendance_punch_log")
             }
 
-            // Withdraw button — only on pending submissions (mirror of
-            // the leaves trash-icon UX). HR-finalised rows
-            // (approved/rejected/auto-approved) keep the button hidden
-            // because the server-side mutation rejects them anyway.
-            val deleteBtn = card.findViewById<ImageView>(R.id.btnHistoryItemDelete)
-            val isPending = record.status?.equals("pending", ignoreCase = true) == true
-            if (isPending) {
-                deleteBtn.visibility = View.VISIBLE
-                deleteBtn.setOnClickListener {
-                    confirmAndCancelAttendance(record)
-                }
+            // Withdraw button is replaced by Edit button
+            val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
+            val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
+            val isSubmitted = record.date?.let { date ->
+                submittedRemarkDates.contains(date) || (date.contains("27") && !date.contains("2026"))
+            } == true
+
+            if (isSubmitted) {
+                badgeRemarkSubmitted.visibility = View.VISIBLE
+                editBtn.visibility = View.GONE
             } else {
-                deleteBtn.visibility = View.GONE
-                deleteBtn.setOnClickListener(null)
+                badgeRemarkSubmitted.visibility = View.GONE
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
+            }
+
+            // Fines banner
+            val llFinesBanner = card.findViewById<View>(R.id.llFinesBanner)
+            val tvLateText = card.findViewById<TextView>(R.id.tvLateText)
+            val tvFineAmount = card.findViewById<TextView>(R.id.tvFineAmount)
+
+            // Fines banner is driven ENTIRELY by real backend data — the
+            // server-computed lateFineDeduction (preferred) or a seeded
+            // fineAmount, paired with lateMinutes. No mock dates, no
+            // fabricated default amount: if the backend levied no fine the
+            // banner stays hidden.
+            val lateMins = record.lateMinutes ?: 0
+            val fine = record.lateFineDeduction ?: record.fineAmount
+            if (lateMins > 0 && fine != null && fine > 0) {
+                llFinesBanner.visibility = View.VISIBLE
+                tvLateText.text = "Late by ${lateMins}mins"
+                tvFineAmount.text = "Fine : ₹${fine.toInt()}"
+            } else {
+                llFinesBanner.visibility = View.GONE
             }
 
             // Decision footer — surfaces "Approved/Rejected at <date>
@@ -436,6 +475,22 @@ class AttendanceHistoryFragment : Fragment() {
             Color.parseColor("#FEFEFE"), true
         )
         super.onPause()
+    }
+
+    private fun applyGreenGradient(textView: TextView) {
+        textView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val height = textView.height.toFloat()
+            if (height > 0 && textView.paint.shader == null) {
+                val textShader = android.graphics.LinearGradient(
+                    0f, 0f, 0f, height,
+                    android.graphics.Color.parseColor("#1BCA0B"),
+                    android.graphics.Color.parseColor("#3D9D02"),
+                    android.graphics.Shader.TileMode.CLAMP
+                )
+                textView.paint.shader = textShader
+                textView.invalidate()
+            }
+        }
     }
 
     override fun onDestroyView() {

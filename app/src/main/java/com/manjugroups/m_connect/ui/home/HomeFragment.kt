@@ -47,6 +47,20 @@ class HomeFragment : Fragment() {
 
     private var pendingEntryAnimation = true
     private val bannerFloatAnimators = mutableListOf<android.animation.ObjectAnimator>()
+    // True once today's visits have resolved at least once. Gates the
+    // visit skeleton so a refresh / attendance update never blanks the
+    // trip card back to a skeleton or the empty state.
+    private var homeVisitsResolved = false
+    // True once a real visits load cycle has begun (isVisitsLoading flipped
+    // true). The flow starts at `false`, so without this guard the
+    // collector's "load finished" branch fires on that initial replayed
+    // false and renders the empty card before any load even starts — the
+    // empty-flash-before-data the user kept seeing.
+    private var homeLoadStarted = false
+    // Deferred visit skeleton — only paints if the load is still running
+    // after the grace period, so fast/cached loads never flash it.
+    private var pendingVisitSkeleton: Runnable? = null
+    private val visitSkeletonDelayMs = 200L
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -88,6 +102,13 @@ class HomeFragment : Fragment() {
                     }
                 }
             }
+        }
+
+        // When the CP/SV outcome sheet (opened straight from the home
+        // card) saves an outcome, refresh today's trips so the card flips
+        // to its Completed state without the user re-entering the screen.
+        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
+            viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         }
     }
 
@@ -450,7 +471,16 @@ class HomeFragment : Fragment() {
                             binding.homeRefresh.dismissRefresh()
                             binding.homeStickyColumn.visibility = View.VISIBLE
                             renderSummary()
-                            if (!viewModel.isVisitsLoading.value) {
+                            // Paint the trip card only once visits have
+                            // resolved (or we already have some to show) AND
+                            // we're not mid visits-fetch. Otherwise a
+                            // Loaded-with-empty-trips state during the
+                            // initial load would flash the empty view before
+                            // the visit skeleton appears.
+                            val hasVisits = state.todayVisits.any { it.status != "cancelled" }
+                            if ((homeVisitsResolved || hasVisits) &&
+                                !viewModel.isVisitsLoading.value
+                            ) {
                                 renderVisitCard(state)
                             }
                             if (pendingEntryAnimation) {
@@ -478,9 +508,28 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.isVisitsLoading.collect { loading ->
-                    setVisitSkeletonVisible(loading)
-                    if (!loading) {
-                        // Re-render once loading finishes so the real cards appear.
+                    val hasVisits = (viewModel.uiState.value as? HomeUiState.Loaded)
+                        ?.todayVisits?.any { it.status != "cancelled" } == true
+                    if (loading) {
+                        homeLoadStarted = true
+                        // Arm the deferred skeleton — first load, nothing
+                        // to show yet. If the load resolves within the
+                        // grace period the timer is cancelled and no
+                        // skeleton flashes.
+                        if (!homeVisitsResolved && !hasVisits) {
+                            scheduleVisitSkeleton()
+                        }
+                    } else if (homeLoadStarted) {
+                        // A REAL load cycle finished — now it's safe to
+                        // resolve to the real cards (or the empty state).
+                        homeVisitsResolved = true
+                        (viewModel.uiState.value as? HomeUiState.Loaded)?.let(::renderVisitCard)
+                    } else if (hasVisits) {
+                        // Initial replayed `false` but we already have
+                        // cached trips — show them now. Don't mark resolved
+                        // or render the empty state: a real load is still
+                        // coming, and an empty cache here must wait for it
+                        // rather than flashing "No Trips".
                         (viewModel.uiState.value as? HomeUiState.Loaded)?.let(::renderVisitCard)
                     }
                 }
@@ -489,6 +538,35 @@ class HomeFragment : Fragment() {
     }
 
     private var visitSkeletonAnimating = false
+
+    /**
+     * Arms the deferred visit skeleton. No-op if already showing/armed or
+     * already resolved. It only paints if [visitSkeletonDelayMs] elapses
+     * with the load still running and nothing to show — so quick loads
+     * never flash it.
+     */
+    private fun scheduleVisitSkeleton() {
+        if (_binding == null || homeVisitsResolved) return
+        if (binding.visitSkeletonContainer.visibility == View.VISIBLE) return
+        if (pendingVisitSkeleton != null) return
+        val r = Runnable {
+            pendingVisitSkeleton = null
+            val hasVisits = (viewModel.uiState.value as? HomeUiState.Loaded)
+                ?.todayVisits?.any { it.status != "cancelled" } == true
+            if (_binding != null && !homeVisitsResolved && !hasVisits &&
+                viewModel.isVisitsLoading.value
+            ) {
+                setVisitSkeletonVisible(true)
+            }
+        }
+        pendingVisitSkeleton = r
+        binding.root.postDelayed(r, visitSkeletonDelayMs)
+    }
+
+    private fun cancelPendingVisitSkeleton() {
+        pendingVisitSkeleton?.let { _binding?.root?.removeCallbacks(it) }
+        pendingVisitSkeleton = null
+    }
 
     private fun setVisitSkeletonVisible(visible: Boolean) {
         val skeleton = binding.visitSkeletonContainer
@@ -541,6 +619,9 @@ class HomeFragment : Fragment() {
     }
 
     private fun renderVisitCard(state: HomeUiState.Loaded) {
+        // We have a definitive answer — drop any armed/showing skeleton.
+        cancelPendingVisitSkeleton()
+        setVisitSkeletonVisible(false)
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
@@ -643,7 +724,18 @@ class HomeFragment : Fragment() {
                 statusText.text = "Reaching"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
                 statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
-                action.text = "Complete Trip"
+                // The trip has reached the client (status == arrived); the
+                // only thing left is to capture the visit outcome. Mirror
+                // the label the trip-detail screen shows for that same
+                // step ("Complete SV details" for SV-cum-CP, "Complete CP
+                // details" otherwise) so the card and the detail screen
+                // agree — and so tapping it opens the outcome form right
+                // here instead of forcing a hop into the detail screen.
+                action.text = if (visit.visitCategory == "sv_cum_cp") {
+                    "Complete SV details"
+                } else {
+                    "Complete CP details"
+                }
                 actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
                 action.setTextColor(android.graphics.Color.WHITE)
                 actionIcon.visibility = View.VISIBLE
@@ -716,7 +808,7 @@ class HomeFragment : Fragment() {
                 actionBtn.setOnClickListener(openDetail)
             } else if (!isInProgress && canStartTrip) {
                 val startTrip: (View) -> Unit = {
-                    DriverStartTripBottomSheet.newInstance(visit.id)
+                    DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
                         .show(parentFragmentManager, "driver_start_trip")
                 }
                 itemView.isClickable = true
@@ -741,6 +833,18 @@ class HomeFragment : Fragment() {
                 itemView.setOnClickListener(openDetail)
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openDetail)
+            } else if (needsCpDetails) {
+                // Arrival is already verified (status == arrived) — the
+                // outcome form is the only remaining step. Open it right
+                // from the home card so the user doesn't have to open the
+                // trip detail and tap "Complete CP details" there. The
+                // whole card and the button both trigger it.
+                val openOutcome: (View) -> Unit = { openCpOutcomeSheetForVisit(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openOutcome)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openOutcome)
             } else {
                 val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
                 itemView.isClickable = true
@@ -841,6 +945,32 @@ class HomeFragment : Fragment() {
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
+    }
+
+    /**
+     * Opens the CP/SV completion-outcome sheet directly from the home
+     * card — same sheet the trip-detail screen's "Complete CP details"
+     * button shows. Only used once the visit is arrival-verified (status
+     * == arrived), so no further OTP/photo step is needed. Mirrors
+     * TripNavigationFragment.showCpCompletionSheet: forwards the CP id,
+     * client-met/outcome hints, and the SV-cum-CP flag so the sheet opens
+     * straight into locked-SV mode where applicable.
+     */
+    private fun openCpOutcomeSheetForVisit(visit: TodayVisit) {
+        val cpId = visit.clientPlaceVisitId
+        if (cpId.isNullOrBlank()) {
+            // No CP row behind it — fall back to the trip detail screen.
+            openTripNavigationForVisit(visit)
+            return
+        }
+        CompleteCpVisitBottomSheet
+            .newInstance(
+                cpVisitId = cpId,
+                cpClientMet = visit.cpVisit?.clientMet,
+                cpOutcome = visit.cpVisit?.outcome,
+                isSvFixedHint = visit.visitCategory == "sv_cum_cp",
+            )
+            .show(parentFragmentManager, "cp_visit_complete")
     }
 
     private fun openTripNavigationForPlace(place: AssignedPlace) {
@@ -1017,6 +1147,7 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
         stopBannerFloatingAnimation()
         super.onDestroyView()

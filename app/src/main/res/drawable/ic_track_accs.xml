@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp"
+    android:viewportWidth="20" android:viewportHeight="20">
+    <group android:translateX="-312">
+        <path android:pathData="M320.823 19.4557H324.157C328.323 19.4557 329.99 17.7891 329.99 13.6224V8.6224C329.99 4.45573 328.323 2.78906 324.157 2.78906H320.823C316.657 2.78906 314.99 4.45573 314.99 8.6224V13.6224C314.99 17.7891 316.657 19.4557 320.823 19.4557Z" android:strokeColor="#94A3B8" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M326.24 7.44531V8.27865C326.24 8.96198 325.682 9.52865 324.99 9.52865H319.99C319.307 9.52865 318.74 8.97031 318.74 8.27865V7.44531C318.74 6.76198 319.298 6.19531 319.99 6.19531H324.99C325.682 6.19531 326.24 6.75365 326.24 7.44531Z" android:strokeColor="#94A3B8" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M319.27 12.7917H319.28" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M322.486 12.7917H322.496" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M325.702 12.7917H325.712" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M319.27 15.7057H319.28" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M322.486 15.7057H322.496" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+        <path android:pathData="M325.702 15.7057H325.712" android:strokeColor="#94A3B8" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+    </group>
+</vector>

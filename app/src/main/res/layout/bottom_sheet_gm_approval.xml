@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet"
+    android:orientation="vertical">
+
+    <!-- Top handle -->
+    <View
+        android:layout_width="48dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <!-- Header -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="20dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Requested Loans"
+        android:textColor="#101828"
+        android:textSize="16sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Information about Today's Trip"
+        android:textColor="#667085"
+        android:textSize="13sp" />
+
+    <!-- Track Progress Row -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="20dp">
+
+        <!-- Background Line -->
+        <View
+            android:id="@+id/trackLine"
+            android:layout_width="0dp"
+            android:layout_height="2dp"
+            android:background="#E2E8F0"
+            app:layout_constraintTop_toTopOf="@id/sheetTrackFrameN1"
+            app:layout_constraintBottom_toBottomOf="@id/sheetTrackFrameN1"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameN1"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameAccs" />
+
+        <!-- NOMINEE 1 Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameN1"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintHorizontal_chainStyle="spread_inside"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/sheetTrackFrameN2"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconN1"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_shield" />
+        </FrameLayout>
+
+        <!-- NOMINEE 1 Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextN1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="NOMINEE 1"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameN1"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameN1"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameN1" />
+
+        <!-- NOMINEE 2 Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameN2"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintStart_toEndOf="@id/sheetTrackFrameN1"
+            app:layout_constraintEnd_toStartOf="@id/sheetTrackFrameGm"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconN2"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_shield" />
+        </FrameLayout>
+
+        <!-- NOMINEE 2 Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextN2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="NOMINEE 2"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameN2"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameN2"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameN2" />
+
+        <!-- GM Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameGm"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintStart_toEndOf="@id/sheetTrackFrameN2"
+            app:layout_constraintEnd_toStartOf="@id/sheetTrackFrameAvp"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconGm"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_gm" />
+        </FrameLayout>
+
+        <!-- GM Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextGm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="GM"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameGm"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameGm"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameGm" />
+
+        <!-- AVP Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameAvp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintStart_toEndOf="@id/sheetTrackFrameGm"
+            app:layout_constraintEnd_toStartOf="@id/sheetTrackFrameHr"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconAvp"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_avp" />
+        </FrameLayout>
+
+        <!-- AVP Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextAvp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="AVP"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameAvp"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameAvp"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameAvp" />
+
+        <!-- HR Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameHr"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintStart_toEndOf="@id/sheetTrackFrameAvp"
+            app:layout_constraintEnd_toStartOf="@id/sheetTrackFrameAccs"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconHr"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_hr" />
+        </FrameLayout>
+
+        <!-- HR Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextHr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="HR"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameHr"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameHr"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameHr" />
+
+        <!-- ACC'S Circle -->
+        <FrameLayout
+            android:id="@+id/sheetTrackFrameAccs"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_loan_track_pending"
+            app:layout_constraintStart_toEndOf="@id/sheetTrackFrameHr"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/sheetTrackIconAccs"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_track_accs" />
+        </FrameLayout>
+
+        <!-- ACC'S Text -->
+        <TextView
+            android:id="@+id/sheetTrackTextAccs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="ACC'S"
+            android:textColor="#98A2B3"
+            android:textSize="9sp"
+            app:layout_constraintStart_toStartOf="@id/sheetTrackFrameAccs"
+            app:layout_constraintEnd_toEndOf="@id/sheetTrackFrameAccs"
+            app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameAccs" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Nominees Outer Container Card -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="20dp"
+        android:background="@drawable/bg_esign_card"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Labels Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvNominee1Label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="NOMINEE 1"
+                android:textColor="#667085"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvNominee2Label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="end"
+                android:text="NOMINEE 2"
+                android:textColor="#667085"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Signature Boxes + Separator Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Nominee 1 signature box -->
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_esign_inner_card">
+
+                <ImageView
+                    android:id="@+id/ivNominee1Signature"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:padding="12dp"
+                    android:scaleType="fitCenter" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="8dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_expand_fullscreen" />
+            </FrameLayout>
+
+            <!-- Separator vertical line + blue group icon -->
+            <FrameLayout
+                android:layout_width="32dp"
+                android:layout_height="110dp">
+
+                <!-- Vertical Line -->
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_horizontal"
+                    android:background="#E4E7EC" />
+
+                <!-- Group Icon (pre-rendered circular image from mockup) -->
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_loan_track_group" />
+            </FrameLayout>
+
+            <!-- Nominee 2 signature box -->
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_esign_inner_card">
+
+                <ImageView
+                    android:id="@+id/ivNominee2Signature"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:padding="12dp"
+                    android:scaleType="fitCenter" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="8dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_expand_fullscreen" />
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Spacer -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="24dp" />
+
+    <!-- Action buttons: Reject + Accept -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <!-- Reject button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReject"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_btn_reject_outline"
+            android:fontFamily="@font/inter_medium"
+            android:text="Reject"
+            android:textAllCaps="false"
+            android:textColor="#D92D20"
+            android:textSize="15sp"
+            app:backgroundTint="@null"
+            app:cornerRadius="8dp"
+            app:icon="@drawable/ic_leave_action_x"
+            app:iconGravity="textStart"
+            app:iconSize="16dp"
+            app:iconTint="#D92D20" />
+
+        <!-- Accept button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAccept"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_btn_accept_green_gradient"
+            android:fontFamily="@font/inter_medium"
+            android:text="Accept"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            app:backgroundTint="@null"
+            app:cornerRadius="8dp"
+            app:icon="@drawable/ic_loan_track_check"
+            app:iconGravity="textStart"
+            app:iconSize="16dp"
+            app:iconTint="@color/white" />
+    </LinearLayout>
+
+</LinearLayout>

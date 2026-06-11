@@ -112,6 +112,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var isAttachmentMenuOpen = false
     private var hasLoadedMessages = false
     private var isEmojiPanelVisible = false
+    private var isDocumentPickerMode = false
 
     private var mediaRecorder: MediaRecorder? = null
     private var audioFile: File? = null
@@ -340,10 +341,30 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private fun setupAdapters() {
         chatAdapter = ChatMessageAdapter(
-            onMessageReactionClick = { message: MessageData, anchor: View -> showReactionPopup(message, anchor) },
+            onMessageReactionClick = { message: MessageData, anchor: View ->
+                val bodyText = if (!message.body.isNullOrBlank()) {
+                    message.body
+                } else {
+                    val att = message.attachments?.firstOrNull()
+                    if (att != null) {
+                        val mime = att.fileType.orEmpty().lowercase()
+                        when {
+                            mime.startsWith("image/") -> "📷 Photo"
+                            mime.startsWith("video/") -> "🎥 Video"
+                            mime.startsWith("audio/") -> "🎙️ Voice message"
+                            else -> "📁 ${att.fileName ?: "Attachment"}"
+                        }
+                    } else {
+                        ""
+                    }
+                }
+                val actions = ChatMessageActionsFragment.newInstance(message.id ?: "", bodyText)
+                actions.setCallback(this)
+                actions.show(childFragmentManager, "MessageActions")
+            },
             onReactionPillClick = { message: MessageData, anchor: View -> showReactionRemovePopup(message, anchor) },
-            onAttachmentClick = { url: String, mime: String, storageId: String? ->
-                handleAttachmentClick(url, mime, storageId)
+            onAttachmentClick = { url: String, mime: String, storageId: String?, fileName: String? ->
+                handleAttachmentClick(url, mime, storageId, fileName)
             },
             onReplyClick = { messageId -> scrollToMessage(messageId) },
             onMessageTap = { _ ->
@@ -403,7 +424,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.rvMessages.postDelayed(checkRunnable, 100)
     }
 
-    private fun handleAttachmentClick(url: String, mime: String, storageId: String?) {
+    private fun handleAttachmentClick(url: String, mime: String, storageId: String?, fileName: String?) {
         if (url.isBlank() && storageId.isNullOrBlank()) {
             toast("Attachment unavailable")
             return
@@ -413,29 +434,50 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 if (resolved.isNullOrBlank()) {
                     toast("Unable to load attachment")
                 } else {
-                    routeAttachment(resolved, mime, storageId)
+                    routeAttachment(resolved, mime, storageId, fileName)
                 }
             }
         } else {
-            routeAttachment(url, mime, storageId)
+            routeAttachment(url, mime, storageId, fileName)
         }
     }
 
-    private fun routeAttachment(url: String, mime: String, storageId: String? = null) {
+    private fun routeAttachment(url: String, mime: String, storageId: String? = null, fileName: String? = null) {
         val lowerMime = mime.lowercase(Locale.getDefault())
+        val nameLower = fileName?.lowercase(Locale.getDefault()) ?: ""
         val urlLower = url.lowercase(Locale.getDefault())
-        val isVideo = lowerMime.startsWith("video/") ||
+
+        val resolvedMime = if (lowerMime == "application/octet-stream" && nameLower.isNotEmpty()) {
+            when {
+                nameLower.endsWith(".mp4") || nameLower.endsWith(".mov") || nameLower.endsWith(".webm") || nameLower.endsWith(".mkv") || nameLower.endsWith(".3gp") || nameLower.endsWith(".avi") -> "video/mp4"
+                nameLower.endsWith(".jpg") || nameLower.endsWith(".jpeg") || nameLower.endsWith(".png") || nameLower.endsWith(".gif") || nameLower.endsWith(".webp") -> "image/jpeg"
+                nameLower.endsWith(".mp3") || nameLower.endsWith(".wav") || nameLower.endsWith(".m4a") || nameLower.endsWith(".aac") || nameLower.endsWith(".ogg") -> "audio/mp4"
+                nameLower.endsWith(".pdf") -> "application/pdf"
+                else -> lowerMime
+            }
+        } else {
+            lowerMime
+        }
+
+        val isVideo = resolvedMime.startsWith("video/") ||
             urlLower.endsWith(".mp4") ||
             urlLower.endsWith(".mov") ||
             urlLower.endsWith(".webm") ||
             urlLower.endsWith(".mkv") ||
             urlLower.endsWith(".3gp") ||
-            urlLower.endsWith(".avi")
+            urlLower.endsWith(".avi") ||
+            nameLower.endsWith(".mp4") ||
+            nameLower.endsWith(".mov") ||
+            nameLower.endsWith(".webm") ||
+            nameLower.endsWith(".mkv") ||
+            nameLower.endsWith(".3gp") ||
+            nameLower.endsWith(".avi")
+
         when {
-            lowerMime.startsWith("image/") -> showImagePreview(url)
-            lowerMime.startsWith("audio/") -> playVoiceMessage(url, mime, storageId)
+            resolvedMime.startsWith("image/") -> showImagePreview(url)
+            resolvedMime.startsWith("audio/") -> playVoiceMessage(url, resolvedMime, storageId)
             isVideo -> showVideoPreview(url)
-            else -> openAttachmentUrl(url, mime)
+            else -> openAttachmentUrl(url, resolvedMime)
         }
     }
 
@@ -949,7 +991,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         replyingToMessage = message
         binding.replyPreviewCard.visibility = View.VISIBLE
         binding.tvReplyName.text = if (message.senderId == myStaffId) "You" else message.senderName
-        binding.tvReplyBody.text = message.body ?: "Attachment"
+        binding.tvReplyBody.text = getMessagePreviewText(message).ifBlank { "Attachment" }
         binding.etMessage.requestFocus()
         val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         imm.showSoftInput(binding.etMessage, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
@@ -1777,11 +1819,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 onClick()
             }
         }
-        tile(R.id.tileAttachImage) { pickAttachmentsLauncher.launch(arrayOf("image/*")) }
-        tile(R.id.tileAttachVideo) { pickAttachmentsLauncher.launch(arrayOf("video/*")) }
-        tile(R.id.tileAttachAudio) { pickAttachmentsLauncher.launch(arrayOf("audio/*")) }
+        tile(R.id.tileAttachImage) {
+            isDocumentPickerMode = false
+            pickAttachmentsLauncher.launch(arrayOf("image/*"))
+        }
+        tile(R.id.tileAttachVideo) {
+            isDocumentPickerMode = false
+            pickAttachmentsLauncher.launch(arrayOf("video/*"))
+        }
+        tile(R.id.tileAttachAudio) {
+            isDocumentPickerMode = false
+            pickAttachmentsLauncher.launch(arrayOf("audio/*"))
+        }
         tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
-        tile(R.id.tileAttachDocument) { pickAttachmentsLauncher.launch(arrayOf("*/*")) }
+        tile(R.id.tileAttachDocument) {
+            isDocumentPickerMode = true
+            pickAttachmentsLauncher.launch(arrayOf("*/*"))
+        }
         tile(R.id.tileAttachContact) { launchContactPicker() }
         tile(R.id.tileAttachCamera) { launchCamera() }
         attachTilesWired = true
@@ -2241,7 +2295,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             // Override MIME type for image/video/audio files picked via Document Picker
             // so they are sent and rendered as document cards instead of inline media
             val mime = meta.fileType.lowercase(Locale.US)
-            val finalMeta = if (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")) {
+            val finalMeta = if (isDocumentPickerMode && (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/"))) {
                 meta.copy(fileType = "application/octet-stream")
             } else {
                 meta

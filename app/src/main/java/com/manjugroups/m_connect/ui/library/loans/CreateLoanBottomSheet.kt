@@ -85,32 +85,29 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
         setupSelectors()
         loadStaffList()
 
-        binding.etLoanAmount.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                validateForm()
+        // Hard cap the Tenure field at 6 (matching web: LOAN_TENURE_MAX_MONTHS).
+        // Filter rejects any keystroke or paste that would produce a value > 6,
+        // so the user can never type or paste "70", "7", "12", etc. The
+        // submit-time check in submitLoanRequest() stays as defence in depth.
+        // (Field watchers were dropped in the darx merge — the submit button
+        // is always active now and persists a draft instead of gating on a
+        // validateForm pass.)
+        binding.etTenure.filters = arrayOf(
+            android.text.InputFilter { source, start, end, dest, dstart, dend ->
+                val resulting = StringBuilder(dest)
+                    .replace(dstart, dend, source.subSequence(start, end).toString())
+                    .toString()
+                if (resulting.isEmpty()) return@InputFilter null
+                val n = resulting.toIntOrNull() ?: return@InputFilter ""
+                if (n in 0..6) null else ""
             }
-        })
-        binding.etTenure.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                validateForm()
-            }
-        })
-        binding.etLoanPurpose.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                validateForm()
-            }
-        })
+        )
 
         binding.btnSubmitLoan.setOnClickListener {
             submitLoanRequest()
         }
-        validateForm()
+        
+        restoreDraft()
     }
 
     private fun setupSelectors() {
@@ -132,7 +129,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 disbursedDateIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
                 binding.tvDisbursedDate.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(cal.time)
                 binding.tvDisbursedDate.setTextColor(android.graphics.Color.parseColor("#101828"))
-                validateForm()
             }
         }
 
@@ -142,7 +138,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 repaymentMonthIso = SimpleDateFormat("yyyy-MM", Locale.US).format(cal.time)
                 binding.tvRepaymentStartMonth.text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
                 binding.tvRepaymentStartMonth.setTextColor(android.graphics.Color.parseColor("#101828"))
-                validateForm()
             }
         }
 
@@ -151,42 +146,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun validateForm() {
-        val n1 = selectedNominee1
-        val n2 = selectedNominee2
-        val amountStr = binding.etLoanAmount.text.toString().trim()
-        val amount = amountStr.toDoubleOrNull()
-        val disDate = disbursedDateIso
-        val repMonth = repaymentMonthIso
-        val tenureStr = binding.etTenure.text.toString().trim()
-        val tenure = tenureStr.toDoubleOrNull()
-        val doc = originalDocument
-        val purpose = binding.etLoanPurpose.text.toString().trim()
 
-        val isValid = n1 != null && 
-                      n2 != null && 
-                      n1.id != n2.id && 
-                      amount != null && amount > 0 && 
-                      !disDate.isNullOrBlank() && 
-                      !repMonth.isNullOrBlank() && 
-                      tenure != null && tenure > 0 && tenure <= 6.0 && 
-                      !doc.isNullOrBlank() && 
-                      purpose.isNotBlank()
-
-        if (isValid) {
-            binding.btnSubmitLoan.isEnabled = true
-            binding.btnSubmitLoan.isClickable = true
-            binding.btnSubmitLoan.isFocusable = true
-            binding.btnSubmitLoan.setBackgroundResource(R.drawable.bg_leave_submit_button)
-            binding.btnSubmitLoan.setTextColor(android.graphics.Color.WHITE)
-        } else {
-            binding.btnSubmitLoan.isEnabled = false
-            binding.btnSubmitLoan.isClickable = false
-            binding.btnSubmitLoan.isFocusable = false
-            binding.btnSubmitLoan.setBackgroundResource(R.drawable.bg_loan_submit_button_disabled)
-            binding.btnSubmitLoan.setTextColor(android.graphics.Color.parseColor("#98A2B3"))
-        }
-    }
 
     private fun loadStaffList() {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -220,7 +180,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                     binding.tvNominee2.text = selected.name
                     binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
                 }
-                validateForm()
             }
             .show()
     }
@@ -234,7 +193,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 interestType = type
                 binding.tvInterestType.text = type
                 binding.tvInterestType.setTextColor(android.graphics.Color.parseColor("#101828"))
-                validateForm()
             }
             .show()
     }
@@ -248,7 +206,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 originalDocument = doc
                 binding.tvOriginalDocument.text = doc
                 binding.tvOriginalDocument.setTextColor(android.graphics.Color.parseColor("#101828"))
-                validateForm()
             }
             .show()
     }
@@ -342,13 +299,14 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                         interestType = interestType ?: "Flat",
                         disbursedDate = disDate,
                         repaymentStartMonth = repMonth,
-                        tenureMonths = tenure,
+                        tenureMonths = tenure.toInt(),
                         originalDocument = doc,
                         purpose = purpose,
                         notes = notes.ifBlank { null }
                     )
                 )
                 if (resp.success) {
+                    clearDraft()
                     setFragmentResult(RESULT_KEY, Bundle.EMPTY)
                     Toast.makeText(requireContext(), "Loan requested successfully", Toast.LENGTH_SHORT).show()
                     dismissAllowingStateLoss()
@@ -357,6 +315,19 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                     binding.btnSubmitLoan.isEnabled = true
                     binding.btnSubmitLoan.alpha = 1f
                 }
+            } catch (e: retrofit2.HttpException) {
+                val errorStr = try {
+                    e.response()?.errorBody()?.string()?.take(200) ?: e.message()
+                } catch (ex: Exception) {
+                    e.message()
+                }
+                android.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Server Error")
+                    .setMessage(errorStr)
+                    .setPositiveButton("OK", null)
+                    .show()
+                binding.btnSubmitLoan.isEnabled = true
+                binding.btnSubmitLoan.alpha = 1f
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
                 binding.btnSubmitLoan.isEnabled = true
@@ -368,6 +339,90 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveDraft()
+    }
+
+    private fun saveDraft() {
+        if (_binding == null) return
+        val prefs = requireContext().getSharedPreferences("loan_draft", android.content.Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("n1_id", selectedNominee1?.id)
+            putString("n1_name", selectedNominee1?.name)
+            putString("n2_id", selectedNominee2?.id)
+            putString("n2_name", selectedNominee2?.name)
+            putString("amount", binding.etLoanAmount.text.toString())
+            putString("interestType", interestType)
+            putString("disbursedDateIso", disbursedDateIso)
+            putString("disbursedDateText", binding.tvDisbursedDate.text.toString())
+            putString("repaymentMonthIso", repaymentMonthIso)
+            putString("repaymentMonthText", binding.tvRepaymentStartMonth.text.toString())
+            putString("tenure", binding.etTenure.text.toString())
+            putString("document", originalDocument)
+            putString("purpose", binding.etLoanPurpose.text.toString())
+            putString("notes", binding.etLoanNotes.text.toString())
+        }.apply()
+    }
+
+    private fun restoreDraft() {
+        if (_binding == null) return
+        val prefs = requireContext().getSharedPreferences("loan_draft", android.content.Context.MODE_PRIVATE)
+        val n1Id = prefs.getString("n1_id", null)
+        val n1Name = prefs.getString("n1_name", null)
+        if (n1Id != null && n1Name != null) {
+            selectedNominee1 = StaffData(id = n1Id, name = n1Name, phone = null, role = null, designation = null, status = null, employeeId = null, department = null)
+            binding.tvNominee1.text = n1Name
+            binding.tvNominee1.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        val n2Id = prefs.getString("n2_id", null)
+        val n2Name = prefs.getString("n2_name", null)
+        if (n2Id != null && n2Name != null) {
+            selectedNominee2 = StaffData(id = n2Id, name = n2Name, phone = null, role = null, designation = null, status = null, employeeId = null, department = null)
+            binding.tvNominee2.text = n2Name
+            binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        binding.etLoanAmount.setText(prefs.getString("amount", ""))
+        
+        interestType = prefs.getString("interestType", null)
+        if (interestType != null && interestType != "Select Type") {
+            binding.tvInterestType.text = interestType
+            binding.tvInterestType.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        disbursedDateIso = prefs.getString("disbursedDateIso", null)
+        val dDateText = prefs.getString("disbursedDateText", null)
+        if (disbursedDateIso != null && dDateText != null && dDateText != "Select Date") {
+            binding.tvDisbursedDate.text = dDateText
+            binding.tvDisbursedDate.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        repaymentMonthIso = prefs.getString("repaymentMonthIso", null)
+        val rMonthText = prefs.getString("repaymentMonthText", null)
+        if (repaymentMonthIso != null && rMonthText != null && rMonthText != "Select Month") {
+            binding.tvRepaymentStartMonth.text = rMonthText
+            binding.tvRepaymentStartMonth.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        binding.etTenure.setText(prefs.getString("tenure", ""))
+        
+        originalDocument = prefs.getString("document", null)
+        if (originalDocument != null && originalDocument != "Select the document") {
+            binding.tvOriginalDocument.text = originalDocument
+            binding.tvOriginalDocument.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
+
+        binding.etLoanPurpose.setText(prefs.getString("purpose", ""))
+        binding.etLoanNotes.setText(prefs.getString("notes", ""))
+    }
+
+    private fun clearDraft() {
+        requireContext().getSharedPreferences("loan_draft", android.content.Context.MODE_PRIVATE)
+            .edit().clear().apply()
     }
 
     companion object {

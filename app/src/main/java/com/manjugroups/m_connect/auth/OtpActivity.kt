@@ -36,6 +36,7 @@ class OtpActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
     private val viewModel: AuthViewModel by viewModels()
     private val api = ApiService.create()
+    private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
     private lateinit var otpBoxes: List<EditText>
     private var countDownTimer: CountDownTimer? = null
     private var canResend = false
@@ -259,6 +260,33 @@ class OtpActivity : AppCompatActivity() {
             session.shouldTrackNow = false
             session.activeTrackingSessionId = null
 
+            // Cache designation immediately from the verify-otp payload.
+            // The OTP response already carries every field UserInfo
+            // exposes — including designation — so leaning on this is
+            // both faster and far more reliable than the old approach
+            // of waiting for the secondary getStaffDetail() round-trip,
+            // which was wrapped in runCatching{} and SILENTLY dropped
+            // the designation whenever the fetch failed (driver roles
+            // sometimes lack /api/hr/staff/get visibility). With this
+            // null is now an unambiguous "backend didn't supply it",
+            // not "we couldn't fetch it". getStaffDetail below still
+            // runs for reportingTo and can refresh designation if the
+            // OTP payload was empty.
+            response.user?.designation?.takeIf { it.isNotBlank() }?.let {
+                session.designation = it
+            }
+
+            // Probe the backend's fleet-driver gate so the app's
+            // isDriverMode also flips on for staff whose designation
+            // isn't literally "Driver" but who the backend treats as a
+            // driver because of a fleetDrivers row tied to their phone.
+            // The endpoint returns success=true for valid drivers and
+            // success=false ("Driver access only") otherwise — both
+            // are non-fatal here; we just record the answer.
+            session.fleetDriverByBackend = runCatching {
+                geoApi.getMmsFleetDriverTrips(session.bearerToken)
+            }.map { it.success }.getOrDefault(false)
+
             runCatching {
                 api.getMyIamPermissions(session.bearerToken)
             }.onSuccess { iam ->
@@ -277,11 +305,14 @@ class OtpActivity : AppCompatActivity() {
                     resp.staff?.let { staff ->
                         session.reportingToId = staff.reportingTo
                         session.reportingToName = staff.reportingToName
-                        // Cache designation so SessionManager.isDriverMode
-                        // can derive role automatically (matches the web's
-                        // hasDriverDesignation check). Replaces the old
-                        // user-toggled Executive/Driver dropdown on Home.
-                        session.designation = staff.designation
+                        // Refresh designation if the staff-detail call
+                        // succeeded. We only overwrite when the value
+                        // is non-blank so a 500 returning a partial row
+                        // can't wipe the good value we already cached
+                        // from the OTP payload.
+                        staff.designation?.takeIf { it.isNotBlank() }?.let {
+                            session.designation = it
+                        }
                     }
                 }
             }

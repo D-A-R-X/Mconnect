@@ -2,40 +2,48 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_leave_sheet"
+    android:background="@drawable/bg_bottom_sheet_apply_leave"
     android:orientation="vertical"
-    android:paddingHorizontal="14dp"
-    android:paddingTop="18dp"
-    android:paddingBottom="12dp">
+    android:paddingHorizontal="20dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="24dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="@font/inter_semibold"
+        android:fontFamily="@font/inter_bold"
         android:text="Leave Category"
-        android:textColor="?attr/colorForegroundPrimary"
-        android:textSize="28sp" />
+        android:textColor="#101828"
+        android:textSize="18sp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="1dp"
-        android:fontFamily="@font/inter_regular"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_medium"
         android:text="Select Leave category"
-        android:textColor="?attr/colorForegroundSecondary"
+        android:textColor="#667085"
         android:textSize="12sp" />
 
     <LinearLayout
         android:id="@+id/leaveCategoryContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="16dp"
         android:orientation="vertical" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="20dp"
         android:orientation="horizontal">
 
         <TextView
@@ -43,25 +51,25 @@
             android:layout_width="0dp"
             android:layout_height="40dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_leave_sheet_button_outline"
+            android:background="@drawable/bg_apply_leave_btn_outline"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
             android:text="Close Message"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="12sp" />
+            android:textColor="#1BCA0B"
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/btnSubmitSheet"
             android:layout_width="0dp"
             android:layout_height="40dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_leave_sheet_button_filled"
+            android:background="@drawable/bg_apply_leave_btn_disabled"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
-            android:text="Submit Date"
+            android:text="Submit"
             android:textColor="@android:color/white"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 
 </LinearLayout>

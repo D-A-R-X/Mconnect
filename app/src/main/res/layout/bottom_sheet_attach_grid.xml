@@ -46,11 +46,10 @@
                     android:layout_height="52dp"
                     android:background="@drawable/bg_attach_tile_circle_white">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_image_outline"
-                        app:tint="#12B76A" />
+                        android:src="@drawable/ic_chat_action_gallery" />
                 </FrameLayout>
 
                 <TextView
@@ -80,11 +79,10 @@
                     android:layout_height="52dp"
                     android:background="@drawable/bg_attach_tile_circle_white">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_pin_outline"
-                        app:tint="#12B76A" />
+                        android:src="@drawable/ic_chat_action_location" />
                 </FrameLayout>
 
                 <TextView
@@ -114,11 +112,10 @@
                     android:layout_height="52dp"
                     android:background="@drawable/bg_attach_tile_circle_white">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_user_outline"
-                        app:tint="#12B76A" />
+                        android:src="@drawable/ic_chat_action_contact" />
                 </FrameLayout>
 
                 <TextView
@@ -148,11 +145,10 @@
                     android:layout_height="52dp"
                     android:background="@drawable/bg_attach_tile_circle_white">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_chat_file"
-                        app:tint="#12B76A" />
+                        android:src="@drawable/ic_chat_action_document" />
                 </FrameLayout>
 
                 <TextView

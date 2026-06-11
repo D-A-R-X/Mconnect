@@ -18,6 +18,8 @@ import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -77,6 +79,14 @@ class HomeViewModel : ViewModel() {
 
     private val _isVisitsLoading = MutableStateFlow(false)
     val isVisitsLoading: StateFlow<Boolean> = _isVisitsLoading.asStateFlow()
+
+    // Last error from /api/mms-fleet/driver/trips, surfaced so the driver
+    // mode My Trips screen can explain why the list is empty instead of
+    // pretending nothing came back. null when the driver call succeeded
+    // (or wasn't applicable for the current session). Cleared on a fresh
+    // load attempt.
+    private val _driverTripsError = MutableStateFlow<String?>(null)
+    val driverTripsError: StateFlow<String?> = _driverTripsError.asStateFlow()
 
     private var cachedState: HomeUiState.Loaded? = null
 
@@ -138,7 +148,14 @@ class HomeViewModel : ViewModel() {
                     }
                 }
 
-                val loaded = HomeUiState.Loaded(
+                // IMPORTANT: copy from the existing cachedState so the
+                // attendance refresh PRESERVES today's visits. Building a
+                // fresh Loaded() here reset todayVisits to empty before
+                // loadTodayVisitsInternal re-fetched them, which made the
+                // home card flash: trips → empty → skeleton → trips. The
+                // copy keeps the current trips on screen until the fresh
+                // ones land.
+                val loaded = (cachedState ?: HomeUiState.Loaded()).copy(
                     hasOpenSession = hasOpen,
                     completedMinutes = completedMin,
                     openSessionStartMillis = openSessionStartMillis,
@@ -146,7 +163,8 @@ class HomeViewModel : ViewModel() {
                     totalMinutes = totalMin,
                     sessions = sessions,
                     daysPresent = daysPresent,
-                    permissionsLeftHrs = permLeft
+                    permissionsLeftHrs = permLeft,
+                    isPunching = false,
                 )
                 cachedState = loaded
                 _uiState.value = loaded
@@ -239,17 +257,45 @@ class HomeViewModel : ViewModel() {
         try {
             val session = context?.let { SessionManager(it) }
             val isDriverMode = session?.isDriverMode == true
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val shouldProbeDriverTrips = isDriverMode ||
+                session?.fleetDriverByBackend != true
+
+          coroutineScope {
+            // Fire every independent fetch CONCURRENTLY. These used to be
+            // awaited one after another — 3+ sequential network round-trips
+            // — which is what made the trip list sit on a skeleton for so
+            // long. The merging below is purely local, so only the network
+            // calls need to overlap; wall-clock now ≈ the slowest single
+            // call instead of their sum.
+            val placesDeferred = async {
+                runCatching { geoApi.getAssignedPlaces(bearerToken) }.getOrNull()
+            }
+            val visitsDeferred = async {
+                runCatching { geoApi.getTodayVisits(bearerToken, todayStr) }.getOrNull()
+            }
+            // Wrapped in runCatching so a failure resolves to a Result
+            // (never throws inside the async) — that keeps a failed CP /
+            // driver fetch from cancelling the sibling fetches in this
+            // scope. We re-throw via getOrThrow() at the call site so the
+            // existing per-section try/catch handles it exactly as before.
+            val cpDeferred = if (!isDriverMode) async {
+                runCatching {
+                    geoApi.getMyMarketingCpVisits(bearerToken, fromDate = null, toDate = null)
+                }
+            } else null
+            val driverDeferred = if (shouldProbeDriverTrips) async {
+                runCatching { geoApi.getMmsFleetDriverTrips(bearerToken) }
+            } else null
 
             // Load assigned places
-            val placesResp = geoApi.getAssignedPlaces(bearerToken)
-            val places = placesResp.data ?: emptyList()
+            val places = placesDeferred.await()?.data ?: emptyList()
             Log.d(TAG, "Assigned places: ${places.size}")
 
             // Load today's scheduled visits from the legacy fieldVisits
             // pipeline (rows that already have a fieldVisits child).
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val visitsResp = geoApi.getTodayVisits(bearerToken, todayStr)
-            val legacyVisits = visitsResp.data?.filter { it.status != "cancelled" } ?: emptyList()
+            val legacyVisits = visitsDeferred.await()?.data
+                ?.filter { it.status != "cancelled" } ?: emptyList()
             Log.d(TAG, "Today visits (legacy fieldVisits): ${legacyVisits.size}")
 
             // Merge: CP visits assigned to me that may not have spawned
@@ -264,11 +310,7 @@ class HomeViewModel : ViewModel() {
             var cpError: String? = null
             if (!isDriverMode) {
                 try {
-                    val cpResp = geoApi.getMyMarketingCpVisits(
-                        bearerToken,
-                        fromDate = null,
-                        toDate = null,
-                    )
+                    val cpResp = cpDeferred!!.await().getOrThrow()
                     Log.d(
                         TAG,
                         "CP merge: success=${cpResp.success} total=${cpResp.visits.size} " +
@@ -313,38 +355,91 @@ class HomeViewModel : ViewModel() {
                 Log.d(TAG, "CP merge skipped for driver mode")
             }
 
-            if (isDriverMode) {
+            // Speculatively probe driver-trips even when the cached
+            // isDriverMode flag is false. The backend's gate is
+            // authoritative; if it returns success, this account IS a
+            // driver per the backend (a designation-or-fleetDrivers
+            // match) and we should both show the trips AND persist the
+            // backend-driver flag so subsequent navigation lights up
+            // the driver UI immediately. Skips the probe only when we
+            // already know the account is a driver — saves the round
+            // trip on every refresh for confirmed drivers and avoids
+            // it entirely for clearly-non-driver flows after the first
+            // miss.
+            if (shouldProbeDriverTrips) {
+                // Reset before re-attempting so the surfaced banner
+                // doesn't go stale on a refresh that now succeeds.
+                _driverTripsError.value = null
                 try {
-                    val driverResp = geoApi.getMmsFleetDriverTrips(bearerToken)
+                    val driverResp = driverDeferred!!.await().getOrThrow()
+                    // Persist the backend's verdict so the rest of the
+                    // app (SessionManager.isDriverMode) reflects it on
+                    // the very next access, without waiting for a
+                    // logout/login cycle.
+                    if (session != null) {
+                        session.fleetDriverByBackend = driverResp.success
+                    }
                     if (driverResp.success) {
                         val existingIds = merged.map { it.id }.toHashSet()
                         val driverTrips = driverResp.trips
                             .mapNotNull { it.toTodayVisitOrNull() }
                             .filter { it.id !in existingIds }
+                        Log.d(
+                            TAG,
+                            "MMS fleet driver trips: server=${driverResp.trips.size} " +
+                                "kept=${driverTrips.size}",
+                        )
                         if (driverTrips.isNotEmpty()) {
-                            Log.d(TAG, "Today visits (MMS fleet driver): +${driverTrips.size}")
                             merged.addAll(driverTrips)
+                        } else if (driverResp.trips.isEmpty()) {
+                            // Endpoint authorised the driver but returned
+                            // zero rows — most often a driverPhone mismatch
+                            // between the assigned siteVisit and the
+                            // staff phone we're logged in with.
+                            _driverTripsError.value =
+                                "No fleet trips found for your phone. " +
+                                "Make sure the dispatcher assigned the vehicle " +
+                                "to this driver's phone number."
                         }
                     } else {
-                        Log.w(TAG, "MMS fleet driver trips failed: ${driverResp.error}")
+                        val msg = driverResp.error ?: "Unknown error"
+                        Log.w(TAG, "MMS fleet driver trips failed: $msg")
+                        _driverTripsError.value =
+                            "Driver trips couldn't load: $msg"
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "MMS fleet driver trips failed: ${e.message}")
+                    val msg = e.message ?: e.javaClass.simpleName
+                    Log.w(TAG, "MMS fleet driver trips failed: $msg")
+                    _driverTripsError.value = "Driver trips couldn't load: $msg"
                 }
             }
 
-            // Sort newest-first so a freshly-fixed SV-cum-CP lands at
-            // the top of Today's Trip instead of getting pushed below
-            // older legacy fieldVisits rows. Falls back to scheduled
-            // start time and then id for stability when creationTime
-            // is missing on either side (shouldn't happen post-fix but
-            // keeps the comparator total).
+            // Push completed trips to the bottom of every category-
+            // agnostic list, then sort the rest newest-first so a
+            // freshly-fixed SV-cum-CP lands at the top of Today's Trip
+            // instead of getting pushed below older legacy fieldVisits
+            // rows. The completed-last primary key keeps actionable
+            // work (Enroute, Ready, Upcoming) above the day's history
+            // on the Home dashboard and the My Trips "All" tab; the
+            // explicit "Completed" filter tab still surfaces them
+            // because it filters by status, not position. Falls back
+            // to scheduled start time and then id for stability when
+            // creationTime is missing on either side.
+            val completedStatuses = setOf("completed", "complete", "done", "closed")
             val sortedMerged = merged.sortedWith(
-                compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                compareBy<TodayVisit> {
+                    if (it.status.lowercase(Locale.getDefault()) in completedStatuses) 1 else 0
+                }
+                    .thenByDescending { it.creationTime ?: 0.0 }
                     .thenByDescending { it.scheduledStartTime ?: "" }
                     .thenBy { it.id }
             )
-            val current = cachedState ?: return
+            // Seed a default Loaded state when nothing has populated the
+            // dashboard yet (My Trips opened before Home). Previously this
+            // returned early when cachedState was null, so a visits-only
+            // load never emitted — the list could never appear without a
+            // prior full home load.
+            val current = cachedState ?: HomeUiState.Loaded()
             val updated = current.copy(
                 todayVisits = sortedMerged,
                 assignedPlaces = places,
@@ -370,6 +465,7 @@ class HomeViewModel : ViewModel() {
                     "Home empty: ${parts.joinToString(", ")}",
                 )
             }
+          } // end coroutineScope — parallel fetches + local merge
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load visits/places: ${e.message}", e)
             _punchEvent.emit(
@@ -479,7 +575,14 @@ class HomeViewModel : ViewModel() {
     private fun MmsFleetDriverTrip.toTodayVisitOrNull(): TodayVisit? {
         val tripId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        if (this.canOperateToday == false) return null
+        // canOperateToday is a "can the driver hit Start now" flag —
+        // backend sets it false when the trip's scheduledDate isn't
+        // today (e.g. trip is for tomorrow). It is NOT a visibility
+        // flag. Dropping the row here meant a driver assigned to a
+        // trip dated for tomorrow saw an empty My Trips screen, even
+        // though both the dispatcher and the staff knew the trip
+        // existed. We now keep every row; the card's status pill /
+        // action button reflects whether the trip is actionable.
         val status = when (this.phase?.lowercase(Locale.getDefault())) {
             "completed" -> "completed"
             "on_site" -> "on_site"
@@ -506,8 +609,16 @@ class HomeViewModel : ViewModel() {
         )
     }
 
-    fun loadTodayVisits(bearerToken: String) {
-        viewModelScope.launch { loadTodayVisitsInternal(bearerToken) }
+    /**
+     * Loads ONLY today's visits — no attendance / permission / month
+     * stats. Used by My Trips, which shows trips and nothing else, so it
+     * shouldn't pay for the full home-dashboard load (four sequential
+     * attendance/permission calls + a GeoTrack sync) before the trip list
+     * can fill in. `context` is required for driver detection + the fleet
+     * driver-trips probe.
+     */
+    fun loadTodayVisits(bearerToken: String, context: Context? = null) {
+        viewModelScope.launch { loadTodayVisitsInternal(bearerToken, context) }
     }
 
     fun startVisit(context: Context, bearerToken: String, visitId: String, lat: Double?, lng: Double?) {

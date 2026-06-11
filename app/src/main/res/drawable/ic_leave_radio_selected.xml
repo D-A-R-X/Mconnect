@@ -1,22 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="oval">
-            <size
-                android:width="16dp"
-                android:height="16dp" />
-            <solid android:color="#00FFFFFF" />
-            <stroke
-                android:width="1.5dp"
-                android:color="#7A5AF8" />
-        </shape>
-    </item>
-    <item
-        android:gravity="center"
-        android:width="8dp"
-        android:height="8dp">
-        <shape android:shape="oval">
-            <solid android:color="#7A5AF8" />
-        </shape>
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="#0B61CA"
+        android:pathData="M8,8m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,8 L7,10 L11,6" />
+</vector>

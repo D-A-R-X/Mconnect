@@ -3,6 +3,8 @@ package com.manjugroups.m_connect.ui.marketing.bookings
 import android.app.Dialog
 import android.app.AlertDialog
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -10,13 +12,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.R
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -54,6 +59,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     private var activeTab: Tab = Tab.APPROVAL
     private var editMode: Boolean = false
     private val inputs = linkedMapOf<String, EditText>()
+    private val fieldContainers = linkedMapOf<String, LinearLayout>()
     private val editableInputs = mutableSetOf<String>()
     private var approvalTransactionInput: EditText? = null
 
@@ -127,12 +133,15 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         title = TextView(requireContext()).apply {
             text = "Booking"
             textSize = 18f
+            includeFontPadding = false
             setTextColor(Color.parseColor("#101828"))
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            typeface = interFont(R.font.inter_bold)
         }
         subtitle = TextView(requireContext()).apply {
             text = "Loading details..."
             textSize = 12f
+            includeFontPadding = false
+            typeface = interFont(R.font.inter_regular)
             setTextColor(Color.parseColor("#667085"))
         }
         titleBox.addView(title)
@@ -235,16 +244,20 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             val active = tab == activeTab
             tabRow.addView(TextView(requireContext()).apply {
                 text = tab.label
-                textSize = 13f
+                textSize = 12f
                 gravity = Gravity.CENTER
-                setPadding(dp(14), dp(9), dp(14), dp(9))
+                includeFontPadding = false
+                setPadding(dp(14), 0, dp(14), 0)
                 setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#475467"))
-                setBackgroundColor(Color.parseColor(if (active) "#0B61CA" else "#F2F4F7"))
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setBackgroundResource(
+                    if (active) R.drawable.bg_outcome_subtab_active
+                    else R.drawable.bg_outcome_subtab_inactive,
+                )
+                typeface = interFont(if (active) R.font.inter_semibold else R.font.inter_medium)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    dp(38),
-                ).apply { marginEnd = dp(8) }
+                    dp(32),
+                ).apply { marginEnd = dp(6) }
                 setOnClickListener {
                     activeTab = tab
                     renderTabs()
@@ -256,6 +269,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
 
     private fun renderContent() {
         inputs.clear()
+        fieldContainers.clear()
         editableInputs.clear()
         content.removeAllViews()
         val b = booking ?: return
@@ -363,20 +377,48 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun renderFields(fields: List<FieldSpec>) {
-        fields.forEach { field ->
-            val label = TextView(requireContext()).apply {
+        fields.forEachIndexed { index, field ->
+            // Label — matches the New Booking form: inter_medium 12sp #475467.
+            content.addView(TextView(requireContext()).apply {
                 text = field.label
                 textSize = 12f
-                setTextColor(Color.parseColor("#667085"))
-                setPadding(0, dp(10), 0, dp(4))
+                includeFontPadding = false
+                typeface = interFont(R.font.inter_medium)
+                setTextColor(Color.parseColor("#475467"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = if (index == 0) 0 else dp(14) }
+            })
+
+            // Rounded white pill (bg_outcome_field_pill) with a leading
+            // icon and a transparent EditText — identical chrome to the
+            // New Booking client form.
+            val pill = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setBackgroundResource(R.drawable.bg_outcome_field_pill)
+                setPadding(dp(14), 0, dp(14), 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(48),
+                ).apply { topMargin = dp(6) }
             }
+            pill.addView(ImageView(requireContext()).apply {
+                setImageResource(iconFor(field.key, field.numeric))
+                layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
+            })
             val input = EditText(requireContext()).apply {
                 setText(field.value.orEmpty())
-                textSize = 14f
-                setSingleLine(false)
-                minLines = 1
+                textSize = 13f
+                setSingleLine(true)
+                includeFontPadding = false
+                typeface = interFont(R.font.inter_medium)
+                background = null
                 setTextColor(Color.parseColor("#101828"))
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setHintTextColor(Color.parseColor("#94A3B8"))
+                hint = field.label
+                setPadding(0, 0, 0, 0)
                 inputType = if (field.numeric) {
                     android.text.InputType.TYPE_CLASS_NUMBER or
                         android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
@@ -385,13 +427,16 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                         android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
                 }
             }
-            inputs[field.key] = input
-            if (field.editable) editableInputs.add(field.key)
-            content.addView(label)
-            content.addView(input, LinearLayout.LayoutParams(
+            pill.addView(input, LinearLayout.LayoutParams(
+                0,
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
+                1f,
+            ).apply { marginStart = dp(10) })
+
+            inputs[field.key] = input
+            fieldContainers[field.key] = pill
+            if (field.editable) editableInputs.add(field.key)
+            content.addView(pill)
         }
     }
 
@@ -399,18 +444,37 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(Color.parseColor("#F9FAFB"))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#E2E8F0"))
+            }
         }
         items.chunked(2).forEach { rowItems ->
             val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
             rowItems.forEach { item ->
-                row.addView(TextView(requireContext()).apply {
-                    text = "${item.first}\n${item.second?.takeIf { it.isNotBlank() } ?: "-"}"
-                    textSize = 12f
-                    setTextColor(Color.parseColor("#344054"))
+                val cell = LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.VERTICAL
                     setPadding(0, dp(5), dp(10), dp(5))
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                cell.addView(TextView(requireContext()).apply {
+                    text = item.first
+                    textSize = 11f
+                    includeFontPadding = false
+                    typeface = interFont(R.font.inter_medium)
+                    setTextColor(Color.parseColor("#94A3B8"))
                 })
+                cell.addView(TextView(requireContext()).apply {
+                    text = item.second?.takeIf { it.isNotBlank() } ?: "-"
+                    textSize = 13f
+                    includeFontPadding = false
+                    typeface = interFont(R.font.inter_semibold)
+                    setTextColor(Color.parseColor("#101828"))
+                    setPadding(0, dp(2), 0, 0)
+                })
+                row.addView(cell)
             }
             box.addView(row)
         }
@@ -421,7 +485,8 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         content.addView(TextView(requireContext()).apply {
             this.text = text
             textSize = 13f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            typeface = interFont(R.font.inter_semibold)
             setTextColor(Color.parseColor("#101828"))
             setPadding(0, dp(18), 0, dp(8))
         })
@@ -431,6 +496,8 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         content.addView(TextView(requireContext()).apply {
             this.text = text
             textSize = 13f
+            includeFontPadding = false
+            typeface = interFont(R.font.inter_regular)
             setTextColor(Color.parseColor("#475467"))
             setPadding(0, dp(4), 0, dp(4))
         })
@@ -440,9 +507,15 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         content.addView(TextView(requireContext()).apply {
             text = if (sub.isBlank()) title else "$title\n$sub"
             textSize = 13f
+            includeFontPadding = false
+            typeface = interFont(R.font.inter_medium)
             setTextColor(Color.parseColor("#344054"))
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(Color.parseColor("#F2F4F7"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#F2F4F7"))
+            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -464,7 +537,10 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             input.isEnabled = editable
             input.isFocusable = editable
             input.isFocusableInTouchMode = editable
-            input.setBackgroundColor(Color.parseColor(if (editable) "#FFFFFF" else "#F9FAFB"))
+            // Keep the pill chrome from bg_outcome_field_pill; just dim
+            // read-only pills slightly so editable fields stand out in
+            // edit mode. The EditText itself stays transparent.
+            fieldContainers[key]?.alpha = if (!canEdit || editable) 1f else 0.6f
         }
     }
 
@@ -741,15 +817,47 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             this.text = text
             textSize = 13f
             gravity = Gravity.CENTER
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            typeface = interFont(R.font.inter_semibold)
             setTextColor(Color.parseColor(fg))
-            setBackgroundColor(Color.parseColor(bg))
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            // Rounded pill background to match the New Booking form's
+            // button language instead of the old flat rectangles.
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor(bg))
+            }
+            setPadding(dp(16), dp(8), dp(16), dp(8))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 dp(38),
             ).apply { marginStart = dp(8) }
         }
+
+    /** Load a bundled Inter typeface; null-safe fallback to default. */
+    private fun interFont(resId: Int): Typeface? =
+        runCatching { ResourcesCompat.getFont(requireContext(), resId) }.getOrNull()
+
+    /**
+     * Leading icon for a field pill, mirroring the New Booking client
+     * form (phone / person / calendar / mail / whatsapp / rupee). Keyed
+     * off the field name so dates, money, and contact fields each get
+     * the matching glyph; everything else falls back to the person icon.
+     */
+    private fun iconFor(key: String, numeric: Boolean): Int {
+        val k = key.lowercase()
+        return when {
+            k == "whatsappnumber" -> R.drawable.ic_outcome_whatsapp
+            k.contains("email") -> R.drawable.ic_outcome_mail
+            k.contains("mobile") || k.contains("phone") || k.contains("number") ->
+                R.drawable.ic_outcome_phone
+            k.contains("date") || k.contains("dob") || k.contains("birth") ||
+                k.contains("anniversary") || k.contains("validity") ->
+                R.drawable.ic_outcome_calendar
+            numeric -> R.drawable.ic_outcome_rupee
+            else -> R.drawable.ic_outcome_person
+        }
+    }
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()

@@ -51,6 +51,9 @@ class SiteVisitsFragment : Fragment() {
     private enum class Filter { ALL, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
 
     private var allVisits: List<TodayVisit> = emptyList()
+    // Gates the skeleton to the first load so refreshes / re-opens don't
+    // flash already-rendered rows back to placeholders.
+    private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
@@ -199,9 +202,12 @@ class SiteVisitsFragment : Fragment() {
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<View>(R.id.cpvEmptyState)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
-        SkeletonUtils.startSkeletonPulse(skeletonContainer)
-        empty.visibility = View.GONE
-        list.removeAllViews()
+        // Skeleton only on the first load — refresh / return keeps rows.
+        if (!hasLoadedOnce) {
+            SkeletonUtils.startSkeletonPulse(skeletonContainer)
+            empty.visibility = View.GONE
+            list.removeAllViews()
+        }
 
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val cal = Calendar.getInstance()
@@ -214,6 +220,7 @@ class SiteVisitsFragment : Fragment() {
             try {
                 val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                hasLoadedOnce = true
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load site visits")
                     return@launch

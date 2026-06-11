@@ -595,6 +595,36 @@ class LandInspectionFragment : Fragment() {
                         ).show()
                     }
                 }
+                item.acceptanceStatus == "accepted" -> {
+                    // THIS inspector has accepted → show only a single
+                    // "Accepted" button (no Reschedule, no actionable Accept).
+                    // Each assignee's acceptance is tracked per-staff on the
+                    // server, so one GM accepting never flips another's card.
+                    // Tapping opens the inspection form.
+                    actionsLayout.visibility = View.VISIBLE
+                    arrowBtn.visibility = View.GONE
+                    rescheduleBtn.visibility = View.GONE
+                    acceptBtn.visibility = View.VISIBLE
+                    acceptIcon.visibility = View.VISIBLE
+                    acceptLabel.text = "Accepted"
+                    acceptBtn.alpha = 1f
+                    acceptBtn.isClickable = true
+                    // Grey out the button so the accepted state reads as
+                    // done, not a live green CTA.
+                    acceptBtn.setBackgroundResource(R.drawable.bg_inspection_accepted_grey)
+                    // Sits alone → drop the inter-button left margin.
+                    (acceptBtn.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+                        lp.marginStart = 0
+                        acceptBtn.layoutParams = lp
+                    }
+                    val openForm = View.OnClickListener {
+                        SiteInspectionBottomSheet
+                            .newInstance(item.propertyId, item.title)
+                            .show(parentFragmentManager, "site_inspection")
+                    }
+                    acceptBtn.setOnClickListener(openForm)
+                    card.setOnClickListener(openForm)
+                }
                 else -> {
                     // Pending acceptance (NOT_STARTED) or IN_PROGRESS -> show Reschedule and Accept buttons
                     actionsLayout.visibility = View.VISIBLE

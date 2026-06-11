@@ -778,16 +778,50 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvPhone?.text = phone ?: "—"
 
         // --- Project / title ------------------------------------------
-        // Use the enriched project name when present; fall back to the
-        // clientPlace label (some CPs are place-only and don't carry a
-        // project picker). Keep the existing tvTitle behaviour but
-        // render "—" instead of the generic "Site Visit" placeholder
-        // when there is truly nothing to show.
+        // Resolution order:
+        //   1. visit.project.name (backend pre-resolved)
+        //   2. async lookup against proposedSiteVisit.projectId via
+        //      api.getMarketingProjects — covers CP-linked SVs where
+        //      getForMobileId returns project=null (the CP-level
+        //      projectId is unset; the SV's project lives on
+        //      proposedSiteVisit). Same self-sufficient fallback the
+        //      Site Incharge block below uses for its analogous
+        //      "backend didn't pre-resolve, look it up here" case.
+        //   3. "—" if neither path yields a project.
+        //
+        // The previous code fell back to `visit.clientPlace?.name`
+        // which leaked the client's name into the Project / Plot row
+        // for residential CPs (clientPlace.name defaults to the
+        // client's name when the place was created from the
+        // telecaller's manual-profile address). Removed entirely —
+        // nothing in this field can resemble a client name now.
         val projectName = visit.project?.name?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
-        tvProject?.text = projectName ?: "—"
         if (!projectName.isNullOrBlank()) {
+            tvProject?.text = projectName
             tvTitle?.text = projectName
+        } else {
+            // Show em-dash up front; the async resolve below replaces
+            // it once the project name lands. Prevents a one-frame
+            // flash of a wrong/stale value.
+            tvProject?.text = "—"
+            val proposedProjectId = visit.proposedSiteVisit?.projectId
+            if (!proposedProjectId.isNullOrBlank()) {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching {
+                        val projectsResp = api.getMarketingProjects(session.bearerToken)
+                        if (projectsResp.success) {
+                            val matching = projectsResp.projects.firstOrNull {
+                                it.id == proposedProjectId
+                            }
+                            val name = matching?.name?.takeIf { it.isNotBlank() }
+                            if (!name.isNullOrBlank()) {
+                                tvProject?.text = name
+                                tvTitle?.text = name
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // --- Staff assigned (BDO) -------------------------------------

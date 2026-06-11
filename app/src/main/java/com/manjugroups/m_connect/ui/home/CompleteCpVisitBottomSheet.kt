@@ -136,6 +136,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var btnCpLockedReject: TextView? = null
     private var btnCpLockedConfirm: TextView? = null
 
+    // Cached CP visit detail captured when the locked-SV mode is engaged.
+    // The Confirm button path uses `convertedSiteVisitId` to decide whether
+    // the SV already exists (telecaller pre-created it via
+    // siteVisits.create with clientPlaceVisitId — call setOutcome to flip
+    // the existing pending SV to confirmed) or still needs to be
+    // materialized from the proposed payload (call convertToSiteVisit).
+    // Without this distinction the old Confirm path was hitting
+    // convertCpVisitToSiteVisit unconditionally, and that mutation
+    // short-circuits when convertedSiteVisitId is already set — so the
+    // linked SV's confirmationStatus stayed "pending" and the row never
+    // left the Fixed tab on the web's /marketing/site-visits page.
+    private var lockedCpVisit: CpVisitDetail? = null
+
     /**
      * "Pure SV" outcome mode. When [ARG_SITE_VISIT_ID] is set the sheet
      * is being invoked from the Trip Details screen of a real siteVisits
@@ -3972,6 +3985,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private suspend fun applyLockedSvMode(visit: CpVisitDetail, proposed: ProposedSiteVisit) {
         if (!isAdded) return
         lockedFromProposedSv = true
+        lockedCpVisit = visit
 
         // 1. Force the active outcome to Site Visit and re-render so the
         //    SV body is the one on screen.
@@ -4148,12 +4162,93 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun onLockedConfirmTap() {
-        // Confirming just reuses the existing persistSiteVisit flow —
-        // it already calls markClientMet + convertCpVisitToSiteVisit with
-        // the populated SV fields, which we filled from the telecaller's
-        // proposed payload.
+        // Two confirmation paths depending on whether the SV is already
+        // materialized:
+        //
+        // 1. SV-cum-CP (the telecaller pre-created the SV via
+        //    siteVisits.create with clientPlaceVisitId; the CP row carries
+        //    `convertedSiteVisitId` pointing at the pending SV).
+        //    convertCpVisitToSiteVisit is a no-op here — its early-return
+        //    guard at clientPlaceVisits.ts:1363 returns the existing SV
+        //    id without touching its confirmationStatus, so the linked SV
+        //    stays "pending" forever and never leaves the Fixed tab on
+        //    web. The correct call is setCpVisitOutcome(outcome =
+        //    "interested"): the backend's setOutcome path at
+        //    clientPlaceVisits.ts:1149-1168 sees outcome === "interested"
+        //    AND visit.convertedSiteVisitId set, and patches the linked
+        //    SV's confirmationStatus to "confirmed".
+        //
+        // 2. Proposed-only CP (CP carries proposedSiteVisit but no
+        //    convertedSiteVisitId yet — older flows or direct CP create).
+        //    Here the SV doesn't exist yet, so we keep the legacy
+        //    persistSiteVisit path which calls convertCpVisitToSiteVisit
+        //    to materialize the SV from the proposed payload.
         clearError()
-        persistSiteVisit()
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+            ?: return showError("Missing CP visit id")
+        val convertedSvId = lockedCpVisit?.convertedSiteVisitId?.takeIf { it.isNotBlank() }
+        if (convertedSvId != null) {
+            persistSvCumCpConfirm(cpVisitId)
+        } else {
+            persistSiteVisit()
+        }
+    }
+
+    /**
+     * SV-cum-CP confirmation: the SV already exists (with
+     * confirmationStatus="pending"), the CP needs its outcome recorded
+     * as "interested" so the backend's clientPlaceVisits.setOutcome
+     * gate flips the linked SV to confirmed. Distinct from the
+     * proposed-only confirm path (which materializes a brand-new SV via
+     * convertCpVisitToSiteVisit) because that mutation short-circuits
+     * when convertedSiteVisitId is already set.
+     */
+    private fun persistSvCumCpConfirm(cpVisitId: String) {
+        btnCpLockedConfirm?.isClickable = false
+        btnCpLockedConfirm?.text = "Saving…"
+        btnCpLockedReject?.isClickable = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
+                )
+                if (!metResp.success) {
+                    finishCtaLockedConfirm(metResp.error ?: "Failed to record client met")
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    SetOutcomeRequest(
+                        id = cpVisitId,
+                        outcome = OUTCOME_INTERESTED,
+                        notes = "Confirmed by field staff",
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    finishCtaLockedConfirm(outcomeResp.error ?: "Failed to save outcome")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_INTERESTED,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                val serverMessage = extractHttpErrorMessage(e)
+                finishCtaLockedConfirm(serverMessage ?: e.message ?: "Network error")
+            }
+        }
+    }
+
+    private fun finishCtaLockedConfirm(error: String) {
+        btnCpLockedConfirm?.isClickable = true
+        btnCpLockedConfirm?.text = "Confirm"
+        btnCpLockedReject?.isClickable = true
+        showError(error)
     }
 
     private fun onLockedRejectTap() {
@@ -4226,6 +4321,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
+        // SV-cum-CP confirm path: emitted when the field staff taps the
+        // locked-mode Confirm button on a CP that already has a linked
+        // SV (convertedSiteVisitId set). Triggers the web's
+        // clientPlaceVisits.setOutcome path to flip the linked SV's
+        // confirmationStatus from "pending" to "confirmed" so it leaves
+        // the Fixed tab.
+        private const val OUTCOME_INTERESTED = "interested"
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         // SV-cum-CP rejection (distinct from not_interested). Set by

@@ -176,7 +176,32 @@ class HrDashboardFragment : Fragment() {
         }
 
         binding.btnClockOut.setOnClickListener {
-            ClockOutConfirmBottomSheet().show(parentFragmentManager, "clock_out_confirm")
+            // Show the SAME "Today" figure the dashboard card displays.
+            // While the session is open the API's todayMinutes is 0 (it
+            // only sums CLOSED sessions), so reading it directly made the
+            // sheet say 00:00:00 even after hours on the clock. The card
+            // instead runs a live ticker of `now - firstPunchIn`; mirror
+            // that here so the confirm sheet and the card always agree.
+            // Once clocked out, the ticker stops and todayMinutes holds
+            // the real total, so we fall back to it. Standard workday =
+            // 8h (480m); anything above lands in the overtime bucket.
+            val state = flowViewModel.uiState.value
+            val firstIso = state.firstPunchInIso
+            val today = if (state.isClockedIn && !firstIso.isNullOrBlank()) {
+                val firstMs = parseIsoMillisOrNull(firstIso)
+                if (firstMs != null) {
+                    ((System.currentTimeMillis() - firstMs).coerceAtLeast(0) / 60_000L).toInt()
+                } else {
+                    state.todayMinutes
+                }
+            } else {
+                state.todayMinutes
+            }
+            val overtime = (today - 480).coerceAtLeast(0)
+            ClockOutConfirmBottomSheet.newInstance(
+                todayMinutes = today,
+                overtimeMinutes = overtime,
+            ).show(parentFragmentManager, "clock_out_confirm")
         }
 
         parentFragmentManager.setFragmentResultListener(
@@ -203,6 +228,17 @@ class HrDashboardFragment : Fragment() {
                     ClockInSuccessBottomSheet().show(parentFragmentManager, "clock_in_success")
                 }
                 null -> Unit
+            }
+        }
+
+        // Reload the attendance cards after a correction/remark request is
+        // submitted from a day card's edit icon.
+        parentFragmentManager.setFragmentResultListener(
+            EditAttendanceBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                loadRecentHistoryCards()
             }
         }
 
@@ -388,15 +424,24 @@ class HrDashboardFragment : Fragment() {
                         binding.todayPunchSummary.visibility = View.VISIBLE
                         binding.tvTodayClockedInAt.text =
                             AttendanceFlowViewModel.formatIsoToTime(firstPunchIso)
-                        binding.tvTodayClockedOutAt.text = when {
-                            !lastPunchIso.isNullOrBlank() ->
+                        // Show "Clocked out" ONLY when there's a real
+                        // punch-out that's different from the punch-in
+                        // (the backend can occasionally echo the
+                        // punch-in iso into lastPunchOutIso the moment
+                        // the row is created — that produced the
+                        // "Clocked in 2:17 PM / Clocked out 2:17 PM"
+                        // confusion in the screenshot). The Today /
+                        // Pay Period hour counters and the history
+                        // strip below still surface the clock-out
+                        // time once it's real.
+                        val hasRealClockOut = !lastPunchIso.isNullOrBlank() &&
+                            lastPunchIso != firstPunchIso
+                        if (hasRealClockOut) {
+                            binding.todayClockedOutGroup.visibility = View.VISIBLE
+                            binding.tvTodayClockedOutAt.text =
                                 AttendanceFlowViewModel.formatIsoToTime(lastPunchIso)
-                            // While the session is still open we show
-                            // a dash for clock-out — the live ticker
-                            // on tvTodayHours already conveys "still
-                            // running". Showing "Now" or current time
-                            // here would be misleading.
-                            else -> "—"
+                        } else {
+                            binding.todayClockedOutGroup.visibility = View.GONE
                         }
                     } else {
                         binding.todayPunchSummary.visibility = View.GONE
@@ -659,7 +704,41 @@ class HrDashboardFragment : Fragment() {
 
     private fun bindRecentHistoryCards(records: List<AttendanceRecord>) {
         recentHistoryRecords = records
-        val sorted = records.sortedByDescending { it.date ?: "" }
+        // Fill gaps: walk every date from the start of the current
+        // month to today and inject a placeholder AttendanceRecord
+        // for any day the backend didn't return. The backend's
+        // getMyAttendance only includes days that have a row in the
+        // staffAttendance table — if a staff didn't clock in
+        // yesterday, yesterday silently vanished from this list,
+        // which read as "yesterday's attendance is not showing"
+        // even though the real cause was "no row was ever created".
+        // With this fill, every day in the period appears with
+        // 00:00:00 hrs / "-- - --" so the gap is visible and
+        // actionable instead of invisible.
+        val byDate = records.associateBy { it.date.orEmpty() }
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = Calendar.getInstance()
+        val today = ymd.format(cal.time)
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        val filled = mutableListOf<AttendanceRecord>()
+        while (true) {
+            val day = ymd.format(cal.time)
+            if (day > today) break
+            filled.add(
+                byDate[day] ?: AttendanceRecord(
+                    date = day,
+                    status = null,
+                    totalMinutes = 0,
+                    approvedAttendance = null,
+                    punchInTime = null,
+                    punchOutTime = null,
+                    hasOpenSession = false,
+                    sessions = emptyList(),
+                ),
+            )
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        val sorted = filled.sortedByDescending { it.date ?: "" }
         val primary = sorted.getOrNull(0)
         if (primary != null) {
             binding.tvHistoryDate1.text = formatDashboardDate(primary.date)
@@ -686,6 +765,21 @@ class HrDashboardFragment : Fragment() {
                 formatMinutesAsPeriod(record.totalMinutes ?: 0)
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
                 buildPunchRange(record)
+
+            // Pencil → Remark / Time Correction request, same sheet as the
+            // My Attendance history screen. Gap-filled placeholder days
+            // have no backend row (id == null) to attach a request to, so
+            // hide the icon for those.
+            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+            if (record.id.isNullOrBlank()) {
+                editBtn.visibility = View.GONE
+            } else {
+                editBtn.visibility = View.VISIBLE
+                editBtn.setOnClickListener {
+                    EditAttendanceBottomSheet.newInstance(record)
+                        .show(parentFragmentManager, "edit_attendance")
+                }
+            }
             binding.historyListContainer.addView(card)
         }
     }

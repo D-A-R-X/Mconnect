@@ -2,26 +2,26 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/optionRow"
     android:layout_width="match_parent"
-    android:layout_height="36dp"
-    android:layout_marginBottom="6dp"
+    android:layout_height="48dp"
+    android:layout_marginBottom="8dp"
     android:background="@drawable/bg_leave_sheet_option"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="8dp">
+    android:paddingHorizontal="16dp">
 
     <TextView
         android:id="@+id/tvOption"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:fontFamily="@font/inter_regular"
-        android:textColor="?attr/colorForegroundSecondary"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#344054"
         android:textSize="14sp" />
 
     <ImageView
         android:id="@+id/ivOptionCheck"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:contentDescription="Selected"
         android:src="@drawable/ic_leave_radio_unselected" />
 </LinearLayout>

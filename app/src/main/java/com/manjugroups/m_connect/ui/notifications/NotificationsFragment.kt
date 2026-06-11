@@ -21,8 +21,16 @@ import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.hr.AttendanceReviewFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
+import com.manjugroups.m_connect.ui.library.loans.LoansFragment
+import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
+import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
+import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
+import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
+import com.manjugroups.m_connect.ui.tasks.TaskDetailFragment
+import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -149,6 +157,13 @@ class NotificationsFragment : Fragment() {
                 }
             }
 
+            // Map each backend referenceType to the mobile destination
+            // that surfaces that entity. Keep types matching what the
+            // Convex notifications writers emit (search the backend for
+            // `referenceType:` to see the full enum). Unknown types fall
+            // through to the else branch and refresh the list — that
+            // way new server-side notification kinds don't crash old
+            // clients, they just no-op visually.
             val fragment = when (notification.referenceType) {
                 "leave" -> LeavesFragment.newInstance(
                     mode = if (notification.type.orEmpty().contains("approval-needed")) {
@@ -178,6 +193,30 @@ class NotificationsFragment : Fragment() {
                         name = notification.title ?: "Chat"
                     )
                 }
+                // HR Attendance Review Blocked + the broader staff-attendance
+                // family (escalations, reviewer reminders, reviewed/approved
+                // notifications). All currently land on the HR review
+                // screen — the user picks the row they care about there.
+                // Was the exact symptom the screenshot showed: tapping
+                // "HR Attendance Review Blocked" did nothing because this
+                // type was missing from the routing table.
+                "staff-attendance" -> AttendanceReviewFragment.newInstance()
+                // Marketing chains. Each has a list-fragment landing —
+                // the operator drills into the specific row from there.
+                // (Detail-by-id factories exist for bookings + tasks; the
+                // SV/CP/lead list screens don't have a cheap byId factory
+                // yet, so we land on the list and the row is one tap away.)
+                "site-visit" -> SiteVisitsFragment()
+                "clientPlaceVisit" -> CpVisitsFragment()
+                "booking", "booking_cancellation" -> BookingsFragment.newInstance()
+                "telecallerLeads" -> MyLeadsFragment.newInstance()
+                // Loans, including loan-skip-request approvals.
+                "loan", "loan-skip-request" -> LoansFragment()
+                // Daily tasks — open the specific task when the
+                // notification carries its id, otherwise the list.
+                "dailyTask" -> notification.referenceId?.let { id ->
+                    TaskDetailFragment.newInstance(id)
+                } ?: TasksFragment()
                 else -> null
             }
 
@@ -187,6 +226,15 @@ class NotificationsFragment : Fragment() {
                     .addToBackStack(null)
                     .commit()
             } else {
+                // Unknown referenceType — keep behaviour identical to
+                // before: refresh so the row at least shows up as read
+                // and the operator can re-evaluate. Surface a small hint
+                // so they know the tap registered.
+                Toast.makeText(
+                    requireContext(),
+                    "Open the related screen from the menu to view this update.",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 loadNotifications()
             }
         }
