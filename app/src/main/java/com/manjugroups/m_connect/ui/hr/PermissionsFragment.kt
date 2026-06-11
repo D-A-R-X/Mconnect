@@ -278,6 +278,14 @@ class PermissionsFragment : Fragment() {
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
+        val pendingCount = state.pendingApprovals.size
+        if (pendingCount > 0 && screenMode == MODE_HISTORY && canApprove) {
+            binding.dotScopeBadge.visibility = View.VISIBLE
+            binding.dotScopeBadge.text = pendingCount.toString()
+        } else {
+            binding.dotScopeBadge.visibility = View.GONE
+        }
+
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
 

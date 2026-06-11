@@ -117,12 +117,17 @@
                                         android:maxLines="1"
                                         android:singleLine="true" />
 
-                                    <View
+                                    <TextView
                                         android:id="@+id/dotScopeBadge"
-                                        android:layout_width="6dp"
-                                        android:layout_height="6dp"
-                                        android:layout_marginStart="4dp"
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:layout_marginStart="5dp"
                                         android:background="@drawable/bg_red_dot"
+                                        android:gravity="center"
+                                        android:fontFamily="@font/inter_regular"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="9sp"
+                                        android:includeFontPadding="false"
                                         android:visibility="gone" />
 
                                     <ImageView
