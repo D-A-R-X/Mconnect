@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blue pill background for the "Got It" CTA in the geofence-warning
+     dialog. Matches the M-Connect primary action blue. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#1570EF" />
+    <corners android:radius="100dp" />
+</shape>
