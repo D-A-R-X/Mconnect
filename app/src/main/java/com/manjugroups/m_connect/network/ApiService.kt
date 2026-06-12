@@ -70,6 +70,21 @@ interface ApiService {
         @Query("toDate") toDate: String? = null
     ): MyAttendanceResponse
 
+    // Home geofence policy for the authenticated staff. The app uses this
+    // to disable the Clock-In button when the user is inside their home
+    // radius, instead of waiting for the server to reject the punch.
+    @GET("api/hr/attendance/home-fence")
+    suspend fun getHomeFence(
+        @Header("Authorization") token: String,
+    ): HomeFenceResponse
+
+    // Master vendors list — drives the On-Duty form's "Select Vendor"
+    // step. Was previously a hardcoded sample list.
+    @GET("api/library/vendors")
+    suspend fun getVendors(
+        @Header("Authorization") token: String,
+    ): VendorsResponse
+
     @POST("api/hr/attendance/punch-in")
     suspend fun punchIn(
         @Header("Authorization") token: String,
@@ -1063,6 +1078,50 @@ data class TrackingDeviceHealth(
 // Attendance models
 data class AttendanceTodayResponse(val success: Boolean, val attendance: AttendanceData?)
 data class MyAttendanceResponse(val success: Boolean, val total: Int?, val records: List<AttendanceRecord> = emptyList())
+
+// Mirrors getHomeFenceForStaff in convex/hr/staffHomeGeocoding.ts.
+//   enabled     — true when ALL of: global toggle on + staff has lat/lng +
+//                 geocode quality is enforceable. The app only blocks
+//                 Clock-In if this is true.
+//   enforceable — quality is enforceable on its own (true if the staff
+//                 has a precise pin but the global toggle is off — useful
+//                 if we ever want to show a soft warning instead of a
+//                 block).
+data class HomeFenceResponse(
+    val success: Boolean,
+    val fence: HomeFenceData? = null,
+    val error: String? = null,
+)
+
+data class HomeFenceData(
+    val enabled: Boolean = false,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val radiusMeters: Int = 150,
+    val enforceable: Boolean = false,
+)
+
+// Vendor master data — mirrors /api/library/vendors. Slim subset of the
+// convex vendors row: enough for the On-Duty form to render a list and
+// (later) show the vendor's address on a map.
+data class VendorsResponse(
+    val success: Boolean,
+    val total: Int = 0,
+    val vendors: List<VendorRemote> = emptyList(),
+    val error: String? = null,
+)
+
+data class VendorRemote(
+    val id: String,
+    val name: String,
+    val nickname: String? = null,
+    val companyName: String? = null,
+    val type: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val address: String? = null,
+    val status: String? = null,
+)
 
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)

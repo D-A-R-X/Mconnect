@@ -3200,7 +3200,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         if (_binding == null) return
         binding.btnSend.isEnabled = !isBusy
         binding.btnAttach.isEnabled = !isBusy
-        binding.etMessage.isEnabled = !isBusy
+        // Intentionally NOT disabling etMessage. Disabling a focused
+        // EditText causes Android to strip focus + dismiss the IME, so
+        // every send was killing the keyboard and the user had to tap
+        // the field again to type the next message. The isSendingMessage
+        // guard at the top of sendMessage() already prevents double-fires,
+        // so the field can stay enabled — the user can keep typing the
+        // next message while the previous one is still uploading.
         binding.btnSend.alpha = if (isBusy) 0.6f else 1f
         binding.btnAttach.alpha = if (isBusy) 0.6f else 1f
     }

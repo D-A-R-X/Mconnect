@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrDashboardBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
+import com.manjugroups.m_connect.network.HomeFenceData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -79,6 +80,26 @@ class HrDashboardFragment : Fragment() {
     // live ticker can update it each second. Reset whenever the history list
     // is rebuilt.
     private var todayCardHoursView: TextView? = null
+
+    // Home geofence enforcement. The web's hr.attendance.homeBlockEnabled
+    // setting blocks punch-IN from inside the staff's home radius — instead
+    // of letting them tap and bounce off a server error, we mirror the
+    // check client-side and disable the button preemptively.
+    //   homeFence            — last snapshot pulled from /home-fence; null
+    //                          until the first fetch, treated as "no block"
+    //                          while loading so we never falsely disable.
+    //   isInsideHomeFence    — last computed boolean; drives both the
+    //                          button enable state and the subtitle.
+    //   geofenceWatcherJob   — re-checks distance every few seconds while
+    //                          the user is on the dashboard.
+    private var homeFence: HomeFenceData? = null
+    private var isInsideHomeFence: Boolean = false
+    private var geofenceWatcherJob: Job? = null
+    // Live diagnostic for the fence — captured each watcher tick so the
+    // subtitle can surface WHY enforcement isn't firing when staff
+    // expect it (policy off / no GPS / outside radius / etc.).
+    private var lastFenceStatus: String? = null
+
     private var pendingEntryAnimation = true
     private var hasPlayedEntryAnimation = false
 
@@ -173,6 +194,13 @@ class HrDashboardFragment : Fragment() {
         updateAttendanceLoadingUi()
 
         binding.btnClockInNow.setOnClickListener {
+            // Button stays active visually so the user can always reach
+            // for it. If they're inside their home fence, refuse the tap
+            // with a short top-of-screen Toast — no other visual cue.
+            if (isInsideHomeFence) {
+                showTopToast("Move away from home to clock in")
+                return@setOnClickListener
+            }
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ClockInAreaFragment())
                 .addToBackStack(null)
@@ -427,6 +455,16 @@ class HrDashboardFragment : Fragment() {
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
+        // Refresh the geofence policy each time the dashboard becomes
+        // visible (so an HR-side radius change picks up without restart),
+        // then start the periodic watcher.
+        loadHomeFence()
+        startGeofenceWatcher()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopGeofenceWatcher()
     }
 
     private fun collectState() {
@@ -515,7 +553,17 @@ class HrDashboardFragment : Fragment() {
                         binding.clockedInButtonGroup.visibility = View.GONE
                         binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
+                        // Title + subtitle + Dynamic Island handled
+                        // centrally by updateHeaderTexts; reset the
+                        // button drawable + hide the fence status line
+                        // since the home-fence check is now enforced
+                        // only in the click handler (top Toast).
                         updateHeaderTexts(false)
+                        binding.btnClockInNow.setBackgroundResource(
+                            R.drawable.bg_attendance_btn_primary
+                        )
+                        binding.btnClockInNow.alpha = 1f
+                        binding.tvClockInFenceStatus.visibility = View.GONE
                     }
                 }
             }
@@ -981,6 +1029,149 @@ class HrDashboardFragment : Fragment() {
         } catch (_: Exception) {
             null
         }
+    }
+
+    // ── Home geofence enforcement ──────────────────────────────────────
+    //
+    // Mirrors checkHomeBlock in convex/staffAttendance.ts. The endpoint
+    // returns one snapshot per session (the home pin + per-staff/global
+    // radius + the enabled flag); the watcher loop below periodically
+    // grabs the last-known location and recomputes distance so the button
+    // disable state reflects movement in/out of the fence in near-real
+    // time without burning battery on high-accuracy fixes.
+
+    private fun loadHomeFence() {
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val snapshot = try {
+                api.getHomeFence(token)
+            } catch (_: Exception) {
+                null
+            }
+            if (_binding == null) return@launch
+            homeFence = snapshot?.fence?.takeIf { it.enabled }
+            // Fresh fetch → recompute right away so the button reacts to
+            // the new policy without waiting for the next watcher tick.
+            refreshGeofenceState()
+        }
+    }
+
+    /** Returns true when the staff is enforceably inside their home radius. */
+    private suspend fun computeInsideHomeFence(): Boolean {
+        val fence = homeFence
+        if (fence == null) {
+            lastFenceStatus = "Home-block policy off (HR setting)"
+            return false
+        }
+        if (!fence.enabled) {
+            lastFenceStatus = "Home-block policy off"
+            return false
+        }
+        val lat = fence.lat
+        val lng = fence.lng
+        if (lat == null || lng == null) {
+            lastFenceStatus = "No home pin set for this staff"
+            return false
+        }
+        val hasFine = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            lastFenceStatus = "Grant location permission to enforce home fence"
+            return false
+        }
+        val loc = try {
+            val client = LocationServices.getFusedLocationProviderClient(requireContext())
+            val token = CancellationTokenSource().token
+            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+                ?: client.lastLocation.await()
+        } catch (_: Exception) { null }
+        if (loc == null) {
+            lastFenceStatus = "Waiting for GPS fix…"
+            return false
+        }
+        if (loc.latitude == 0.0 && loc.longitude == 0.0) {
+            lastFenceStatus = "Waiting for GPS fix…"
+            return false
+        }
+        val distanceMeters = haversineMeters(
+            loc.latitude, loc.longitude, lat, lng,
+        ).toInt()
+        val inside = distanceMeters <= fence.radiusMeters
+        lastFenceStatus = if (inside) {
+            "Inside home fence (${distanceMeters} m ≤ ${fence.radiusMeters} m)"
+        } else {
+            "Outside home fence (${distanceMeters} m, allowed when ≤ ${fence.radiusMeters} m)"
+        }
+        return inside
+    }
+
+    /** Recompute inside-fence and update the button + subtitle. */
+    private fun refreshGeofenceState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val inside = computeInsideHomeFence()
+            if (_binding == null) return@launch
+            if (inside == isInsideHomeFence) return@launch
+            isInsideHomeFence = inside
+            applyGeofenceToButton()
+        }
+    }
+
+    /**
+     * Drives the Clock-In button's enabled state + the header subtitle
+     * from `isInsideHomeFence`. Safe to call from collectState (when the
+     * flow state changes) and from refreshGeofenceState (when GPS does).
+     */
+    private fun applyGeofenceToButton() {
+        // Intentionally no visual cue — the button stays active green,
+        // header stays "Let's Clock-In!", no diagnostic banner. The
+        // only enforcement is in the click listener: if isInsideHomeFence
+        // is true at tap time, we refuse with a top-of-screen Toast.
+        if (_binding == null) return
+        binding.tvClockInFenceStatus.visibility = View.GONE
+    }
+
+    /** Brief top-of-screen Toast for the geofence refusal. */
+    private fun showTopToast(message: String) {
+        val act = activity ?: return
+        com.manjugroups.m_connect.ui.common.TopToast.show(act, message)
+    }
+
+    private fun startGeofenceWatcher() {
+        if (geofenceWatcherJob?.isActive == true) return
+        geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && _binding != null) {
+                refreshGeofenceState()
+                // Tighter than the original 15 s so the button reacts
+                // within a few seconds of the staff stepping in/out of
+                // their home radius.
+                delay(5_000L)
+            }
+        }
+    }
+
+    private fun stopGeofenceWatcher() {
+        geofenceWatcherJob?.cancel()
+        geofenceWatcherJob = null
+    }
+
+    /** Great-circle distance in meters — mirrors convex/lib/geo.ts. */
+    private fun haversineMeters(
+        lat1: Double, lng1: Double, lat2: Double, lng2: Double,
+    ): Double {
+        val r = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) *
+            Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return r * c
     }
 
     @Suppress("DEPRECATION")
