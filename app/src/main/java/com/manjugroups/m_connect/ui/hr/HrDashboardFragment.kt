@@ -75,6 +75,10 @@ class HrDashboardFragment : Fragment() {
     private var wasShowingSkeleton = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
     private var liveTickerJob: Job? = null
+    // Reference to the dynamic "Today" history card's hours TextView, so the
+    // live ticker can update it each second. Reset whenever the history list
+    // is rebuilt.
+    private var todayCardHoursView: TextView? = null
     private var pendingEntryAnimation = true
     private var hasPlayedEntryAnimation = false
 
@@ -406,46 +410,21 @@ class HrDashboardFragment : Fragment() {
                     updateAttendanceLoadingUi()
                     if (!state.isLoading) hasShownAttendanceContentOnce = true
                     binding.tvTodayHours.text = state.todayHours
-                    binding.tvLatestTotalHours.text = state.latestTotalHours
-                    binding.tvLatestRange.text = state.latestRange
+                    // The old static "Today" card (cardHistory1) is permanently
+                    // hidden — today's log is now injected as the FIRST item in
+                    // the history list below, in the same card style as past
+                    // days, tagged "Today". See bindRecentHistoryCards.
+                    binding.cardHistory1.visibility = View.GONE
                     binding.tvPayPeriodLabel.text = state.payPeriodLabel
                         .ifBlank { binding.tvPayPeriodLabel.text }
                     binding.tvPayPeriodHours.text = state.payPeriodHours
 
-                    // Today's clock-in/out summary on the main card.
-                    // Visible the moment the user has clocked in at
-                    // least once today, so the operator sees actual
-                    // times alongside the Today / Pay Period hour
-                    // counters instead of having to scroll into the
-                    // history strip below for that info.
-                    val firstPunchIso = state.firstPunchInIso
-                    val lastPunchIso = state.lastPunchOutIso
-                    if (!firstPunchIso.isNullOrBlank()) {
-                        binding.todayPunchSummary.visibility = View.VISIBLE
-                        binding.tvTodayClockedInAt.text =
-                            AttendanceFlowViewModel.formatIsoToTime(firstPunchIso)
-                        // Show "Clocked out" ONLY when there's a real
-                        // punch-out that's different from the punch-in
-                        // (the backend can occasionally echo the
-                        // punch-in iso into lastPunchOutIso the moment
-                        // the row is created — that produced the
-                        // "Clocked in 2:17 PM / Clocked out 2:17 PM"
-                        // confusion in the screenshot). The Today /
-                        // Pay Period hour counters and the history
-                        // strip below still surface the clock-out
-                        // time once it's real.
-                        val hasRealClockOut = !lastPunchIso.isNullOrBlank() &&
-                            lastPunchIso != firstPunchIso
-                        if (hasRealClockOut) {
-                            binding.todayClockedOutGroup.visibility = View.VISIBLE
-                            binding.tvTodayClockedOutAt.text =
-                                AttendanceFlowViewModel.formatIsoToTime(lastPunchIso)
-                        } else {
-                            binding.todayClockedOutGroup.visibility = View.GONE
-                        }
-                    } else {
-                        binding.todayPunchSummary.visibility = View.GONE
-                    }
+                    // The top "Clocked in" box was moved down into the
+                    // history strip: the "Today" log card now carries the
+                    // clock-in time alongside the other day logs, so this
+                    // summary box stays hidden to avoid showing the same
+                    // info twice.
+                    binding.todayPunchSummary.visibility = View.GONE
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
@@ -527,6 +506,9 @@ class HrDashboardFragment : Fragment() {
                 val totalMinutes = (elapsedMs / 60_000L).toInt()
                 _binding?.tvTodayHours?.text =
                     AttendanceFlowViewModel.formatMinutesForToday(totalMinutes)
+                // Keep the inline "Today" history card's Total Hours live too,
+                // so it agrees with the top stat instead of sitting at 00:00:00.
+                todayCardHoursView?.text = formatMinutesAsPeriod(totalMinutes)
                 delay(1000L)
             }
         }
@@ -739,47 +721,60 @@ class HrDashboardFragment : Fragment() {
             cal.add(Calendar.DAY_OF_MONTH, 1)
         }
         val sorted = filled.sortedByDescending { it.date ?: "" }
-        val primary = sorted.getOrNull(0)
-        if (primary != null) {
-            binding.tvHistoryDate1.text = formatDashboardDate(primary.date)
-            binding.tvLatestTotalHours.text = formatMinutesAsPeriod(primary.totalMinutes ?: 0)
-            binding.tvLatestRange.text = buildPunchRange(primary)
-        } else {
-            binding.tvHistoryDate1.text = formatDashboardDate(null)
-            binding.tvLatestTotalHours.text = formatMinutesAsPeriod(0)
-            binding.tvLatestRange.text = "-- - --"
-        }
+        // Static cardHistory1 is retired; today lives inline in the list.
+        binding.cardHistory1.visibility = View.GONE
 
-        // Render the rest of the month with the same rich-card visual style
-        // (calendar icon + date + inner Total Hours / Clock in & Out card).
+        // Build the list: Today first (tagged "Today" with live clock-in +
+        // live hours), then yesterday, day-before, etc — all in the same card
+        // style so the user sees one consistent log strip.
         binding.historyListContainer.removeAllViews()
-        sorted.drop(1).forEach { record ->
+        todayCardHoursView = null
+        val liveState = flowViewModel.uiState.value
+        val liveInIso = liveState.firstPunchInIso
+        val liveInMs = liveInIso?.let { parseIsoMillisOrNull(it) }
+
+        sorted.forEachIndexed { index, record ->
             val card = LayoutInflater.from(requireContext()).inflate(
                 R.layout.item_attendance_history_card,
                 binding.historyListContainer,
                 false
             )
-            card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
-                formatDashboardDate(record.date)
-            card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
-                formatMinutesAsPeriod(record.totalMinutes ?: 0)
-            card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
-                buildPunchRange(record)
+            val dateView = card.findViewById<TextView>(R.id.tvHistoryItemDate)
+            val hoursView = card.findViewById<TextView>(R.id.tvHistoryItemHours)
+            val rangeView = card.findViewById<TextView>(R.id.tvHistoryItemRange)
 
-            // Pencil → Remark / Time Correction request, same sheet as the
-            // My Attendance history screen. Gap-filled placeholder days
-            // have no backend row (id == null) to attach a request to, so
-            // hide the icon for those.
-            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
-            if (record.id.isNullOrBlank()) {
-                editBtn.visibility = View.GONE
+            if (index == 0) {
+                // TODAY row — tag, live clock-in, no clock-out until the day
+                // ends, hours stay live (server total is 0 for an open
+                // session; the ticker keeps it advancing).
+                dateView.text = "Today"
+                val recordInIso = record.punchInTime
+                    ?: record.sessions?.firstOrNull()?.punchInTime
+                val todayInIso = liveInIso?.takeIf { it.isNotBlank() } ?: recordInIso
+                val todayInLabel = todayInIso?.takeIf { it.isNotBlank() }
+                    ?.let(::formatIsoTime) ?: "--"
+                rangeView.text = "$todayInLabel - --"
+                hoursView.text =
+                    if (liveState.isClockedIn && liveInMs != null) {
+                        val mins = ((System.currentTimeMillis() - liveInMs)
+                            .coerceAtLeast(0) / 60_000L).toInt()
+                        formatMinutesAsPeriod(mins)
+                    } else {
+                        liveState.latestTotalHours
+                            .ifBlank { formatMinutesAsPeriod(record.totalMinutes ?: 0) }
+                    }
+                todayCardHoursView = hoursView
             } else {
-                editBtn.visibility = View.VISIBLE
-                editBtn.setOnClickListener {
-                    EditAttendanceBottomSheet.newInstance(record)
-                        .show(parentFragmentManager, "edit_attendance")
-                }
+                dateView.text = formatDashboardDate(record.date)
+                hoursView.text = formatMinutesAsPeriod(record.totalMinutes ?: 0)
+                rangeView.text = buildPunchRange(record)
             }
+
+            // The pencil (Remark / Time Correction request) is intentionally
+            // hidden on the dashboard — the user asked for that affordance to
+            // live ONLY inside the dedicated "My Attendance" history screen.
+            card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+                .visibility = View.GONE
             binding.historyListContainer.addView(card)
         }
     }

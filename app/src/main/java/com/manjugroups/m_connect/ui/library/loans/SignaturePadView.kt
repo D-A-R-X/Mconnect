@@ -29,20 +29,40 @@ class SignaturePadView @JvmOverloads constructor(
     private var currentPath = Path()
     private var hasDrawn = false
 
+    // An already-saved signature shown as a read-only preview (e.g. the
+    // staff member's profile digital sign). Cleared the moment the user
+    // starts drawing a new one.
+    private var loadedBitmap: Bitmap? = null
+
     var onSignatureChanged: ((Boolean) -> Unit)? = null
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        loadedBitmap?.let { bmp ->
+            val dst = RectF(0f, 0f, width.toFloat(), height.toFloat())
+            canvas.drawBitmap(bmp, null, dst, null)
+        }
         for (path in paths) {
             canvas.drawPath(path, paint)
         }
         canvas.drawPath(currentPath, paint)
     }
 
+    /** Show a previously-saved signature image as a read-only preview. */
+    fun loadBitmap(bitmap: Bitmap?) {
+        loadedBitmap = bitmap
+        invalidate()
+    }
+
+    /** True only if the user physically drew (not just a loaded preview). */
+    fun hasUserDrawn(): Boolean = hasDrawn
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
+                // Drawing a new signature replaces any loaded preview.
+                loadedBitmap = null
                 currentPath = Path()
                 currentPath.moveTo(event.x, event.y)
                 invalidate()
@@ -69,11 +89,13 @@ class SignaturePadView @JvmOverloads constructor(
         paths.clear()
         currentPath = Path()
         hasDrawn = false
+        loadedBitmap = null
         onSignatureChanged?.invoke(false)
         invalidate()
     }
 
-    fun isEmpty(): Boolean = !hasDrawn
+    // A loaded preview counts as "not empty" — the user can submit it as-is.
+    fun isEmpty(): Boolean = !hasDrawn && loadedBitmap == null
 
     fun getSignatureBitmap(): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)

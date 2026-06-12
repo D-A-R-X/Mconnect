@@ -27,9 +27,22 @@ class ClockInSuccessBottomSheet : BottomSheetDialogFragment() {
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
+                // Float the success badge cleanly above the white card —
+                // transparent sheet bg + no clipping (same fix as
+                // ClockOutSuccessBottomSheet) so there's no grey band
+                // behind the green check.
+                it.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
+                if (it is ViewGroup) {
+                    it.clipChildren = false
+                    it.clipToPadding = false
+                }
+                (it.parent as? ViewGroup)?.let { parent ->
+                    parent.clipChildren = false
+                    parent.clipToPadding = false
+                }
             }
         }
         return dialog

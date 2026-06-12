@@ -912,9 +912,6 @@
                             android:id="@+id/itemMarketingMyLeads"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingVertical="12dp">
@@ -937,11 +934,23 @@
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 
-                            <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:contentDescription="@null"
-                                android:src="@drawable/ic_apps_chevron" />
+                            <!--
+                              Coming-soon pill replaces the chevron — the
+                              Leads tab is intentionally not navigable until
+                              the feature ships. The fragment binding clears
+                              the click handler so taps on this row are no-ops.
+                            -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_apps_coming_soon_pill"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="4dp"
+                                android:text="Coming soon"
+                                android:textColor="#B54708"
+                                android:textSize="11sp" />
                         </LinearLayout>
 
                         <View
