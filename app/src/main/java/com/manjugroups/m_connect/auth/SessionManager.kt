@@ -157,6 +157,41 @@ class SessionManager(context: Context) {
         get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_IS_NOTIFICATION_ENABLED, value).apply()
 
+    var isOnDuty: Boolean
+        get() = prefs.getBoolean(KEY_IS_ON_DUTY, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_ON_DUTY, value).apply()
+
+    var onDutyType: String?
+        get() = prefs.getString(KEY_ON_DUTY_TYPE, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_TYPE, value).apply()
+
+    var onDutyTargetName: String?
+        get() = prefs.getString(KEY_ON_DUTY_TARGET_NAME, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_TARGET_NAME, value).apply()
+
+    var onDutyTargetId: String?
+        get() = prefs.getString(KEY_ON_DUTY_TARGET_ID, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_TARGET_ID, value).apply()
+
+    var onDutyVehicleOwnership: String?
+        get() = prefs.getString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, value).apply()
+
+    var onDutyVehicleType: String?
+        get() = prefs.getString(KEY_ON_DUTY_VEHICLE_TYPE, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_VEHICLE_TYPE, value).apply()
+
+    fun clearOnDutyDetails() {
+        prefs.edit()
+            .remove(KEY_IS_ON_DUTY)
+            .remove(KEY_ON_DUTY_TYPE)
+            .remove(KEY_ON_DUTY_TARGET_NAME)
+            .remove(KEY_ON_DUTY_TARGET_ID)
+            .remove(KEY_ON_DUTY_VEHICLE_OWNERSHIP)
+            .remove(KEY_ON_DUTY_VEHICLE_TYPE)
+            .apply()
+    }
+
     fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
         val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
         try {
@@ -392,5 +427,11 @@ class SessionManager(context: Context) {
         private const val KEY_FLEET_DRIVER_BY_BACKEND = "fleet_driver_by_backend"
         private const val KEY_DRIVER_TRIPS = "driver_trips"
         private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
+        private const val KEY_IS_ON_DUTY = "is_on_duty"
+        private const val KEY_ON_DUTY_TYPE = "on_duty_type"
+        private const val KEY_ON_DUTY_TARGET_NAME = "on_duty_target_name"
+        private const val KEY_ON_DUTY_TARGET_ID = "on_duty_target_id"
+        private const val KEY_ON_DUTY_VEHICLE_OWNERSHIP = "on_duty_vehicle_ownership"
+        private const val KEY_ON_DUTY_VEHICLE_TYPE = "on_duty_vehicle_type"
     }
 }
