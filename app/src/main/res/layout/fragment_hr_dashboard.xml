@@ -23,6 +23,41 @@
         android:background="@drawable/bg_attendance_header_gradient"
         android:clipChildren="false">
 
+        <!-- Dynamic Island Pill (shown when On Duty is started) -->
+        <LinearLayout
+            android:id="@+id/layoutDynamicIslandOnduty"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="38dp"
+            android:background="@drawable/bg_dynamic_island_onduty"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:background="@drawable/bg_circle_green" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="On Duty Started"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
+
+            <ImageView
+                android:layout_width="11dp"
+                android:layout_height="11dp"
+                android:src="@drawable/ic_check_white"
+                app:tint="#FFFFFF" />
+        </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/attendanceHeaderTextGroup"
                 android:layout_width="234dp"
@@ -338,12 +373,26 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:orientation="vertical">
+                    android:orientation="horizontal">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnOnDutyDisabled"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="10dp"
+                        android:background="@drawable/bg_attendance_btn_outline_disabled"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="On Duty"
+                        android:textAllCaps="false"
+                        android:textColor="#98A2B3"
+                        android:textSize="14sp" />
 
                     <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/btnClockInNow"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="48dp"
+                        android:layout_weight="1"
                         android:background="@drawable/bg_attendance_btn_primary"
                         android:fontFamily="@font/inter_semibold"
                         android:text="Clock In Now"
@@ -353,23 +402,34 @@
                 </LinearLayout>
 
                 <!--
-                    Clocked-in state: single full-width "Clock Out" button.
-                    The "Take a Break" / "Resume" pause-and-resume flow was
-                    intentionally removed per business decision — clock-in
-                    and clock-out are the only two actions exposed.
+                    Clocked-in state: side-by-side "On Duty" and "Clock Out" buttons.
                 -->
                 <LinearLayout
                     android:id="@+id/clockedInButtonGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:orientation="vertical"
+                    android:orientation="horizontal"
                     android:visibility="gone">
 
                     <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/btnClockOut"
-                        android:layout_width="match_parent"
+                        android:id="@+id/btnOnDuty"
+                        android:layout_width="0dp"
                         android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="10dp"
+                        android:background="@drawable/bg_attendance_btn_outline"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="On Duty"
+                        android:textAllCaps="false"
+                        android:textColor="#1BCA0B"
+                        android:textSize="14sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnClockOut"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
                         android:background="@drawable/bg_attendance_btn_primary"
                         android:fontFamily="@font/inter_semibold"
                         android:text="Clock Out"
