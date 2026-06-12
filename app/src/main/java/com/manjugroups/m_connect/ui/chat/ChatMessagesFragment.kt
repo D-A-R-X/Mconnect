@@ -2718,6 +2718,36 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
+    private var micPulseAnimator: android.animation.AnimatorSet? = null
+
+    private fun startMicPulseAnimation() {
+        if (_binding == null) return
+        micPulseAnimator?.cancel()
+
+        val scaleX = android.animation.ObjectAnimator.ofFloat(binding.animatingMicContainer, "scaleX", 1.0f, 1.15f, 1.0f)
+        val scaleY = android.animation.ObjectAnimator.ofFloat(binding.animatingMicContainer, "scaleY", 1.0f, 1.15f, 1.0f)
+
+        scaleX.repeatCount = android.animation.ValueAnimator.INFINITE
+        scaleY.repeatCount = android.animation.ValueAnimator.INFINITE
+
+        micPulseAnimator = android.animation.AnimatorSet().apply {
+            playTogether(scaleX, scaleY)
+            duration = 1000
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun stopMicPulseAnimation() {
+        micPulseAnimator?.cancel()
+        micPulseAnimator = null
+        if (_binding != null) {
+            binding.animatingMicContainer.animate().cancel()
+            binding.animatingMicContainer.scaleX = 1f
+            binding.animatingMicContainer.scaleY = 1f
+        }
+    }
+
     private fun updateRecordingUI() {
         if (_binding == null) return
         if (isRecording) {
@@ -2732,6 +2762,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.animatingMicContainer.scaleX = 1f
             binding.animatingMicContainer.scaleY = 1f
             binding.animatingMicContainer.alpha = 1f
+            binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_rec_mic_circle)
 
             binding.slideCancelContainer.alpha = 1f
             binding.slideCancelContainer.translationX = 0f
@@ -2764,8 +2795,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
             updateRecordingHintNormal()
             recordingHandler.post(recordingTimerTask)
+            startMicPulseAnimation()
             broadcastRecordingTyping()
         } else {
+            stopMicPulseAnimation()
+            binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_send_circle)
             recordingHandler.removeCallbacks(recordingTimerTask)
             binding.ivRecordingDot.animate().cancel()
             binding.etMessage.isEnabled = true
@@ -2787,6 +2821,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private fun animateDropToTrash() {
         if (_binding == null) return
+
+        stopMicPulseAnimation()
 
         // Calculate translation needed to reach the trash can
         val targetTx = -(binding.animatingMicContainer.x - binding.trashCanContainer.x)
@@ -2972,7 +3008,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startRecording() {
         runCatching {
             val toneGenerator = android.media.ToneGenerator(android.media.AudioManager.STREAM_SYSTEM, 100)
-            toneGenerator.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 100)
+            toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_CONFIRM, 150)
         }
         runCatching {
             audioFile = File(requireContext().cacheDir, "voice_${System.currentTimeMillis()}.m4a")
@@ -3265,18 +3301,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
 
             if (_binding != null) {
-                val topPadding = dpToPx(12)
-                val bottomPadding = dpToPx(12) + bottomInset
-                val sidePadding = dpToPx(12)
+                val topPadding = 0
+                val bottomPadding = bottomInset
+                val sidePadding = 0
 
-                binding.bottomBar.setPadding(
-                    sidePadding,
-                    topPadding,
-                    sidePadding,
-                    bottomPadding
-                )
-
-                binding.recordingOverlay.setPadding(
+                binding.bottomContainer.setPadding(
                     sidePadding,
                     topPadding,
                     sidePadding,
