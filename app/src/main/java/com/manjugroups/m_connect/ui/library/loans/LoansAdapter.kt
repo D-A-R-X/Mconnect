@@ -25,7 +25,7 @@ class LoansAdapter(
 
     override fun getItemViewType(position: Int): Int = when (items[position].status) {
         LoanStatus.ACTIVE, LoanStatus.PENDING -> TYPE_ACTIVE
-        LoanStatus.REPAID -> TYPE_PREVIOUS
+        else -> TYPE_PREVIOUS // REPAID / CANCELLED / REJECTED
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -81,6 +81,26 @@ class LoansAdapter(
             b.tvLoanPrincipal.text = formatRupees(loan.principal)
             b.tvLoanPrincipalLabel.text = if (loan.isAdvance) "Advance" else "Principal"
             b.tvLoanDisbursed.text = formatShortDate(loan.disbursedMillis)
+
+            // Show the real terminal state — cancelled/rejected rows were
+            // previously mislabelled "REPAID".
+            when (loan.status) {
+                LoanStatus.CANCELLED -> {
+                    b.tvPreviousLoanBadge.text = "• CANCELLED"
+                    b.tvPreviousLoanBadge.setTextColor(android.graphics.Color.parseColor("#667085"))
+                }
+                LoanStatus.REJECTED -> {
+                    b.tvPreviousLoanBadge.text = "• REJECTED"
+                    b.tvPreviousLoanBadge.setTextColor(android.graphics.Color.parseColor("#F04438"))
+                }
+                else -> {
+                    b.tvPreviousLoanBadge.text = "• REPAID"
+                    b.tvPreviousLoanBadge.setTextColor(android.graphics.Color.parseColor("#12B76A"))
+                }
+            }
+            // A cancelled/rejected request has no repayment schedule.
+            val terminal = loan.status == LoanStatus.CANCELLED || loan.status == LoanStatus.REJECTED
+            b.btnViewRepayment.visibility = if (terminal) android.view.View.GONE else android.view.View.VISIBLE
             b.btnViewRepayment.setOnClickListener { onPreviousClick(loan) }
         }
     }

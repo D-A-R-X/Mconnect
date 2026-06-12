@@ -30,7 +30,7 @@ data class Loan(
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
-enum class LoanStatus { ACTIVE, PENDING, REPAID }
+enum class LoanStatus { ACTIVE, PENDING, REPAID, CANCELLED, REJECTED }
 
 data class Repayment(
     val emiIndex: Int,
@@ -51,6 +51,17 @@ object LoanMapper {
 
     fun fromRemote(remote: RemoteLoan, mappedStatus: LoanStatus): Loan {
         val type = inferType(remote.purpose)
+        // Derive the REAL status from the server row, not the bucket hint —
+        // the "previous" bucket lumps repaid + cancelled + rejected together,
+        // so a cancelled loan was wrongly shown as "Repaid".
+        val mappedStatusReal = when (remote.status?.lowercase()?.trim()) {
+            "cancelled", "canceled" -> LoanStatus.CANCELLED
+            "rejected" -> LoanStatus.REJECTED
+            "active" -> LoanStatus.ACTIVE
+            "pending" -> LoanStatus.PENDING
+            "completed", "repaid", "closed" -> LoanStatus.REPAID
+            else -> mappedStatus
+        }
         val title = remote.purpose?.takeIf { it.isNotBlank() }
             ?: when (type) {
                 LoanType.HOME -> "Home Loan"
@@ -63,13 +74,13 @@ object LoanMapper {
             .sortedBy { parseMonth(it.month) ?: 0L }
             .mapIndexed { idx, r -> mapRepayment(idx + 1, r) }
 
-        val repayments = when (mappedStatus) {
+        val repayments = when (mappedStatusReal) {
             LoanStatus.ACTIVE -> buildFullSchedule(remote, paidEntries)
             LoanStatus.PENDING -> buildPendingSchedule(remote)
-            LoanStatus.REPAID -> paidEntries
+            else -> paidEntries
         }
 
-        val nextEmiMillis = if (mappedStatus == LoanStatus.ACTIVE) {
+        val nextEmiMillis = if (mappedStatusReal == LoanStatus.ACTIVE) {
             nextUnpaidMonthMillis(remote, paidEntries)
         } else 0L
 
@@ -77,23 +88,28 @@ object LoanMapper {
         // *expected* outstanding — surface the loanAmount instead of zero so
         // the card has something meaningful to show.
         val outstanding = when {
-            mappedStatus == LoanStatus.PENDING -> (remote.loanAmount ?: remote.principalAmount ?: 0.0)
+            mappedStatusReal == LoanStatus.PENDING -> (remote.loanAmount ?: remote.principalAmount ?: 0.0)
             else -> (remote.remainingBalance ?: 0.0)
         }
 
-        val isAdvance = remote.interestType.equals("Salary Advance", ignoreCase = true)
-            || remote.interestType.equals("salary_advance", ignoreCase = true)
-            || remote.purpose?.contains("advance", ignoreCase = true) == true
-            || (remote.interestType.isNullOrBlank()
-                && remote.purpose?.contains("home", ignoreCase = true) == false
-                && remote.purpose?.contains("education", ignoreCase = true) == false)
+        // requestType is the authoritative backend flag ("loan" vs
+        // "salary_advance"); fall back to the older interestType/purpose
+        // heuristics only when the backend didn't stamp it (legacy rows).
+        val isAdvance = when {
+            remote.requestType.equals("salary_advance", ignoreCase = true) -> true
+            remote.requestType.equals("loan", ignoreCase = true) -> false
+            else ->
+                remote.interestType.equals("Salary Advance", ignoreCase = true)
+                    || remote.interestType.equals("salary_advance", ignoreCase = true)
+                    || remote.purpose?.contains("advance", ignoreCase = true) == true
+        }
 
         return Loan(
             id = remote.id.orEmpty(),
             title = title,
             loanId = remote.loanId.orEmpty(),
             type = type,
-            status = mappedStatus,
+            status = mappedStatusReal,
             outstandingBalance = outstanding.toLong(),
             nextEmiAmount = (remote.monthlyDeduction ?: 0.0).toLong(),
             nextEmiDueMillis = nextEmiMillis,

@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.BottomSheetAcceptLoanBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApproveLoanRequest
+import com.manjugroups.m_connect.network.DigitalSignRequest
 import com.manjugroups.m_connect.network.LoanData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,6 +59,7 @@ class AcceptLoanBottomSheet(
 
         binding.btnClear.setOnClickListener {
             binding.signaturePad.clear()
+            existingSignatureStorageId = null
         }
 
         binding.btnSubmit.setOnClickListener {
@@ -67,45 +69,83 @@ class AcceptLoanBottomSheet(
             }
             submitApproval()
         }
+
+        loadExistingSignature()
     }
+
+    /**
+     * If the staff member already has a saved digital signature, fetch it
+     * and show it in the pad so they can approve without re-drawing. Tapping
+     * Clear (or drawing) discards it and forces a fresh signature.
+     */
+    private fun loadExistingSignature() {
+        val token = SessionManager(requireContext()).bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                val resp = withContext(Dispatchers.IO) { api.getDigitalSign(token) }
+                if (resp.success && resp.hasSignature && !resp.url.isNullOrBlank()) {
+                    val bmp = withContext(Dispatchers.IO) {
+                        val client = okhttp3.OkHttpClient()
+                        val request = okhttp3.Request.Builder().url(resp.url).build()
+                        client.newCall(request).execute().body?.byteStream()?.let {
+                            android.graphics.BitmapFactory.decodeStream(it)
+                        }
+                    }
+                    if (_binding != null && bmp != null) {
+                        existingSignatureStorageId = resp.storageId
+                        binding.signaturePad.loadBitmap(bmp)
+                        binding.btnSubmit.isEnabled = true
+                    }
+                }
+            }
+        }
+    }
+
+    /** Storage id of the staff's saved signature, when one was fetched. */
+    private var existingSignatureStorageId: String? = null
 
     private fun submitApproval() {
         binding.btnSubmit.isEnabled = false
-        binding.btnSubmit.text = "Uploading..."
         val token = SessionManager(requireContext()).bearerToken
+        val drewNew = binding.signaturePad.hasUserDrawn()
+        val existing = existingSignatureStorageId
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // 1. Export signature to file
-                val bitmap = binding.signaturePad.getSignatureBitmap()
-                val file = File(requireContext().cacheDir, "signature_${System.currentTimeMillis()}.png")
-                withContext(Dispatchers.IO) {
-                    FileOutputStream(file).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                }
-
-                // 2. Upload signature image
-                val requestBody = file.asRequestBody("image/png".toMediaType())
-                val uploadResp = withContext(Dispatchers.IO) {
-                    api.uploadStorageFile(token, requestBody)
-                }
-
-                val storageId = uploadResp.storageId
-                if (storageId == null) {
-                    throw Exception("Upload failed, storage ID is null")
-                }
-
-                // 3. Call approve API
-                binding.btnSubmit.text = "Approving..."
-                val req = ApproveLoanRequest(id = loan.id!!, eSignatureId = storageId)
-                withContext(Dispatchers.IO) {
-                    runCatching { api.approveLoan(token, req) }.onFailure { err ->
-                        if (err.message?.contains("404") != true) {
-                            throw err
+                val storageId: String = if (drewNew || existing == null) {
+                    // Fresh signature → upload, then persist it as the
+                    // staff's profile digital sign so it's reused next time.
+                    binding.btnSubmit.text = "Uploading..."
+                    val bitmap = binding.signaturePad.getSignatureBitmap()
+                    val file = File(requireContext().cacheDir, "signature_${System.currentTimeMillis()}.png")
+                    withContext(Dispatchers.IO) {
+                        FileOutputStream(file).use { out ->
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                         }
                     }
+                    val requestBody = file.asRequestBody("image/png".toMediaType())
+                    val uploadResp = withContext(Dispatchers.IO) {
+                        api.uploadStorageFile(token, requestBody)
+                    }
+                    val newId = uploadResp.storageId
+                        ?: throw Exception("Upload failed, storage ID is null")
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            api.saveDigitalSign(
+                                token,
+                                DigitalSignRequest(storageId = newId, fileName = "signature.png"),
+                            )
+                        }
+                    }
+                    newId
+                } else {
+                    // Reuse the already-saved signature — no re-upload.
+                    existing
                 }
+
+                binding.btnSubmit.text = "Approving..."
+                val req = ApproveLoanRequest(id = loan.id!!, eSignatureId = storageId)
+                withContext(Dispatchers.IO) { api.approveLoan(token, req) }
 
                 binding.btnSubmit.text = "Success!"
                 Toast.makeText(requireContext(), "Loan approved successfully", Toast.LENGTH_SHORT).show()

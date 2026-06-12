@@ -147,6 +147,18 @@ interface ApiService {
         @Body body: RequestBody
     ): StorageUploadResponse
 
+    // ── Staff digital signature (reused for loan e-sign) ──
+    @GET("api/hr/staff/digital-sign")
+    suspend fun getDigitalSign(
+        @Header("Authorization") token: String
+    ): DigitalSignResponse
+
+    @POST("api/hr/staff/digital-sign")
+    suspend fun saveDigitalSign(
+        @Header("Authorization") token: String,
+        @Body body: DigitalSignRequest
+    ): DigitalSignResponse
+
     // Leaves
     @GET("api/hr/leaves/balance")
     suspend fun getLeaveBalance(
@@ -1212,6 +1224,19 @@ data class PunchResponse(
 // Storage models
 data class UploadUrlResponse(val success: Boolean, val uploadUrl: String?)
 data class StorageUrlResponse(val success: Boolean, val url: String?)
+
+/** GET /api/hr/staff/digital-sign — the caller's saved signature, if any. */
+data class DigitalSignResponse(
+    val success: Boolean = false,
+    val hasSignature: Boolean = false,
+    val storageId: String? = null,
+    val url: String? = null,
+    val fileName: String? = null,
+    val error: String? = null,
+)
+
+/** POST /api/hr/staff/digital-sign — persist a freshly-drawn signature. */
+data class DigitalSignRequest(val storageId: String, val fileName: String? = null)
 data class StorageUploadResponse(
     val success: Boolean,
     val storageId: String? = null,
@@ -1346,6 +1371,9 @@ data class LoanData(
     val purpose: String? = null,
     val notes: String? = null,
     val approvalStatus: String? = null,
+    // "loan" | "salary_advance" — the authoritative type flag from the
+    // backend (drives the Loans vs Advance split, not interestType/purpose).
+    val requestType: String? = null,
     val currentStage: String? = null,
     val nominee1Status: String? = null,
     val nominee2Status: String? = null,

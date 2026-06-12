@@ -161,11 +161,7 @@ class GmApprovalBottomSheet(
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val req = ApproveLoanRequest(id = loan.id!!)
-                withContext(Dispatchers.IO) {
-                    runCatching { api.approveLoan(token, req) }.onFailure { err ->
-                        if (err.message?.contains("404") != true) throw err
-                    }
-                }
+                withContext(Dispatchers.IO) { api.approveLoan(token, req) }
                 Toast.makeText(requireContext(), "Loan approved successfully", Toast.LENGTH_SHORT).show()
                 onAccepted()
                 dismiss()
@@ -185,11 +181,7 @@ class GmApprovalBottomSheet(
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val req = RejectRequest(id = loan.id!!, reason = "Rejected by approver")
-                withContext(Dispatchers.IO) {
-                    runCatching { api.rejectLoan(token, req) }.onFailure { err ->
-                        if (err.message?.contains("404") != true) throw err
-                    }
-                }
+                withContext(Dispatchers.IO) { api.rejectLoan(token, req) }
                 Toast.makeText(requireContext(), "Loan rejected", Toast.LENGTH_SHORT).show()
                 onRejected()
                 dismiss()

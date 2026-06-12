@@ -48,11 +48,6 @@ class LoansFragment : Fragment() {
     private lateinit var adapter: LoansAdapter
     private lateinit var requestedLoansAdapter: RequestedLoansAdapter
 
-    private var mockPendingList: MutableList<com.manjugroups.m_connect.network.LoanData>? = null
-
-    /** Tracks which role the user selected from the dropdown (0=User, 1=Nominee1, 2=Nominee2, 3=GM, 4=AVP, 5=HR). */
-    private var selectedRoleId = 0
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -73,36 +68,18 @@ class LoansFragment : Fragment() {
 
         requestedLoansAdapter = RequestedLoansAdapter(
             onAcceptClick = { loan ->
-                if (selectedRoleId >= 3) {
-                    // GM / AVP / HR — show the approval sheet with track progress & signatures
-                    val gmSheet = GmApprovalBottomSheet(
-                        loan = loan,
-                        onAccepted = {
-                            val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
-                            if (idx != -1) {
-                                mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
-                            }
-                            loadPendingApprovals()
-                        },
-                        onRejected = {
-                            val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
-                            if (idx != -1) {
-                                mockPendingList!!.removeAt(idx)
-                            }
-                            loadPendingApprovals()
-                        }
-                    )
-                    gmSheet.show(childFragmentManager, "GmApprovalBottomSheet")
+                // Route by the loan's CURRENT stage, not a manual role pick:
+                //   nominee_pending → e-signature pad (saved sign auto-used)
+                //   gm/avp/hr/accountant_pending → approval sheet (no sign)
+                if (loan.currentStage?.lowercase()?.trim() == "nominee_pending") {
+                    AcceptLoanBottomSheet(loan) { loadPendingApprovals() }
+                        .show(childFragmentManager, "AcceptLoanBottomSheet")
                 } else {
-                    // Nominee 1 / 2 — show the e-signature pad
-                    val bottomSheet = AcceptLoanBottomSheet(loan) {
-                        val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
-                        if (idx != -1) {
-                            mockPendingList!![idx] = mockPendingList!![idx].copy(status = "APPROVED")
-                        }
-                        loadPendingApprovals()
-                    }
-                    bottomSheet.show(childFragmentManager, "AcceptLoanBottomSheet")
+                    GmApprovalBottomSheet(
+                        loan = loan,
+                        onAccepted = { loadPendingApprovals() },
+                        onRejected = { loadPendingApprovals() },
+                    ).show(childFragmentManager, "GmApprovalBottomSheet")
                 }
             },
             onRejectClick = { loan ->
@@ -113,33 +90,13 @@ class LoansFragment : Fragment() {
         binding.rvRequestedLoans.adapter = requestedLoansAdapter
         binding.rvRequestedLoans.itemAnimator = null
 
-        binding.btnUserDropdown.setOnClickListener { view ->
-            val popup = android.widget.PopupMenu(requireContext(), view)
-            popup.menu.add(0, 0, 0, "User")
-            popup.menu.add(0, 1, 1, "Nominee 1")
-            popup.menu.add(0, 2, 2, "Nominee 2")
-            popup.menu.add(0, 3, 3, "GM")
-            popup.menu.add(0, 4, 4, "AVP")
-            popup.menu.add(0, 5, 5, "HR")
-            popup.setOnMenuItemClickListener { item ->
-                binding.btnUserDropdown.text = item.title
-                selectedRoleId = item.itemId
-                if (item.itemId == 0) {
-                    binding.layoutRequestedLoans.visibility = View.GONE
-                    binding.layoutPreviousLoans.visibility = View.VISIBLE
-                    binding.heroActiveCard.visibility = View.VISIBLE
-                    loadFromApi()
-                } else {
-                    binding.layoutRequestedLoans.visibility = View.VISIBLE
-                    binding.layoutPreviousLoans.visibility = View.GONE
-                    binding.heroActiveCard.visibility = View.VISIBLE
-                    binding.loansEmptyState.visibility = View.GONE
-                    loadPendingApprovals()
-                }
-                true
-            }
-            popup.show()
-        }
+        // Role dropdown removed. The backend's pending-approvals endpoint
+        // returns exactly the loans THIS user can act on (resolved by their
+        // role + each loan's stage), so the screen always shows My Loans
+        // plus a Pending Approvals section that only appears when the user
+        // actually has something to approve.
+        binding.btnUserDropdown.visibility = View.GONE
+        binding.layoutPreviousLoans.visibility = View.VISIBLE
 
         binding.btnLoansBack.setOnClickListener { navigateUp() }
         binding.btnLoansEmptyBack.setOnClickListener { navigateUp() }
@@ -184,6 +141,7 @@ class LoansFragment : Fragment() {
         }
 
         loadFromApi()
+        loadPendingApprovals()
     }
 
     private fun applySystemInsets() {
@@ -390,6 +348,15 @@ class LoansFragment : Fragment() {
         // the other. Salary advances start at hr_pending (they skip the
         // nominee/GM/AVP chain), so those earlier dots read as done —
         // matching "it's already past those" semantics.
+        // Advances run ONLY HR → Accounts (no nominee/GM/AVP chain), so
+        // hide those four steps for an advance — the tracker then shows
+        // just the two relevant stages.
+        val loanStepVis = if (loan.isAdvance) View.GONE else View.VISIBLE
+        binding.trackStepNominee1.visibility = loanStepVis
+        binding.trackStepNominee2.visibility = loanStepVis
+        binding.trackStepGm.visibility = loanStepVis
+        binding.trackStepAvp.visibility = loanStepVis
+
         val stage = loan.currentStage?.lowercase()?.trim().orEmpty()
         // Numeric rank of the current stage; -1 for unknown/blank so an
         // un-stamped legacy row lights nothing rather than everything.
@@ -468,44 +435,20 @@ class LoansFragment : Fragment() {
             runCatching { api.getPendingLoanApprovals(token) }
                 .onSuccess { response ->
                     if (_binding == null) return@onSuccess
-                    // Use response.pending for requested loans
-                    requestedLoansAdapter.submitList(response.pending)
+                    val pending = response.pending
+                    requestedLoansAdapter.submitList(pending)
+                    // The Pending Approvals section only appears when this
+                    // user actually has loans to act on (the backend decided
+                    // that by their role + each loan's stage).
+                    binding.layoutRequestedLoans.visibility =
+                        if (pending.isEmpty()) View.GONE else View.VISIBLE
                 }
-                .onFailure { err ->
+                .onFailure {
                     if (_binding == null) return@onFailure
-                    if (err.message?.contains("404") == true) {
-                        // Mock data for UI demonstration since backend endpoint is missing
-                        if (mockPendingList == null) {
-                            mockPendingList = mutableListOf(
-                                com.manjugroups.m_connect.network.LoanData(
-                                    id = "mock_1",
-                                    loanId = "LN000021",
-                                    staffId = "s1",
-                                    staffName = "Manju",
-                                    employeeId = "EMP001",
-                                    principalAmount = 250000.0,
-                                    purpose = "Home Loan",
-                                    disbursedDate = "25 Apr 2024",
-                                    status = "PENDING"
-                                ),
-                                com.manjugroups.m_connect.network.LoanData(
-                                    id = "mock_2",
-                                    loanId = "LN000022",
-                                    staffId = "s2",
-                                    staffName = "Siva",
-                                    employeeId = "EMP002",
-                                    principalAmount = 15000.0,
-                                    interestType = "Salary Advance",
-                                    purpose = "Salary Advance",
-                                    disbursedDate = "25 Apr 2024",
-                                    status = "PENDING"
-                                )
-                            )
-                        }
-                        requestedLoansAdapter.submitList(mockPendingList?.toList())
-                    } else {
-                        android.widget.Toast.makeText(requireContext(), "Failed to load requests: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    // No approvals to show (or a transient error) — hide the
+                    // section silently; most staff never approve loans.
+                    requestedLoansAdapter.submitList(emptyList())
+                    binding.layoutRequestedLoans.visibility = View.GONE
                 }
         }
     }
@@ -520,16 +463,7 @@ class LoansFragment : Fragment() {
                     loadPendingApprovals()
                 }
                 .onFailure { err ->
-                    if (err.message?.contains("404") == true) {
-                        android.widget.Toast.makeText(requireContext(), "Loan rejected (Mock)", android.widget.Toast.LENGTH_SHORT).show()
-                        val idx = mockPendingList?.indexOfFirst { it.id == loan.id } ?: -1
-                        if (idx != -1) {
-                            mockPendingList!!.removeAt(idx)
-                        }
-                        loadPendingApprovals()
-                    } else {
-                        android.widget.Toast.makeText(requireContext(), "Failed to reject loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    android.widget.Toast.makeText(requireContext(), "Failed to reject loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -646,6 +580,7 @@ class LoansFragment : Fragment() {
         // "User" view; the role-filter dropdown drives its own load.
         if (loaded && _binding != null) {
             loadFromApi()
+            loadPendingApprovals()
         }
     }
 
