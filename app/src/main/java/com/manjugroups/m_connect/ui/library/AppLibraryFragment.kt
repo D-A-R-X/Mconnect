@@ -375,13 +375,22 @@ class AppLibraryFragment : Fragment() {
         binding.itemMarketingDialer.isFocusable = false
         binding.itemMarketingDialer.setOnClickListener(null)
         binding.itemMarketingDialer.background = null
+        // Leads is gated as Coming Soon — same treatment as Dialer / Inventory.
+        // IAM still decides whether the row appears, but it's non-tappable
+        // until the feature ships. Layout swaps the chevron for a "Coming
+        // soon" pill; we mirror that here by clearing the click handler +
+        // isClickable.
         bindIamEntry(
             row = binding.itemMarketingMyLeads,
             allowed = hasAny(listOf(
                 "telecaller.externalLeads.viewOwn",
                 "telecaller.externalLeads.viewAll",
             )),
-        ) { openScreen(MyLeadsFragment.newInstance(MyLeadsFragment.Mode.ALL)) }
+        ) { /* no-op — Leads is coming soon */ }
+        binding.itemMarketingMyLeads.isClickable = false
+        binding.itemMarketingMyLeads.isFocusable = false
+        binding.itemMarketingMyLeads.setOnClickListener(null)
+        binding.itemMarketingMyLeads.background = null
         // Inventory is gated as Coming Soon — same treatment as Dialer.
         // IAM still decides whether the row appears, but it's non-tappable
         // until the feature ships. Layout swaps the chevron for a "Coming

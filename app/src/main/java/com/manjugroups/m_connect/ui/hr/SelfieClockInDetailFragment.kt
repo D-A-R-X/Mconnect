@@ -22,7 +22,9 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSelfieClockInDetailBinding
 import com.manjugroups.m_connect.ui.common.navigateUp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -173,31 +175,39 @@ class SelfieClockInDetailFragment : Fragment() {
     }
 
     private fun loadPreviewImage(file: File) {
-        try {
-            val bounds = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
+        // Decode OFF the main thread — doing it inline froze the UI while a
+        // multi-megapixel selfie was downsampled, which read as a crash. A
+        // loader covers the (now short) gap.
+        binding.selfiePreviewLoader.visibility = View.VISIBLE
+        viewLifecycleOwner.lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, bounds)
+                    var sampleSize = 1
+                    val reqSize = 1080
+                    var outWidth = bounds.outWidth
+                    var outHeight = bounds.outHeight
+                    while (outWidth > reqSize || outHeight > reqSize) {
+                        sampleSize *= 2
+                        outWidth /= 2
+                        outHeight /= 2
+                    }
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize.coerceAtLeast(1)
+                    }
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                } catch (_: Exception) {
+                    null
+                }
             }
-            BitmapFactory.decodeFile(file.absolutePath, bounds)
-            var sampleSize = 1
-            val reqSize = 1080
-            var outWidth = bounds.outWidth
-            var outHeight = bounds.outHeight
-            while (outWidth > reqSize || outHeight > reqSize) {
-                sampleSize *= 2
-                outWidth /= 2
-                outHeight /= 2
-            }
-            val options = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize.coerceAtLeast(1)
-            }
-            val bitmap = BitmapFactory.decodeFile(file.absolutePath, options)
+            if (_binding == null) return@launch
             if (bitmap != null) {
                 binding.ivSelfiePreview.setImageBitmap(bitmap)
             } else {
                 binding.ivSelfiePreview.setImageURI(android.net.Uri.fromFile(file))
             }
-        } catch (_: Exception) {
-            binding.ivSelfiePreview.setImageURI(android.net.Uri.fromFile(file))
+            binding.selfiePreviewLoader.visibility = View.GONE
         }
     }
 

@@ -112,6 +112,16 @@
                         android:scaleType="centerCrop"
                         android:src="@drawable/bg_attendance_checker_placeholder" />
 
+                    <!-- Shown while the captured photo is decoded off the main
+                         thread so the screen doesn't look frozen/blank. -->
+                    <ProgressBar
+                        android:id="@+id/selfiePreviewLoader"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_gravity="center"
+                        android:indeterminateTint="#FFFFFF"
+                        android:visibility="gone" />
+
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
