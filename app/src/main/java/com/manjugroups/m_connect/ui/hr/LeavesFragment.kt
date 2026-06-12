@@ -584,16 +584,11 @@ class LeavesFragment : Fragment() {
 
         val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu, null)
 
-        // Measure the popup so we can position it correctly
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-
+        val popupWidth = dp(160)
         val popup = android.widget.PopupWindow(
             popupView,
-            popupView.measuredWidth,
-            popupView.measuredHeight,
+            popupWidth,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         ).apply {
             elevation = dp(12).toFloat()
@@ -659,7 +654,7 @@ class LeavesFragment : Fragment() {
             }
         }
 
-        val xOffset = anchor.width - popupView.measuredWidth
+        val xOffset = anchor.width - popupWidth
         popup.showAsDropDown(anchor, xOffset, dp(4))
 
         popupView.alpha = 0f

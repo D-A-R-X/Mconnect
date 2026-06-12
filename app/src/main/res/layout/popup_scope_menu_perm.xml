@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
+    android:layout_width="180dp"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_scope_popup"
-    android:minWidth="140dp"
     android:orientation="vertical"
     android:paddingVertical="6dp">
 
@@ -21,7 +20,10 @@
         android:text="My Permission"
         android:textColor="#061D3D"
         android:textSize="14sp"
-        android:letterSpacing="-0.02" />
+        android:letterSpacing="-0.02"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:singleLine="true" />
 
     <View
         android:layout_width="64dp"
@@ -54,7 +56,10 @@
                 android:text="Team Permission"
                 android:textColor="#061D3D"
                 android:textSize="14sp"
-                android:letterSpacing="-0.02" />
+                android:letterSpacing="-0.02"
+                android:maxLines="1"
+                android:ellipsize="none"
+                android:singleLine="true" />
 
             <TextView
                 android:id="@+id/dotTeamBadge"
@@ -91,5 +96,8 @@
         android:text="All Permission"
         android:textColor="#061D3D"
         android:textSize="14sp"
-        android:letterSpacing="-0.02" />
+        android:letterSpacing="-0.02"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:singleLine="true" />
 </LinearLayout>

@@ -202,6 +202,8 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.Message) {
             val isDeleted = item.data.isDeleted == true
             resetBodyStyle(binding.tvMessageBody, isSent = true)
+            binding.tvMessageTime.setTextColor(android.graphics.Color.parseColor("#CCFFFFFF"))
+            binding.ivSeenStatus.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#80FFFFFF"))
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = true)
             applyBodyMaxWidth(binding.tvMessageBody)
             binding.ivSeenStatus.visibility = if (isDeleted) View.GONE else View.VISIBLE
@@ -231,6 +233,18 @@ class ChatMessageAdapter(
             binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
                 .getFont(binding.root.context, R.font.inter_regular)
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
+
+            // Apply animated emoji style if body contains only 1-3 emojis
+            item.data.body?.let { bodyText ->
+                applyEmojiOnlyStyle(
+                    body = binding.tvMessageBody,
+                    bubbleFrame = binding.bubbleFrame,
+                    timeView = binding.tvMessageTime,
+                    tickIcon = binding.ivSeenStatus,
+                    text = bodyText,
+                    isMine = true
+                )
+            }
 
             bindReplyQuote(
                 parentId = item.data.parentMessageId,
@@ -282,6 +296,7 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.Message) {
             val isDeleted = item.data.isDeleted == true
             resetBodyStyle(binding.tvMessageBody, isSent = false)
+            binding.tvMessageTime.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = false)
             applyBodyMaxWidth(binding.tvMessageBody)
 
@@ -325,6 +340,18 @@ class ChatMessageAdapter(
             binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
                 .getFont(binding.root.context, R.font.inter_regular)
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
+
+            // Apply animated emoji style if body contains only 1-3 emojis
+            item.data.body?.let { bodyText ->
+                applyEmojiOnlyStyle(
+                    body = binding.tvMessageBody,
+                    bubbleFrame = binding.bubbleFrame,
+                    timeView = binding.tvMessageTime,
+                    tickIcon = null,
+                    text = bodyText,
+                    isMine = false
+                )
+            }
 
             bindReplyQuote(
                 parentId = item.data.parentMessageId,
@@ -389,6 +416,9 @@ class ChatMessageAdapter(
     }
 
     private fun resetBodyStyle(body: TextView, isSent: Boolean) {
+        body.clearAnimation()
+        body.scaleX = 1f
+        body.scaleY = 1f
         body.alpha = 1f
         body.textSize = 14f
         body.setTextColor(
@@ -398,6 +428,19 @@ class ChatMessageAdapter(
         body.typeface = androidx.core.content.res.ResourcesCompat
             .getFont(body.context, R.font.inter_regular)
         body.setCompoundDrawables(null, null, null, null)
+        body.visibility = View.VISIBLE
+
+        val parent = body.parent as? ViewGroup
+        if (parent != null) {
+            val viewsToRemove = mutableListOf<View>()
+            for (i in 0 until parent.childCount) {
+                val child = parent.getChildAt(i)
+                if (child.tag == "DYNAMIC_EMOJI_VIEW") {
+                    viewsToRemove.add(child)
+                }
+            }
+            viewsToRemove.forEach { parent.removeView(it) }
+        }
     }
 
     private fun applyBubbleChrome(
@@ -1120,6 +1163,212 @@ class ChatMessageAdapter(
         fun bind(item: ChatItem.DateSeparator) {
             binding.tvDateLabel.text = item.date
         }
+    }
+
+    private fun applyEmojiOnlyStyle(
+        body: TextView,
+        bubbleFrame: FrameLayout,
+        timeView: TextView,
+        tickIcon: View?,
+        text: String,
+        isMine: Boolean
+    ) {
+        val emojiCount = getEmojiCountIfOnlyEmojis(text)
+        if (emojiCount in 1..3) {
+            bubbleFrame.background = null
+            bubbleFrame.setPadding(0, 0, 0, 0)
+            timeView.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
+            if (tickIcon is ImageView) {
+                tickIcon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#8E8E93"))
+            }
+
+            body.textSize = when (emojiCount) {
+                1 -> 48f
+                2 -> 36f
+                else -> 28f
+            }
+
+            val parent = body.parent as? ViewGroup
+            if (parent != null) {
+                renderAnimatedEmojis(parent, body, text, emojiCount, isMine)
+            }
+        }
+    }
+
+    private fun renderAnimatedEmojis(
+        parent: ViewGroup,
+        body: TextView,
+        text: String,
+        emojiCount: Int,
+        isMine: Boolean
+    ) {
+        body.visibility = View.GONE
+
+        val emojis = mutableListOf<String>()
+        val boundary = java.text.BreakIterator.getCharacterInstance()
+        boundary.setText(text)
+        var start = boundary.first()
+        var end = boundary.next()
+        while (end != java.text.BreakIterator.DONE) {
+            val cluster = text.substring(start, end)
+            if (isClusterOnlyEmoji(cluster)) {
+                emojis.add(cluster)
+            }
+            start = end
+            end = boundary.next()
+        }
+
+        val sizeDp = when (emojiCount) {
+            1 -> 100
+            2 -> 76
+            else -> 60
+        }
+
+        val context = parent.context
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (isMine) android.view.Gravity.END else android.view.Gravity.START
+            tag = "DYNAMIC_EMOJI_VIEW"
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = if (isMine) android.view.Gravity.END else android.view.Gravity.START
+                bottomMargin = dp(context, 4)
+                topMargin = dp(context, 4)
+            }
+        }
+
+        val sizePx = dp(context, sizeDp)
+
+        emojis.take(emojiCount).forEach { emoji ->
+            val url = getEmojiCdnUrl(emoji)
+            if (url == null) {
+                body.visibility = View.VISIBLE
+                return@forEach
+            }
+            val imageView = ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(sizePx, sizePx).apply {
+                    marginStart = dp(context, 4)
+                    marginEnd = dp(context, 4)
+                }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                load(url) {
+                    crossfade(true)
+                    listener(
+                        onError = { _, _ ->
+                            body.visibility = View.VISIBLE
+                        }
+                    )
+                }
+            }
+            container.addView(imageView)
+        }
+
+        parent.addView(container, 0)
+    }
+
+    private fun isCircularFaceEmoji(emojiStr: String): Boolean {
+        if (emojiStr.isEmpty()) return false
+        val codePoint = emojiStr.codePointAt(0)
+        return (codePoint in 0x1F600..0x1F644) ||
+               (codePoint in 0x1F910..0x1F917) ||
+               (codePoint in 0x1F920..0x1F92F) ||
+               (codePoint in 0x1F970..0x1F978) ||
+               codePoint == 0x1F97A ||
+               codePoint == 0x1F97B ||
+               codePoint == 0x1F97C ||
+               (codePoint in 0x1F311..0x1F318)
+    }
+
+    private fun getEmojiCdnUrl(emojiText: String): String? {
+        val codePoints = mutableListOf<String>()
+        var i = 0
+        val len = emojiText.length
+        while (i < len) {
+            val codePoint = emojiText.codePointAt(i)
+            val charCount = Character.charCount(codePoint)
+            if (isEmoji(codePoint)) {
+                val hex = Integer.toHexString(codePoint).lowercase()
+                if (codePoint != 0xfe0f && codePoint != 0x200d) {
+                    codePoints.add(hex)
+                }
+            }
+            i += charCount
+        }
+        if (codePoints.isEmpty()) return null
+        val filename = codePoints.joinToString("_")
+        return "https://fonts.gstatic.com/s/e/notoemoji/latest/$filename/512.gif"
+    }
+
+    private fun getEmojiCountIfOnlyEmojis(text: String): Int {
+        if (text.isBlank()) return 0
+        val boundary = java.text.BreakIterator.getCharacterInstance()
+        boundary.setText(text)
+        var emojiCount = 0
+        var start = boundary.first()
+        var end = boundary.next()
+        while (end != java.text.BreakIterator.DONE) {
+            val cluster = text.substring(start, end)
+            if (isClusterOnlyEmoji(cluster)) {
+                emojiCount++
+            } else if (!isClusterWhitespace(cluster)) {
+                return 0
+            }
+            start = end
+            end = boundary.next()
+        }
+        return emojiCount
+    }
+
+    private fun isClusterOnlyEmoji(cluster: String): Boolean {
+        var i = 0
+        val len = cluster.length
+        var hasEmoji = false
+        while (i < len) {
+            val codePoint = cluster.codePointAt(i)
+            val charCount = Character.charCount(codePoint)
+            if (isEmoji(codePoint)) {
+                hasEmoji = true
+            } else if (!isWhitespaceOrEmojiModifier(codePoint)) {
+                return false
+            }
+            i += charCount
+        }
+        return hasEmoji
+    }
+
+    private fun isClusterWhitespace(cluster: String): Boolean {
+        return cluster.all { Character.isWhitespace(it.code) }
+    }
+
+    private fun isEmoji(codePoint: Int): Boolean {
+        return (codePoint in 0x1F600..0x1F64F) || // Emoticons
+               (codePoint in 0x1F300..0x1F5FF) || // Misc Symbols and Pictographs
+               (codePoint in 0x1F680..0x1F6FF) || // Transport and Map
+               (codePoint in 0x1F1E6..0x1F1FF) || // Regional Flags
+               (codePoint in 0x2600..0x26FF) ||     // Misc Symbols
+               (codePoint in 0x2700..0x27BF) ||     // Dingbats
+               (codePoint in 0xFE00..0xFE0F) ||     // Variation Selectors
+               (codePoint in 0x1F900..0x1F9FF) || // Supplemental Symbols and Pictographs
+               (codePoint in 0x1FA70..0x1FAFF) || // Symbols and Pictographs Extended-A
+               (codePoint in 0x1FB00..0x1FBFF) || // Symbols and Pictographs Extended-B
+               (codePoint in 0x1F7E0..0x1F7EF) || // Colored circles and squares (Geometric Shapes Extended)
+               (codePoint in 0x1F700..0x1F7FF) || // Geometric Shapes Extended / Alchemical
+               (codePoint in 0x2300..0x23FF) ||     // Misc Technical
+               (codePoint in 0x2B50..0x2B55) ||     // Stars/Shapes
+               (codePoint in 0x2190..0x21FF) ||     // Arrows
+               (codePoint in 0x2900..0x2BFF) ||     // Supplemental Arrows/Shapes
+               (codePoint in 0x3000..0x32FF) ||     // CJK Symbols / Enclosed CJK
+               codePoint == 0x203C || codePoint == 0x2049 || // Double exclamation / question exclamation
+               codePoint == 0x200D ||               // Zero Width Joiner
+               codePoint == 0x20E3                  // Combining Enclosing Keycap
+    }
+
+    private fun isWhitespaceOrEmojiModifier(codePoint: Int): Boolean {
+        return Character.isWhitespace(codePoint) ||
+               codePoint == 0x200D || // Zero Width Joiner
+               (codePoint in 0x1F3FB..0x1F3FF) // Fitzpatrick skin tone modifiers
     }
 
     private fun formatTime(timestamp: Double?): String {
