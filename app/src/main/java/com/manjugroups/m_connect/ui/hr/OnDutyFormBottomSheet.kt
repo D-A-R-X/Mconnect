@@ -36,6 +36,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private var selectedTargetName: String? = null
     private var selectedVehicleOwnership: String? = null // "Own Vehicle", "Office Vehicle"
     private var selectedVehicleType: String? = null // "2 Wheeler", "4 Wheeler"
+    private var isAnimatingSelection = false
 
     private var allProjects: List<ProjectSummary> = emptyList()
     // Real vendor master data, fetched from /api/library/vendors. Empty
@@ -447,6 +448,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private fun showStep2() {
         selectedVehicleOwnership = null
         selectedVehicleType = null
+        isAnimatingSelection = false
         layoutStep1.visibility = View.GONE
         layoutStep2.visibility = View.VISIBLE
         btnOnDutyNext.visibility = View.GONE
@@ -454,6 +456,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         tvSheetTitle.text = "Select Vehicle"
         tvSheetSubtitle.text = "Which Vehicle You are going to use"
         resetAllStep2Cards()
+        setCardsClickable(true)
         validateStep2()
     }
 
@@ -507,12 +510,19 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         ownership: String,
         vehicleType: String
     ) {
+        // Prevent simultaneous or rapid clicks during animation
+        if (isAnimatingSelection) return
+
         // If already selected, do not allow unselection or re-triggering animation
         if (selectedVehicleOwnership == ownership && selectedVehicleType == vehicleType) return
         if (animatingIcon.visibility == View.VISIBLE) return
 
+        isAnimatingSelection = true
         selectedVehicleOwnership = ownership
         selectedVehicleType = vehicleType
+
+        // Disable all cards during animation to prevent concurrent selection clicks
+        setCardsClickable(false)
 
         // 1. Reset all cards to normal unselected state
         resetAllStep2Cards()
@@ -542,8 +552,13 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 selectedCard.setBackgroundResource(R.drawable.bg_on_duty_card_selected_blue)
                 textView.setTextColor(Color.WHITE)
 
+                // Re-enable all cards after animation completes
+                setCardsClickable(true)
+
                 // 5. Update validation state
                 validateStep2()
+
+                isAnimatingSelection = false
             }
             .start()
     }
@@ -568,6 +583,20 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         imgOwnFourWheelerAnim.visibility = View.INVISIBLE
         imgOfficeTwoWheelerAnim.visibility = View.INVISIBLE
         imgOfficeFourWheelerAnim.visibility = View.INVISIBLE
+    }
+
+    private fun setCardsClickable(clickable: Boolean) {
+        if (::cardOwnTwoWheeler.isInitialized) {
+            cardOwnTwoWheeler.isClickable = clickable
+            cardOwnFourWheeler.isClickable = clickable
+            cardOfficeTwoWheeler.isClickable = clickable
+            cardOfficeFourWheeler.isClickable = clickable
+
+            cardOwnTwoWheeler.isFocusable = clickable
+            cardOwnFourWheeler.isFocusable = clickable
+            cardOfficeTwoWheeler.isFocusable = clickable
+            cardOfficeFourWheeler.isFocusable = clickable
+        }
     }
 
     private fun validateStep2() {
