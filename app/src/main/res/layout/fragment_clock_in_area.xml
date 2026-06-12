@@ -326,14 +326,29 @@
             </LinearLayout>
         </LinearLayout>
 
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/bottomActionPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_attendance_bottom_panel"
+            android:orientation="vertical"
             android:paddingHorizontal="24dp"
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
+
+            <!-- Geofence status — shown only when the home-block policy
+                 has something to report (inside fence, waiting for GPS,
+                 etc.). ClockInAreaFragment drives visibility + text. -->
+            <TextView
+                android:id="@+id/tvClockInFenceStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:textColor="#475467"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnSelfieClockIn"
@@ -345,7 +360,7 @@
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
-        </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
 
 </FrameLayout>

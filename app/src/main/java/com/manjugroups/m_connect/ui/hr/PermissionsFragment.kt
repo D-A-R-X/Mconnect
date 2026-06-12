@@ -93,10 +93,13 @@ class PermissionsFragment : Fragment() {
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnApplyPermission.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, ApplyPermissionFragment())
-                .addToBackStack(null)
-                .commit()
+            parentFragmentManager.setFragmentResultListener(ApplyPermissionBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
+                val success = bundle.getBoolean("success", false)
+                if (success) {
+                    viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+                }
+            }
+            ApplyPermissionBottomSheet.newInstance().show(parentFragmentManager, "apply_permission_sheet")
         }
 
         val cal = Calendar.getInstance()
@@ -170,15 +173,11 @@ class PermissionsFragment : Fragment() {
         binding.scopeBackdrop.animate().alpha(1f).setDuration(200).start()
 
         val popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_scope_menu_perm, null)
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-
+        val popupWidth = dp(180)
         val popup = android.widget.PopupWindow(
             popupView,
-            popupView.measuredWidth,
-            popupView.measuredHeight,
+            popupWidth,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         ).apply {
             elevation = dp(12).toFloat()
@@ -233,7 +232,7 @@ class PermissionsFragment : Fragment() {
             if (scope != Scope.ALL) switchScope(Scope.ALL)
         }
 
-        val xOffset = anchor.width - popupView.measuredWidth
+        val xOffset = anchor.width - popupWidth
         popup.showAsDropDown(anchor, xOffset, dp(4))
 
         popupView.alpha = 0f
@@ -277,6 +276,14 @@ class PermissionsFragment : Fragment() {
         }
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
+
+        val pendingCount = state.pendingApprovals.size
+        if (pendingCount > 0 && screenMode == MODE_HISTORY && canApprove) {
+            binding.dotScopeBadge.visibility = View.VISIBLE
+            binding.dotScopeBadge.text = pendingCount.toString()
+        } else {
+            binding.dotScopeBadge.visibility = View.GONE
+        }
 
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
@@ -426,8 +433,8 @@ class PermissionsFragment : Fragment() {
             val staffRow = card.findViewById<View>(R.id.staffInfoRow)
             val byLabel = card.findViewById<TextView>(R.id.tvBy)
             val actionRow = card.findViewById<View>(R.id.permissionActionRow)
-            val approveButton = card.findViewById<TextView>(R.id.btnApprovePermission)
-            val rejectButton = card.findViewById<TextView>(R.id.btnRejectPermission)
+            val approveButton = card.findViewById<View>(R.id.btnApprovePermission)
+            val rejectButton = card.findViewById<View>(R.id.btnRejectPermission)
 
             val displayName = perm.staffName?.trim().takeUnless { it.isNullOrBlank() } ?: "Self"
             val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"

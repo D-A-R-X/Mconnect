@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Background for the custom top-of-screen toast pill. Dark rounded
+     surface, matches the system Toast aesthetic but lets us place it
+     at the top (Android 11+ ignores Toast.setGravity for text toasts,
+     so we render our own view). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E6111827" />
+    <corners android:radius="22dp" />
+</shape>

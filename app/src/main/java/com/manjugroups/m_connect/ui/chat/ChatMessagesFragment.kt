@@ -250,12 +250,49 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         if (isRecording) {
                             val deltaX = recordTouchStartX - event.rawX
                             val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
-                            if (deltaX > threshold && !recordCancelRequested) {
-                                recordCancelRequested = true
-                                updateRecordingHintCancel()
-                            } else if (deltaX <= threshold && recordCancelRequested) {
-                                recordCancelRequested = false
-                                updateRecordingHintNormal()
+
+                            // Slide constraint: limit sliding to the width of the bottom bar minus padding
+                            val maxSlide = (binding.recordingOverlay.width - dpToPx(80)).coerceAtLeast(0)
+                            val currentSlide = deltaX.coerceIn(0f, maxSlide.toFloat())
+
+                            // Slide the mic icon left
+                            binding.animatingMicContainer.translationX = -currentSlide
+
+                            // Fade the "Slide to cancel" text container with distance
+                            val fadeRatio = 1f - (currentSlide / threshold).coerceIn(0f, 1f)
+                            binding.slideCancelContainer.alpha = fadeRatio
+                            binding.slideCancelContainer.translationX = -currentSlide * 0.3f // Slight parallax movement
+
+                            if (currentSlide >= threshold) {
+                                if (!recordCancelRequested) {
+                                    recordCancelRequested = true
+                                    updateRecordingHintCancel()
+
+                                    // Scale up, rotate, and highlight trash icon red
+                                    binding.ivTrash.animate().cancel()
+                                    binding.ivTrash.animate()
+                                        .scaleX(1.3f)
+                                        .scaleY(1.3f)
+                                        .rotation(-20f)
+                                        .setDuration(150)
+                                        .start()
+                                    binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#F04438"))
+                                }
+                            } else {
+                                if (recordCancelRequested) {
+                                    recordCancelRequested = false
+                                    updateRecordingHintNormal()
+
+                                    // Revert trash can size, rotation, and color
+                                    binding.ivTrash.animate().cancel()
+                                    binding.ivTrash.animate()
+                                        .scaleX(1f)
+                                        .scaleY(1f)
+                                        .rotation(0f)
+                                        .setDuration(150)
+                                        .start()
+                                    binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#98A2B3"))
+                                }
                             }
                             true
                         } else {
@@ -264,8 +301,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (isRecording) {
-                            stopRecording(send = !recordCancelRequested)
-                            recordCancelRequested = false
+                            if (recordCancelRequested) {
+                                animateDropToTrash()
+                            } else {
+                                stopRecording(send = true)
+                                hideRecordingOverlay()
+                            }
                             true
                         } else {
                             false
@@ -273,8 +314,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     }
                     MotionEvent.ACTION_CANCEL -> {
                         if (isRecording) {
-                            stopRecording(send = false)
-                            recordCancelRequested = false
+                            if (recordCancelRequested) {
+                                animateDropToTrash()
+                            } else {
+                                stopRecording(send = false)
+                                hideRecordingOverlay()
+                            }
                             true
                         } else {
                             false
@@ -2667,8 +2712,39 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 val timeStr = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
                 binding.tvChatSubtitle.text = "Recording voice... $timeStr"
                 binding.tvChatSubtitle.setTextColor(subtitleColorRecording)
+                binding.tvRecordingTimer.text = timeStr
                 recordingHandler.postDelayed(this, 1000)
             }
+        }
+    }
+
+    private var micPulseAnimator: android.animation.AnimatorSet? = null
+
+    private fun startMicPulseAnimation() {
+        if (_binding == null) return
+        micPulseAnimator?.cancel()
+
+        val scaleX = android.animation.ObjectAnimator.ofFloat(binding.animatingMicContainer, "scaleX", 1.0f, 1.15f, 1.0f)
+        val scaleY = android.animation.ObjectAnimator.ofFloat(binding.animatingMicContainer, "scaleY", 1.0f, 1.15f, 1.0f)
+
+        scaleX.repeatCount = android.animation.ValueAnimator.INFINITE
+        scaleY.repeatCount = android.animation.ValueAnimator.INFINITE
+
+        micPulseAnimator = android.animation.AnimatorSet().apply {
+            playTogether(scaleX, scaleY)
+            duration = 1000
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun stopMicPulseAnimation() {
+        micPulseAnimator?.cancel()
+        micPulseAnimator = null
+        if (_binding != null) {
+            binding.animatingMicContainer.animate().cancel()
+            binding.animatingMicContainer.scaleX = 1f
+            binding.animatingMicContainer.scaleY = 1f
         }
     }
 
@@ -2676,12 +2752,56 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         if (_binding == null) return
         if (isRecording) {
             binding.etMessage.isEnabled = false
+
+            // Show the custom recording overlay and animating mic
+            binding.recordingOverlay.visibility = View.VISIBLE
+            binding.recordingOverlay.alpha = 1f
+            binding.animatingMicContainer.visibility = View.VISIBLE
+            binding.animatingMicContainer.translationX = 0f
+            binding.animatingMicContainer.translationY = 0f
+            binding.animatingMicContainer.scaleX = 1f
+            binding.animatingMicContainer.scaleY = 1f
+            binding.animatingMicContainer.alpha = 1f
+            binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_rec_mic_circle)
+
+            binding.slideCancelContainer.alpha = 1f
+            binding.slideCancelContainer.translationX = 0f
+
+            // Set up red blinking dot animation
+            binding.ivRecordingDot.visibility = View.VISIBLE
+            binding.ivRecordingDot.alpha = 1f
+            binding.ivRecordingDot.animate().cancel()
+
+            val blinkListener = object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (isRecording && _binding != null) {
+                        val nextAlpha = if (binding.ivRecordingDot.alpha < 0.5f) 1f else 0.2f
+                        binding.ivRecordingDot.animate()
+                            .alpha(nextAlpha)
+                            .setDuration(500)
+                            .setListener(this)
+                            .start()
+                    }
+                }
+            }
+            binding.ivRecordingDot.animate()
+                .alpha(0.2f)
+                .setDuration(500)
+                .setListener(blinkListener)
+                .start()
+
+            // Start/Reset the timer display in the overlay
+            binding.tvRecordingTimer.text = "00:00"
+
             updateRecordingHintNormal()
-            binding.ivSendIcon.setImageResource(R.drawable.ic_send)
             recordingHandler.post(recordingTimerTask)
+            startMicPulseAnimation()
             broadcastRecordingTyping()
         } else {
+            stopMicPulseAnimation()
+            binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_send_circle)
             recordingHandler.removeCallbacks(recordingTimerTask)
+            binding.ivRecordingDot.animate().cancel()
             binding.etMessage.isEnabled = true
             binding.etMessage.hint = "Message ..."
             applySubtitleState()
@@ -2691,12 +2811,81 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private fun updateRecordingHintNormal() {
         if (_binding == null) return
-        binding.etMessage.hint = "◀  Slide to cancel"
+        binding.tvSlideCancel.text = "◀  Slide to cancel"
     }
 
     private fun updateRecordingHintCancel() {
         if (_binding == null) return
-        binding.etMessage.hint = "Release to cancel"
+        binding.tvSlideCancel.text = "Release to cancel"
+    }
+
+    private fun animateDropToTrash() {
+        if (_binding == null) return
+
+        stopMicPulseAnimation()
+
+        // Calculate translation needed to reach the trash can
+        val targetTx = -(binding.animatingMicContainer.x - binding.trashCanContainer.x)
+
+        binding.animatingMicContainer.animate().cancel()
+        binding.animatingMicContainer.animate()
+            .translationX(targetTx)
+            .scaleX(0.2f)
+            .scaleY(0.2f)
+            .alpha(0f)
+            .setDuration(250)
+            .withEndAction {
+                // Revert trash can to normal size and rotation, then do a shake animation
+                binding.ivTrash.animate()
+                    .rotation(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .start()
+
+                val shakeAnimator = ValueAnimator.ofFloat(0f, 15f, -15f, 10f, -10f, 5f, -5f, 0f).apply {
+                    duration = 400
+                    addUpdateListener { anim ->
+                        if (_binding != null) {
+                            val value = anim.animatedValue as Float
+                            binding.ivTrash.translationX = dpToPx(value.toInt()).toFloat() / 2f
+                        }
+                    }
+                }
+                shakeAnimator.start()
+
+                // Play deletion/trash error sound
+                val toneGenerator = android.media.ToneGenerator(android.media.AudioManager.STREAM_SYSTEM, 90)
+                toneGenerator.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 150)
+
+                stopRecording(send = false)
+                hideRecordingOverlay()
+            }
+            .start()
+    }
+
+    private fun hideRecordingOverlay() {
+        if (_binding == null) return
+        binding.recordingOverlay.animate().cancel()
+        binding.recordingOverlay.animate()
+            .alpha(0f)
+            .setDuration(200)
+            .withEndAction {
+                if (_binding != null) {
+                    binding.recordingOverlay.visibility = View.GONE
+                    binding.recordingOverlay.alpha = 1f
+                    binding.animatingMicContainer.visibility = View.GONE
+                    binding.animatingMicContainer.translationX = 0f
+                    binding.animatingMicContainer.scaleX = 1f
+                    binding.animatingMicContainer.scaleY = 1f
+                    binding.animatingMicContainer.alpha = 1f
+                    binding.ivTrash.translationX = 0f
+                    binding.ivTrash.scaleX = 1f
+                    binding.ivTrash.scaleY = 1f
+                    binding.ivTrash.rotation = 0f
+                    binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#98A2B3"))
+                }
+            }
+            .start()
     }
 
     private fun broadcastRecordingTyping() {
@@ -2817,6 +3006,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     @Suppress("DEPRECATION")
     private fun startRecording() {
+        runCatching {
+            val toneGenerator = android.media.ToneGenerator(android.media.AudioManager.STREAM_SYSTEM, 100)
+            toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_CONFIRM, 150)
+        }
         runCatching {
             audioFile = File(requireContext().cacheDir, "voice_${System.currentTimeMillis()}.m4a")
             mediaRecorder = MediaRecorder(requireContext()).apply {
@@ -3007,7 +3200,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         if (_binding == null) return
         binding.btnSend.isEnabled = !isBusy
         binding.btnAttach.isEnabled = !isBusy
-        binding.etMessage.isEnabled = !isBusy
+        // Intentionally NOT disabling etMessage. Disabling a focused
+        // EditText causes Android to strip focus + dismiss the IME, so
+        // every send was killing the keyboard and the user had to tap
+        // the field again to type the next message. The isSendingMessage
+        // guard at the top of sendMessage() already prevents double-fires,
+        // so the field can stay enabled — the user can keep typing the
+        // next message while the previous one is still uploading.
         binding.btnSend.alpha = if (isBusy) 0.6f else 1f
         binding.btnAttach.alpha = if (isBusy) 0.6f else 1f
     }
@@ -3108,11 +3307,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
 
             if (_binding != null) {
-                binding.bottomBar.setPadding(
-                    dpToPx(12),
-                    dpToPx(12),
-                    dpToPx(12),
-                    dpToPx(12) + bottomInset
+                val topPadding = 0
+                val bottomPadding = bottomInset
+                val sidePadding = 0
+
+                binding.bottomContainer.setPadding(
+                    sidePadding,
+                    topPadding,
+                    sidePadding,
+                    bottomPadding
                 )
 
                 val sysBottom = sys.bottom

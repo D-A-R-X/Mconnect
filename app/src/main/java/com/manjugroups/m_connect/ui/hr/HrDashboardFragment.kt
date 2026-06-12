@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentHrDashboardBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
+import com.manjugroups.m_connect.network.HomeFenceData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -75,6 +76,30 @@ class HrDashboardFragment : Fragment() {
     private var wasShowingSkeleton = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
     private var liveTickerJob: Job? = null
+    // Reference to the dynamic "Today" history card's hours TextView, so the
+    // live ticker can update it each second. Reset whenever the history list
+    // is rebuilt.
+    private var todayCardHoursView: TextView? = null
+
+    // Home geofence enforcement. The web's hr.attendance.homeBlockEnabled
+    // setting blocks punch-IN from inside the staff's home radius — instead
+    // of letting them tap and bounce off a server error, we mirror the
+    // check client-side and disable the button preemptively.
+    //   homeFence            — last snapshot pulled from /home-fence; null
+    //                          until the first fetch, treated as "no block"
+    //                          while loading so we never falsely disable.
+    //   isInsideHomeFence    — last computed boolean; drives both the
+    //                          button enable state and the subtitle.
+    //   geofenceWatcherJob   — re-checks distance every few seconds while
+    //                          the user is on the dashboard.
+    private var homeFence: HomeFenceData? = null
+    private var isInsideHomeFence: Boolean = false
+    private var geofenceWatcherJob: Job? = null
+    // Live diagnostic for the fence — captured each watcher tick so the
+    // subtitle can surface WHY enforcement isn't firing when staff
+    // expect it (policy off / no GPS / outside radius / etc.).
+    private var lastFenceStatus: String? = null
+
     private var pendingEntryAnimation = true
     private var hasPlayedEntryAnimation = false
 
@@ -169,10 +194,48 @@ class HrDashboardFragment : Fragment() {
         updateAttendanceLoadingUi()
 
         binding.btnClockInNow.setOnClickListener {
+            // Button stays active visually so the user can always reach
+            // for it. If they're inside their home fence, refuse the tap
+            // with a short top-of-screen Toast — no other visual cue.
+            if (isInsideHomeFence) {
+                showTopToast("Move away from home to clock in")
+                return@setOnClickListener
+            }
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, ClockInAreaFragment())
                 .addToBackStack(null)
                 .commit()
+        }
+
+        binding.btnOnDutyDisabled.setOnClickListener {
+            Toast.makeText(
+                requireContext(),
+                "Please clock in first to start on duty.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        binding.btnOnDuty.setOnClickListener {
+            if (session.isOnDuty) {
+                session.clearOnDutyDetails()
+                Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+                updateOnDutyButtonUi()
+                val isClockedIn = flowViewModel.uiState.value.isClockedIn
+                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+            } else {
+                OnDutyFormBottomSheet.newInstance().show(parentFragmentManager, "on_duty_form")
+            }
+        }
+
+        parentFragmentManager.setFragmentResultListener(
+            OnDutyFormBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            if (bundle.getBoolean(OnDutyFormBottomSheet.KEY_STARTED, false)) {
+                updateOnDutyButtonUi()
+                val isClockedIn = flowViewModel.uiState.value.isClockedIn
+                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+            }
         }
 
         binding.btnClockOut.setOnClickListener {
@@ -221,6 +284,7 @@ class HrDashboardFragment : Fragment() {
             val mode = runCatching { PunchMode.valueOf(rawMode ?: "") }.getOrNull()
             when (mode) {
                 PunchMode.PUNCH_OUT -> {
+                    session.clearOnDutyDetails()
                     ClockOutSuccessBottomSheet()
                         .show(parentFragmentManager, "clock_out_success")
                 }
@@ -391,6 +455,16 @@ class HrDashboardFragment : Fragment() {
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
         flowViewModel.loadTodayAttendance(session.bearerToken)
         loadRecentHistoryCards()
+        // Refresh the geofence policy each time the dashboard becomes
+        // visible (so an HR-side radius change picks up without restart),
+        // then start the periodic watcher.
+        loadHomeFence()
+        startGeofenceWatcher()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopGeofenceWatcher()
     }
 
     private fun collectState() {
@@ -406,46 +480,21 @@ class HrDashboardFragment : Fragment() {
                     updateAttendanceLoadingUi()
                     if (!state.isLoading) hasShownAttendanceContentOnce = true
                     binding.tvTodayHours.text = state.todayHours
-                    binding.tvLatestTotalHours.text = state.latestTotalHours
-                    binding.tvLatestRange.text = state.latestRange
+                    // The old static "Today" card (cardHistory1) is permanently
+                    // hidden — today's log is now injected as the FIRST item in
+                    // the history list below, in the same card style as past
+                    // days, tagged "Today". See bindRecentHistoryCards.
+                    binding.cardHistory1.visibility = View.GONE
                     binding.tvPayPeriodLabel.text = state.payPeriodLabel
                         .ifBlank { binding.tvPayPeriodLabel.text }
                     binding.tvPayPeriodHours.text = state.payPeriodHours
 
-                    // Today's clock-in/out summary on the main card.
-                    // Visible the moment the user has clocked in at
-                    // least once today, so the operator sees actual
-                    // times alongside the Today / Pay Period hour
-                    // counters instead of having to scroll into the
-                    // history strip below for that info.
-                    val firstPunchIso = state.firstPunchInIso
-                    val lastPunchIso = state.lastPunchOutIso
-                    if (!firstPunchIso.isNullOrBlank()) {
-                        binding.todayPunchSummary.visibility = View.VISIBLE
-                        binding.tvTodayClockedInAt.text =
-                            AttendanceFlowViewModel.formatIsoToTime(firstPunchIso)
-                        // Show "Clocked out" ONLY when there's a real
-                        // punch-out that's different from the punch-in
-                        // (the backend can occasionally echo the
-                        // punch-in iso into lastPunchOutIso the moment
-                        // the row is created — that produced the
-                        // "Clocked in 2:17 PM / Clocked out 2:17 PM"
-                        // confusion in the screenshot). The Today /
-                        // Pay Period hour counters and the history
-                        // strip below still surface the clock-out
-                        // time once it's real.
-                        val hasRealClockOut = !lastPunchIso.isNullOrBlank() &&
-                            lastPunchIso != firstPunchIso
-                        if (hasRealClockOut) {
-                            binding.todayClockedOutGroup.visibility = View.VISIBLE
-                            binding.tvTodayClockedOutAt.text =
-                                AttendanceFlowViewModel.formatIsoToTime(lastPunchIso)
-                        } else {
-                            binding.todayClockedOutGroup.visibility = View.GONE
-                        }
-                    } else {
-                        binding.todayPunchSummary.visibility = View.GONE
-                    }
+                    // The top "Clocked in" box was moved down into the
+                    // history strip: the "Today" log card now carries the
+                    // clock-in time alongside the other day logs, so this
+                    // summary box stays hidden to avoid showing the same
+                    // info twice.
+                    binding.todayPunchSummary.visibility = View.GONE
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
@@ -476,10 +525,10 @@ class HrDashboardFragment : Fragment() {
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnOnDuty.isEnabled = !state.isSubmitting
+                        updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
-                        binding.tvAttendanceHeaderTitle.text = "You're Clocked In"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Have a productive day ahead"
+                        updateHeaderTexts(true)
                     } else if (hasClockedOutToday) {
                         // One-time Clock In rule: once the staff has punched in
                         // today the button never reverts to "Clock In". It
@@ -487,6 +536,7 @@ class HrDashboardFragment : Fragment() {
                         // unlimited — each tap re-stamps the day's punch-out, so
                         // the last tap becomes the effective punch-out (locked
                         // by the midnight finalize).
+                        session.clearOnDutyDetails()
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnClockOut.isEnabled = !state.isSubmitting
@@ -494,19 +544,121 @@ class HrDashboardFragment : Fragment() {
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "Clocked Out"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Tap Clock Out again to update — final time locks at midnight"
+                        updateHeaderTexts(false)
                     } else {
+                        session.clearOnDutyDetails()
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
+                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Don’t miss your clock in schedule"
+                        // Title + subtitle + Dynamic Island handled
+                        // centrally by updateHeaderTexts; reset the
+                        // button drawable + hide the fence status line
+                        // since the home-fence check is now enforced
+                        // only in the click handler (top Toast).
+                        updateHeaderTexts(false)
+                        binding.btnClockInNow.setBackgroundResource(
+                            R.drawable.bg_attendance_btn_primary
+                        )
+                        binding.btnClockInNow.alpha = 1f
+                        binding.tvClockInFenceStatus.visibility = View.GONE
                     }
                 }
+            }
+        }
+    }
+
+    private fun updateOnDutyButtonUi() {
+        if (!isAdded || _binding == null) return
+        if (session.isOnDuty) {
+            binding.btnOnDuty.text = "Complete On Duty"
+            binding.btnOnDuty.setTextColor(Color.WHITE)
+            binding.btnOnDuty.setBackgroundResource(R.drawable.bg_attendance_btn_blue_gradient)
+        } else {
+            binding.btnOnDuty.text = "On Duty"
+            binding.btnOnDuty.setTextColor(Color.parseColor("#1BCA0B"))
+            binding.btnOnDuty.setBackgroundResource(R.drawable.bg_attendance_btn_outline)
+        }
+    }
+
+    private fun showDynamicIslandWithAnimation(animate: Boolean) {
+        if (!isAdded || _binding == null) return
+        val pill = binding.layoutDynamicIslandOnduty
+        if (pill.visibility == View.VISIBLE) return
+
+        if (!animate) {
+            pill.visibility = View.VISIBLE
+            pill.alpha = 1f
+            pill.scaleX = 1f
+            pill.scaleY = 1f
+            pill.translationY = 0f
+            return
+        }
+
+        pill.visibility = View.VISIBLE
+        pill.alpha = 0f
+        pill.scaleX = 0.4f
+        pill.scaleY = 0.4f
+        pill.translationY = -60f
+
+        pill.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .translationY(0f)
+            .setDuration(500)
+            .setInterpolator(android.view.animation.OvershootInterpolator(1.4f))
+            .start()
+    }
+
+    private fun hideDynamicIslandWithAnimation(animate: Boolean) {
+        if (!isAdded || _binding == null) return
+        val pill = binding.layoutDynamicIslandOnduty
+        if (pill.visibility == View.GONE) return
+
+        if (!animate) {
+            pill.visibility = View.GONE
+            return
+        }
+
+        pill.animate()
+            .alpha(0f)
+            .scaleX(0.4f)
+            .scaleY(0.4f)
+            .translationY(-60f)
+            .setDuration(400)
+            .setInterpolator(android.view.animation.AnticipateInterpolator())
+            .withEndAction {
+                pill.visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun updateHeaderTexts(isClockedIn: Boolean, animateDynamicIsland: Boolean = false) {
+        if (!isAdded || _binding == null) return
+        
+        // Show/hide the dynamic island pill based on On Duty status
+        if (session.isOnDuty) {
+            showDynamicIslandWithAnimation(animateDynamicIsland)
+        } else {
+            hideDynamicIslandWithAnimation(animateDynamicIsland)
+        }
+
+        if (isClockedIn) {
+            binding.tvAttendanceHeaderTitle.text = "You're Clocked In"
+            binding.tvAttendanceHeaderSubtitle.text = "Have a productive day ahead"
+        } else {
+            val hasClockedOutToday = !flowViewModel.uiState.value.isClockedIn && !flowViewModel.uiState.value.firstPunchInIso.isNullOrBlank()
+            if (hasClockedOutToday) {
+                binding.tvAttendanceHeaderTitle.text = "Clocked Out"
+                binding.tvAttendanceHeaderSubtitle.text =
+                    "Tap Clock Out again to update — final time locks at midnight"
+            } else {
+                binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
+                binding.tvAttendanceHeaderSubtitle.text =
+                    "Don’t miss your clock in schedule"
             }
         }
     }
@@ -527,6 +679,9 @@ class HrDashboardFragment : Fragment() {
                 val totalMinutes = (elapsedMs / 60_000L).toInt()
                 _binding?.tvTodayHours?.text =
                     AttendanceFlowViewModel.formatMinutesForToday(totalMinutes)
+                // Keep the inline "Today" history card's Total Hours live too,
+                // so it agrees with the top stat instead of sitting at 00:00:00.
+                todayCardHoursView?.text = formatMinutesAsPeriod(totalMinutes)
                 delay(1000L)
             }
         }
@@ -739,47 +894,60 @@ class HrDashboardFragment : Fragment() {
             cal.add(Calendar.DAY_OF_MONTH, 1)
         }
         val sorted = filled.sortedByDescending { it.date ?: "" }
-        val primary = sorted.getOrNull(0)
-        if (primary != null) {
-            binding.tvHistoryDate1.text = formatDashboardDate(primary.date)
-            binding.tvLatestTotalHours.text = formatMinutesAsPeriod(primary.totalMinutes ?: 0)
-            binding.tvLatestRange.text = buildPunchRange(primary)
-        } else {
-            binding.tvHistoryDate1.text = formatDashboardDate(null)
-            binding.tvLatestTotalHours.text = formatMinutesAsPeriod(0)
-            binding.tvLatestRange.text = "-- - --"
-        }
+        // Static cardHistory1 is retired; today lives inline in the list.
+        binding.cardHistory1.visibility = View.GONE
 
-        // Render the rest of the month with the same rich-card visual style
-        // (calendar icon + date + inner Total Hours / Clock in & Out card).
+        // Build the list: Today first (tagged "Today" with live clock-in +
+        // live hours), then yesterday, day-before, etc — all in the same card
+        // style so the user sees one consistent log strip.
         binding.historyListContainer.removeAllViews()
-        sorted.drop(1).forEach { record ->
+        todayCardHoursView = null
+        val liveState = flowViewModel.uiState.value
+        val liveInIso = liveState.firstPunchInIso
+        val liveInMs = liveInIso?.let { parseIsoMillisOrNull(it) }
+
+        sorted.forEachIndexed { index, record ->
             val card = LayoutInflater.from(requireContext()).inflate(
                 R.layout.item_attendance_history_card,
                 binding.historyListContainer,
                 false
             )
-            card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
-                formatDashboardDate(record.date)
-            card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
-                formatMinutesAsPeriod(record.totalMinutes ?: 0)
-            card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
-                buildPunchRange(record)
+            val dateView = card.findViewById<TextView>(R.id.tvHistoryItemDate)
+            val hoursView = card.findViewById<TextView>(R.id.tvHistoryItemHours)
+            val rangeView = card.findViewById<TextView>(R.id.tvHistoryItemRange)
 
-            // Pencil → Remark / Time Correction request, same sheet as the
-            // My Attendance history screen. Gap-filled placeholder days
-            // have no backend row (id == null) to attach a request to, so
-            // hide the icon for those.
-            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
-            if (record.id.isNullOrBlank()) {
-                editBtn.visibility = View.GONE
+            if (index == 0) {
+                // TODAY row — tag, live clock-in, no clock-out until the day
+                // ends, hours stay live (server total is 0 for an open
+                // session; the ticker keeps it advancing).
+                dateView.text = "Today"
+                val recordInIso = record.punchInTime
+                    ?: record.sessions?.firstOrNull()?.punchInTime
+                val todayInIso = liveInIso?.takeIf { it.isNotBlank() } ?: recordInIso
+                val todayInLabel = todayInIso?.takeIf { it.isNotBlank() }
+                    ?.let(::formatIsoTime) ?: "--"
+                rangeView.text = "$todayInLabel - --"
+                hoursView.text =
+                    if (liveState.isClockedIn && liveInMs != null) {
+                        val mins = ((System.currentTimeMillis() - liveInMs)
+                            .coerceAtLeast(0) / 60_000L).toInt()
+                        formatMinutesAsPeriod(mins)
+                    } else {
+                        liveState.latestTotalHours
+                            .ifBlank { formatMinutesAsPeriod(record.totalMinutes ?: 0) }
+                    }
+                todayCardHoursView = hoursView
             } else {
-                editBtn.visibility = View.VISIBLE
-                editBtn.setOnClickListener {
-                    EditAttendanceBottomSheet.newInstance(record)
-                        .show(parentFragmentManager, "edit_attendance")
-                }
+                dateView.text = formatDashboardDate(record.date)
+                hoursView.text = formatMinutesAsPeriod(record.totalMinutes ?: 0)
+                rangeView.text = buildPunchRange(record)
             }
+
+            // The pencil (Remark / Time Correction request) is intentionally
+            // hidden on the dashboard — the user asked for that affordance to
+            // live ONLY inside the dedicated "My Attendance" history screen.
+            card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+                .visibility = View.GONE
             binding.historyListContainer.addView(card)
         }
     }
@@ -861,6 +1029,149 @@ class HrDashboardFragment : Fragment() {
         } catch (_: Exception) {
             null
         }
+    }
+
+    // ── Home geofence enforcement ──────────────────────────────────────
+    //
+    // Mirrors checkHomeBlock in convex/staffAttendance.ts. The endpoint
+    // returns one snapshot per session (the home pin + per-staff/global
+    // radius + the enabled flag); the watcher loop below periodically
+    // grabs the last-known location and recomputes distance so the button
+    // disable state reflects movement in/out of the fence in near-real
+    // time without burning battery on high-accuracy fixes.
+
+    private fun loadHomeFence() {
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val snapshot = try {
+                api.getHomeFence(token)
+            } catch (_: Exception) {
+                null
+            }
+            if (_binding == null) return@launch
+            homeFence = snapshot?.fence?.takeIf { it.enabled }
+            // Fresh fetch → recompute right away so the button reacts to
+            // the new policy without waiting for the next watcher tick.
+            refreshGeofenceState()
+        }
+    }
+
+    /** Returns true when the staff is enforceably inside their home radius. */
+    private suspend fun computeInsideHomeFence(): Boolean {
+        val fence = homeFence
+        if (fence == null) {
+            lastFenceStatus = "Home-block policy off (HR setting)"
+            return false
+        }
+        if (!fence.enabled) {
+            lastFenceStatus = "Home-block policy off"
+            return false
+        }
+        val lat = fence.lat
+        val lng = fence.lng
+        if (lat == null || lng == null) {
+            lastFenceStatus = "No home pin set for this staff"
+            return false
+        }
+        val hasFine = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            lastFenceStatus = "Grant location permission to enforce home fence"
+            return false
+        }
+        val loc = try {
+            val client = LocationServices.getFusedLocationProviderClient(requireContext())
+            val token = CancellationTokenSource().token
+            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+                ?: client.lastLocation.await()
+        } catch (_: Exception) { null }
+        if (loc == null) {
+            lastFenceStatus = "Waiting for GPS fix…"
+            return false
+        }
+        if (loc.latitude == 0.0 && loc.longitude == 0.0) {
+            lastFenceStatus = "Waiting for GPS fix…"
+            return false
+        }
+        val distanceMeters = haversineMeters(
+            loc.latitude, loc.longitude, lat, lng,
+        ).toInt()
+        val inside = distanceMeters <= fence.radiusMeters
+        lastFenceStatus = if (inside) {
+            "Inside home fence (${distanceMeters} m ≤ ${fence.radiusMeters} m)"
+        } else {
+            "Outside home fence (${distanceMeters} m, allowed when ≤ ${fence.radiusMeters} m)"
+        }
+        return inside
+    }
+
+    /** Recompute inside-fence and update the button + subtitle. */
+    private fun refreshGeofenceState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val inside = computeInsideHomeFence()
+            if (_binding == null) return@launch
+            if (inside == isInsideHomeFence) return@launch
+            isInsideHomeFence = inside
+            applyGeofenceToButton()
+        }
+    }
+
+    /**
+     * Drives the Clock-In button's enabled state + the header subtitle
+     * from `isInsideHomeFence`. Safe to call from collectState (when the
+     * flow state changes) and from refreshGeofenceState (when GPS does).
+     */
+    private fun applyGeofenceToButton() {
+        // Intentionally no visual cue — the button stays active green,
+        // header stays "Let's Clock-In!", no diagnostic banner. The
+        // only enforcement is in the click listener: if isInsideHomeFence
+        // is true at tap time, we refuse with a top-of-screen Toast.
+        if (_binding == null) return
+        binding.tvClockInFenceStatus.visibility = View.GONE
+    }
+
+    /** Brief top-of-screen Toast for the geofence refusal. */
+    private fun showTopToast(message: String) {
+        val act = activity ?: return
+        com.manjugroups.m_connect.ui.common.TopToast.show(act, message)
+    }
+
+    private fun startGeofenceWatcher() {
+        if (geofenceWatcherJob?.isActive == true) return
+        geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && _binding != null) {
+                refreshGeofenceState()
+                // Tighter than the original 15 s so the button reacts
+                // within a few seconds of the staff stepping in/out of
+                // their home radius.
+                delay(5_000L)
+            }
+        }
+    }
+
+    private fun stopGeofenceWatcher() {
+        geofenceWatcherJob?.cancel()
+        geofenceWatcherJob = null
+    }
+
+    /** Great-circle distance in meters — mirrors convex/lib/geo.ts. */
+    private fun haversineMeters(
+        lat1: Double, lng1: Double, lat2: Double, lng2: Double,
+    ): Double {
+        val r = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) *
+            Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return r * c
     }
 
     @Suppress("DEPRECATION")

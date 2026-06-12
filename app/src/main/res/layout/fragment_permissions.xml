@@ -91,15 +91,15 @@
                             <FrameLayout
                                 android:id="@+id/dropdownScopeSelector"
                                 android:layout_width="wrap_content"
-                                android:layout_height="32dp"
+                                android:layout_height="45dp"
                                 android:background="@drawable/bg_scope_chip"
+                                android:padding="4dp"
                                 android:clickable="true"
                                 android:focusable="true">
 
                                 <LinearLayout
                                     android:layout_width="wrap_content"
                                     android:layout_height="match_parent"
-                                    android:layout_margin="2dp"
                                     android:background="@drawable/bg_scope_chip_inner"
                                     android:gravity="center"
                                     android:orientation="horizontal"
@@ -112,17 +112,22 @@
                                         android:fontFamily="@font/inter_regular"
                                         android:text="My Permission"
                                         android:textColor="#061D3D"
-                                        android:textSize="12sp"
+                                        android:textSize="14sp"
                                         android:letterSpacing="-0.02"
                                         android:maxLines="1"
                                         android:singleLine="true" />
 
-                                    <View
+                                    <TextView
                                         android:id="@+id/dotScopeBadge"
-                                        android:layout_width="6dp"
-                                        android:layout_height="6dp"
-                                        android:layout_marginStart="4dp"
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:layout_marginStart="5dp"
                                         android:background="@drawable/bg_red_dot"
+                                        android:gravity="center"
+                                        android:fontFamily="@font/inter_regular"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="9sp"
+                                        android:includeFontPadding="false"
                                         android:visibility="gone" />
 
                                     <ImageView
@@ -312,7 +317,7 @@
                         android:paddingTop="16dp"
                         android:paddingBottom="12dp"
                         android:visibility="gone"
-                        app:es_image="@drawable/ic_leave_empty_js1pm"
+                        app:es_image="@drawable/ic_permission_empty"
                         app:es_title="No Permissions Yet!"
                         app:es_description="Need a short break? Tap 'Apply Permission' and we'll handle the rest!" />
                 </LinearLayout>

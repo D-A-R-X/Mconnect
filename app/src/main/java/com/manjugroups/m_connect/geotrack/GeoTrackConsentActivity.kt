@@ -150,6 +150,22 @@ class GeoTrackConsentActivity : AppCompatActivity() {
     }
 
     private fun requestBackgroundLocation() {
+        // Short-circuit when background location is already granted —
+        // previously the Android 11+ branch always opened the
+        // "Background Location Required" dialog, so users who'd already
+        // approved "Allow all the time" had to keep dismissing it on
+        // every consent run. Check first, advance straight to the next
+        // step if we're good.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            requestActivityRecognition()
+            return
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Android 11+ — system won't show "Allow all the time" in dialog
             // Must redirect user to Settings. Tracking-enabled staff cannot

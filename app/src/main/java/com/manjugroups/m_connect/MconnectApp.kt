@@ -7,8 +7,24 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 
-class MconnectApp : Application() {
+class MconnectApp : Application(), ImageLoaderFactory {
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
     override fun onCreate() {
         super.onCreate()
         // Force a single visual mode for now: app always runs in light mode.
