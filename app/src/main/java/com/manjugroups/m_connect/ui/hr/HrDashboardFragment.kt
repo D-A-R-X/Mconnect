@@ -179,6 +179,37 @@ class HrDashboardFragment : Fragment() {
                 .commit()
         }
 
+        binding.btnOnDutyDisabled.setOnClickListener {
+            Toast.makeText(
+                requireContext(),
+                "Please clock in first to start on duty.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        binding.btnOnDuty.setOnClickListener {
+            if (session.isOnDuty) {
+                session.clearOnDutyDetails()
+                Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+                updateOnDutyButtonUi()
+                val isClockedIn = flowViewModel.uiState.value.isClockedIn
+                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+            } else {
+                OnDutyFormBottomSheet.newInstance().show(parentFragmentManager, "on_duty_form")
+            }
+        }
+
+        parentFragmentManager.setFragmentResultListener(
+            OnDutyFormBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            if (bundle.getBoolean(OnDutyFormBottomSheet.KEY_STARTED, false)) {
+                updateOnDutyButtonUi()
+                val isClockedIn = flowViewModel.uiState.value.isClockedIn
+                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+            }
+        }
+
         binding.btnClockOut.setOnClickListener {
             // Show the SAME "Today" figure the dashboard card displays.
             // While the session is open the API's todayMinutes is 0 (it
@@ -225,6 +256,7 @@ class HrDashboardFragment : Fragment() {
             val mode = runCatching { PunchMode.valueOf(rawMode ?: "") }.getOrNull()
             when (mode) {
                 PunchMode.PUNCH_OUT -> {
+                    session.clearOnDutyDetails()
                     ClockOutSuccessBottomSheet()
                         .show(parentFragmentManager, "clock_out_success")
                 }
@@ -455,10 +487,10 @@ class HrDashboardFragment : Fragment() {
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnOnDuty.isEnabled = !state.isSubmitting
+                        updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
-                        binding.tvAttendanceHeaderTitle.text = "You're Clocked In"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Have a productive day ahead"
+                        updateHeaderTexts(true)
                     } else if (hasClockedOutToday) {
                         // One-time Clock In rule: once the staff has punched in
                         // today the button never reverts to "Clock In". It
@@ -466,6 +498,7 @@ class HrDashboardFragment : Fragment() {
                         // unlimited — each tap re-stamps the day's punch-out, so
                         // the last tap becomes the effective punch-out (locked
                         // by the midnight finalize).
+                        session.clearOnDutyDetails()
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnClockOut.isEnabled = !state.isSubmitting
@@ -473,19 +506,111 @@ class HrDashboardFragment : Fragment() {
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "Clocked Out"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Tap Clock Out again to update — final time locks at midnight"
+                        updateHeaderTexts(false)
                     } else {
+                        session.clearOnDutyDetails()
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
+                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
-                        binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
-                        binding.tvAttendanceHeaderSubtitle.text =
-                            "Don’t miss your clock in schedule"
+                        updateHeaderTexts(false)
                     }
                 }
+            }
+        }
+    }
+
+    private fun updateOnDutyButtonUi() {
+        if (!isAdded || _binding == null) return
+        if (session.isOnDuty) {
+            binding.btnOnDuty.text = "Complete On Duty"
+            binding.btnOnDuty.setTextColor(Color.WHITE)
+            binding.btnOnDuty.setBackgroundResource(R.drawable.bg_attendance_btn_blue_gradient)
+        } else {
+            binding.btnOnDuty.text = "On Duty"
+            binding.btnOnDuty.setTextColor(Color.parseColor("#1BCA0B"))
+            binding.btnOnDuty.setBackgroundResource(R.drawable.bg_attendance_btn_outline)
+        }
+    }
+
+    private fun showDynamicIslandWithAnimation(animate: Boolean) {
+        if (!isAdded || _binding == null) return
+        val pill = binding.layoutDynamicIslandOnduty
+        if (pill.visibility == View.VISIBLE) return
+
+        if (!animate) {
+            pill.visibility = View.VISIBLE
+            pill.alpha = 1f
+            pill.scaleX = 1f
+            pill.scaleY = 1f
+            pill.translationY = 0f
+            return
+        }
+
+        pill.visibility = View.VISIBLE
+        pill.alpha = 0f
+        pill.scaleX = 0.4f
+        pill.scaleY = 0.4f
+        pill.translationY = -60f
+
+        pill.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .translationY(0f)
+            .setDuration(500)
+            .setInterpolator(android.view.animation.OvershootInterpolator(1.4f))
+            .start()
+    }
+
+    private fun hideDynamicIslandWithAnimation(animate: Boolean) {
+        if (!isAdded || _binding == null) return
+        val pill = binding.layoutDynamicIslandOnduty
+        if (pill.visibility == View.GONE) return
+
+        if (!animate) {
+            pill.visibility = View.GONE
+            return
+        }
+
+        pill.animate()
+            .alpha(0f)
+            .scaleX(0.4f)
+            .scaleY(0.4f)
+            .translationY(-60f)
+            .setDuration(400)
+            .setInterpolator(android.view.animation.AnticipateInterpolator())
+            .withEndAction {
+                pill.visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun updateHeaderTexts(isClockedIn: Boolean, animateDynamicIsland: Boolean = false) {
+        if (!isAdded || _binding == null) return
+        
+        // Show/hide the dynamic island pill based on On Duty status
+        if (session.isOnDuty) {
+            showDynamicIslandWithAnimation(animateDynamicIsland)
+        } else {
+            hideDynamicIslandWithAnimation(animateDynamicIsland)
+        }
+
+        if (isClockedIn) {
+            binding.tvAttendanceHeaderTitle.text = "You're Clocked In"
+            binding.tvAttendanceHeaderSubtitle.text = "Have a productive day ahead"
+        } else {
+            val hasClockedOutToday = !flowViewModel.uiState.value.isClockedIn && !flowViewModel.uiState.value.firstPunchInIso.isNullOrBlank()
+            if (hasClockedOutToday) {
+                binding.tvAttendanceHeaderTitle.text = "Clocked Out"
+                binding.tvAttendanceHeaderSubtitle.text =
+                    "Tap Clock Out again to update — final time locks at midnight"
+            } else {
+                binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
+                binding.tvAttendanceHeaderSubtitle.text =
+                    "Don’t miss your clock in schedule"
             }
         }
     }
