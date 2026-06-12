@@ -196,9 +196,9 @@ class HrDashboardFragment : Fragment() {
         binding.btnClockInNow.setOnClickListener {
             // Button stays active visually so the user can always reach
             // for it. If they're inside their home fence, refuse the tap
-            // with a short top-of-screen Toast — no other visual cue.
+            // and show the "You are at Home!" warning dialog.
             if (isInsideHomeFence) {
-                showTopToast("Move away from home to clock in")
+                HomeFenceWarningDialog.show(parentFragmentManager)
                 return@setOnClickListener
             }
             parentFragmentManager.beginTransaction()
