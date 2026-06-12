@@ -28,18 +28,28 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.Circle
+import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentClockInAreaBinding
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.HomeFenceData
 import com.manjugroups.m_connect.network.TodayShiftDay
 import com.manjugroups.m_connect.network.TodayShiftResponse
 import com.manjugroups.m_connect.network.TodayShiftSchedule
 import com.manjugroups.m_connect.ui.common.navigateUp
 import java.util.Calendar
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -58,6 +68,24 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     private var pendingPunchImageFile: File? = null
     private var pendingPunchImageUri: android.net.Uri? = null
     private var isLaunchingCamera = false
+
+    // Home geofence enforcement — mirrors HrDashboardFragment. Blocks
+    // the Selfie-To-Clock-In path the same way the dashboard blocks
+    // Clock-In Now, so the staff can't sidestep the dashboard guard by
+    // tapping through to this screen first.
+    private var homeFence: HomeFenceData? = null
+    private var isInsideHomeFence: Boolean = false
+    private var geofenceWatcherJob: Job? = null
+    // Geographic circle for the home fence drawn on the Clock-In Area
+    // map. Stays anchored to the home pin's coords — Google Maps moves
+    // it across the screen as the user pans, which is the correct
+    // behaviour for a real geofence.
+    private var homeFenceCircle: Circle? = null
+    private var lastFenceStatus: String? = null
+    // Real geo-anchored marker for the user's position. Replaces the
+    // userPinOuter screen overlay so the "V" stays at the staff's
+    // actual latitude/longitude when the map is panned.
+    private var userMarker: Marker? = null
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -184,10 +212,17 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         }
 
         binding.btnSelfieClockIn.setOnClickListener {
+            // Button stays visually active. Refuse the tap with a
+            // top-of-screen Toast if the user is inside their home fence.
+            if (isInsideHomeFence) {
+                showTopToast("Move away from home to clock in")
+                return@setOnClickListener
+            }
             beginPunchCapture(PunchMode.PUNCH_IN)
         }
 
         loadTodayShift()
+        loadHomeFence()
     }
 
     override fun onResume() {
@@ -195,6 +230,11 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         (activity as? MainActivity)?.setTabBarVisible(false)
         (activity as? MainActivity)?.setTopBarAppearance(Color.TRANSPARENT, true, fullBleed = true)
         _binding?.mapViewClockIn?.onResume()
+        // Refresh fence policy + restart the watcher so coming back to
+        // this screen picks up an HR-side change (radius tweak / toggle
+        // flip) without restarting the app.
+        loadHomeFence()
+        startGeofenceWatcher()
     }
 
     override fun onStart() {
@@ -204,6 +244,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
 
     override fun onPause() {
         _binding?.mapViewClockIn?.onPause()
+        stopGeofenceWatcher()
         super.onPause()
     }
 
@@ -232,7 +273,19 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             uiSettings.isMyLocationButtonEnabled = false
             uiSettings.isRotateGesturesEnabled = false
             uiSettings.isTiltGesturesEnabled = false
+            // Scroll is now ON — the user can pan the map for context.
+            // The V isn't a screen overlay anymore: it's rendered as a
+            // real geo-anchored marker (see updateUserMarker below), so
+            // it stays at the staff's actual latitude/longitude when
+            // the map is panned.
         }
+        // Hide the old screen-anchored overlay; the geo-anchored marker
+        // takes over.
+        binding.userPinOuter.visibility = View.GONE
+        // If the fence is already loaded, draw it the moment the map is
+        // ready (don't wait for the next watcher tick).
+        homeFenceCircle = null
+        drawHomeFenceCircleOnMap()
         updateUserLocationOnMap()
     }
 
@@ -273,8 +326,48 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             val map = googleMap ?: return@launch
             val point = LatLng(lat, lng)
             map.clear()
+            // map.clear() removes ALL overlays — null the cached
+            // handles so the next draw re-adds them instead of trying
+            // to patch removed objects.
+            homeFenceCircle = null
+            userMarker = null
+            drawHomeFenceCircleOnMap()
+            updateUserMarker(point)
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 17f))
         }
+    }
+
+    /** Render the existing userPinOuter View to a Bitmap so we can
+     *  reuse the same design as a real map marker. */
+    private fun renderUserPinBitmap(): BitmapDescriptor? {
+        val v = binding.userPinOuter
+        val w = v.width
+        val h = v.height
+        if (w <= 0 || h <= 0) return null
+        val bm = android.graphics.Bitmap.createBitmap(
+            w, h, android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        v.draw(android.graphics.Canvas(bm))
+        return BitmapDescriptorFactory.fromBitmap(bm)
+    }
+
+    /** Add or move the geo-anchored user marker. Center-anchored so the
+     *  avatar inside the V circle sits on the user's actual lat/lng. */
+    private fun updateUserMarker(latLng: LatLng) {
+        val map = googleMap ?: return
+        val icon = renderUserPinBitmap()
+        val existing = userMarker
+        if (existing != null) {
+            existing.position = latLng
+            if (icon != null) existing.setIcon(icon)
+            return
+        }
+        userMarker = map.addMarker(
+            MarkerOptions()
+                .position(latLng)
+                .anchor(0.5f, 0.5f)
+                .let { if (icon != null) it.icon(icon) else it }
+        )
     }
 
     private fun loadTodayShift() {
@@ -450,5 +543,153 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         } catch (_: Exception) {
             null
         }
+    }
+
+    // ── Home geofence enforcement (same shape as HrDashboardFragment) ──
+    //
+    // Single fetch per resume + a 15 s watcher; recomputes distance via
+    // haversine and disables btnSelfieClockIn the moment the user is
+    // inside their enforceable home radius. Server-side checkHomeBlock
+    // is the final word, so a stale tick can only ever fail-open and
+    // get rejected with ATTENDANCE_BLOCKED_LOCATION at punch time.
+
+    private fun loadHomeFence() {
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val snapshot = try {
+                api.getHomeFence(token)
+            } catch (_: Exception) {
+                null
+            }
+            if (_binding == null) return@launch
+            homeFence = snapshot?.fence?.takeIf { it.enabled }
+            refreshGeofenceState()
+        }
+    }
+
+    private suspend fun computeInsideHomeFence(): Boolean {
+        val fence = homeFence
+        if (fence == null) { lastFenceStatus = "Home-block policy off (HR setting)"; return false }
+        if (!fence.enabled) { lastFenceStatus = "Home-block policy off"; return false }
+        val lat = fence.lat
+        val lng = fence.lng
+        if (lat == null || lng == null) {
+            lastFenceStatus = "No home pin set for this staff"
+            return false
+        }
+        if (!hasLocationPermission()) {
+            lastFenceStatus = "Grant location permission to enforce home fence"
+            return false
+        }
+        val loc = try {
+            val client = LocationServices.getFusedLocationProviderClient(requireContext())
+            val token = CancellationTokenSource().token
+            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+                ?: client.lastLocation.await()
+        } catch (_: Exception) { null }
+        if (loc == null || (loc.latitude == 0.0 && loc.longitude == 0.0)) {
+            lastFenceStatus = "Waiting for GPS fix…"
+            return false
+        }
+        val distanceMeters = haversineMeters(
+            loc.latitude, loc.longitude, lat, lng,
+        ).toInt()
+        val inside = distanceMeters <= fence.radiusMeters
+        lastFenceStatus = if (inside) {
+            "Inside home fence (${distanceMeters} m ≤ ${fence.radiusMeters} m)"
+        } else {
+            "Outside home fence (${distanceMeters} m, allowed when ≤ ${fence.radiusMeters} m)"
+        }
+        return inside
+    }
+
+    private fun refreshGeofenceState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val inside = computeInsideHomeFence()
+            if (_binding == null) return@launch
+            isInsideHomeFence = inside
+            applyGeofenceToButton()
+        }
+    }
+
+    private fun applyGeofenceToButton() {
+        if (_binding == null) return
+        // Button stays visually active — no drawable swap, no banner.
+        // The click listener is the only enforcement, via a top Toast.
+        binding.tvClockInFenceStatus.visibility = View.GONE
+        drawHomeFenceCircleOnMap()
+    }
+
+    /** Brief top-of-screen Toast for the geofence refusal. */
+    private fun showTopToast(message: String) {
+        val act = activity ?: return
+        com.manjugroups.m_connect.ui.common.TopToast.show(act, message)
+    }
+
+    /**
+     * Draw the home geofence circle on the Clock-In Area map so the
+     * staff can see WHERE their home fence is. The circle is anchored
+     * to the home pin's coordinates — when the user pans the map the
+     * circle moves across the screen with the map, which is correct
+     * geographic anchoring (not a bug).
+     */
+    private fun drawHomeFenceCircleOnMap() {
+        val map = googleMap ?: return
+        val fence = homeFence
+        val lat = fence?.lat
+        val lng = fence?.lng
+        if (fence == null || !fence.enabled || lat == null || lng == null) {
+            homeFenceCircle?.remove()
+            homeFenceCircle = null
+            return
+        }
+        val existing = homeFenceCircle
+        if (existing == null) {
+            homeFenceCircle = map.addCircle(
+                CircleOptions()
+                    .center(LatLng(lat, lng))
+                    .radius(fence.radiusMeters.toDouble())
+                    .strokeWidth(3f)
+                    // Red border + faint red fill — distinct from the
+                    // work-area circle (blue) so the two are visually
+                    // distinguishable on the same map.
+                    .strokeColor(android.graphics.Color.parseColor("#DC2626"))
+                    .fillColor(android.graphics.Color.parseColor("#33DC2626")),
+            )
+        } else {
+            existing.center = LatLng(lat, lng)
+            existing.radius = fence.radiusMeters.toDouble()
+        }
+    }
+
+    private fun startGeofenceWatcher() {
+        if (geofenceWatcherJob?.isActive == true) return
+        geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && _binding != null) {
+                refreshGeofenceState()
+                delay(5_000L)
+            }
+        }
+    }
+
+    private fun stopGeofenceWatcher() {
+        geofenceWatcherJob?.cancel()
+        geofenceWatcherJob = null
+    }
+
+    /** Great-circle distance in meters — mirrors convex/lib/geo.ts. */
+    private fun haversineMeters(
+        lat1: Double, lng1: Double, lat2: Double, lng2: Double,
+    ): Double {
+        val r = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) *
+            Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return r * c
     }
 }

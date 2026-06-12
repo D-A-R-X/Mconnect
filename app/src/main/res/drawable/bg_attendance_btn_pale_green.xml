@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pale / desaturated version of bg_attendance_btn_primary, used when
+     the Clock-In button is intentionally blocked (currently: home
+     geofence). Reads as "off but related to clock-in" rather than the
+     dead grey of the platform's disabled state. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#C8F0BD"
+        android:endColor="#A8DD9B"
+        android:type="linear" />
+    <corners android:radius="100dp" />
+</shape>

@@ -9,6 +9,7 @@
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8"
@@ -399,6 +400,25 @@
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
                         android:textSize="14sp" />
+
+                    <!-- Live geofence status line. Hidden by default;
+                         HrDashboardFragment shows it when there's
+                         something useful to report (e.g. "Outside home
+                         fence (240 m)" or "You're at home — move outside
+                         your home area to clock in") so the staff can
+                         see the reason without scrolling up to the
+                         header. -->
+                    <TextView
+                        android:id="@+id/tvClockInFenceStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:textColor="#475467"
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        tools:text="Outside home fence (240 m, allowed when ≤ 150 m)" />
                 </LinearLayout>
 
                 <!--

@@ -38,15 +38,12 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private var selectedVehicleType: String? = null // "2 Wheeler", "4 Wheeler"
 
     private var allProjects: List<ProjectSummary> = emptyList()
-    private val mockVendors = listOf(
-        VendorItem("v1", "Manju Construction"),
-        VendorItem("v2", "Elite Cement Suppliers"),
-        VendorItem("v3", "Steel Traders Co."),
-        VendorItem("v4", "Brickworks Inc."),
-        VendorItem("v5", "Stone & Sand Suppliers"),
-        VendorItem("v6", "Vertex Developers"),
-        VendorItem("v7", "Super Concrete Ltd.")
-    )
+    // Real vendor master data, fetched from /api/library/vendors. Empty
+    // until the first fetch returns; the list and search both render
+    // against this. Replaces the old hardcoded sample list which was
+    // showing on screen even though the web Vendors tab had different
+    // data (or no data at all for a fresh tenant).
+    private var allVendors: List<VendorItem> = emptyList()
 
     private val displayedItems = mutableListOf<DisplayItem>()
     private lateinit var listAdapter: ListAdapter
@@ -90,7 +87,9 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private lateinit var layoutBottomButtons: View
 
     data class DisplayItem(val id: String, val name: String)
-    data class VendorItem(val id: String, val name: String)
+    // address kept locally so a follow-up screen can show the vendor's
+    // location on a map without a second fetch.
+    data class VendorItem(val id: String, val name: String, val address: String? = null)
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -291,8 +290,9 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
-        // Fetch Projects in background
+        // Fetch master lists in background.
         fetchProjects()
+        fetchVendors()
     }
 
     private fun selectCategory(category: String) {
@@ -363,6 +363,27 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun fetchVendors() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getVendors(session.bearerToken)
+                if (resp.success) {
+                    allVendors = resp.vendors
+                        .filter { it.status?.equals("inactive", true) != true }
+                        .map { VendorItem(it.id, it.name, it.address) }
+                    // If the user is already viewing the Vendors list,
+                    // re-render now that data has arrived.
+                    if (selectedCategory == "Vendors") {
+                        loadVendorsToList()
+                    }
+                }
+            } catch (_: Exception) {
+                // Silent — list stays empty, search still works against
+                // whatever's already loaded.
+            }
+        }
+    }
+
     private fun loadProjectsToList() {
         displayedItems.clear()
         allProjects.forEach {
@@ -373,7 +394,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
 
     private fun loadVendorsToList() {
         displayedItems.clear()
-        mockVendors.forEach {
+        allVendors.forEach {
             displayedItems.add(DisplayItem(it.id, it.name))
         }
         listAdapter.notifyDataSetChanged()
@@ -394,9 +415,9 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             }
         } else if (selectedCategory == "Vendors") {
             val filtered = if (clean.isEmpty()) {
-                mockVendors
+                allVendors
             } else {
-                mockVendors.filter { it.name.lowercase(Locale.getDefault()).contains(clean) }
+                allVendors.filter { it.name.lowercase(Locale.getDefault()).contains(clean) }
             }
             filtered.forEach {
                 displayedItems.add(DisplayItem(it.id, it.name))
