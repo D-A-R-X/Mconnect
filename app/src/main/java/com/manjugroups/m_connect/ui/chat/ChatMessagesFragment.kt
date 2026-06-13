@@ -703,159 +703,22 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showImageSendPreview(images: List<PendingAttachment>) {
-        if (images.isEmpty()) return
-        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_send_preview, null)
-        val popup = PopupWindow(
-            view,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            true
-        ).apply {
-            isFocusable = true
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0F0F1A")))
-        }
-
-        val editView = view.findViewById<MediaEditView>(R.id.ivPreviewMain)
-        val stripContainer = view.findViewById<LinearLayout>(R.id.thumbStripContainer)
-        val etCaption = view.findViewById<android.widget.EditText>(R.id.etPreviewCaption)
-        val btnSend = view.findViewById<View>(R.id.btnPreviewSend)
-        val btnBack = view.findViewById<View>(R.id.btnPreviewBack)
-        val editToolBar = view.findViewById<LinearLayout>(R.id.editToolBar)
-        val tvEditModeLabel = view.findViewById<android.widget.TextView>(R.id.tvEditModeLabel)
-        val btnEditApply = view.findViewById<View>(R.id.btnEditApply)
-        val btnEditCancel = view.findViewById<View>(R.id.btnEditCancel)
-        val drawToolBar = view.findViewById<LinearLayout>(R.id.drawToolBar)
-        val cropToolBar = view.findViewById<LinearLayout>(R.id.cropToolBar)
-        val drawColorRow = view.findViewById<LinearLayout>(R.id.drawColorRow)
-        setupDrawToolbar(view, editView, drawColorRow)
-        setupCropToolbar(view, editView)
-
-        // Per-image edit state: we replace the file URI when the user commits
-        // edits, so the sent attachment has the flattened bitmap.
-        val workingImages = images.toMutableList()
-        var activeIndex = 0
-
-        fun loadActiveBitmap() {
-            val active = workingImages[activeIndex]
-            viewLifecycleOwner.lifecycleScope.launch {
-                val bm = withContext(Dispatchers.IO) {
-                    runCatching {
-                        requireContext().contentResolver.openInputStream(active.uri)?.use {
-                            android.graphics.BitmapFactory.decodeStream(it)
-                        }
-                    }.getOrNull()
+        val first = images.firstOrNull() ?: return
+        val previewSheet = MediaPreviewBottomSheet().apply {
+            setAttachment(first)
+            setListener(object : MediaPreviewBottomSheet.MediaPreviewListener {
+                override fun onMediaSend(attachment: PendingAttachment, caption: String) {
+                    pendingAttachments.add(attachment)
+                    if (caption.isNotEmpty()) {
+                        binding.etMessage.setText(caption)
+                    }
+                    renderPendingAttachments()
+                    updateSendIcon()
+                    sendMessage()
                 }
-                if (_binding == null || bm == null) return@launch
-                editView.setBitmap(bm)
-            }
+            })
         }
-
-        fun showActive() {
-            loadActiveBitmap()
-            for (i in 0 until stripContainer.childCount) {
-                val v = stripContainer.getChildAt(i)
-                v.alpha = if (i == activeIndex) 1f else 0.55f
-                v.setBackgroundResource(
-                    if (i == activeIndex) R.drawable.bg_thumb_strip_selected
-                    else 0
-                )
-            }
-        }
-
-        fun showEditToolbar(label: String) {
-            tvEditModeLabel.text = label
-            editToolBar.visibility = View.VISIBLE
-        }
-
-        fun hideEditToolbar() {
-            editToolBar.visibility = View.GONE
-        }
-
-        images.forEachIndexed { index, attachment ->
-            val thumb = ImageView(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(dpToPx(52), dpToPx(52)).apply {
-                    marginEnd = dpToPx(6)
-                }
-                setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                load(attachment.uri) {
-                    transformations(coil.transform.RoundedCornersTransformation(dpToPx(8).toFloat()))
-                }
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    activeIndex = index
-                    showActive()
-                }
-            }
-            stripContainer.addView(thumb)
-        }
-        showActive()
-
-        view.findViewById<View>(R.id.btnPreviewCrop)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.CROP
-            showEditToolbar("Crop")
-            cropToolBar.visibility = View.VISIBLE
-            drawToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewDraw)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.DRAW
-            showEditToolbar("Draw — tap Done when finished")
-            drawToolBar.visibility = View.VISIBLE
-            cropToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewText)?.setOnClickListener {
-            showAddTextSheet { text ->
-                if (text.isNotEmpty()) {
-                    editView.addText(text)
-                    showEditToolbar("Drag text to position")
-                }
-            }
-        }
-        btnEditCancel.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.cancelCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-        btnEditApply.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.applyCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-
-        view.findViewById<View>(R.id.btnPreviewUndo)?.setOnClickListener {
-            if (!editView.undo()) toast("Nothing to undo")
-        }
-        view.findViewById<View>(R.id.btnPreviewDownload)?.setOnClickListener {
-            val first = workingImages.firstOrNull() ?: return@setOnClickListener
-            savePendingAttachmentToGallery(first)
-        }
-
-        btnBack.setOnClickListener { popup.dismiss() }
-
-        btnSend.setOnClickListener {
-            val caption = etCaption.text?.toString()?.trim().orEmpty()
-            // Flatten any current edits into the active image before sending.
-            val edited = editView.getResult()
-            if (edited != null) {
-                val saved = persistEditedBitmap(edited)
-                if (saved != null) workingImages[activeIndex] = saved
-            }
-            popup.dismiss()
-            pendingAttachments.addAll(workingImages)
-            if (caption.isNotEmpty()) {
-                binding.etMessage.setText(caption)
-            }
-            renderPendingAttachments()
-            updateSendIcon()
-            sendMessage()
-        }
-
-        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+        previewSheet.show(parentFragmentManager, "media_preview")
     }
 
     private fun playVoiceMessage(url: String, mime: String = "audio/mp4", storageId: String? = null) {
@@ -1907,9 +1770,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             }.getOrNull() ?: 0L
                             val name = "Video-${System.currentTimeMillis()}.mp4"
                             val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                            pendingAttachments += pending
-                            renderPendingAttachments()
-                            updateSendIcon()
+                            showImageSendPreview(listOf(pending))
                         } else {
                             val mime = resolver.getType(uri) ?: "image/jpeg"
                             val size = runCatching {
@@ -3348,7 +3209,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         _binding = null
     }
 
-    private data class PendingAttachment(
+    data class PendingAttachment(
         val uri: Uri,
         val fileName: String,
         val fileType: String,

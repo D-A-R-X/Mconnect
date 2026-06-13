@@ -68,6 +68,17 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun safeToast(message: String) {
+        val ctx = context ?: return
+        Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun playSound(soundId: Int) {
+        runCatching {
+            mediaActionSound.play(soundId)
+        }
+    }
+
     // UI elements
     private lateinit var viewFinder: PreviewView
     private lateinit var tvTitle: TextView
@@ -97,7 +108,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             switchToVideoMode()
         } else {
-            Toast.makeText(requireContext(), "Audio permission required for recording video", Toast.LENGTH_SHORT).show()
+            safeToast("Audio permission required for recording video")
             switchToPhotoMode()
         }
     }
@@ -364,7 +375,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
-        mediaActionSound.play(android.media.MediaActionSound.SHUTTER_CLICK)
+        playSound(android.media.MediaActionSound.SHUTTER_CLICK)
 
         imageCapture.takePicture(
             outputOptions,
@@ -377,7 +388,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    Toast.makeText(requireContext(), "Failed to capture photo", Toast.LENGTH_SHORT).show()
+                    safeToast("Failed to capture photo")
                 }
             }
         )
@@ -388,7 +399,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         val videoCapture = videoCapture ?: return
         if (isRecording) {
             // Stop recording
-            mediaActionSound.play(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
+            playSound(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
             mainHandler.removeCallbacks(recordingProgressRunnable)
             activeRecording?.stop()
             activeRecording = null
@@ -406,7 +417,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             imgShutter.setImageResource(R.drawable.ic_trip_stop_white)
             btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F04438"))
 
-            mediaActionSound.play(android.media.MediaActionSound.START_VIDEO_RECORDING)
+            playSound(android.media.MediaActionSound.START_VIDEO_RECORDING)
 
             activeRecording = videoCapture.output
                 .prepareRecording(requireContext(), outputOptions)
@@ -426,7 +437,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                                 listener?.onMediaCaptured(uri, isVideo = true)
                                 dismiss()
                             } else {
-                                Toast.makeText(requireContext(), "Failed to save video", Toast.LENGTH_SHORT).show()
+                                safeToast("Failed to save video")
                                 isRecording = false
                                 imgShutter.setImageResource(R.drawable.ic_chat_video)
                                 btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#12B76A"))
