@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_chat_action_sheet"
     android:orientation="vertical"
-    android:paddingBottom="48dp">
+    android:paddingBottom="20dp">
 
     <!-- Top Drag Handle -->
     <View
@@ -232,67 +232,6 @@
         </GridLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- Context / Label Selector -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="8dp"
-        android:fontFamily="@font/inter_medium"
-        android:text="Select Telemetry Context"
-        android:textColor="#344054"
-        android:textSize="12sp" />
-
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/chipGroupLocationMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
-        app:singleSelection="true"
-        app:checkedChip="@+id/chipModeInspection">
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipModeInspection"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Site Inspection"
-            app:chipBackgroundColor="@color/chat_filter_inactive"
-            app:checkedIconEnabled="true"
-            app:chipIconEnabled="false" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipModeDuty"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Punched Duty"
-            app:chipBackgroundColor="@color/chat_filter_inactive"
-            app:checkedIconEnabled="true"
-            app:chipIconEnabled="false" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipModeMeeting"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Client Meeting"
-            app:chipBackgroundColor="@color/chat_filter_inactive"
-            app:checkedIconEnabled="true"
-            app:chipIconEnabled="false" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipModeRegular"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Current Location"
-            app:chipBackgroundColor="@color/chat_filter_inactive"
-            app:checkedIconEnabled="true"
-            app:chipIconEnabled="false" />
-    </com.google.android.material.chip.ChipGroup>
-
     <!-- Share Button -->
     <Button
         android:id="@+id/btnLocationShareSend"
@@ -302,7 +241,7 @@
         android:layout_marginTop="20dp"
         android:backgroundTint="#38A612"
         android:fontFamily="@font/inter_bold"
-        android:text="Share Location &amp; Telemetry"
+        android:text="Share Location"
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         app:cornerRadius="100dp" />
