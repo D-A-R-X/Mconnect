@@ -23,4 +23,20 @@ interface LocationPointDao {
 
     @Query("DELETE FROM pending_points WHERE recordedAt < :cutoffMs")
     suspend fun deleteOlderThan(cutoffMs: Long)
+
+    /**
+     * Purge only SENT points older than [cutoffMs]. Preserves unsent
+     * points so a multi-day offline period doesn't lose the buffered
+     * journey — they still get to flush when the network returns.
+     */
+    @Query("DELETE FROM pending_points WHERE sent = 1 AND recordedAt < :cutoffMs")
+    suspend fun deleteSentOlderThan(cutoffMs: Long)
+
+    /**
+     * Safety-cap purge for genuinely abandoned unsent points (e.g. the
+     * staff was offline for 30+ days). Without this, the local DB
+     * could grow unbounded if the device never recovers.
+     */
+    @Query("DELETE FROM pending_points WHERE sent = 0 AND recordedAt < :cutoffMs")
+    suspend fun deleteUnsentOlderThan(cutoffMs: Long)
 }

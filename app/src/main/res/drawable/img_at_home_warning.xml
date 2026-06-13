@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder illustration for the "You are at Home!" dialog.
+     Replace with the final 3D-rendered PNG by dropping it at
+       app/src/main/res/drawable-nodpi/img_at_home_warning.png
+     (Android will pick the PNG over this vector once it exists.) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Soft pale-blue backdrop circle -->
+    <path
+        android:fillColor="#EAF1FE"
+        android:pathData="M100,100m-92,0a92,92 0,1 1,184 0a92,92 0,1 1,-184 0z" />
+
+    <!-- House body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1570EF"
+        android:strokeWidth="2.5"
+        android:pathData="M60,98 L60,148 L140,148 L140,98 L100,68 Z" />
+
+    <!-- Roof -->
+    <path
+        android:fillColor="#1570EF"
+        android:pathData="M50,102 L100,62 L150,102 L140,102 L100,72 L60,102 Z" />
+
+    <!-- Door -->
+    <path
+        android:fillColor="#1570EF"
+        android:pathData="M86,116 L86,148 L114,148 L114,116 Q114,110 100,110 Q86,110 86,116 Z" />
+
+    <!-- Window frame -->
+    <path
+        android:fillColor="#1570EF"
+        android:pathData="M72,116 m-4,0 a4,4 0,1 1,8 0 a4,4 0,1 1,-8 0z" />
+
+    <!-- Speech bubble base (question mark holder) -->
+    <path
+        android:fillColor="#1570EF"
+        android:pathData="M126,40 m-22,0 a22,22 0,1 1,44 0 a22,22 0,1 1,-44 0z" />
+
+    <!-- Speech-bubble tail -->
+    <path
+        android:fillColor="#1570EF"
+        android:pathData="M132,60 L140,72 L142,58 Z" />
+
+    <!-- Question mark glyph -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M121,30 q0,-8 5,-8 q5,0 5,5 q0,3 -2.5,5 q-2.5,2 -2.5,5 l0,3 l-5,0 z M124,52 a3.5,3.5 0,1 1,7 0 a3.5,3.5 0,1 1,-7 0z" />
+
+    <!-- Location pin (red) -->
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M150,110 m-12,0 c0,-7 5,-12 12,-12 c7,0 12,5 12,12 c0,9 -12,22 -12,22 c0,0 -12,-13 -12,-22 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M150,110 m-4,0 a4,4 0,1 1,8 0 a4,4 0,1 1,-8 0z" />
+</vector>

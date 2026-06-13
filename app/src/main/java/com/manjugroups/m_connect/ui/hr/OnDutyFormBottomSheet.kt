@@ -11,6 +11,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
@@ -24,6 +25,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectSummary
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Locale
 
 class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
@@ -94,8 +96,28 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
-        
-        // Intercept back key event directly on the dialog window
+
+        // Intercept the system back gesture / hardware back button so it
+        // walks the multi-step sheet back one step at a time instead of
+        // dismissing outright.
+        //
+        // Two listeners are wired because Android handles back differently
+        // depending on the device + version:
+        //   • OnBackPressedDispatcher — fires for the gesture-back swipe
+        //     on Android 13+ (the only path that actually delivers there;
+        //     setOnKeyListener with KEYCODE_BACK doesn't fire under
+        //     predictive back). Without this, swipe-back was just
+        //     dismissing the whole sheet.
+        //   • setOnKeyListener — covers hardware back keys on older
+        //     devices / emulators where the dispatcher route may be a no-op.
+        dialog.onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    handleBackPress()
+                }
+            },
+        )
         dialog.setOnKeyListener { _, keyCode, event ->
             if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
                 if (event.action == android.view.KeyEvent.ACTION_UP) {
@@ -611,13 +633,20 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private fun submitOnDuty() {
         val remarks = etOnDutyRemarks.text.toString().trim()
         val targetName = if (selectedCategory == "Others") remarks else selectedTargetName
+        val targetAddress = allVendors
+            .firstOrNull { it.id == selectedTargetId }?.address
 
+        // Local state first — instant UI response, the Dynamic Island
+        // pill and Complete On Duty button can render immediately.
         session.isOnDuty = true
         session.onDutyType = selectedCategory
         session.onDutyTargetName = targetName
         session.onDutyTargetId = selectedTargetId
         session.onDutyVehicleOwnership = selectedVehicleOwnership
         session.onDutyVehicleType = selectedVehicleType
+        // Clear any stale tripId from a previous session before the new
+        // start call returns.
+        session.onDutyTripId = null
 
         val resultBundle = Bundle().apply {
             putBoolean(KEY_STARTED, true)
@@ -625,6 +654,66 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         setFragmentResult(RESULT_KEY, resultBundle)
         Toast.makeText(requireContext(), "On Duty started.", Toast.LENGTH_SHORT).show()
         dismissAllowingStateLoss()
+
+        // Backend sync — fire after dismissing so the bottom sheet UX
+        // doesn't stall on a network round-trip. The activity owns the
+        // coroutine so the call survives this fragment's destruction.
+        val appCtx = requireContext().applicationContext
+        val sessionRef = session
+        val category = selectedCategory
+        val targetIdRef = selectedTargetId
+        val vehicleOwnership = selectedVehicleOwnership
+        val vehicleType = selectedVehicleType
+        requireActivity().lifecycleScope.launch {
+            try {
+                val loc = fetchCurrentLocationOrNull(appCtx)
+                val resp = api.startOnDutyTrip(
+                    sessionRef.bearerToken,
+                    com.manjugroups.m_connect.network.StartOnDutyTripRequest(
+                        lat = loc?.latitude,
+                        lng = loc?.longitude,
+                        address = null,
+                        category = category,
+                        targetId = targetIdRef,
+                        targetName = targetName,
+                        targetAddress = targetAddress,
+                        vehicleOwnership = vehicleOwnership,
+                        vehicleType = vehicleType,
+                    ),
+                )
+                if (resp.success && !resp.tripId.isNullOrBlank()) {
+                    sessionRef.onDutyTripId = resp.tripId
+                }
+            } catch (_: Exception) {
+                // Network down or server hiccup — the user is still
+                // marked on-duty locally; the trip will be visible to
+                // HR once we add retry-on-resume. Silent for now.
+            }
+        }
+    }
+
+    /** Best-effort current location for the on-duty trip start. Uses
+     *  the same Fused client pattern as the rest of the attendance
+     *  flow. Returns null if permission is missing or no fix arrives. */
+    private suspend fun fetchCurrentLocationOrNull(
+        ctx: android.content.Context,
+    ): android.location.Location? {
+        val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(
+            ctx, android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(
+            ctx, android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) return null
+        return try {
+            val client = com.google.android.gms.location
+                .LocationServices.getFusedLocationProviderClient(ctx)
+            val token = com.google.android.gms.tasks.CancellationTokenSource().token
+            client.getCurrentLocation(
+                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+                token,
+            ).await() ?: client.lastLocation.await()
+        } catch (_: Exception) { null }
     }
 
     private inner class ListAdapter : RecyclerView.Adapter<ListAdapter.VH>() {

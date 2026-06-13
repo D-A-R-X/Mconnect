@@ -354,22 +354,25 @@ class ChatListFragment : Fragment() {
     }
 
     private fun renderFilterState() {
-        val allCount = allConversations.size + allChannels.size
-        
-        val unreadCount = allConversations.count { (it.unreadCount ?: 0) > 0 } + 
-                          allChannels.count { (it.unreadCount ?: 0) > 0 }
-                          
-        val favouritesCount = (allConversations.mapNotNull { it.id } + allChannels.mapNotNull { it.id })
-            .count { favouriteIds.contains(it) }
-            
-        val groupsCount = allChannels.size
-        val dmCount = allConversations.size
+        // All filter-chip badges show UNREAD counts only — the badge is
+        // a "you have N new messages here" cue, not a category total.
+        // bindFilterChip already hides the badge when its count is 0,
+        // so any chip with no unread messages renders label-only.
+        val unreadConvs = allConversations.filter { (it.unreadCount ?: 0) > 0 }
+        val unreadChannels = allChannels.filter { (it.unreadCount ?: 0) > 0 }
 
-        bindFilterChip(binding.chipAll, binding.chipAllLabel, binding.chipAllBadge, activeFilter == ChatFilter.ALL, allCount)
-        bindFilterChip(binding.chipUnread, binding.chipUnreadLabel, binding.chipUnreadBadge, activeFilter == ChatFilter.UNREAD, unreadCount)
-        bindFilterChip(binding.chipFavourites, binding.chipFavouritesLabel, binding.chipFavouritesBadge, activeFilter == ChatFilter.FAVOURITES, favouritesCount)
-        bindFilterChip(binding.chipChannels, binding.chipChannelsLabel, binding.chipChannelsBadge, activeFilter == ChatFilter.GROUPS, groupsCount)
-        bindFilterChip(binding.chipDirect, binding.chipDirectLabel, binding.chipDirectBadge, activeFilter == ChatFilter.DM, dmCount)
+        val allUnread = unreadConvs.size + unreadChannels.size
+        val groupsUnread = unreadChannels.size
+        val dmUnread = unreadConvs.size
+        val favouritesUnread =
+            unreadConvs.count { favouriteIds.contains(it.id) } +
+            unreadChannels.count { favouriteIds.contains(it.id) }
+
+        bindFilterChip(binding.chipAll, binding.chipAllLabel, binding.chipAllBadge, activeFilter == ChatFilter.ALL, allUnread)
+        bindFilterChip(binding.chipUnread, binding.chipUnreadLabel, binding.chipUnreadBadge, activeFilter == ChatFilter.UNREAD, allUnread)
+        bindFilterChip(binding.chipFavourites, binding.chipFavouritesLabel, binding.chipFavouritesBadge, activeFilter == ChatFilter.FAVOURITES, favouritesUnread)
+        bindFilterChip(binding.chipChannels, binding.chipChannelsLabel, binding.chipChannelsBadge, activeFilter == ChatFilter.GROUPS, groupsUnread)
+        bindFilterChip(binding.chipDirect, binding.chipDirectLabel, binding.chipDirectBadge, activeFilter == ChatFilter.DM, dmUnread)
     }
 
     private fun bindFilterChip(
@@ -545,18 +548,27 @@ class ChatListFragment : Fragment() {
 
     private fun buildItems(): List<ChatListItem> {
         val query = chatSearchQuery.lowercase(Locale.getDefault())
+        val selfStaffId = session.staffId
 
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
             val title = conversation.displayName?.ifBlank { null } ?: "Chat"
-            
+
             // Resolve last message preview text and icon
             val previewResult = conversation.lastMessage?.let { resolveMessagePreview(it) }
                 ?: conversation.lastMessagePreview?.let { resolveRawPreviewText(it) }
                 ?: MessagePreviewResult("No messages yet", null)
-            
+
             val lastActive = conversation.lastMessageAt ?: 0L
             val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
+
+            // Pick the OTHER participant's photo for the avatar — server
+            // already resolved the storage id to a public URL in
+            // convex/chat/conversations.list. Group chats don't carry a
+            // single representative photo; we leave the initial there.
+            val otherParticipant = conversation.participants
+                ?.firstOrNull { it.id != null && it.id != selfStaffId }
+            val avatarPhoto = otherParticipant?.photo?.takeIf { it.isNotBlank() }
 
             ChatListItem(
                 id = id,
@@ -569,7 +581,8 @@ class ChatListFragment : Fragment() {
                 avatarSeed = title.length,
                 isMuted = conversation.muted ?: false,
                 isOnline = isOnline,
-                previewIconRes = previewResult.iconResId
+                previewIconRes = previewResult.iconResId,
+                avatarPhotoUrl = avatarPhoto,
             )
         }
 

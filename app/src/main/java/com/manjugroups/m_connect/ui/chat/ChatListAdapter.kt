@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.manjugroups.m_connect.databinding.ItemChatBinding
 import com.manjugroups.m_connect.R
 
@@ -22,7 +23,8 @@ data class ChatListItem(
     val isMuted: Boolean,
     val isOnline: Boolean = false,
     val isFavourite: Boolean = false,
-    val previewIconRes: Int? = null
+    val previewIconRes: Int? = null,
+    val avatarPhotoUrl: String? = null,
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }
@@ -64,6 +66,20 @@ class ChatListAdapter(
             if (avatarContainer.childCount > 0) {
                 val avatarFrame = avatarContainer.getChildAt(0)
                 avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+            }
+            // Photo overlay — when the server gave us a participant
+            // photo URL, load it on top of the initial circle. Coil
+            // crossfades it in so the initial briefly shows then fades
+            // into the actual picture. When there's no photo (channels,
+            // staff with no upload), the ImageView stays gone and the
+            // initial does its existing job.
+            val photo = item.avatarPhotoUrl
+            if (!photo.isNullOrBlank()) {
+                binding.ivChatAvatarPhoto.visibility = View.VISIBLE
+                binding.ivChatAvatarPhoto.load(photo) { crossfade(true) }
+            } else {
+                binding.ivChatAvatarPhoto.visibility = View.GONE
+                binding.ivChatAvatarPhoto.setImageDrawable(null)
             }
             timestampBinder(binding.tvChatTime, item.timestamp)
 

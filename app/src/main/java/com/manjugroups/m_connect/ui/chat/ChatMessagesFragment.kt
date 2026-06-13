@@ -2070,11 +2070,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         fallbackStamp = conversation?.lastMessageAt
                     )
 
+                    // Use the photo embedded in the conversation
+                    // response first — server already resolved the
+                    // storage id to a public URL, so the avatar
+                    // renders without waiting for a second round-trip.
+                    photoUrl = participant?.photo?.takeIf { it.isNotBlank() }
+
                     val staffId = otherStaffId
                     if (staffId != null) {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            photoUrl = staffResp.staff?.photo
+                            // Only overwrite if we got something — don't
+                            // wipe the participant-supplied URL with null
+                            // when /api/hr/staff/get fails or is stale.
+                            val staffPhoto = staffResp.staff?.photo
+                            if (!staffPhoto.isNullOrBlank()) {
+                                photoUrl = staffPhoto
+                            }
                             otherStaffPhone = staffResp.staff?.phone
                         }
                     }
