@@ -147,6 +147,16 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val view = view ?: return
         val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
+        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+
+        // Stop any active video playback and hide VideoView
+        videoPreview.stopPlayback()
+        videoPreview.visibility = View.GONE
+        videoTouchOverlay.visibility = View.GONE
+
+        // Make sure image preview is visible
+        imgPreview.visibility = View.VISIBLE
 
         val isVideo = media.fileType.startsWith("video/")
         imgPreview.load(media.uri) {
@@ -157,6 +167,77 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
                 decoderFactory(coil.decode.VideoFrameDecoder.Factory())
             }
         }
+        imgPlayIcon.visibility = if (isVideo) View.VISIBLE else View.GONE
+
+        // Set click listeners for play icon and image preview to trigger play video
+        if (isVideo) {
+            val playClickListener = View.OnClickListener {
+                playVideo(media)
+            }
+            imgPlayIcon.setOnClickListener(playClickListener)
+            imgPreview.setOnClickListener(playClickListener)
+        } else {
+            imgPlayIcon.setOnClickListener(null)
+            imgPreview.setOnClickListener(null)
+        }
+    }
+
+    private fun playVideo(media: PendingAttachment) {
+        val view = view ?: return
+        val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
+        val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
+        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+
+        // Hide static preview and play icon
+        imgPreview.visibility = View.GONE
+        imgPlayIcon.visibility = View.GONE
+
+        // Show VideoView and touch overlay
+        videoPreview.visibility = View.VISIBLE
+        videoTouchOverlay.visibility = View.VISIBLE
+
+        // Determine Uri (if mock URL from picsum, play the Google APIs sample video)
+        val videoUri = if (media.uri.toString().contains("picsum.photos")) {
+            Uri.parse("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4")
+        } else {
+            media.uri
+        }
+
+        videoPreview.setVideoURI(videoUri)
+        videoPreview.setOnPreparedListener { mp ->
+            mp.isLooping = false
+            videoPreview.start()
+        }
+
+        videoPreview.setOnCompletionListener {
+            resetVideoState()
+        }
+
+        videoTouchOverlay.setOnClickListener {
+            if (videoPreview.isPlaying) {
+                videoPreview.pause()
+                imgPlayIcon.visibility = View.VISIBLE
+            } else {
+                videoPreview.start()
+                imgPlayIcon.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun resetVideoState() {
+        val view = view ?: return
+        val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
+        val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
+        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+
+        videoPreview.stopPlayback()
+        videoPreview.visibility = View.GONE
+        videoTouchOverlay.visibility = View.GONE
+
+        imgPreview.visibility = View.VISIBLE
+        val isVideo = currentAttachment?.fileType?.startsWith("video/") == true
         imgPlayIcon.visibility = if (isVideo) View.VISIBLE else View.GONE
     }
 
@@ -230,7 +311,19 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
                 }
             }
         } else {
-            val meta = readAttachmentMeta(clickedItem.uri)
+            val meta = if (clickedItem.isMock) {
+                val name = if (clickedItem.isVideo) "Sample_Video.mp4" else "Sample_Mock_${clickedItem.mockUrl?.substringAfterLast('/')}.jpg"
+                val type = if (clickedItem.isVideo) "video/mp4" else "image/jpeg"
+                PendingAttachment(
+                    uri = clickedItem.uri,
+                    fileName = name,
+                    fileType = type,
+                    fileSize = 102400L
+                )
+            } else {
+                readAttachmentMeta(clickedItem.uri)
+            }
+
             if (meta != null) {
                 val maxSize = 15L * 1024L * 1024L
                 if (meta.fileSize > maxSize) {
@@ -269,8 +362,7 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
                 while (cursor.moveToNext() && count < 25) {
                     val id = cursor.getLong(idCol)
                     val contentUri = ContentUris.withAppendedId(imagesUri, id)
-                    val isSelected = selectedAttachments.any { it.uri.toString() == contentUri.toString() }
-                    list.add(LocalPreviewItem(uri = contentUri, isVideo = false, isSelected = isSelected))
+                    list.add(LocalPreviewItem(uri = contentUri, isVideo = false, isSelected = false))
                     count++
                 }
             }
@@ -293,14 +385,67 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
                     val durationMs = if (durationCol != -1) cursor.getLong(durationCol) else 0L
                     val durationStr = formatDuration(durationMs)
                     val contentUri = ContentUris.withAppendedId(videosUri, id)
-                    val isSelected = selectedAttachments.any { it.uri.toString() == contentUri.toString() }
-                    list.add(LocalPreviewItem(uri = contentUri, isVideo = true, durationStr = durationStr, isSelected = isSelected))
+                    list.add(LocalPreviewItem(uri = contentUri, isVideo = true, durationStr = durationStr, isSelected = false))
                     count++
                 }
             }
         }
 
-        return list.sortedByDescending { it.uri.lastPathSegment?.toLongOrNull() ?: 0L }
+        val sortedList = list.sortedByDescending { it.uri.lastPathSegment?.toLongOrNull() ?: 0L }.toMutableList()
+
+        // Append the exact same mock list items as ChatMessagesFragment.kt
+        val mockItems = listOf(
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/82/300/300"),
+                isVideo = false,
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/82/300/300"
+            ),
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/1016/300/300"),
+                isVideo = false,
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1016/300/300"
+            ),
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/1015/300/300"),
+                isVideo = false,
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1015/300/300"
+            ),
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/1018/300/300"),
+                isVideo = true,
+                durationStr = "0:54",
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1018/300/300"
+            ),
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/1043/300/300"),
+                isVideo = false,
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1043/300/300"
+            ),
+            LocalPreviewItem(
+                uri = Uri.parse("https://picsum.photos/id/1025/300/300"),
+                isVideo = false,
+                isSelected = false,
+                isMock = true,
+                mockUrl = "https://picsum.photos/id/1025/300/300"
+            )
+        )
+        sortedList.addAll(mockItems)
+
+        // Set the selection status based on selectedAttachments
+        return sortedList.map { item ->
+            val isSel = selectedAttachments.any { it.uri.toString() == item.uri.toString() }
+            item.copy(isSelected = isSel)
+        }
     }
 
     private fun formatDuration(ms: Long): String {
@@ -350,17 +495,25 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        view?.findViewById<android.widget.VideoView>(R.id.videoPreviewMain)?.stopPlayback()
         super.onDismiss(dialog)
         if (!isSent) {
             listener?.onPreviewCancelled()
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        view?.findViewById<android.widget.VideoView>(R.id.videoPreviewMain)?.stopPlayback()
+    }
+
     data class LocalPreviewItem(
         val uri: Uri,
         val isVideo: Boolean,
         val durationStr: String? = null,
-        val isSelected: Boolean
+        val isSelected: Boolean,
+        val isMock: Boolean = false,
+        val mockUrl: String? = null
     )
 
     private inner class LocalPreviewAdapter(
@@ -378,12 +531,33 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_chat_local_media, parent, false)
+            
+            // Apply clipToOutline to the imageContainer thumbnail shape
+            val imageContainer = view.findViewById<View>(R.id.imageContainer)
+            if (imageContainer != null) {
+                imageContainer.background = androidx.core.content.ContextCompat.getDrawable(
+                    parent.context, R.drawable.bg_chat_local_media_thumbnail_shape
+                )
+                imageContainer.clipToOutline = true
+            }
+
+            // Adjust width and margins programmatically to avoid match_parent stretch
+            val density = parent.context.resources.displayMetrics.density
+            val lp = view.layoutParams as? ViewGroup.MarginLayoutParams
+            if (lp != null) {
+                lp.width = (70 * density).toInt()
+                lp.topMargin = (2 * density).toInt()
+                lp.bottomMargin = (2 * density).toInt()
+                view.layoutParams = lp
+            }
             return ViewHolder(view)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
-            holder.ivThumbnail.load(item.uri) {
+            val loadUrl: Any = if (item.isMock && !item.mockUrl.isNullOrEmpty()) item.mockUrl else item.uri
+            
+            holder.ivThumbnail.load(loadUrl) {
                 crossfade(true)
                 placeholder(R.drawable.bg_chat_media_placeholder)
                 error(R.drawable.bg_chat_media_placeholder)

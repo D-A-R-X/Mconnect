@@ -37,6 +37,21 @@
                 android:scaleType="centerCrop"
                 android:contentDescription="Captured media" />
 
+            <VideoView
+                android:id="@+id/videoPreviewMain"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/videoTouchOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone" />
+
             <!-- Video Play Overlay Icon -->
             <ImageView
                 android:id="@+id/imgVideoPlayIcon"
@@ -143,11 +158,11 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvPreviewLocalMedia"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="64dp"
         android:orientation="horizontal"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         android:layout_marginHorizontal="20dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:visibility="gone"
         android:clipToPadding="false"
         android:clipChildren="false" />
@@ -156,7 +171,7 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:paddingHorizontal="20dp">
 
         <!-- User profile pill -->
