@@ -176,7 +176,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_bold"
                 android:text="PHOTO"
-                android:textColor="#16A34A"
+                android:textColor="#38A612"
                 android:textSize="13sp" />
 
             <View
@@ -185,7 +185,7 @@
                 android:layout_height="4dp"
                 android:layout_marginTop="4dp"
                 android:background="@drawable/bg_loan_track_active"
-                android:backgroundTint="#16A34A" />
+                android:backgroundTint="#38A612" />
         </LinearLayout>
 
         <LinearLayout
@@ -214,7 +214,7 @@
                 android:layout_height="4dp"
                 android:layout_marginTop="4dp"
                 android:background="@drawable/bg_loan_track_active"
-                android:backgroundTint="#16A34A"
+                android:backgroundTint="#38A612"
                 android:visibility="invisible" />
         </LinearLayout>
     </LinearLayout>
@@ -267,7 +267,7 @@
             android:layout_width="72dp"
             android:layout_height="72dp"
             android:background="@drawable/bg_attendance_camera_capture_outer"
-            android:backgroundTint="#16A34A"
+            android:backgroundTint="#38A612"
             android:clickable="true"
             android:focusable="true"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -282,7 +282,7 @@
                 android:layout_height="28dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_chat_camera"
-                app:tint="#16A34A" />
+                app:tint="#38A612" />
         </FrameLayout>
 
         <!-- Camera Switch Option -->
@@ -337,7 +337,7 @@
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:src="@drawable/ic_tip_bulb"
-            app:tint="#16A34A" />
+            app:tint="#38A612" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -345,7 +345,7 @@
             android:layout_marginStart="8dp"
             android:fontFamily="@font/inter_medium"
             android:text="Tips: Ensure good lighting and clear visibility"
-            android:textColor="#16A34A"
+            android:textColor="#38A612"
             android:textSize="11sp" />
     </LinearLayout>
 

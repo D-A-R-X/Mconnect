@@ -365,9 +365,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         tvTitle.text = "Camera"
         tvSubtitle.text = "Take a photo"
         imgShutter.setImageResource(R.drawable.ic_chat_camera)
-        btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#16A34A"))
+        btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
         
-        tvTabPhoto.setTextColor(Color.parseColor("#16A34A"))
+        tvTabPhoto.setTextColor(Color.parseColor("#38A612"))
         dotTabPhoto.visibility = View.VISIBLE
         tvTabVideo.setTextColor(Color.parseColor("#667085"))
         dotTabVideo.visibility = View.INVISIBLE
@@ -390,9 +390,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         tvTitle.text = "Video"
         tvSubtitle.text = "Record a video"
         imgShutter.setImageResource(R.drawable.ic_chat_video)
-        btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#16A34A"))
+        btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
         
-        tvTabVideo.setTextColor(Color.parseColor("#16A34A"))
+        tvTabVideo.setTextColor(Color.parseColor("#38A612"))
         dotTabVideo.visibility = View.VISIBLE
         tvTabPhoto.setTextColor(Color.parseColor("#667085"))
         dotTabPhoto.visibility = View.INVISIBLE
@@ -450,7 +450,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             activeRecording = null
             isRecording = false
             imgShutter.setImageResource(R.drawable.ic_chat_video)
-            btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#16A34A"))
+            btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
         } else {
             // Start recording
             val videoDir = File(requireContext().cacheDir, "chat_videos").apply { mkdirs() }
@@ -485,7 +485,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                                 safeToast("Failed to save video")
                                 isRecording = false
                                 imgShutter.setImageResource(R.drawable.ic_chat_video)
-                                btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#16A34A"))
+                                btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
                                 tvSubtitle.text = "Record a video"
                             }
                         }
