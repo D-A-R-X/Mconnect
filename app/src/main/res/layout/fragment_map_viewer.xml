@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:orientation="vertical">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#FEFEFE"
+        android:elevation="1dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <ImageView
+            android:id="@+id/btnMapViewerBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:src="@drawable/ic_back_chevron"
+            app:tint="?attr/colorForegroundPrimary" />
+
+        <TextView
+            android:id="@+id/tvMapViewerTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Location Map"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Map View -->
+        <com.google.android.gms.maps.MapView
+            android:id="@+id/mapViewViewer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Bottom overlay Card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_margin="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="#FFFFFF">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tvMapViewerLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:text="Site Inspection"
+                    android:textColor="#101828"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvMapViewerCoords"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/geist_mono"
+                    android:text="12.9716, 77.5946"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnMapViewerExternal"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="12dp"
+                    android:backgroundTint="#38A612"
+                    android:fontFamily="@font/inter_bold"
+                    android:text="Open in Google Maps"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+    </FrameLayout>
+</LinearLayout>

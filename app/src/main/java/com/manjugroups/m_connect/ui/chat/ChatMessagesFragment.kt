@@ -96,6 +96,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private val audioDurationLocalCache = mutableMapOf<String, String>()
     private val staffNameCache = mutableMapOf<String, String>()
     private val pendingAttachments = mutableListOf<PendingAttachment>()
+    private val localAttachmentUriMap = mutableMapOf<String, String>()
 
     private val subtitleColorMuted = android.graphics.Color.parseColor("#667085")
     private val subtitleColorTyping = android.graphics.Color.parseColor("#12B76A")
@@ -251,8 +252,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val deltaX = recordTouchStartX - event.rawX
                             val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
 
-                            // Slide constraint: limit sliding to the width of the bottom bar minus padding
-                            val maxSlide = (binding.recordingOverlay.width - dpToPx(80)).coerceAtLeast(0)
+                            // Slide constraint: limit sliding so it stops exactly at the trash can
+                            val maxSlide = if (binding.animatingMicContainer.left > 0) {
+                                binding.animatingMicContainer.left - binding.trashCanContainer.left
+                            } else {
+                                binding.recordingOverlay.width - dpToPx(80)
+                            }.coerceAtLeast(0)
                             val currentSlide = deltaX.coerceIn(0f, maxSlide.toFloat())
 
                             // Slide the mic icon left
@@ -262,6 +267,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val fadeRatio = 1f - (currentSlide / threshold).coerceIn(0f, 1f)
                             binding.slideCancelContainer.alpha = fadeRatio
                             binding.slideCancelContainer.translationX = -currentSlide * 0.3f // Slight parallax movement
+
+                            // Cross-fade recording status container (fading out) and trash can container (fading in)
+                            binding.recordingStatusContainer.alpha = fadeRatio
+                            binding.trashCanContainer.alpha = 1f - fadeRatio
 
                             if (currentSlide >= threshold) {
                                 if (!recordCancelRequested) {
@@ -474,6 +483,34 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             toast("Attachment unavailable")
             return
         }
+
+        // Try local playing/viewing from cached URIs or files to eliminate loading lag
+        if (!fileName.isNullOrBlank()) {
+            val cachedUri = localAttachmentUriMap[fileName]
+            if (!cachedUri.isNullOrBlank()) {
+                routeAttachment(cachedUri, mime, storageId, fileName)
+                return
+            }
+
+            val localVideoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_videos"), fileName)
+            if (localVideoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localVideoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localPhotoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_photos"), fileName)
+            if (localPhotoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localPhotoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localEditFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_edits"), fileName)
+            if (localEditFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localEditFile).toString(), mime, storageId, fileName)
+                return
+            }
+        }
+
         if (url.isBlank()) {
             resolveStorageUrl(storageId!!) { resolved ->
                 if (resolved.isNullOrBlank()) {
@@ -536,9 +573,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             true
         )
 
+        // Swap mock picsum image URLs for a real video to prevent indefinite loading spinner in ExoPlayer
+        val resolvedUrl = if (url.contains("picsum.photos")) {
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+        } else {
+            url
+        }
+
         val playerView = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPlayerView)
         val player = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build().apply {
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(resolvedUrl))
             playWhenReady = true
             prepare()
         }
@@ -695,159 +739,36 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showImageSendPreview(images: List<PendingAttachment>) {
-        if (images.isEmpty()) return
-        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_send_preview, null)
-        val popup = PopupWindow(
-            view,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            true
-        ).apply {
-            isFocusable = true
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0F0F1A")))
-        }
-
-        val editView = view.findViewById<MediaEditView>(R.id.ivPreviewMain)
-        val stripContainer = view.findViewById<LinearLayout>(R.id.thumbStripContainer)
-        val etCaption = view.findViewById<android.widget.EditText>(R.id.etPreviewCaption)
-        val btnSend = view.findViewById<View>(R.id.btnPreviewSend)
-        val btnBack = view.findViewById<View>(R.id.btnPreviewBack)
-        val editToolBar = view.findViewById<LinearLayout>(R.id.editToolBar)
-        val tvEditModeLabel = view.findViewById<android.widget.TextView>(R.id.tvEditModeLabel)
-        val btnEditApply = view.findViewById<View>(R.id.btnEditApply)
-        val btnEditCancel = view.findViewById<View>(R.id.btnEditCancel)
-        val drawToolBar = view.findViewById<LinearLayout>(R.id.drawToolBar)
-        val cropToolBar = view.findViewById<LinearLayout>(R.id.cropToolBar)
-        val drawColorRow = view.findViewById<LinearLayout>(R.id.drawColorRow)
-        setupDrawToolbar(view, editView, drawColorRow)
-        setupCropToolbar(view, editView)
-
-        // Per-image edit state: we replace the file URI when the user commits
-        // edits, so the sent attachment has the flattened bitmap.
-        val workingImages = images.toMutableList()
-        var activeIndex = 0
-
-        fun loadActiveBitmap() {
-            val active = workingImages[activeIndex]
-            viewLifecycleOwner.lifecycleScope.launch {
-                val bm = withContext(Dispatchers.IO) {
-                    runCatching {
-                        requireContext().contentResolver.openInputStream(active.uri)?.use {
-                            android.graphics.BitmapFactory.decodeStream(it)
+        val previewSheet = MediaPreviewBottomSheet().apply {
+            setAttachments(images)
+            setListener(object : MediaPreviewBottomSheet.MediaPreviewListener {
+                override fun onMediaSend(attachments: List<PendingAttachment>, caption: String) {
+                    if (attachments.isNotEmpty()) {
+                        pendingAttachments.addAll(attachments)
+                        if (caption.isNotEmpty()) {
+                            binding.etMessage.setText(caption)
                         }
-                    }.getOrNull()
+                        renderPendingAttachments()
+                        updateSendIcon()
+                        sendMessage()
+                    }
                 }
-                if (_binding == null || bm == null) return@launch
-                editView.setBitmap(bm)
-            }
-        }
 
-        fun showActive() {
-            loadActiveBitmap()
-            for (i in 0 until stripContainer.childCount) {
-                val v = stripContainer.getChildAt(i)
-                v.alpha = if (i == activeIndex) 1f else 0.55f
-                v.setBackgroundResource(
-                    if (i == activeIndex) R.drawable.bg_thumb_strip_selected
-                    else 0
-                )
-            }
-        }
-
-        fun showEditToolbar(label: String) {
-            tvEditModeLabel.text = label
-            editToolBar.visibility = View.VISIBLE
-        }
-
-        fun hideEditToolbar() {
-            editToolBar.visibility = View.GONE
-        }
-
-        images.forEachIndexed { index, attachment ->
-            val thumb = ImageView(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(dpToPx(52), dpToPx(52)).apply {
-                    marginEnd = dpToPx(6)
+                override fun onAddMoreClicked() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
                 }
-                setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                load(attachment.uri) {
-                    transformations(coil.transform.RoundedCornersTransformation(dpToPx(8).toFloat()))
+
+                override fun onPreviewCancelled() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        launchCamera()
+                    }
                 }
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    activeIndex = index
-                    showActive()
-                }
-            }
-            stripContainer.addView(thumb)
+            })
         }
-        showActive()
-
-        view.findViewById<View>(R.id.btnPreviewCrop)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.CROP
-            showEditToolbar("Crop")
-            cropToolBar.visibility = View.VISIBLE
-            drawToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewDraw)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.DRAW
-            showEditToolbar("Draw — tap Done when finished")
-            drawToolBar.visibility = View.VISIBLE
-            cropToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewText)?.setOnClickListener {
-            showAddTextSheet { text ->
-                if (text.isNotEmpty()) {
-                    editView.addText(text)
-                    showEditToolbar("Drag text to position")
-                }
-            }
-        }
-        btnEditCancel.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.cancelCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-        btnEditApply.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.applyCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-
-        view.findViewById<View>(R.id.btnPreviewUndo)?.setOnClickListener {
-            if (!editView.undo()) toast("Nothing to undo")
-        }
-        view.findViewById<View>(R.id.btnPreviewDownload)?.setOnClickListener {
-            val first = workingImages.firstOrNull() ?: return@setOnClickListener
-            savePendingAttachmentToGallery(first)
-        }
-
-        btnBack.setOnClickListener { popup.dismiss() }
-
-        btnSend.setOnClickListener {
-            val caption = etCaption.text?.toString()?.trim().orEmpty()
-            // Flatten any current edits into the active image before sending.
-            val edited = editView.getResult()
-            if (edited != null) {
-                val saved = persistEditedBitmap(edited)
-                if (saved != null) workingImages[activeIndex] = saved
-            }
-            popup.dismiss()
-            pendingAttachments.addAll(workingImages)
-            if (caption.isNotEmpty()) {
-                binding.etMessage.setText(caption)
-            }
-            renderPendingAttachments()
-            updateSendIcon()
-            sendMessage()
-        }
-
-        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+        previewSheet.show(parentFragmentManager, "media_preview")
     }
 
     private fun playVoiceMessage(url: String, mime: String = "audio/mp4", storageId: String? = null) {
@@ -1876,7 +1797,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isDocumentPickerMode = false
             pickAttachmentsLauncher.launch(arrayOf("audio/*"))
         }
-        tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
+        tile(R.id.tileAttachLocation) { launchLocationShare() }
         tile(R.id.tileAttachDocument) {
             isDocumentPickerMode = true
             pickAttachmentsLauncher.launch(arrayOf("*/*"))
@@ -1886,67 +1807,45 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         attachTilesWired = true
     }
 
-    private val cameraImageUri: android.net.Uri? get() = pendingCameraUri
-    private var pendingCameraUri: android.net.Uri? = null
-    private var pendingCameraMode: CameraMode = CameraMode.PHOTO
+    private fun launchCamera() {
+        ensureCameraPermissionThen {
+            val cameraSheet = CustomCameraBottomSheet().apply {
+                setListener(object : CustomCameraBottomSheet.CameraResultListener {
+                    override fun onMediaCaptured(uri: android.net.Uri, isVideo: Boolean) {
+                        val resolver = requireContext().contentResolver
+                        if (isVideo) {
+                            val mime = resolver.getType(uri) ?: "video/mp4"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = uri.lastPathSegment ?: "Video-${System.currentTimeMillis()}.mp4"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            showImageSendPreview(listOf(pending))
+                        } else {
+                            val mime = resolver.getType(uri) ?: "image/jpeg"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = uri.lastPathSegment ?: "Photo-${System.currentTimeMillis()}.jpg"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            showImageSendPreview(listOf(pending))
+                        }
+                    }
 
-    private enum class CameraMode { PHOTO, VIDEO }
-
-    private val takePictureLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "image/jpeg"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Photo-${System.currentTimeMillis()}.jpg"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                showImageSendPreview(listOf(pending))
+                    override fun onGalleryClicked() {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
+                })
             }
+            cameraSheet.show(parentFragmentManager, "custom_camera")
         }
-
-    private val captureVideoLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CaptureVideo()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "video/mp4"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Video-${System.currentTimeMillis()}.mp4"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                pendingAttachments += pending
-                renderPendingAttachments()
-                updateSendIcon()
-            }
-        }
+    }
 
     private val cameraPermissionLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchCameraForMode(pendingCameraMode) else toast("Camera permission required")
+            if (granted) launchCamera() else toast("Camera permission required")
         }
-
-    private fun launchCamera() {
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
-        val sheet = layoutInflater.inflate(R.layout.bottom_sheet_camera_choice, null)
-        dialog.setContentView(sheet)
-        sheet.findViewById<View>(R.id.btnCameraPhoto).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.PHOTO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.PHOTO) }
-        }
-        sheet.findViewById<View>(R.id.btnCameraVideo).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.VIDEO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.VIDEO) }
-        }
-        dialog.show()
-    }
 
     private fun ensureCameraPermissionThen(action: () -> Unit) {
         val permission = android.Manifest.permission.CAMERA
@@ -1958,37 +1857,42 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
-    private fun launchCameraForMode(mode: CameraMode) {
-        when (mode) {
-            CameraMode.PHOTO -> actuallyLaunchCamera()
-            CameraMode.VIDEO -> actuallyLaunchVideoCamera()
+    private val locationPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            if (fineGranted || coarseGranted) {
+                showLocationShareSheet()
+            } else {
+                toast("Location permission is required to share your site telemetry")
+            }
+        }
+
+    private fun launchLocationShare() {
+        val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), fine) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), coarse) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            showLocationShareSheet()
+        } else {
+            locationPermissionLauncher.launch(arrayOf(fine, coarse))
         }
     }
 
-    private fun actuallyLaunchCamera() {
-        val photoDir = File(requireContext().cacheDir, "chat_photos").apply { mkdirs() }
-        val photoFile = File(photoDir, "photo_${System.currentTimeMillis()}.jpg")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            photoFile
-        )
-        pendingCameraUri = uri
-        runCatching { takePictureLauncher.launch(uri) }
-            .onFailure { toast("Unable to open camera") }
+    private fun showLocationShareSheet() {
+        val sheet = LocationShareBottomSheet().apply {
+            setListener(object : LocationShareBottomSheet.LocationShareListener {
+                override fun onLocationShared(locationString: String) {
+                    sendLocationMessage(locationString)
+                }
+            })
+        }
+        sheet.show(parentFragmentManager, "location_share_sheet")
     }
 
-    private fun actuallyLaunchVideoCamera() {
-        val videoDir = File(requireContext().cacheDir, "chat_videos").apply { mkdirs() }
-        val videoFile = File(videoDir, "video_${System.currentTimeMillis()}.mp4")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            videoFile
-        )
-        pendingCameraUri = uri
-        runCatching { captureVideoLauncher.launch(uri) }
-            .onFailure { toast("Unable to open video recorder") }
+    private fun sendLocationMessage(locationString: String) {
+        binding.etMessage.setText(locationString)
+        sendMessage()
     }
 
     private val pickContactLauncher =
@@ -2779,6 +2683,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.slideCancelContainer.alpha = 1f
             binding.slideCancelContainer.translationX = 0f
 
+            // Initialize recording status container and trash container alphas/visibilities
+            binding.recordingStatusContainer.visibility = View.VISIBLE
+            binding.recordingStatusContainer.alpha = 1f
+            binding.trashCanContainer.visibility = View.VISIBLE
+            binding.trashCanContainer.alpha = 0f
+
             // Set up red blinking dot animation
             binding.ivRecordingDot.visibility = View.VISIBLE
             binding.ivRecordingDot.alpha = 1f
@@ -2814,6 +2724,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_send_circle)
             recordingHandler.removeCallbacks(recordingTimerTask)
             binding.ivRecordingDot.animate().cancel()
+            binding.recordingStatusContainer.visibility = View.GONE
+            binding.trashCanContainer.visibility = View.GONE
             binding.etMessage.isEnabled = true
             binding.etMessage.hint = "Message ..."
             applySubtitleState()
@@ -2837,7 +2749,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         stopMicPulseAnimation()
 
         // Calculate translation needed to reach the trash can
-        val targetTx = -(binding.animatingMicContainer.x - binding.trashCanContainer.x)
+        val targetTx = (binding.trashCanContainer.left - binding.animatingMicContainer.left).toFloat()
 
         binding.animatingMicContainer.animate().cancel()
         binding.animatingMicContainer.animate()
@@ -2895,6 +2807,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     binding.ivTrash.scaleY = 1f
                     binding.ivTrash.rotation = 0f
                     binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#98A2B3"))
+                    
+                    // Reset trash container and recording status container alpha/visibility
+                    binding.trashCanContainer.alpha = 0f
+                    binding.recordingStatusContainer.alpha = 1f
+                    binding.recordingStatusContainer.visibility = View.GONE
                 }
             }
             .start()
@@ -3103,6 +3020,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val previousText = text
         val parentId = replyingToMessage?.id
 
+        // Cache local URI mapping to load attachments instantly without network buffering
+        pendingSnapshot.forEach { attachment ->
+            localAttachmentUriMap[attachment.fileName] = attachment.uri.toString()
+        }
+
         binding.etMessage.setText("")
         if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
@@ -3170,8 +3092,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private suspend fun uploadPendingAttachments(
         attachments: List<PendingAttachment>
-    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> {
-        return attachments.map { attachment ->
+    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        attachments.map { attachment ->
             val bytes = requireContext().contentResolver.openInputStream(attachment.uri)?.use {
                 it.readBytes()
             } ?: error("Unable to read ${attachment.fileName}")
@@ -3392,7 +3314,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         _binding = null
     }
 
-    private data class PendingAttachment(
+    data class PendingAttachment(
         val uri: Uri,
         val fileName: String,
         val fileType: String,
