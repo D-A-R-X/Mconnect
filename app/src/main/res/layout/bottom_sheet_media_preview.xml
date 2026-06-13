@@ -52,6 +52,97 @@
                 android:focusable="true"
                 android:visibility="gone" />
 
+            <!-- Video Control Overlay Bar -->
+            <LinearLayout
+                android:id="@+id/videoControlBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="#99000000"
+                android:orientation="vertical"
+                android:padding="8dp"
+                android:visibility="gone">
+
+                <!-- Scrubber (SeekBar) -->
+                <SeekBar
+                    android:id="@+id/videoSeekBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="100"
+                    android:progress="0"
+                    android:thumbTint="#16A34A"
+                    android:progressTint="#16A34A"
+                    android:progressBackgroundTint="#FFFFFF" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <!-- Rewind 10s -->
+                    <ImageView
+                        android:id="@+id/btnVideoRewind"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:padding="4dp"
+                        android:src="@android:drawable/ic_media_rew"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Play/Pause in bar -->
+                    <ImageView
+                        android:id="@+id/btnVideoPlayPause"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_marginStart="8dp"
+                        android:padding="4dp"
+                        android:src="@android:drawable/ic_media_pause"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Fast Forward 10s -->
+                    <ImageView
+                        android:id="@+id/btnVideoFastForward"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_marginStart="8dp"
+                        android:padding="4dp"
+                        android:src="@android:drawable/ic_media_ff"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Time text (current / total) -->
+                    <TextView
+                        android:id="@+id/tvVideoTime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:text="00:00 / 00:00" />
+
+                    <!-- Volume icon (mute/unmute) -->
+                    <ImageView
+                        android:id="@+id/btnVideoVolumeToggle"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:padding="4dp"
+                        android:src="@drawable/ic_volume_up"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Volume SeekBar -->
+                    <SeekBar
+                        android:id="@+id/volumeSeekBar"
+                        android:layout_width="80dp"
+                        android:layout_height="wrap_content"
+                        android:max="15"
+                        android:progress="10"
+                        android:thumbTint="#16A34A"
+                        android:progressTint="#16A34A"
+                        android:progressBackgroundTint="#FFFFFF" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Video Play Overlay Icon -->
             <ImageView
                 android:id="@+id/imgVideoPlayIcon"

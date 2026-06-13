@@ -544,9 +544,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             true
         )
 
+        // Swap mock picsum image URLs for a real video to prevent indefinite loading spinner in ExoPlayer
+        val resolvedUrl = if (url.contains("picsum.photos")) {
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+        } else {
+            url
+        }
+
         val playerView = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPlayerView)
         val player = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build().apply {
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(resolvedUrl))
             playWhenReady = true
             prepare()
         }

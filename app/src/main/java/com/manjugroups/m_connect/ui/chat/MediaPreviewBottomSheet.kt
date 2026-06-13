@@ -42,6 +42,27 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     private val localMediaItems = mutableListOf<LocalPreviewItem>()
     private var localMediaAdapter: LocalPreviewAdapter? = null
 
+    private val updateSeekBarHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val updateSeekBarRunnable = object : Runnable {
+        override fun run() {
+            val view = view ?: return
+            val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+            val videoSeekBar = view.findViewById<android.widget.SeekBar>(R.id.videoSeekBar) ?: return
+            val tvVideoTime = view.findViewById<android.widget.TextView>(R.id.tvVideoTime) ?: return
+
+            if (videoPreview.isPlaying) {
+                val current = videoPreview.currentPosition
+                val duration = videoPreview.duration
+                if (duration > 0) {
+                    videoSeekBar.max = duration
+                    videoSeekBar.progress = current
+                    tvVideoTime.text = "${formatDurationMs(current.toLong())} / ${formatDurationMs(duration.toLong())}"
+                }
+                updateSeekBarHandler.postDelayed(this, 250)
+            }
+        }
+    }
+
     fun setListener(listener: MediaPreviewListener) {
         this.listener = listener
     }
@@ -149,11 +170,14 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
         val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+        val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
 
-        // Stop any active video playback and hide VideoView
+        // Stop any active video playback and hide VideoView & Controls
+        updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
         videoPreview.stopPlayback()
         videoPreview.visibility = View.GONE
         videoTouchOverlay.visibility = View.GONE
+        videoControlBar.visibility = View.GONE
 
         // Make sure image preview is visible
         imgPreview.visibility = View.VISIBLE
@@ -188,14 +212,23 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
         val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+        val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
+        val videoSeekBar = view.findViewById<android.widget.SeekBar>(R.id.videoSeekBar) ?: return
+        val btnRewind = view.findViewById<View>(R.id.btnVideoRewind) ?: return
+        val btnPlayPause = view.findViewById<ImageView>(R.id.btnVideoPlayPause) ?: return
+        val btnFastForward = view.findViewById<View>(R.id.btnVideoFastForward) ?: return
+        val tvVideoTime = view.findViewById<android.widget.TextView>(R.id.tvVideoTime) ?: return
+        val btnVolumeToggle = view.findViewById<ImageView>(R.id.btnVideoVolumeToggle) ?: return
+        val volumeSeekBar = view.findViewById<android.widget.SeekBar>(R.id.volumeSeekBar) ?: return
 
-        // Hide static preview and play icon
+        // Hide static preview and center play icon
         imgPreview.visibility = View.GONE
         imgPlayIcon.visibility = View.GONE
 
-        // Show VideoView and touch overlay
+        // Show VideoView, touch overlay, and control bar
         videoPreview.visibility = View.VISIBLE
         videoTouchOverlay.visibility = View.VISIBLE
+        videoControlBar.visibility = View.VISIBLE
 
         // Determine Uri (if mock URL from picsum, play the Google APIs sample video)
         val videoUri = if (media.uri.toString().contains("picsum.photos")) {
@@ -205,22 +238,117 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         }
 
         videoPreview.setVideoURI(videoUri)
+
+        // Setup volume controls
+        val audioManager = requireContext().getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        val currentVolume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+
+        volumeSeekBar.max = maxVolume
+        volumeSeekBar.progress = currentVolume
+        updateVolumeIcon(currentVolume, maxVolume)
+
+        volumeSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, progress, 0)
+                    updateVolumeIcon(progress, maxVolume)
+                }
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+
+        var lastVolume = if (currentVolume > 0) currentVolume else maxVolume / 2
+        btnVolumeToggle.setOnClickListener {
+            val vol = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+            if (vol > 0) {
+                lastVolume = vol
+                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
+                volumeSeekBar.progress = 0
+                updateVolumeIcon(0, maxVolume)
+            } else {
+                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, lastVolume, 0)
+                volumeSeekBar.progress = lastVolume
+                updateVolumeIcon(lastVolume, maxVolume)
+            }
+        }
+
+        // Setup Video Seek Listener
+        videoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    videoPreview.seekTo(progress)
+                    val dur = videoPreview.duration
+                    tvVideoTime.text = "${formatDurationMs(progress.toLong())} / ${formatDurationMs(dur.toLong())}"
+                }
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {
+                updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
+            }
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {
+                if (videoPreview.isPlaying) {
+                    updateSeekBarHandler.post(updateSeekBarRunnable)
+                }
+            }
+        })
+
+        // Rewind & Fast Forward Click Listeners
+        btnRewind.setOnClickListener {
+            val target = (videoPreview.currentPosition - 10000).coerceAtLeast(0)
+            videoPreview.seekTo(target)
+            videoSeekBar.progress = target
+        }
+        btnFastForward.setOnClickListener {
+            val dur = videoPreview.duration
+            val target = (videoPreview.currentPosition + 10000).coerceAtMost(dur)
+            videoPreview.seekTo(target)
+            videoSeekBar.progress = target
+        }
+
+        // Play/Pause toggle in Bar
+        btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+        btnPlayPause.setOnClickListener {
+            if (videoPreview.isPlaying) {
+                videoPreview.pause()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                imgPlayIcon.visibility = View.VISIBLE
+            } else {
+                videoPreview.start()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                imgPlayIcon.visibility = View.GONE
+                updateSeekBarHandler.post(updateSeekBarRunnable)
+            }
+        }
+
         videoPreview.setOnPreparedListener { mp ->
             mp.isLooping = false
             videoPreview.start()
+            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+            val dur = videoPreview.duration
+            if (dur > 0) {
+                videoSeekBar.max = dur
+                videoSeekBar.progress = 0
+                tvVideoTime.text = "00:00 / ${formatDurationMs(dur.toLong())}"
+            }
+            updateSeekBarHandler.post(updateSeekBarRunnable)
         }
 
         videoPreview.setOnCompletionListener {
             resetVideoState()
         }
 
+        // Tap on main overlay also toggles Play/Pause
         videoTouchOverlay.setOnClickListener {
             if (videoPreview.isPlaying) {
                 videoPreview.pause()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
                 imgPlayIcon.visibility = View.VISIBLE
             } else {
                 videoPreview.start()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
                 imgPlayIcon.visibility = View.GONE
+                updateSeekBarHandler.post(updateSeekBarRunnable)
             }
         }
     }
@@ -231,14 +359,34 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
         val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
+        val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
 
+        updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
         videoPreview.stopPlayback()
         videoPreview.visibility = View.GONE
         videoTouchOverlay.visibility = View.GONE
+        videoControlBar.visibility = View.GONE
 
         imgPreview.visibility = View.VISIBLE
         val isVideo = currentAttachment?.fileType?.startsWith("video/") == true
         imgPlayIcon.visibility = if (isVideo) View.VISIBLE else View.GONE
+    }
+
+    private fun formatDurationMs(ms: Long): String {
+        val totalSecs = ms / 1000
+        val minutes = totalSecs / 60
+        val seconds = totalSecs % 60
+        return String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
+    }
+
+    private fun updateVolumeIcon(volume: Int, maxVolume: Int) {
+        val view = view ?: return
+        val btnVolume = view.findViewById<ImageView>(R.id.btnVideoVolumeToggle) ?: return
+        if (volume == 0) {
+            btnVolume.setColorFilter(Color.parseColor("#EF4444")) // Red for mute
+        } else {
+            btnVolume.setColorFilter(Color.WHITE) // White for active
+        }
     }
 
     private fun toggleLocalMediaList(view: View) {
