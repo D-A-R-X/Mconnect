@@ -703,18 +703,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showImageSendPreview(images: List<PendingAttachment>) {
-        val first = images.firstOrNull() ?: return
         val previewSheet = MediaPreviewBottomSheet().apply {
-            setAttachment(first)
+            setAttachments(images)
             setListener(object : MediaPreviewBottomSheet.MediaPreviewListener {
-                override fun onMediaSend(attachment: PendingAttachment, caption: String) {
-                    pendingAttachments.add(attachment)
-                    if (caption.isNotEmpty()) {
-                        binding.etMessage.setText(caption)
+                override fun onMediaSend(attachments: List<PendingAttachment>, caption: String) {
+                    if (attachments.isNotEmpty()) {
+                        pendingAttachments.addAll(attachments)
+                        if (caption.isNotEmpty()) {
+                            binding.etMessage.setText(caption)
+                        }
+                        renderPendingAttachments()
+                        updateSendIcon()
+                        sendMessage()
                     }
-                    renderPendingAttachments()
-                    updateSendIcon()
-                    sendMessage()
                 }
 
                 override fun onAddMoreClicked() {

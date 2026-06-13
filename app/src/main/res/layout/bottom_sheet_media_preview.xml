@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:background="@drawable/bg_chat_action_sheet"
     android:orientation="vertical"
     android:layout_marginTop="36dp"
@@ -105,6 +105,7 @@
                 android:padding="6dp">
                 
                 <ImageView
+                    android:id="@+id/imgPreviewAddIcon"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:src="@drawable/ic_add_plus"
@@ -137,6 +138,19 @@
                 android:src="@drawable/ic_view_once" />
         </LinearLayout>
     </FrameLayout>
+
+    <!-- Horizontal Local Media List (RecyclerView) -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvPreviewLocalMedia"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:orientation="horizontal"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        android:clipToPadding="false"
+        android:clipChildren="false" />
 
     <!-- Bottom Controls Section: User name on Left, Send on Right -->
     <androidx.constraintlayout.widget.ConstraintLayout
