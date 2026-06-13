@@ -288,14 +288,16 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                 val recorder = Recorder.Builder()
                     .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
                     .build()
-                videoCapture = VideoCapture.withOutput(recorder).apply {
-                    targetRotation = rotation
-                }
+                videoCapture = VideoCapture.Builder(recorder)
+                    .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
+                    .build().apply {
+                        targetRotation = rotation
+                    }
                 camera = cameraProvider.bindToLifecycle(
                     viewLifecycleOwner,
                     cameraSelector,
                     preview,
-                    videoCapture
+                    videoCapture!!
                 )
             }
             
@@ -411,7 +413,12 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         val photoDir = File(requireContext().cacheDir, "chat_photos").apply { mkdirs() }
         val photoFile = File(photoDir, "photo_${System.currentTimeMillis()}.jpg")
 
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        val metadata = ImageCapture.Metadata().apply {
+            isReversedHorizontal = (cameraLensFacing == CameraSelector.LENS_FACING_FRONT)
+        }
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
+            .setMetadata(metadata)
+            .build()
 
         playSound(android.media.MediaActionSound.SHUTTER_CLICK)
 
