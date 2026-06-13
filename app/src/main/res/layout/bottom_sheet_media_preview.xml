@@ -20,16 +20,15 @@
     <!-- Captured Media Preview Container -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginHorizontal="20dp"
-        android:layout_weight="1">
+        android:layout_height="380dp"
+        android:layout_marginHorizontal="20dp">
 
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             app:cardCornerRadius="16dp"
             app:cardElevation="0dp"
-            android:backgroundTint="#F2F4F7">
+            app:cardBackgroundColor="#F2F4F7">
 
             <ImageView
                 android:id="@+id/imgPreviewMain"
@@ -66,7 +65,7 @@
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:src="@drawable/ic_arrow_up"
-            app:tint="#12B76A" />
+            app:tint="#16A34A" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -74,7 +73,7 @@
             android:layout_marginTop="2dp"
             android:fontFamily="@font/inter_semibold"
             android:text="Swipe up for filters"
-            android:textColor="#12B76A"
+            android:textColor="#16A34A"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -84,8 +83,7 @@
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="16dp"
-        android:background="@drawable/bg_attendance_camera_chip"
-        android:backgroundTint="#FFFFFF"
+        android:background="@drawable/bg_camera_caption_input"
         android:padding="4dp">
 
         <LinearLayout
@@ -97,18 +95,20 @@
 
             <!-- Green Plus Icon inside square outline -->
             <FrameLayout
+                android:id="@+id/btnPreviewAdd"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:layout_marginStart="4dp"
-                android:background="@drawable/bg_home_new_action_circle"
-                android:backgroundTint="#ECFDF3"
+                android:background="@drawable/bg_camera_plus_btn"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="6dp">
                 
                 <ImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:src="@drawable/ic_add_plus"
-                    app:tint="#12B76A" />
+                    app:tint="#16A34A" />
             </FrameLayout>
 
             <!-- Caption EditText -->
@@ -182,7 +182,7 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="@drawable/bg_home_new_action_circle"
-            android:backgroundTint="#12B76A"
+            android:backgroundTint="#16A34A"
             android:clickable="true"
             android:focusable="true"
             app:layout_constraintBottom_toBottomOf="parent"

@@ -716,6 +716,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     updateSendIcon()
                     sendMessage()
                 }
+
+                override fun onAddMoreClicked() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
+                }
+
+                override fun onPreviewCancelled() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        launchCamera()
+                    }
+                }
             })
         }
         previewSheet.show(parentFragmentManager, "media_preview")
