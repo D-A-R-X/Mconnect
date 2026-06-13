@@ -305,13 +305,26 @@ class ChatMessageAdapter(
                 }
 
                 btnNavigate.setOnClickListener {
-                    val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try {
-                        binding.root.context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                    val activity = cardView.context as? androidx.fragment.app.FragmentActivity
+                    if (activity != null) {
+                        val mapFragment = MapViewerFragment.newInstance(
+                            lat = telemetry.lat,
+                            lon = telemetry.lon,
+                            label = telemetry.label
+                        )
+                        activity.supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainer, mapFragment)
+                            .addToBackStack(null)
+                            .commit()
+                    } else {
+                        val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            binding.root.context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
 
@@ -470,13 +483,26 @@ class ChatMessageAdapter(
                 }
 
                 btnNavigate.setOnClickListener {
-                    val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try {
-                        binding.root.context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                    val activity = cardView.context as? androidx.fragment.app.FragmentActivity
+                    if (activity != null) {
+                        val mapFragment = MapViewerFragment.newInstance(
+                            lat = telemetry.lat,
+                            lon = telemetry.lon,
+                            label = telemetry.label
+                        )
+                        activity.supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainer, mapFragment)
+                            .addToBackStack(null)
+                            .commit()
+                    } else {
+                        val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            binding.root.context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
 

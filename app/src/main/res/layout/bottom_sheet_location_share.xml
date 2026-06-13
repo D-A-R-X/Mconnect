@@ -239,10 +239,10 @@
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="8dp"
-        android:fontFamily="@font/inter_semibold"
+        android:fontFamily="@font/inter_medium"
         android:text="Select Telemetry Context"
         android:textColor="#344054"
-        android:textSize="13sp" />
+        android:textSize="12sp" />
 
     <com.google.android.material.chip.ChipGroup
         android:id="@+id/chipGroupLocationMode"
