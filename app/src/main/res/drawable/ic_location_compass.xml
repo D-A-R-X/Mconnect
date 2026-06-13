@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Sweeping cone shape -->
+    <path
+        android:pathData="M100,100 L163.64,36.36 A90,90 0 0,0 100,10 Z"
+        android:fillColor="#3038A612"/>
+
+    <!-- Radar sweeping indicator line -->
+    <path
+        android:pathData="M100,100 L100,10"
+        android:strokeColor="#FF38A612"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"/>
+
+    <!-- Blip marker dots (simulated targets on radar scope) -->
+    <path
+        android:pathData="M60,70m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"
+        android:fillColor="#8038A612"/>
+    <path
+        android:pathData="M140,120m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#5038A612"/>
+</vector>

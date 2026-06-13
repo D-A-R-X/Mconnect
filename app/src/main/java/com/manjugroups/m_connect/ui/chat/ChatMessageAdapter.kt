@@ -1,6 +1,10 @@
 package com.manjugroups.m_connect.ui.chat
 
 import android.content.res.ColorStateList
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
@@ -227,23 +231,30 @@ class ChatMessageAdapter(
                 return
             }
 
-            binding.tvMessageBody.text = item.data.body
-            binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
-            binding.tvMessageBody.alpha = 1f
-            binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
-                .getFont(binding.root.context, R.font.inter_regular)
+            val telemetry = parseLocationMessage(item.data.body)
+            if (telemetry != null) {
+                binding.tvMessageBody.visibility = View.GONE
+            } else {
+                binding.tvMessageBody.text = item.data.body
+                binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
+                binding.tvMessageBody.alpha = 1f
+                binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
+                    .getFont(binding.root.context, R.font.inter_regular)
+            }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
-            // Apply animated emoji style if body contains only 1-3 emojis
-            item.data.body?.let { bodyText ->
-                applyEmojiOnlyStyle(
-                    body = binding.tvMessageBody,
-                    bubbleFrame = binding.bubbleFrame,
-                    timeView = binding.tvMessageTime,
-                    tickIcon = binding.ivSeenStatus,
-                    text = bodyText,
-                    isMine = true
-                )
+            if (telemetry == null) {
+                // Apply animated emoji style if body contains only 1-3 emojis
+                item.data.body?.let { bodyText ->
+                    applyEmojiOnlyStyle(
+                        body = binding.tvMessageBody,
+                        bubbleFrame = binding.bubbleFrame,
+                        timeView = binding.tvMessageTime,
+                        tickIcon = binding.ivSeenStatus,
+                        text = bodyText,
+                        isMine = true
+                    )
+                }
             }
 
             bindReplyQuote(
@@ -268,19 +279,83 @@ class ChatMessageAdapter(
             }
 
             binding.attachmentsContainer.removeAllViews()
-            val sentLongPress: () -> Unit = {
-                handleLongPress(item.data, binding.bubbleFrame)
-            }
-            item.data.attachments?.forEach { attachment ->
-                binding.attachmentsContainer.addView(
-                    createAttachmentView(
-                        binding.attachmentsContainer,
-                        attachment,
-                        isMine = true,
-                        creationTime = item.data.creationTime,
-                        onLongPress = sentLongPress,
-                    )
+            if (telemetry != null) {
+                val cardView = LayoutInflater.from(binding.root.context).inflate(
+                    R.layout.item_chat_location_card,
+                    binding.attachmentsContainer,
+                    false
                 )
+                val tvLabel = cardView.findViewById<TextView>(R.id.tvCardLocationLabel)
+                val tvCoords = cardView.findViewById<TextView>(R.id.tvCardLocationCoords)
+                val tvBattery = cardView.findViewById<TextView>(R.id.tvCardLocationBattery)
+                val tvSpeed = cardView.findViewById<TextView>(R.id.tvCardLocationSpeed)
+                val btnNavigate = cardView.findViewById<View>(R.id.btnCardLocationNavigate)
+                val btnCopy = cardView.findViewById<View>(R.id.btnCardLocationCopy)
+
+                tvLabel.text = telemetry.label
+                tvCoords.text = String.format(Locale.US, "%.6f, %.6f", telemetry.lat, telemetry.lon)
+                tvBattery.text = "🔋 ${telemetry.battery}%"
+                
+                val isMoving = telemetry.status.equals("Moving", ignoreCase = true) || (telemetry.speed.toIntOrNull() ?: 0) > 0
+                tvSpeed.text = if (isMoving) {
+                    val spd = telemetry.speed.toIntOrNull() ?: 0
+                    if (spd > 0) "$spd km/h" else "Active"
+                } else {
+                    "Stationary"
+                }
+
+                btnNavigate.setOnClickListener {
+                    val activity = cardView.context as? androidx.fragment.app.FragmentActivity
+                    if (activity != null) {
+                        val mapFragment = MapViewerFragment.newInstance(
+                            lat = telemetry.lat,
+                            lon = telemetry.lon,
+                            label = telemetry.label
+                        )
+                        activity.supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainer, mapFragment)
+                            .addToBackStack(null)
+                            .commit()
+                    } else {
+                        val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            binding.root.context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                btnCopy.setOnClickListener {
+                    val clipboard = binding.root.context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Coordinates", "${telemetry.lat}, ${telemetry.lon}")
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(binding.root.context, "Coordinates copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+
+                cardView.setOnLongClickListener {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                    true
+                }
+
+                binding.attachmentsContainer.addView(cardView)
+            } else {
+                val sentLongPress: () -> Unit = {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                }
+                item.data.attachments?.forEach { attachment ->
+                    binding.attachmentsContainer.addView(
+                        createAttachmentView(
+                            binding.attachmentsContainer,
+                            attachment,
+                            isMine = true,
+                            creationTime = item.data.creationTime,
+                            onLongPress = sentLongPress,
+                        )
+                    )
+                }
             }
             val voiceOnly = isVoiceOnly(item.data)
             (binding.tvMessageTime.parent as? View)?.visibility =
@@ -334,23 +409,30 @@ class ChatMessageAdapter(
                 return
             }
 
-            binding.tvMessageBody.text = item.data.body
-            binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
-            binding.tvMessageBody.alpha = 1f
-            binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
-                .getFont(binding.root.context, R.font.inter_regular)
+            val telemetry = parseLocationMessage(item.data.body)
+            if (telemetry != null) {
+                binding.tvMessageBody.visibility = View.GONE
+            } else {
+                binding.tvMessageBody.text = item.data.body
+                binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
+                binding.tvMessageBody.alpha = 1f
+                binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
+                    .getFont(binding.root.context, R.font.inter_regular)
+            }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
-            // Apply animated emoji style if body contains only 1-3 emojis
-            item.data.body?.let { bodyText ->
-                applyEmojiOnlyStyle(
-                    body = binding.tvMessageBody,
-                    bubbleFrame = binding.bubbleFrame,
-                    timeView = binding.tvMessageTime,
-                    tickIcon = null,
-                    text = bodyText,
-                    isMine = false
-                )
+            if (telemetry == null) {
+                // Apply animated emoji style if body contains only 1-3 emojis
+                item.data.body?.let { bodyText ->
+                    applyEmojiOnlyStyle(
+                        body = binding.tvMessageBody,
+                        bubbleFrame = binding.bubbleFrame,
+                        timeView = binding.tvMessageTime,
+                        tickIcon = null,
+                        text = bodyText,
+                        isMine = false
+                    )
+                }
             }
 
             bindReplyQuote(
@@ -375,19 +457,83 @@ class ChatMessageAdapter(
             }
 
             binding.attachmentsContainer.removeAllViews()
-            val receivedLongPress: () -> Unit = {
-                handleLongPress(item.data, binding.bubbleFrame)
-            }
-            item.data.attachments?.forEach { attachment ->
-                binding.attachmentsContainer.addView(
-                    createAttachmentView(
-                        binding.attachmentsContainer,
-                        attachment,
-                        isMine = false,
-                        creationTime = item.data.creationTime,
-                        onLongPress = receivedLongPress,
-                    )
+            if (telemetry != null) {
+                val cardView = LayoutInflater.from(binding.root.context).inflate(
+                    R.layout.item_chat_location_card,
+                    binding.attachmentsContainer,
+                    false
                 )
+                val tvLabel = cardView.findViewById<TextView>(R.id.tvCardLocationLabel)
+                val tvCoords = cardView.findViewById<TextView>(R.id.tvCardLocationCoords)
+                val tvBattery = cardView.findViewById<TextView>(R.id.tvCardLocationBattery)
+                val tvSpeed = cardView.findViewById<TextView>(R.id.tvCardLocationSpeed)
+                val btnNavigate = cardView.findViewById<View>(R.id.btnCardLocationNavigate)
+                val btnCopy = cardView.findViewById<View>(R.id.btnCardLocationCopy)
+
+                tvLabel.text = telemetry.label
+                tvCoords.text = String.format(Locale.US, "%.6f, %.6f", telemetry.lat, telemetry.lon)
+                tvBattery.text = "🔋 ${telemetry.battery}%"
+                
+                val isMoving = telemetry.status.equals("Moving", ignoreCase = true) || (telemetry.speed.toIntOrNull() ?: 0) > 0
+                tvSpeed.text = if (isMoving) {
+                    val spd = telemetry.speed.toIntOrNull() ?: 0
+                    if (spd > 0) "$spd km/h" else "Active"
+                } else {
+                    "Stationary"
+                }
+
+                btnNavigate.setOnClickListener {
+                    val activity = cardView.context as? androidx.fragment.app.FragmentActivity
+                    if (activity != null) {
+                        val mapFragment = MapViewerFragment.newInstance(
+                            lat = telemetry.lat,
+                            lon = telemetry.lon,
+                            label = telemetry.label
+                        )
+                        activity.supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainer, mapFragment)
+                            .addToBackStack(null)
+                            .commit()
+                    } else {
+                        val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            binding.root.context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(binding.root.context, "No map application found", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                btnCopy.setOnClickListener {
+                    val clipboard = binding.root.context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Coordinates", "${telemetry.lat}, ${telemetry.lon}")
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(binding.root.context, "Coordinates copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+
+                cardView.setOnLongClickListener {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                    true
+                }
+
+                binding.attachmentsContainer.addView(cardView)
+            } else {
+                val receivedLongPress: () -> Unit = {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                }
+                item.data.attachments?.forEach { attachment ->
+                    binding.attachmentsContainer.addView(
+                        createAttachmentView(
+                            binding.attachmentsContainer,
+                            attachment,
+                            isMine = false,
+                            creationTime = item.data.creationTime,
+                            onLongPress = receivedLongPress,
+                        )
+                    )
+                }
             }
             val voiceOnly = isVoiceOnly(item.data)
             (binding.tvMessageTime.parent as? View)?.visibility =
@@ -1391,5 +1537,49 @@ class ChatItemDiffCallback : DiffUtil.ItemCallback<ChatItem>() {
 
     override fun areContentsTheSame(oldItem: ChatItem, newItem: ChatItem): Boolean {
         return oldItem == newItem
+    }
+}
+
+private data class TelemetryLocation(
+    val lat: Double,
+    val lon: Double,
+    val label: String,
+    val battery: Int,
+    val speed: String,
+    val status: String
+)
+
+private fun parseLocationMessage(body: String?): TelemetryLocation? {
+    if (body == null || !body.startsWith("[LOCATION:") || !body.endsWith("]")) {
+        return null
+    }
+    return try {
+        val content = body.substring(10, body.length - 1)
+        val parts = content.split(";")
+        var lat = 0.0
+        var lon = 0.0
+        var label = ""
+        var battery = 100
+        var speed = ""
+        var status = ""
+
+        for (part in parts) {
+            val keyValue = part.split("=", limit = 2)
+            if (keyValue.size == 2) {
+                val key = keyValue[0].trim()
+                val value = keyValue[1].trim()
+                when (key) {
+                    "lat" -> lat = value.toDoubleOrNull() ?: 0.0
+                    "lon" -> lon = value.toDoubleOrNull() ?: 0.0
+                    "label" -> label = value
+                    "battery" -> battery = value.toIntOrNull() ?: 100
+                    "speed" -> speed = value
+                    "status" -> status = value
+                }
+            }
+        }
+        TelemetryLocation(lat, lon, label, battery, speed, status)
+    } catch (e: Exception) {
+        null
     }
 }

@@ -120,4 +120,16 @@
         <item name="android:windowElevation">0dp</item>
         <item name="android:elevation">0dp</item>
     </style>
+
+    <style name="CustomCameraBottomSheetTheme" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/CustomCameraBottomSheetStyle</item>
+        <item name="android:windowElevation">0dp</item>
+        <item name="android:elevation">0dp</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
+    <style name="CustomCameraBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:elevation">0dp</item>
+    </style>
 </resources>
