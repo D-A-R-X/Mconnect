@@ -263,6 +263,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             binding.slideCancelContainer.alpha = fadeRatio
                             binding.slideCancelContainer.translationX = -currentSlide * 0.3f // Slight parallax movement
 
+                            // Cross-fade recording status container (fading out) and trash can container (fading in)
+                            binding.recordingStatusContainer.alpha = fadeRatio
+                            binding.trashCanContainer.alpha = 1f - fadeRatio
+
                             if (currentSlide >= threshold) {
                                 if (!recordCancelRequested) {
                                     recordCancelRequested = true
@@ -2767,6 +2771,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.slideCancelContainer.alpha = 1f
             binding.slideCancelContainer.translationX = 0f
 
+            // Initialize recording status container and trash container alphas/visibilities
+            binding.recordingStatusContainer.visibility = View.VISIBLE
+            binding.recordingStatusContainer.alpha = 1f
+            binding.trashCanContainer.visibility = View.VISIBLE
+            binding.trashCanContainer.alpha = 0f
+
             // Set up red blinking dot animation
             binding.ivRecordingDot.visibility = View.VISIBLE
             binding.ivRecordingDot.alpha = 1f
@@ -2802,6 +2812,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_send_circle)
             recordingHandler.removeCallbacks(recordingTimerTask)
             binding.ivRecordingDot.animate().cancel()
+            binding.recordingStatusContainer.visibility = View.GONE
+            binding.trashCanContainer.visibility = View.GONE
             binding.etMessage.isEnabled = true
             binding.etMessage.hint = "Message ..."
             applySubtitleState()
@@ -2883,6 +2895,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     binding.ivTrash.scaleY = 1f
                     binding.ivTrash.rotation = 0f
                     binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#98A2B3"))
+                    
+                    // Reset trash container and recording status container alpha/visibility
+                    binding.trashCanContainer.alpha = 0f
+                    binding.recordingStatusContainer.alpha = 1f
+                    binding.recordingStatusContainer.visibility = View.GONE
                 }
             }
             .start()

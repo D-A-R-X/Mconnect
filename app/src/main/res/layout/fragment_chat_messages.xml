@@ -660,28 +660,36 @@
                 android:clickable="true"
                 android:focusable="true">
 
-                <!-- Red blinking dot / recording indicator -->
-                <ImageView
-                    android:id="@+id/ivRecordingDot"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/bg_loan_track_active"
-                    android:layout_marginStart="8dp"
-                    app:tint="#F04438" />
-
-                <!-- Recording Timer -->
-                <TextView
-                    android:id="@+id/tvRecordingTimer"
+                <!-- Recording Status (Dot + Timer) Container -->
+                <LinearLayout
+                    android:id="@+id/recordingStatusContainer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_toEndOf="@id/ivRecordingDot"
+                    android:layout_alignParentStart="true"
                     android:layout_centerVertical="true"
                     android:layout_marginStart="8dp"
-                    android:textColor="#F04438"
-                    android:textSize="14sp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="00:00" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Red blinking dot / recording indicator -->
+                    <ImageView
+                        android:id="@+id/ivRecordingDot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:src="@drawable/bg_loan_track_active"
+                        app:tint="#F04438" />
+
+                    <!-- Recording Timer -->
+                    <TextView
+                        android:id="@+id/tvRecordingTimer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="#F04438"
+                        android:textSize="14sp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="00:00" />
+                </LinearLayout>
 
                 <!-- Slide to cancel text container -->
                 <LinearLayout
@@ -708,7 +716,8 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true">
+                    android:layout_centerVertical="true"
+                    android:alpha="0">
 
                     <ImageView
                         android:id="@+id/ivTrash"
