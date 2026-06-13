@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Background fill -->
+    <path
+        android:pathData="M100,100m-90,0a90,90 0,1 1,180 0a90,90 0,1 1,-180 0"
+        android:fillColor="#0D38A612"
+        android:strokeColor="#2038A612"
+        android:strokeWidth="1.5"/>
+
+    <!-- Concentric circle 2 -->
+    <path
+        android:pathData="M100,100m-60,0a60,60 0,1 1,120 0a60,60 0,1 1,-120 0"
+        android:strokeColor="#1C38A612"
+        android:strokeWidth="1.2"/>
+
+    <!-- Concentric circle 3 -->
+    <path
+        android:pathData="M100,100m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"
+        android:strokeColor="#1538A612"
+        android:strokeWidth="1.0"/>
+
+    <!-- Horizontal center line -->
+    <path
+        android:pathData="M10,100 L190,100"
+        android:strokeColor="#1538A612"
+        android:strokeWidth="1"/>
+
+    <!-- Vertical center line -->
+    <path
+        android:pathData="M100,10 L100,190"
+        android:strokeColor="#1538A612"
+        android:strokeWidth="1"/>
+
+    <!-- Diagonal lines -->
+    <path
+        android:pathData="M36.36,36.36 L163.64,163.64"
+        android:strokeColor="#0A38A612"
+        android:strokeWidth="0.8"/>
+    <path
+        android:pathData="M163.64,36.36 L36.36,163.64"
+        android:strokeColor="#0A38A612"
+        android:strokeWidth="0.8"/>
+</vector>

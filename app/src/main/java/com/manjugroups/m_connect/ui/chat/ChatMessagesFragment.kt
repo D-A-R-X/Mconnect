@@ -1797,7 +1797,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isDocumentPickerMode = false
             pickAttachmentsLauncher.launch(arrayOf("audio/*"))
         }
-        tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
+        tile(R.id.tileAttachLocation) { launchLocationShare() }
         tile(R.id.tileAttachDocument) {
             isDocumentPickerMode = true
             pickAttachmentsLauncher.launch(arrayOf("*/*"))
@@ -1855,6 +1855,44 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         } else {
             cameraPermissionLauncher.launch(permission)
         }
+    }
+
+    private val locationPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            if (fineGranted || coarseGranted) {
+                showLocationShareSheet()
+            } else {
+                toast("Location permission is required to share your site telemetry")
+            }
+        }
+
+    private fun launchLocationShare() {
+        val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), fine) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), coarse) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            showLocationShareSheet()
+        } else {
+            locationPermissionLauncher.launch(arrayOf(fine, coarse))
+        }
+    }
+
+    private fun showLocationShareSheet() {
+        val sheet = LocationShareBottomSheet().apply {
+            setListener(object : LocationShareBottomSheet.LocationShareListener {
+                override fun onLocationShared(locationString: String) {
+                    sendLocationMessage(locationString)
+                }
+            })
+        }
+        sheet.show(parentFragmentManager, "location_share_sheet")
+    }
+
+    private fun sendLocationMessage(locationString: String) {
+        binding.etMessage.setText(locationString)
+        sendMessage()
     }
 
     private val pickContactLauncher =
