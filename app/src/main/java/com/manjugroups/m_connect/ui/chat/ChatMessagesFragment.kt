@@ -251,8 +251,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val deltaX = recordTouchStartX - event.rawX
                             val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
 
-                            // Slide constraint: limit sliding to the width of the bottom bar minus padding
-                            val maxSlide = (binding.recordingOverlay.width - dpToPx(80)).coerceAtLeast(0)
+                            // Slide constraint: limit sliding so it stops exactly at the trash can
+                            val maxSlide = if (binding.animatingMicContainer.left > 0) {
+                                binding.animatingMicContainer.left - binding.trashCanContainer.left
+                            } else {
+                                binding.recordingOverlay.width - dpToPx(80)
+                            }.coerceAtLeast(0)
                             val currentSlide = deltaX.coerceIn(0f, maxSlide.toFloat())
 
                             // Slide the mic icon left
@@ -2837,7 +2841,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         stopMicPulseAnimation()
 
         // Calculate translation needed to reach the trash can
-        val targetTx = -(binding.animatingMicContainer.x - binding.trashCanContainer.x)
+        val targetTx = (binding.trashCanContainer.left - binding.animatingMicContainer.left).toFloat()
 
         binding.animatingMicContainer.animate().cancel()
         binding.animatingMicContainer.animate()
