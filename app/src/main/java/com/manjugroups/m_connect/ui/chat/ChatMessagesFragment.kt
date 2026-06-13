@@ -1894,67 +1894,47 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         attachTilesWired = true
     }
 
-    private val cameraImageUri: android.net.Uri? get() = pendingCameraUri
-    private var pendingCameraUri: android.net.Uri? = null
-    private var pendingCameraMode: CameraMode = CameraMode.PHOTO
+    private fun launchCamera() {
+        ensureCameraPermissionThen {
+            val cameraSheet = CustomCameraBottomSheet().apply {
+                setListener(object : CustomCameraBottomSheet.CameraResultListener {
+                    override fun onMediaCaptured(uri: android.net.Uri, isVideo: Boolean) {
+                        val resolver = requireContext().contentResolver
+                        if (isVideo) {
+                            val mime = resolver.getType(uri) ?: "video/mp4"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = "Video-${System.currentTimeMillis()}.mp4"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            pendingAttachments += pending
+                            renderPendingAttachments()
+                            updateSendIcon()
+                        } else {
+                            val mime = resolver.getType(uri) ?: "image/jpeg"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = "Photo-${System.currentTimeMillis()}.jpg"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            showImageSendPreview(listOf(pending))
+                        }
+                    }
 
-    private enum class CameraMode { PHOTO, VIDEO }
-
-    private val takePictureLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "image/jpeg"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Photo-${System.currentTimeMillis()}.jpg"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                showImageSendPreview(listOf(pending))
+                    override fun onGalleryClicked() {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
+                })
             }
+            cameraSheet.show(parentFragmentManager, "custom_camera")
         }
-
-    private val captureVideoLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CaptureVideo()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "video/mp4"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Video-${System.currentTimeMillis()}.mp4"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                pendingAttachments += pending
-                renderPendingAttachments()
-                updateSendIcon()
-            }
-        }
+    }
 
     private val cameraPermissionLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchCameraForMode(pendingCameraMode) else toast("Camera permission required")
+            if (granted) launchCamera() else toast("Camera permission required")
         }
-
-    private fun launchCamera() {
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
-        val sheet = layoutInflater.inflate(R.layout.bottom_sheet_camera_choice, null)
-        dialog.setContentView(sheet)
-        sheet.findViewById<View>(R.id.btnCameraPhoto).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.PHOTO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.PHOTO) }
-        }
-        sheet.findViewById<View>(R.id.btnCameraVideo).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.VIDEO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.VIDEO) }
-        }
-        dialog.show()
-    }
 
     private fun ensureCameraPermissionThen(action: () -> Unit) {
         val permission = android.Manifest.permission.CAMERA
@@ -1964,39 +1944,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         } else {
             cameraPermissionLauncher.launch(permission)
         }
-    }
-
-    private fun launchCameraForMode(mode: CameraMode) {
-        when (mode) {
-            CameraMode.PHOTO -> actuallyLaunchCamera()
-            CameraMode.VIDEO -> actuallyLaunchVideoCamera()
-        }
-    }
-
-    private fun actuallyLaunchCamera() {
-        val photoDir = File(requireContext().cacheDir, "chat_photos").apply { mkdirs() }
-        val photoFile = File(photoDir, "photo_${System.currentTimeMillis()}.jpg")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            photoFile
-        )
-        pendingCameraUri = uri
-        runCatching { takePictureLauncher.launch(uri) }
-            .onFailure { toast("Unable to open camera") }
-    }
-
-    private fun actuallyLaunchVideoCamera() {
-        val videoDir = File(requireContext().cacheDir, "chat_videos").apply { mkdirs() }
-        val videoFile = File(videoDir, "video_${System.currentTimeMillis()}.mp4")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            videoFile
-        )
-        pendingCameraUri = uri
-        runCatching { captureVideoLauncher.launch(uri) }
-            .onFailure { toast("Unable to open video recorder") }
     }
 
     private val pickContactLauncher =
