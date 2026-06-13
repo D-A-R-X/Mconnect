@@ -217,11 +217,7 @@ class HrDashboardFragment : Fragment() {
 
         binding.btnOnDuty.setOnClickListener {
             if (session.isOnDuty) {
-                session.clearOnDutyDetails()
-                Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
-                updateOnDutyButtonUi()
-                val isClockedIn = flowViewModel.uiState.value.isClockedIn
-                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+                completeOnDutyTrip()
             } else {
                 OnDutyFormBottomSheet.newInstance().show(parentFragmentManager, "on_duty_form")
             }
@@ -1028,6 +1024,41 @@ class HrDashboardFragment : Fragment() {
                 ?: client.lastLocation.await()
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * Close the active OnDuty trip on the server, then clear the local
+     * session flags + refresh UI. Local state is cleared regardless of
+     * server outcome so the user can't get stuck with a stale "On Duty"
+     * pill if the network is down — the nightly trip-finalize cron will
+     * close any orphaned active trip.
+     */
+    private fun completeOnDutyTrip() {
+        val tripId = session.onDutyTripId
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val loc = fetchLocationOrNull()
+                api.completeOnDutyTrip(
+                    token,
+                    com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
+                        tripId = tripId,
+                        lat = loc?.latitude,
+                        lng = loc?.longitude,
+                        address = null,
+                    ),
+                )
+            } catch (_: Exception) {
+                // Silent — the local state still clears. The cron-based
+                // trip finalizer closes any orphaned active row.
+            }
+            if (_binding == null) return@launch
+            session.clearOnDutyDetails()
+            Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+            updateOnDutyButtonUi()
+            val isClockedIn = flowViewModel.uiState.value.isClockedIn
+            updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
         }
     }
 

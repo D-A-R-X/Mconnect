@@ -19,7 +19,9 @@
             <FrameLayout
                 android:layout_width="52dp"
                 android:layout_height="52dp"
-                android:background="@drawable/bg_chat_avatar_circle">
+                android:background="@drawable/bg_chat_avatar_circle"
+                android:clipChildren="true"
+                android:clipToOutline="true">
 
                 <TextView
                     android:id="@+id/tvChatAvatar"
@@ -29,6 +31,14 @@
                     android:fontFamily="@font/inter_semibold"
                     android:textColor="?attr/colorAccentPrimary"
                     android:textSize="16sp" />
+
+                <ImageView
+                    android:id="@+id/ivChatAvatarPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <View
