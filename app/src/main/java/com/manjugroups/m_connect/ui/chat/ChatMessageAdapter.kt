@@ -289,8 +289,39 @@ class ChatMessageAdapter(
                 val tvCoords = cardView.findViewById<TextView>(R.id.tvCardLocationCoords)
                 val tvBattery = cardView.findViewById<TextView>(R.id.tvCardLocationBattery)
                 val tvSpeed = cardView.findViewById<TextView>(R.id.tvCardLocationSpeed)
+                
+                val tvCoordsLabel = cardView.findViewById<TextView>(R.id.tvCardCoordsLabel)
+                val tvBatteryLabel = cardView.findViewById<TextView>(R.id.tvCardBatteryLabel)
+                val tvSpeedLabel = cardView.findViewById<TextView>(R.id.tvCardSpeedLabel)
+                val layoutGrid = cardView.findViewById<View>(R.id.layoutCardDetailsGrid)
+                val viewDivider = cardView.findViewById<View>(R.id.viewCardDivider)
+                val viewVerDivider = cardView.findViewById<View>(R.id.viewCardVerticalDivider)
+                val ivCopyIcon = cardView.findViewById<ImageView>(R.id.ivCardCopyIcon)
+                val tvCopyText = cardView.findViewById<TextView>(R.id.tvCardCopyText)
+                val tvNavigateText = cardView.findViewById<TextView>(R.id.tvCardNavigateText)
+                val ivNavigateIcon = cardView.findViewById<ImageView>(R.id.ivCardNavigateIcon)
                 val btnNavigate = cardView.findViewById<View>(R.id.btnCardLocationNavigate)
                 val btnCopy = cardView.findViewById<View>(R.id.btnCardLocationCopy)
+
+                // Color views for dark (blue) sent bubble
+                tvLabel.setTextColor(Color.WHITE)
+                tvCoords.setTextColor(Color.WHITE)
+                tvBattery.setTextColor(Color.WHITE)
+                tvSpeed.setTextColor(Color.WHITE)
+                
+                tvCoordsLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+                tvBatteryLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+                tvSpeedLabel.setTextColor(Color.parseColor("#CCFFFFFF"))
+                
+                layoutGrid.setBackgroundColor(Color.parseColor("#1AFFFFFF"))
+                viewDivider.setBackgroundColor(Color.parseColor("#33FFFFFF"))
+                viewVerDivider.setBackgroundColor(Color.parseColor("#33FFFFFF"))
+                
+                ivCopyIcon.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                tvCopyText.setTextColor(Color.WHITE)
+                
+                tvNavigateText.setTextColor(Color.WHITE)
+                ivNavigateIcon.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
 
                 tvLabel.text = telemetry.label
                 tvCoords.text = String.format(Locale.US, "%.6f, %.6f", telemetry.lat, telemetry.lon)
@@ -467,8 +498,39 @@ class ChatMessageAdapter(
                 val tvCoords = cardView.findViewById<TextView>(R.id.tvCardLocationCoords)
                 val tvBattery = cardView.findViewById<TextView>(R.id.tvCardLocationBattery)
                 val tvSpeed = cardView.findViewById<TextView>(R.id.tvCardLocationSpeed)
+                
+                val tvCoordsLabel = cardView.findViewById<TextView>(R.id.tvCardCoordsLabel)
+                val tvBatteryLabel = cardView.findViewById<TextView>(R.id.tvCardBatteryLabel)
+                val tvSpeedLabel = cardView.findViewById<TextView>(R.id.tvCardSpeedLabel)
+                val layoutGrid = cardView.findViewById<View>(R.id.layoutCardDetailsGrid)
+                val viewDivider = cardView.findViewById<View>(R.id.viewCardDivider)
+                val viewVerDivider = cardView.findViewById<View>(R.id.viewCardVerticalDivider)
+                val ivCopyIcon = cardView.findViewById<ImageView>(R.id.ivCardCopyIcon)
+                val tvCopyText = cardView.findViewById<TextView>(R.id.tvCardCopyText)
+                val tvNavigateText = cardView.findViewById<TextView>(R.id.tvCardNavigateText)
+                val ivNavigateIcon = cardView.findViewById<ImageView>(R.id.ivCardNavigateIcon)
                 val btnNavigate = cardView.findViewById<View>(R.id.btnCardLocationNavigate)
                 val btnCopy = cardView.findViewById<View>(R.id.btnCardLocationCopy)
+
+                // Color views for light received bubble
+                tvLabel.setTextColor(Color.parseColor("#101828"))
+                tvCoords.setTextColor(Color.parseColor("#101828"))
+                tvBattery.setTextColor(Color.parseColor("#101828"))
+                tvSpeed.setTextColor(Color.parseColor("#101828"))
+                
+                tvCoordsLabel.setTextColor(Color.parseColor("#667085"))
+                tvBatteryLabel.setTextColor(Color.parseColor("#667085"))
+                tvSpeedLabel.setTextColor(Color.parseColor("#667085"))
+                
+                layoutGrid.setBackgroundColor(Color.parseColor("#0D000000"))
+                viewDivider.setBackgroundColor(Color.parseColor("#EAECF0"))
+                viewVerDivider.setBackgroundColor(Color.parseColor("#EAECF0"))
+                
+                ivCopyIcon.imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#475467"))
+                tvCopyText.setTextColor(Color.parseColor("#475467"))
+                
+                tvNavigateText.setTextColor(Color.parseColor("#38A612"))
+                ivNavigateIcon.imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
 
                 tvLabel.text = telemetry.label
                 tvCoords.text = String.format(Locale.US, "%.6f, %.6f", telemetry.lat, telemetry.lon)

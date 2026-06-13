@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_chat_action_sheet"
     android:orientation="vertical"
-    android:paddingBottom="24dp">
+    android:paddingBottom="48dp">
 
     <!-- Top Drag Handle -->
     <View
@@ -304,7 +304,7 @@
         android:fontFamily="@font/inter_bold"
         android:text="Share Location &amp; Telemetry"
         android:textColor="#FFFFFF"
-        android:textSize="14sp"
+        android:textSize="12sp"
         app:cornerRadius="100dp" />
 
 </LinearLayout>
