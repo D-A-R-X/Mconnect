@@ -55,6 +55,19 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
     private var camera: Camera? = null
 
+    private val mediaActionSound = android.media.MediaActionSound()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var recordingSeconds = 0
+    private val recordingProgressRunnable = object : Runnable {
+        override fun run() {
+            recordingSeconds++
+            val minutes = recordingSeconds / 60
+            val seconds = recordingSeconds % 60
+            tvSubtitle.text = String.format("Recording... %02d:%02d", minutes, seconds)
+            mainHandler.postDelayed(this, 1000)
+        }
+    }
+
     // UI elements
     private lateinit var viewFinder: PreviewView
     private lateinit var tvTitle: TextView
@@ -96,6 +109,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setStyle(STYLE_NORMAL, R.style.CustomCameraBottomSheetTheme)
+        mediaActionSound.load(android.media.MediaActionSound.SHUTTER_CLICK)
+        mediaActionSound.load(android.media.MediaActionSound.START_VIDEO_RECORDING)
+        mediaActionSound.load(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -237,6 +253,10 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             // Re-apply current zoom
             applyZoomRatio()
 
+            // Re-apply current torch state if Flash is on
+            val enableTorch = (flashMode == ImageCapture.FLASH_MODE_ON && activeMode == Mode.PHOTO)
+            camera?.cameraControl?.enableTorch(enableTorch)
+
         } catch (exc: Exception) {
             Toast.makeText(requireContext(), "Failed to bind camera", Toast.LENGTH_SHORT).show()
         }
@@ -258,6 +278,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             else -> "⚡Off"
         }
         imageCapture?.flashMode = flashMode
+
+        val enableTorch = (flashMode == ImageCapture.FLASH_MODE_ON)
+        camera?.cameraControl?.enableTorch(enableTorch)
     }
 
     private fun setZoom(zoom: Float, selectedPill: TextView) {
@@ -341,6 +364,8 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
+        mediaActionSound.play(android.media.MediaActionSound.SHUTTER_CLICK)
+
         imageCapture.takePicture(
             outputOptions,
             ContextCompat.getMainExecutor(requireContext()),
@@ -363,6 +388,8 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         val videoCapture = videoCapture ?: return
         if (isRecording) {
             // Stop recording
+            mediaActionSound.play(android.media.MediaActionSound.STOP_VIDEO_RECORDING)
+            mainHandler.removeCallbacks(recordingProgressRunnable)
             activeRecording?.stop()
             activeRecording = null
             isRecording = false
@@ -379,15 +406,21 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             imgShutter.setImageResource(R.drawable.ic_trip_stop_white)
             btnCapture.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F04438"))
 
+            mediaActionSound.play(android.media.MediaActionSound.START_VIDEO_RECORDING)
+
             activeRecording = videoCapture.output
                 .prepareRecording(requireContext(), outputOptions)
                 .withAudioEnabled()
                 .start(ContextCompat.getMainExecutor(requireContext())) { recordEvent ->
                     when (recordEvent) {
                         is VideoRecordEvent.Start -> {
+                            recordingSeconds = 0
                             tvSubtitle.text = "Recording... 00:00"
+                            mainHandler.removeCallbacks(recordingProgressRunnable)
+                            mainHandler.postDelayed(recordingProgressRunnable, 1000)
                         }
                         is VideoRecordEvent.Finalize -> {
+                            mainHandler.removeCallbacks(recordingProgressRunnable)
                             if (!recordEvent.hasError()) {
                                 val uri = Uri.fromFile(videoFile)
                                 listener?.onMediaCaptured(uri, isVideo = true)
@@ -408,5 +441,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         cameraExecutor.shutdown()
+        mainHandler.removeCallbacks(recordingProgressRunnable)
+        mediaActionSound.release()
     }
 }

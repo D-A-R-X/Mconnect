@@ -79,7 +79,6 @@
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginHorizontal="16dp"
         android:layout_weight="1">
 
         <androidx.cardview.widget.CardView
@@ -99,28 +98,13 @@
                     android:layout_height="match_parent"
                     app:scaleType="fillCenter" />
 
-                <!-- Prompt Guide Overlay Overlay -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:background="@drawable/bg_attendance_camera_chip"
-                    android:backgroundTint="#80000000"
-                    android:fontFamily="@font/inter_semibold"
-                    android:paddingHorizontal="18dp"
-                    android:paddingVertical="10dp"
-                    android:text="Position the subject in the frame"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp" />
-
                 <!-- Zoom Controls Overlay -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom|center_horizontal"
                     android:layout_marginBottom="24dp"
-                    android:background="@drawable/bg_attendance_camera_chip"
-                    android:backgroundTint="#99000000"
+                    android:background="@drawable/bg_camera_zoom_pill"
                     android:gravity="center"
                     android:orientation="horizontal"
                     android:padding="4dp">
@@ -257,9 +241,7 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="@drawable/bg_home_new_action_circle"
-                android:backgroundTint="#F2F4F7"
-                android:clickable="true"
-                android:focusable="true">
+                android:backgroundTint="#F2F4F7">
 
                 <ImageView
                     android:layout_width="20dp"
@@ -318,9 +300,7 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="@drawable/bg_home_new_action_circle"
-                android:backgroundTint="#F2F4F7"
-                android:clickable="true"
-                android:focusable="true">
+                android:backgroundTint="#F2F4F7">
 
                 <ImageView
                     android:layout_width="20dp"
@@ -347,8 +327,7 @@
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="16dp"
-        android:background="@drawable/bg_attendance_camera_chip"
-        android:backgroundTint="#ECFDF3"
+        android:background="@drawable/bg_camera_tips_pill"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingVertical="10dp"
