@@ -233,14 +233,20 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             .requireLensFacing(cameraLensFacing)
             .build()
 
-        preview = Preview.Builder().build().also {
-            it.surfaceProvider = viewFinder.surfaceProvider
-        }
+        val rotation = viewFinder.display?.rotation ?: android.view.Surface.ROTATION_0
+
+        preview = Preview.Builder()
+            .setTargetRotation(rotation)
+            .build()
+            .also {
+                it.surfaceProvider = viewFinder.surfaceProvider
+            }
 
         try {
             if (activeMode == Mode.PHOTO) {
                 imageCapture = ImageCapture.Builder()
                     .setFlashMode(flashMode)
+                    .setTargetRotation(rotation)
                     .build()
                 camera = cameraProvider.bindToLifecycle(
                     viewLifecycleOwner,

@@ -24,6 +24,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment.PendingAttachment
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.media3.common.MediaItem
 
 class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
 
@@ -42,21 +45,23 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     private val localMediaItems = mutableListOf<LocalPreviewItem>()
     private var localMediaAdapter: LocalPreviewAdapter? = null
 
+    private var exoPlayer: ExoPlayer? = null
+
     private val updateSeekBarHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val updateSeekBarRunnable = object : Runnable {
         override fun run() {
             val view = view ?: return
-            val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+            val player = exoPlayer ?: return
             val videoSeekBar = view.findViewById<android.widget.SeekBar>(R.id.videoSeekBar) ?: return
             val tvVideoTime = view.findViewById<android.widget.TextView>(R.id.tvVideoTime) ?: return
 
-            if (videoPreview.isPlaying) {
-                val current = videoPreview.currentPosition
-                val duration = videoPreview.duration
+            if (player.isPlaying) {
+                val current = player.currentPosition
+                val duration = player.duration
                 if (duration > 0) {
-                    videoSeekBar.max = duration
-                    videoSeekBar.progress = current
-                    tvVideoTime.text = "${formatDurationMs(current.toLong())} / ${formatDurationMs(duration.toLong())}"
+                    videoSeekBar.max = duration.toInt()
+                    videoSeekBar.progress = current.toInt()
+                    tvVideoTime.text = "${formatDurationMs(current)} / ${formatDurationMs(duration)}"
                 }
                 updateSeekBarHandler.postDelayed(this, 250)
             }
@@ -168,13 +173,16 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val view = view ?: return
         val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
-        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoPreview = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
         val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
 
         // Stop any active video playback and hide VideoView & Controls
         updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
-        videoPreview.stopPlayback()
+        exoPlayer?.stop()
+        exoPlayer?.release()
+        exoPlayer = null
+        videoPreview.player = null
         videoPreview.visibility = View.GONE
         videoTouchOverlay.visibility = View.GONE
         videoControlBar.visibility = View.GONE
@@ -210,7 +218,7 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val view = view ?: return
         val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
-        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoPreview = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
         val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
         val videoSeekBar = view.findViewById<android.widget.SeekBar>(R.id.videoSeekBar) ?: return
@@ -237,7 +245,15 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
             media.uri
         }
 
-        videoPreview.setVideoURI(videoUri)
+        // Initialize ExoPlayer
+        exoPlayer?.release()
+        val player = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(videoUri))
+            playWhenReady = true
+            prepare()
+        }
+        exoPlayer = player
+        videoPreview.player = player
 
         // Setup volume controls
         val audioManager = requireContext().getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -278,16 +294,16 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         videoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    videoPreview.seekTo(progress)
-                    val dur = videoPreview.duration
-                    tvVideoTime.text = "${formatDurationMs(progress.toLong())} / ${formatDurationMs(dur.toLong())}"
+                    player.seekTo(progress.toLong())
+                    val dur = player.duration
+                    tvVideoTime.text = "${formatDurationMs(progress.toLong())} / ${formatDurationMs(dur)}"
                 }
             }
             override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {
                 updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
             }
             override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {
-                if (videoPreview.isPlaying) {
+                if (player.isPlaying) {
                     updateSeekBarHandler.post(updateSeekBarRunnable)
                 }
             }
@@ -295,57 +311,57 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
 
         // Rewind & Fast Forward Click Listeners
         btnRewind.setOnClickListener {
-            val target = (videoPreview.currentPosition - 10000).coerceAtLeast(0)
-            videoPreview.seekTo(target)
-            videoSeekBar.progress = target
+            val target = (player.currentPosition - 10000).coerceAtLeast(0)
+            player.seekTo(target)
+            videoSeekBar.progress = target.toInt()
         }
         btnFastForward.setOnClickListener {
-            val dur = videoPreview.duration
-            val target = (videoPreview.currentPosition + 10000).coerceAtMost(dur)
-            videoPreview.seekTo(target)
-            videoSeekBar.progress = target
+            val dur = player.duration
+            val target = (player.currentPosition + 10000).coerceAtMost(dur)
+            player.seekTo(target)
+            videoSeekBar.progress = target.toInt()
         }
 
         // Play/Pause toggle in Bar
         btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
         btnPlayPause.setOnClickListener {
-            if (videoPreview.isPlaying) {
-                videoPreview.pause()
+            if (player.isPlaying) {
+                player.pause()
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
                 imgPlayIcon.visibility = View.VISIBLE
             } else {
-                videoPreview.start()
+                player.play()
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
                 imgPlayIcon.visibility = View.GONE
                 updateSeekBarHandler.post(updateSeekBarRunnable)
             }
         }
 
-        videoPreview.setOnPreparedListener { mp ->
-            mp.isLooping = false
-            videoPreview.start()
-            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
-            val dur = videoPreview.duration
-            if (dur > 0) {
-                videoSeekBar.max = dur
-                videoSeekBar.progress = 0
-                tvVideoTime.text = "00:00 / ${formatDurationMs(dur.toLong())}"
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_READY) {
+                    btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                    val dur = player.duration
+                    if (dur > 0) {
+                        videoSeekBar.max = dur.toInt()
+                        videoSeekBar.progress = player.currentPosition.toInt()
+                        tvVideoTime.text = "${formatDurationMs(player.currentPosition)} / ${formatDurationMs(dur)}"
+                    }
+                    updateSeekBarHandler.post(updateSeekBarRunnable)
+                } else if (state == androidx.media3.common.Player.STATE_ENDED) {
+                    resetVideoState()
+                }
             }
-            updateSeekBarHandler.post(updateSeekBarRunnable)
-        }
-
-        videoPreview.setOnCompletionListener {
-            resetVideoState()
-        }
+        })
 
         // Tap on main overlay also toggles Play/Pause
         videoTouchOverlay.setOnClickListener {
-            if (videoPreview.isPlaying) {
-                videoPreview.pause()
+            if (player.isPlaying) {
+                player.pause()
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
                 imgPlayIcon.visibility = View.VISIBLE
             } else {
-                videoPreview.start()
+                player.play()
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
                 imgPlayIcon.visibility = View.GONE
                 updateSeekBarHandler.post(updateSeekBarRunnable)
@@ -357,12 +373,15 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
         val view = view ?: return
         val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewMain) ?: return
         val imgPlayIcon = view.findViewById<ImageView>(R.id.imgVideoPlayIcon) ?: return
-        val videoPreview = view.findViewById<android.widget.VideoView>(R.id.videoPreviewMain) ?: return
+        val videoPreview = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPreviewMain) ?: return
         val videoTouchOverlay = view.findViewById<View>(R.id.videoTouchOverlay) ?: return
         val videoControlBar = view.findViewById<View>(R.id.videoControlBar) ?: return
 
         updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
-        videoPreview.stopPlayback()
+        exoPlayer?.stop()
+        exoPlayer?.release()
+        exoPlayer = null
+        videoPreview.player = null
         videoPreview.visibility = View.GONE
         videoTouchOverlay.visibility = View.GONE
         videoControlBar.visibility = View.GONE
@@ -643,7 +662,10 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     }
 
     override fun onDismiss(dialog: DialogInterface) {
-        view?.findViewById<android.widget.VideoView>(R.id.videoPreviewMain)?.stopPlayback()
+        updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
+        exoPlayer?.stop()
+        exoPlayer?.release()
+        exoPlayer = null
         super.onDismiss(dialog)
         if (!isSent) {
             listener?.onPreviewCancelled()
@@ -651,8 +673,11 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     }
 
     override fun onStop() {
+        updateSeekBarHandler.removeCallbacks(updateSeekBarRunnable)
+        exoPlayer?.stop()
+        exoPlayer?.release()
+        exoPlayer = null
         super.onStop()
-        view?.findViewById<android.widget.VideoView>(R.id.videoPreviewMain)?.stopPlayback()
     }
 
     data class LocalPreviewItem(

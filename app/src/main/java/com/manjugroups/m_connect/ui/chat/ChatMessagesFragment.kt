@@ -96,6 +96,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private val audioDurationLocalCache = mutableMapOf<String, String>()
     private val staffNameCache = mutableMapOf<String, String>()
     private val pendingAttachments = mutableListOf<PendingAttachment>()
+    private val localAttachmentUriMap = mutableMapOf<String, String>()
 
     private val subtitleColorMuted = android.graphics.Color.parseColor("#667085")
     private val subtitleColorTyping = android.graphics.Color.parseColor("#12B76A")
@@ -482,6 +483,34 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             toast("Attachment unavailable")
             return
         }
+
+        // Try local playing/viewing from cached URIs or files to eliminate loading lag
+        if (!fileName.isNullOrBlank()) {
+            val cachedUri = localAttachmentUriMap[fileName]
+            if (!cachedUri.isNullOrBlank()) {
+                routeAttachment(cachedUri, mime, storageId, fileName)
+                return
+            }
+
+            val localVideoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_videos"), fileName)
+            if (localVideoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localVideoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localPhotoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_photos"), fileName)
+            if (localPhotoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localPhotoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localEditFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_edits"), fileName)
+            if (localEditFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localEditFile).toString(), mime, storageId, fileName)
+                return
+            }
+        }
+
         if (url.isBlank()) {
             resolveStorageUrl(storageId!!) { resolved ->
                 if (resolved.isNullOrBlank()) {
@@ -2941,6 +2970,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val previousText = text
         val parentId = replyingToMessage?.id
 
+        // Cache local URI mapping to load attachments instantly without network buffering
+        pendingSnapshot.forEach { attachment ->
+            localAttachmentUriMap[attachment.fileName] = attachment.uri.toString()
+        }
+
         binding.etMessage.setText("")
         if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
@@ -3008,8 +3042,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private suspend fun uploadPendingAttachments(
         attachments: List<PendingAttachment>
-    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> {
-        return attachments.map { attachment ->
+    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        attachments.map { attachment ->
             val bytes = requireContext().contentResolver.openInputStream(attachment.uri)?.use {
                 it.readBytes()
             } ?: error("Unable to read ${attachment.fileName}")

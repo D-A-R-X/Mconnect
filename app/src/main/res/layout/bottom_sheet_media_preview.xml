@@ -37,11 +37,12 @@
                 android:scaleType="centerCrop"
                 android:contentDescription="Captured media" />
 
-            <VideoView
+            <androidx.media3.ui.PlayerView
                 android:id="@+id/videoPreviewMain"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center"
+                app:use_controller="false"
+                app:resize_mode="zoom"
                 android:visibility="gone" />
 
             <View
