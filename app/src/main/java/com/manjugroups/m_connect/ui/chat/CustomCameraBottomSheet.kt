@@ -47,6 +47,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     private var videoCapture: VideoCapture<Recorder>? = null
     private var activeRecording: Recording? = null
     private var isRecording = false
+    private var orientationEventListener: android.view.OrientationEventListener? = null
 
     private var cameraLensFacing = CameraSelector.LENS_FACING_BACK
     private var flashMode = ImageCapture.FLASH_MODE_AUTO // AUTO, ON, OFF
@@ -209,6 +210,26 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             switchToPhotoMode()
         }
 
+        // Set up OrientationEventListener to handle orientation changes
+        orientationEventListener = object : android.view.OrientationEventListener(requireContext()) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                val rotation = when (orientation) {
+                    in 45 until 135 -> android.view.Surface.ROTATION_270
+                    in 135 until 225 -> android.view.Surface.ROTATION_180
+                    in 225 until 315 -> android.view.Surface.ROTATION_90
+                    else -> android.view.Surface.ROTATION_0
+                }
+                imageCapture?.targetRotation = rotation
+                try {
+                    videoCapture?.targetRotation = rotation
+                } catch (e: Exception) {
+                    // Ignore if target rotation not supported
+                }
+            }
+        }
+        orientationEventListener?.enable()
+
         // Start Camera
         startCamera()
     }
@@ -233,7 +254,16 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             .requireLensFacing(cameraLensFacing)
             .build()
 
-        val rotation = viewFinder.display?.rotation ?: android.view.Surface.ROTATION_0
+        val rotation = try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                requireContext().display?.rotation ?: viewFinder.display?.rotation ?: android.view.Surface.ROTATION_0
+            } else {
+                val windowManager = requireContext().getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
+                windowManager.defaultDisplay.rotation
+            }
+        } catch (e: Exception) {
+            viewFinder.display?.rotation ?: android.view.Surface.ROTATION_0
+        }
 
         preview = Preview.Builder()
             .setTargetRotation(rotation)
@@ -258,7 +288,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                 val recorder = Recorder.Builder()
                     .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
                     .build()
-                videoCapture = VideoCapture.withOutput(recorder)
+                videoCapture = VideoCapture.withOutput(recorder).apply {
+                    targetRotation = rotation
+                }
                 camera = cameraProvider.bindToLifecycle(
                     viewLifecycleOwner,
                     cameraSelector,
@@ -457,6 +489,8 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        orientationEventListener?.disable()
+        orientationEventListener = null
         cameraExecutor.shutdown()
         mainHandler.removeCallbacks(recordingProgressRunnable)
         mediaActionSound.release()

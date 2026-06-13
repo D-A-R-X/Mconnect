@@ -1818,7 +1818,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val size = runCatching {
                                 resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
                             }.getOrNull() ?: 0L
-                            val name = "Video-${System.currentTimeMillis()}.mp4"
+                            val name = uri.lastPathSegment ?: "Video-${System.currentTimeMillis()}.mp4"
                             val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
                             showImageSendPreview(listOf(pending))
                         } else {
@@ -1826,7 +1826,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val size = runCatching {
                                 resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
                             }.getOrNull() ?: 0L
-                            val name = "Photo-${System.currentTimeMillis()}.jpg"
+                            val name = uri.lastPathSegment ?: "Photo-${System.currentTimeMillis()}.jpg"
                             val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
                             showImageSendPreview(listOf(pending))
                         }
