@@ -60,7 +60,6 @@ class LocationShareBottomSheet : BottomSheetDialogFragment() {
     private lateinit var tvAccuracy: TextView
     private lateinit var tvState: TextView
     private lateinit var imgRadarSweep: ImageView
-    private lateinit var chipGroupMode: ChipGroup
     private lateinit var btnShare: Button
 
     private var fusedClient: FusedLocationProviderClient? = null
@@ -86,7 +85,6 @@ class LocationShareBottomSheet : BottomSheetDialogFragment() {
         tvAccuracy = view.findViewById(R.id.tvLocationAccuracy)
         tvState = view.findViewById(R.id.tvLocationState)
         imgRadarSweep = view.findViewById(R.id.imgRadarSweep)
-        chipGroupMode = view.findViewById(R.id.chipGroupLocationMode)
         btnShare = view.findViewById(R.id.btnLocationShareSend)
 
         fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())
@@ -108,17 +106,12 @@ class LocationShareBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
-            val selectedChipId = chipGroupMode.checkedChipId
-            val contextLabel = when (selectedChipId) {
-                R.id.chipModeInspection -> "Site Inspection"
-                R.id.chipModeDuty -> "Punched Duty"
-                R.id.chipModeMeeting -> "Client Meeting"
-                else -> "Current Location"
-            }
+            val contextLabel = "Current Location"
 
             val battery = getBatteryPercentage()
-            val speedKmH = (loc.speed * 3.6).toInt()
-            val status = if (loc.speed > 0.5) "Moving" else "Stationary"
+            val rawSpeedKmH = (loc.speed * 3.6).toInt()
+            val speedKmH = if (rawSpeedKmH >= 3) rawSpeedKmH else 0
+            val status = if (speedKmH >= 3) "Moving" else "Stationary"
 
             // Construct telemetry protocol string
             val formatted = "[LOCATION:lat=${loc.latitude};lon=${loc.longitude};label=$contextLabel;battery=$battery;speed=$speedKmH;status=$status]"
@@ -199,8 +192,9 @@ class LocationShareBottomSheet : BottomSheetDialogFragment() {
         tvLongitude.text = String.format(Locale.US, "%.6f°", location.longitude)
         tvAccuracy.text = String.format(Locale.US, "±%.1fm", location.accuracy)
         
-        val speedKmH = (location.speed * 3.6).toInt()
-        tvSpeed.text = if (speedKmH > 1) "$speedKmH km/h" else "Stationary"
+        val rawSpeedKmH = (location.speed * 3.6).toInt()
+        val speedKmH = if (rawSpeedKmH >= 3) rawSpeedKmH else 0
+        tvSpeed.text = if (speedKmH >= 3) "$speedKmH km/h" else "Stationary"
 
         tvState.text = "Telemetry Active"
         tvState.setTextColor(ColorStateListHelper.getColor(requireContext(), "#38A612"))
