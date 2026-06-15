@@ -970,15 +970,106 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun setupEmojiPicker() {
         if (isEmojiPickerInitialized) return
         val context = context ?: return
-        val emojiPicker = EmojiPickerView(context).apply {
-            emojiGridColumns = 9
-            setOnEmojiPickedListener { emoji ->
-                val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
-                binding.etMessage.text?.insert(cursorPos, emoji.emoji)
-                binding.etMessage.setSelection(cursorPos + emoji.emoji.length)
-            }
+
+        // Inflate custom emoji picker layout
+        val pickerLayout = LayoutInflater.from(context).inflate(
+            R.layout.layout_custom_emoji_picker,
+            binding.emojiPickerContainer,
+            false
+        )
+        binding.emojiPickerContainer.addView(pickerLayout)
+
+        val etEmojiSearch = pickerLayout.findViewById<android.widget.EditText>(R.id.etEmojiSearch)
+        val btnSearchClear = pickerLayout.findViewById<ImageView>(R.id.btnSearchClear)
+        val categoryTabsContainer = pickerLayout.findViewById<LinearLayout>(R.id.categoryTabsContainer)
+        val rvEmojis = pickerLayout.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvEmojis)
+
+        // Set up 7-column Grid Recycler
+        val columns = 7
+        val adapter = CustomEmojiAdapter(emptyList()) { emoji ->
+            val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
+            binding.etMessage.text?.insert(cursorPos, emoji)
+            binding.etMessage.setSelection(cursorPos + emoji.length)
+            CustomEmojiData.addFavorite(context, emoji)
         }
-        binding.emojiPickerContainer.addView(emojiPicker)
+        rvEmojis.layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, columns)
+        rvEmojis.adapter = adapter
+
+        var activeCategory = "Favorites"
+
+        fun loadCategory(category: String) {
+            activeCategory = category
+            
+            // Highlight selected tab, reset others
+            for (i in 0 until categoryTabsContainer.childCount) {
+                val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                if (tvName.text == category) {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_selected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
+                } else {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                }
+            }
+
+            val list = if (category == "Favorites") {
+                CustomEmojiData.getFavorites(context)
+            } else {
+                CustomEmojiData.categories[category] ?: emptyList()
+            }
+            adapter.updateList(list)
+            rvEmojis.scrollToPosition(0)
+        }
+
+        // Dynamically build category tabs
+        val categoriesList = listOf("Favorites") + CustomEmojiData.categories.keys.toList()
+        categoriesList.forEach { category ->
+            val tabView = LayoutInflater.from(context).inflate(
+                R.layout.item_emoji_category_tab,
+                categoryTabsContainer,
+                false
+            ) as ViewGroup
+            val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName)
+            tvName.text = category
+            tabView.setOnClickListener {
+                etEmojiSearch.setText("")
+                loadCategory(category)
+            }
+            categoryTabsContainer.addView(tabView)
+        }
+
+        // Search TextWatcher for keyword-based filtering
+        etEmojiSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString().orEmpty().trim()
+                if (query.isNotEmpty()) {
+                    btnSearchClear.visibility = View.VISIBLE
+                    // Clear tab highlights during search
+                    for (i in 0 until categoryTabsContainer.childCount) {
+                        val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                        val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                        tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                        tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                    }
+                    val results = CustomEmojiData.searchEmojis(query)
+                    adapter.updateList(results)
+                } else {
+                    btnSearchClear.visibility = View.GONE
+                    loadCategory(activeCategory)
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        btnSearchClear.setOnClickListener {
+            etEmojiSearch.setText("")
+        }
+
+        // Load default category (Favorites) on start
+        loadCategory("Favorites")
+
         isEmojiPickerInitialized = true
     }
 
