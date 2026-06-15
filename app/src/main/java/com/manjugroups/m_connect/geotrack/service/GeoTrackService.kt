@@ -709,34 +709,39 @@ class GeoTrackService : Service() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
                 delay(HEARTBEAT_INTERVAL_MS)
+                val battery = getBatteryLevel()
+                val sessionId = session.activeTrackingSessionId
+                val deviceId = session.trackingDeviceId
                 try {
                     api.heartbeat(
                         session.bearerToken,
                         HeartbeatRequest(
-                            sessionId = session.activeTrackingSessionId,
-                            deviceId = session.trackingDeviceId,
-                            batteryPct = getBatteryLevel(),
+                            sessionId = sessionId,
+                            deviceId = deviceId,
+                            batteryPct = battery,
                             appVersion = BuildConfig.VERSION_NAME,
                         )
                     )
-                    Log.d(TAG, "Heartbeat OK (battery=${getBatteryLevel()}%)")
+                    Log.d(TAG, "Heartbeat OK (battery=${battery}%)")
                 } catch (e: Exception) {
-                    Log.w(TAG, "Heartbeat failed: ${e.message}")
-                    // Retry once after 10 seconds
-                    delay(10_000)
-                    try {
-                        api.heartbeat(
-                            session.bearerToken,
-                            HeartbeatRequest(
-                                sessionId = session.activeTrackingSessionId,
-                                deviceId = session.trackingDeviceId,
-                                batteryPct = getBatteryLevel(),
-                                appVersion = BuildConfig.VERSION_NAME,
-                            )
+                    Log.w(TAG, "Heartbeat failed: ${e.message} — queueing for replay")
+                    // Persist the heartbeat snapshot so a tunnel /
+                    // building dead-zone doesn't lose battery + uptime
+                    // visibility for that window. The sync loop +
+                    // network-callback replay it via the same flush
+                    // path used for tamper events; the server then has
+                    // a complete heartbeat history with no gaps.
+                    runCatching {
+                        GeoTrackEventQueue.enqueue(
+                            context = this@GeoTrackService,
+                            eventType = GeoTrackEventQueue.HEARTBEAT_EVENT_TYPE,
+                            metadata = buildMap {
+                                if (sessionId != null) put("sessionId", sessionId)
+                                if (deviceId != null) put("deviceId", deviceId)
+                                if (battery != null) put("batteryPct", battery)
+                                put("appVersion", BuildConfig.VERSION_NAME)
+                            },
                         )
-                        Log.d(TAG, "Heartbeat retry OK")
-                    } catch (_: Exception) {
-                        Log.e(TAG, "Heartbeat retry also failed")
                     }
                 }
             }

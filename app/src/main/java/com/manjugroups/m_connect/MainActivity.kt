@@ -85,6 +85,36 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
 
+    /**
+     * One-shot POST_NOTIFICATIONS prompt (Android 13+). Without this the
+     * app never surfaces the system permission dialog on a fresh install
+     * → token registration silently fails → no push ever arrives. On
+     * grant we re-trigger token sync so the device is reachable.
+     */
+    private val notificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            lifecycleScope.launch {
+                runCatching {
+                    com.manjugroups.m_connect.notifications.PushTokenManager.syncCurrentToken(
+                        this@MainActivity, session
+                    )
+                }
+            }
+        }
+    }
+
+    /** Ask for POST_NOTIFICATIONS once per install on API 33+. */
+    private fun maybeRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.POST_NOTIFICATIONS,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -104,6 +134,13 @@ class MainActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Surface the POST_NOTIFICATIONS system prompt on Android 13+
+        // so the user actually gets push notifications for chats,
+        // tasks, approvals, alerts, etc. The launcher's grant callback
+        // re-runs token registration so the device becomes reachable
+        // the moment permission is granted.
+        maybeRequestNotificationPermission()
 
         // Listen for any API call returning 401 — when that happens
         // the saved session token is no longer valid (expired, revoked,

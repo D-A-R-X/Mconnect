@@ -103,7 +103,15 @@ class HomeViewModel : ViewModel() {
                 val cal = Calendar.getInstance()
                 val monthStart = String.format("%04d-%02d-01", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
                 val myAttendance = try { api.getMyAttendance(bearerToken, fromDate = monthStart, toDate = today) } catch (_: Exception) { null }
+                // Today's row is provisional — the day still has hours to
+                // run, and once midnight passes it enters the RO Team
+                // Approval → HR Review flow before being final. Counting
+                // today the moment you punch in inflates the tile by a
+                // day that hasn't actually closed yet. The web side
+                // already defers today's verdict to the midnight cron;
+                // this mirrors that on mobile.
                 val daysPresent = myAttendance?.records?.count { r ->
+                    if (r.date == today) return@count false
                     r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
                 } ?: 0
 

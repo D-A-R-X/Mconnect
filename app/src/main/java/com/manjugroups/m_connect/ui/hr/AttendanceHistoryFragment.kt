@@ -138,8 +138,19 @@ class AttendanceHistoryFragment : Fragment() {
                 if (resp.success) {
                     val records = resp.records
 
+                    // Today's row is provisional — it hasn't crossed
+                    // midnight yet, so it hasn't entered the RO Team
+                    // Approval → HR Review pipeline. Exclude it from
+                    // the Days Present tile so the aggregate only
+                    // reflects days that have actually closed. Today
+                    // still appears in the list below with its live
+                    // status, but the tile waits for the day to end.
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        .format(Date())
+
                     // Present-day count rules — keep in line with what
                     // the user can read off the HR Overview table:
+                    //   • Today → never count (still in progress).
                     //   • Explicit absent / week-off / holiday → never
                     //     count (this was the 20 May "Approved (absent)"
                     //     bug that inflated the count by one).
@@ -150,6 +161,7 @@ class AttendanceHistoryFragment : Fragment() {
                     //     and were getting hidden from the count just
                     //     because the row hadn't been HR-approved yet.
                     val daysPresent = records.count { r ->
+                        if (r.date == today) return@count false
                         val av = r.approvedAttendance?.lowercase()
                         when (av) {
                             "absent", "weekoff", "holiday" -> false
