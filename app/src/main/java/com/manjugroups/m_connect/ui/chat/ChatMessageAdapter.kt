@@ -173,6 +173,35 @@ class ChatMessageAdapter(
         const val TYPE_SENT = 0
         const val TYPE_RECEIVED = 1
         const val TYPE_DATE = 2
+
+        @Volatile
+        private var fontRegular: android.graphics.Typeface? = null
+        @Volatile
+        private var fontSemibold: android.graphics.Typeface? = null
+
+        fun getFontRegular(context: Context): android.graphics.Typeface {
+            val cached = fontRegular
+            if (cached != null) return cached
+            synchronized(this) {
+                val cached2 = fontRegular
+                if (cached2 != null) return cached2
+                val instance = androidx.core.content.res.ResourcesCompat.getFont(context.applicationContext, R.font.inter_regular)!!
+                fontRegular = instance
+                return instance
+            }
+        }
+
+        fun getFontSemibold(context: Context): android.graphics.Typeface {
+            val cached = fontSemibold
+            if (cached != null) return cached
+            synchronized(this) {
+                val cached2 = fontSemibold
+                if (cached2 != null) return cached2
+                val instance = androidx.core.content.res.ResourcesCompat.getFont(context.applicationContext, R.font.inter_semibold)!!
+                fontSemibold = instance
+                return instance
+            }
+        }
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -238,8 +267,7 @@ class ChatMessageAdapter(
                 binding.tvMessageBody.text = item.data.body
                 binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
                 binding.tvMessageBody.alpha = 1f
-                binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
-                    .getFont(binding.root.context, R.font.inter_regular)
+                binding.tvMessageBody.typeface = getFontRegular(binding.root.context)
             }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
@@ -416,8 +444,7 @@ class ChatMessageAdapter(
                 binding.tvMessageBody.text = item.data.body
                 binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
                 binding.tvMessageBody.alpha = 1f
-                binding.tvMessageBody.typeface = androidx.core.content.res.ResourcesCompat
-                    .getFont(binding.root.context, R.font.inter_regular)
+                binding.tvMessageBody.typeface = getFontRegular(binding.root.context)
             }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
@@ -571,8 +598,7 @@ class ChatMessageAdapter(
             if (isSent) android.graphics.Color.parseColor("#FFFFFF")
             else android.graphics.Color.parseColor("#101828")
         )
-        body.typeface = androidx.core.content.res.ResourcesCompat
-            .getFont(body.context, R.font.inter_regular)
+        body.typeface = getFontRegular(body.context)
         body.setCompoundDrawables(null, null, null, null)
         body.visibility = View.VISIBLE
 
@@ -652,8 +678,7 @@ class ChatMessageAdapter(
         val textColor = if (isSent) "#D1E9FF" else "#8E8E93"
         body.setTextColor(android.graphics.Color.parseColor(textColor))
         body.textSize = 13f
-        body.typeface = androidx.core.content.res.ResourcesCompat
-            .getFont(body.context, R.font.inter_regular)
+        body.typeface = getFontRegular(body.context)
         body.setTypeface(body.typeface, android.graphics.Typeface.ITALIC)
         
         // Load a clean deleted/trash icon next to the text
@@ -1140,7 +1165,7 @@ class ChatMessageAdapter(
             text = ext
             setTextColor(Color.parseColor(badgeTextColor))
             textSize = 10f
-            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            typeface = getFontSemibold(context)
             includeFontPadding = false
         }
         badge.addView(badgeLabel)
@@ -1155,7 +1180,7 @@ class ChatMessageAdapter(
             text = attachment.fileName ?: "Document"
             setTextColor(primaryText)
             textSize = 13f
-            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            typeface = getFontSemibold(context)
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
             includeFontPadding = false
@@ -1168,7 +1193,7 @@ class ChatMessageAdapter(
             text = formatDocMeta(attachment.fileName, mime, attachment.fileSize)
             setTextColor(secondaryText)
             textSize = 11f
-            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_regular)
+            typeface = getFontRegular(context)
             includeFontPadding = false
         }
         infoCol.addView(fileNameView)
@@ -1210,7 +1235,7 @@ class ChatMessageAdapter(
             gravity = android.view.Gravity.CENTER
             setTextColor(actionText)
             textSize = 13f
-            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            typeface = getFontSemibold(context)
             layoutParams = LinearLayout.LayoutParams(0, dp(context, 36), 1f)
             isClickable = true
             isFocusable = true
@@ -1230,7 +1255,7 @@ class ChatMessageAdapter(
             gravity = android.view.Gravity.CENTER
             setTextColor(actionText)
             textSize = 13f
-            typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_semibold)
+            typeface = getFontSemibold(context)
             layoutParams = LinearLayout.LayoutParams(0, dp(context, 36), 1f)
             isClickable = true
             isFocusable = true

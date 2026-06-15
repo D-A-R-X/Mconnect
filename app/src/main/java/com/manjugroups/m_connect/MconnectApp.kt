@@ -22,6 +22,19 @@ class MconnectApp : Application(), ImageLoaderFactory {
                     add(GifDecoder.Factory())
                 }
             }
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.20) // Limit memory cache to 20% of available heap
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(this.cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(512 * 1024 * 1024) // 512 MB disk cache
+                    .build()
+            }
+            .allowRgb565(true) // Save 50% memory per bitmap on low-end devices
+            .crossfade(true)   // Smooth image transition animations
             .build()
     }
 
@@ -29,10 +42,17 @@ class MconnectApp : Application(), ImageLoaderFactory {
         super.onCreate()
         // Force a single visual mode for now: app always runs in light mode.
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        // Drop any session that was minted against a different backend URL so
-        // switching BuildConfig.BASE_URL doesn't leak old-account data through
-        // EncryptedSharedPreferences.
-        SessionManager(this).purgeIfBaseUrlChanged()
+        
+        // Preheat EncryptedSharedPreferences and purge session if BASE_URL changed on a background
+        // thread to prevent heavy Keystore operations from blocking the main thread during startup.
+        java.lang.Thread {
+            try {
+                SessionManager(this@MconnectApp).purgeIfBaseUrlChanged()
+            } catch (e: Exception) {
+                android.util.Log.e("MconnectApp", "Failed to preheat/purge SessionManager", e)
+            }
+        }.start()
+
         PushTokenManager.ensureFirebaseInitialized(this)
         createNotificationChannel()
     }

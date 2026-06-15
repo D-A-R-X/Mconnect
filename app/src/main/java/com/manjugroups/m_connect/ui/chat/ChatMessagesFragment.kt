@@ -113,6 +113,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var isAttachmentMenuOpen = false
     private var hasLoadedMessages = false
     private var isEmojiPanelVisible = false
+    private var isEmojiPickerInitialized = false
     private var isDocumentPickerMode = false
 
     private var mediaRecorder: MediaRecorder? = null
@@ -350,8 +351,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.btnCancelReply.setOnClickListener {
             cancelReply()
         }
-
-        setupEmojiPicker()
 
         binding.btnEmoji.setOnClickListener { toggleEmojiPanel() }
         binding.btnCloseEmojiPanel.setOnClickListener { hideEmojiPanel() }
@@ -969,7 +968,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun setupEmojiPicker() {
-        val emojiPicker = EmojiPickerView(requireContext()).apply {
+        if (isEmojiPickerInitialized) return
+        val context = context ?: return
+        val emojiPicker = EmojiPickerView(context).apply {
             emojiGridColumns = 9
             setOnEmojiPickedListener { emoji ->
                 val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
@@ -978,6 +979,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
         }
         binding.emojiPickerContainer.addView(emojiPicker)
+        isEmojiPickerInitialized = true
     }
 
     private fun toggleEmojiPanel() {
@@ -985,6 +987,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showEmojiPanel() {
+        setupEmojiPicker()
         isEmojiPanelVisible = true
         binding.emojiPanel.visibility = View.VISIBLE
         val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
@@ -1268,9 +1271,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         channelId?.let { "channel-$it" } ?: conversationId?.let { "conversation-$it" }
 
     private fun persistMessageCache() {
+        if (_binding == null) return
         val key = cacheKey() ?: return
         val ctx = context?.applicationContext ?: return
-        ChatMessageCache.save(ctx, key, messages.toList())
+        val messagesCopy = messages.toList()
+        viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            ChatMessageCache.save(ctx, key, messagesCopy)
+        }
     }
 
     private fun showChatHeaderMenu(anchor: View) {
