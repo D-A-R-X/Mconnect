@@ -3002,7 +3002,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun sendMessage() {
         val text = binding.etMessage.text.toString().trim()
         if (text.isEmpty() && pendingAttachments.isEmpty()) return
-        if (isSendingMessage) return
 
         val pendingSnapshot = pendingAttachments.toList()
         val previousText = text
@@ -3014,12 +3013,39 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
 
         binding.etMessage.setText("")
-        if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
         cancelReply()
         renderPendingAttachments()
-        setComposerBusy(true)
         updateSendIcon()
+
+        // Create temporary message for optimistic UI update
+        val tempId = "temp_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}"
+        val tempMessage = MessageData(
+            id = tempId,
+            creationTime = System.currentTimeMillis().toDouble(),
+            body = previousText,
+            senderId = myStaffId,
+            senderName = session.userName,
+            channelId = channelId,
+            conversationId = conversationId,
+            isDeleted = false,
+            isEdited = false,
+            replyCount = 0,
+            parentMessageId = parentId,
+            attachments = pendingSnapshot.map {
+                com.manjugroups.m_connect.network.MessageAttachmentData(
+                    id = "temp_attachment_${it.fileName}",
+                    storageId = it.fileName,
+                    fileName = it.fileName,
+                    fileType = it.fileType,
+                    fileSize = it.fileSize,
+                    url = it.uri.toString()
+                )
+            }
+        )
+
+        messages.add(tempMessage)
+        renderMessages(scrollToBottom = true)
 
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
@@ -3036,24 +3062,29 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
             }.onSuccess { response ->
                 if (!response.success) {
+                    messages.removeAll { it.id == tempId }
+                    renderMessages(scrollToBottom = false)
                     restoreComposer(previousText, pendingSnapshot)
                     toast("Failed to send message")
                     return@onSuccess
                 }
-                appendSentMessage(response.messageId)
+                appendSentMessage(response.messageId, tempId)
                 markRead()
             }.onFailure {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
                 restoreComposer(previousText, pendingSnapshot)
                 toast("Network error while sending")
             }
-
-            setComposerBusy(false)
-            updateSendIcon()
         }
     }
 
-    private suspend fun appendSentMessage(messageId: String?) {
+    private suspend fun appendSentMessage(messageId: String?, tempId: String? = null) {
         if (messageId.isNullOrBlank()) {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
             return
         }
@@ -3062,18 +3093,30 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }.onSuccess { resp ->
             val sent = resp.message
             if (sent == null) {
+                if (tempId != null) {
+                    messages.removeAll { it.id == tempId }
+                    renderMessages(scrollToBottom = false)
+                }
                 loadInitialMessages(scrollToBottom = true)
                 return@onSuccess
             }
-            val existingIndex = messages.indexOfFirst { it.id == sent.id }
-            if (existingIndex >= 0) {
-                messages[existingIndex] = sent
+            val existingIndexByTemp = if (tempId != null) messages.indexOfFirst { it.id == tempId } else -1
+            val existingIndexById = messages.indexOfFirst { it.id == sent.id }
+            
+            if (existingIndexByTemp >= 0) {
+                messages[existingIndexByTemp] = sent
+            } else if (existingIndexById >= 0) {
+                messages[existingIndexById] = sent
             } else {
                 messages.add(sent)
             }
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
             renderMessages(scrollToBottom = true)
         }.onFailure {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
         }
     }
@@ -3109,28 +3152,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         attachments: List<PendingAttachment>
     ) {
         if (_binding == null) return
-        binding.etMessage.setText(text)
+        val currentText = binding.etMessage.text?.toString().orEmpty()
+        val newText = if (currentText.isBlank()) text else "$text\n$currentText"
+        binding.etMessage.setText(newText)
         binding.etMessage.setSelection(binding.etMessage.text?.length ?: 0)
-        pendingAttachments.clear()
         pendingAttachments.addAll(attachments)
         renderPendingAttachments()
         updateSendIcon()
     }
 
     private fun setComposerBusy(isBusy: Boolean) {
-        isSendingMessage = isBusy
-        if (_binding == null) return
-        binding.btnSend.isEnabled = !isBusy
-        binding.btnAttach.isEnabled = !isBusy
-        // Intentionally NOT disabling etMessage. Disabling a focused
-        // EditText causes Android to strip focus + dismiss the IME, so
-        // every send was killing the keyboard and the user had to tap
-        // the field again to type the next message. The isSendingMessage
-        // guard at the top of sendMessage() already prevents double-fires,
-        // so the field can stay enabled — the user can keep typing the
-        // next message while the previous one is still uploading.
-        binding.btnSend.alpha = if (isBusy) 0.6f else 1f
-        binding.btnAttach.alpha = if (isBusy) 0.6f else 1f
+        // Keep it empty to avoid blocking the input field and send button,
+        // allowing smooth WhatsApp-style concurrent background sending.
     }
 
     private fun markRead() {
