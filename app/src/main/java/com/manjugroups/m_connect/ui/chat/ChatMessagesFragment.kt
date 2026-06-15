@@ -3372,8 +3372,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
 
                 val sysBottom = sys.bottom
-                binding.attachPanel.setPadding(0, 0, 0, sysBottom)
-                binding.emojiPanel.setPadding(0, 0, 0, sysBottom)
+                val panelPaddingBottom = if (ime.bottom > sys.bottom) {
+                    ime.bottom
+                } else {
+                    sys.bottom
+                }
+                binding.attachPanel.setPadding(0, 0, 0, panelPaddingBottom)
+                binding.emojiPanel.setPadding(0, 0, 0, panelPaddingBottom)
+
+                val basePanelHeight = dpToPx(280)
+                val totalPanelHeight = basePanelHeight + panelPaddingBottom
+
+                binding.emojiPanel.layoutParams = binding.emojiPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.attachPanel.layoutParams = binding.attachPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.emojiPanel.requestLayout()
+                binding.attachPanel.requestLayout()
 
                 binding.rvMessages.setPadding(
                     binding.rvMessages.paddingLeft,

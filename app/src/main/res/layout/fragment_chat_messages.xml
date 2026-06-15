@@ -791,7 +791,8 @@
                 android:padding="4dp"
                 android:src="@drawable/ic_sheet_close"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                app:tint="#667085" />
+                app:tint="#667085"
+                android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
 

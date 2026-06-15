@@ -23,6 +23,8 @@ class CustomEmojiAdapter(
             )
             gravity = android.view.Gravity.CENTER
             textSize = 30f // Make emojis nice and large!
+            setTextColor(android.graphics.Color.BLACK) // Prevent emoji translucency
+            alpha = 1f                                // Force full opacity
             setPadding(0, 10, 0, 10)
             isClickable = true
             isFocusable = true
