@@ -1227,6 +1227,17 @@ data class AttendanceRecord(
     val lateMinutes: Int? = null,
     val fineAmount: Double? = null,
     val lateFineDeduction: Double? = null,
+    // HR-logged "other fines" — manual deductions for loss of property,
+    // indiscipline, etc. Server attributes each fine to its createdAt
+    // date so it lands on the right attendance card. Mobile renders one
+    // blue banner row per entry under the late-fine banner.
+    val otherFines: List<OtherFineData>? = null,
+)
+
+data class OtherFineData(
+    val typeName: String? = null,
+    val amount: Double? = null,
+    val notes: String? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -1430,6 +1441,10 @@ data class MyPermissionsResponse(val success: Boolean, val total: Int?, val perm
 data class PermissionData(
     @SerializedName("_id") val id: String?,
     val permissionId: String? = null,
+    // Authoritative owner of the row. The mobile filters its "My
+    // Permissions" view against this so a misbehaving backend can't
+    // leak other staff's slips into the user's list.
+    val staffId: String? = null,
     val staffName: String? = null,
     val date: String?,
     val fromTime: String?,

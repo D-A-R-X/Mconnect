@@ -230,6 +230,14 @@ class AttendanceHistoryFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvHistoryItemRange).text =
                 "$inLabel · $outLabel"
 
+            // Present (HR-approved) / Absent (zero-worked) pill on each
+            // past-day card. Today's row stays unbadged because the day
+            // is still running.
+            AttendanceStatusBadge.bind(
+                card.findViewById(R.id.tvHistoryItemStatus),
+                record,
+            )
+
             // Open the punch-event log sheet on tap — mirrors the web
             // popup that lists every individual IN/OUT event with its
             // source chip and time.
@@ -278,6 +286,13 @@ class AttendanceHistoryFragment : Fragment() {
                 llFinesBanner.visibility = View.GONE
             }
 
+            // Other fines — manual HR deductions attributed to this
+            // day's date. Inflate one blue row per entry beneath the
+            // late-fine banner so the staff sees each deduction (loss
+            // of property, indiscipline, etc.) as its own line item
+            // matching the iOS UX.
+            renderOtherFines(card, record.otherFines.orEmpty())
+
             // Decision footer — surfaces "Approved/Rejected at <date>
             // By <approver>" on terminal rows. Mirrors the leaves
             // history card's footer so the two surfaces feel like one
@@ -286,6 +301,88 @@ class AttendanceHistoryFragment : Fragment() {
             bindDecisionFooter(card, record)
 
             binding.attendanceList.addView(card)
+        }
+    }
+
+    /**
+     * Inflate one row per HR-logged "Other Fine" into the attendance
+     * card's vertical container. Each row mirrors the late-fine banner
+     * styling but uses the blue bg_other_fine_banner drawable so the
+     * staff can distinguish a punctuality penalty from a manual HR
+     * deduction at a glance. The container hides itself when no fines
+     * landed on this date.
+     */
+    private fun renderOtherFines(
+        card: View,
+        fines: List<com.manjugroups.m_connect.network.OtherFineData>,
+    ) {
+        val container = card.findViewById<android.widget.LinearLayout>(R.id.llOtherFinesContainer)
+        container.removeAllViews()
+        val visible = fines.filter { (it.amount ?: 0.0) > 0 }
+        if (visible.isEmpty()) {
+            container.visibility = View.GONE
+            return
+        }
+        container.visibility = View.VISIBLE
+        val density = resources.displayMetrics.density
+        val topMarginPx = (8 * density).toInt()
+        val padHPx = (12 * density).toInt()
+        val padVPx = (8 * density).toInt()
+        val iconPx = (14 * density).toInt()
+        val textMarginPx = (6 * density).toInt()
+        val amountMarginPx = (4 * density).toInt()
+        val blue = android.graphics.Color.parseColor("#0B61CA")
+        for (fine in visible) {
+            val row = android.widget.LinearLayout(requireContext()).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(padHPx, padVPx, padHPx, padVPx)
+                setBackgroundResource(R.drawable.bg_other_fine_banner)
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = topMarginPx }
+            }
+            val icon = android.widget.ImageView(requireContext()).apply {
+                setImageResource(R.drawable.ic_clock)
+                imageTintList = android.content.res.ColorStateList.valueOf(blue)
+                layoutParams = android.widget.LinearLayout.LayoutParams(iconPx, iconPx)
+            }
+            val label = TextView(requireContext()).apply {
+                text = fine.typeName?.takeIf { it.isNotBlank() } ?: "Other Fine"
+                setTextColor(blue)
+                textSize = 12f
+                typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                    requireContext(), R.font.inter_medium,
+                )
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ).apply { marginStart = textMarginPx }
+            }
+            val receipt = android.widget.ImageView(requireContext()).apply {
+                setImageResource(R.drawable.ic_receipt_red)
+                imageTintList = android.content.res.ColorStateList.valueOf(blue)
+                layoutParams = android.widget.LinearLayout.LayoutParams(iconPx, iconPx)
+            }
+            val amount = TextView(requireContext()).apply {
+                text = "Fine : ₹${(fine.amount ?: 0.0).toInt()}"
+                setTextColor(blue)
+                textSize = 12f
+                typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                    requireContext(), R.font.inter_medium,
+                )
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = amountMarginPx }
+            }
+            row.addView(icon)
+            row.addView(label)
+            row.addView(receipt)
+            row.addView(amount)
+            container.addView(row)
         }
     }
 

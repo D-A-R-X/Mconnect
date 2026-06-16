@@ -264,10 +264,26 @@ class PermissionsFragment : Fragment() {
         //   • Scope.TEAM → team pending approvals (Approve/Reject UI),
         //                   skipping the status filter since the
         //                   server only returns pending rows there.
+        // Defense in depth — the server's GET /api/hr/permissions has
+        // historically leaked the whole org's permissions when called
+        // without ?staffId=. Even after that endpoint is fixed, we
+        // sanitize on the client so My scope can NEVER show another
+        // staff's row. Team / All keep the full server response since
+        // those scopes are explicitly cross-staff.
+        val mySelfId = session.staffId?.takeIf { it.isNotBlank() }
+        val mineOnly = state.myPermissions.filter { row ->
+            val owner = row.staffId
+            // If the row's staffId matches the logged-in user → keep.
+            // If owner is null AND staffName is blank → treat as the
+            // user's own (legacy rows without denormalised staffId).
+            (mySelfId != null && owner == mySelfId)
+                || (owner == null && row.staffName.isNullOrBlank())
+        }
+
         val displayPermissions = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else when (scope) {
-            Scope.MY -> filterHistoryPermissions(state.myPermissions)
+            Scope.MY -> filterHistoryPermissions(mineOnly)
             Scope.TEAM -> filterHistoryPermissions(state.pendingApprovals)
             Scope.ALL -> {
                 val combined = state.myPermissions + state.pendingApprovals

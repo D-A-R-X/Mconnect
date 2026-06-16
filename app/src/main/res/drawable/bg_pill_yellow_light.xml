@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Yellow companion to bg_pill_green_light / bg_pill_red_light, used
+  on the attendance day cards to mark a Pending verdict — a past
+  day where the staff clocked in but never clocked out, and HR
+  hasn't reviewed it yet. Visually distinct from the red Absent so
+  the staff can tell "missing punch" from "marked absent".
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFAEB" />
+    <corners android:radius="16dp" />
+</shape>

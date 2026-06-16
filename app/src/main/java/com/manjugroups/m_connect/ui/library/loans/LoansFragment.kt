@@ -224,6 +224,11 @@ class LoansFragment : Fragment() {
             binding.tvHeroNextEmiLabel.text = "Next Due Date"
             binding.tvPreviousLoansLabel.text = "Previous Advances"
         }
+        // Rename the Requested Loans section so a salary-advance request
+        // doesn't show under a "Requested Loans" header on the Advance
+        // tab — matches the iOS UX and the rest of this screen's labels.
+        binding.tvRequestedLoansTitle.text =
+            if (selectedTab == TAB_LOANS) "Requested Loans" else "Requested Advances"
     }
 
     private fun render() {
@@ -274,12 +279,14 @@ class LoansFragment : Fragment() {
             binding.inlineLoansEmptyState.setTitle(
                 if (selectedTab == TAB_LOANS) "No Loans Yet" else "No Advances Yet"
             )
+            // Subtitle copy mirrors the iOS empty-state design the user
+            // pinned as canonical — same wording on both tabs so the
+            // visual feels consistent when the staff toggles between
+            // Loans and Advance without records on either side.
             binding.inlineLoansEmptyState.setDescription(
-                if (selectedTab == TAB_LOANS) {
-                    "When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
-                } else {
-                    "When your finance team disburses a salary advance, you'll see it grouped here with due dates."
-                },
+                "Stay organized by creating or joining teams. " +
+                    "Groups help you manage tasks, track progress, " +
+                    "and collaborate with your team in one place.",
             )
             binding.heroActiveCard.visibility = View.GONE
             binding.heroActiveCard.setOnClickListener(null)
@@ -324,12 +331,6 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
-                
-                binding.btnCancelLoan.visibility = View.VISIBLE
-                binding.btnCancelLoan.setOnClickListener {
-                    cancelLoan(loan.id)
-                }
-                
                 updateTrackerState(loan)
             }
             else -> {
@@ -338,9 +339,17 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
                 binding.heroActiveDetails.visibility = View.VISIBLE
                 binding.heroPendingTracker.visibility = View.GONE
-                
-                binding.btnCancelLoan.visibility = View.GONE
             }
+        }
+
+        // Delete affordance — same UI + confirm pattern as My
+        // Permissions. Surfaced on every status (pending + active)
+        // so the staff can withdraw a request OR retract a record
+        // they no longer want shown. Backend enforces what's actually
+        // deletable; UI just exposes the entry point.
+        binding.btnCancelLoan.visibility = View.VISIBLE
+        binding.btnCancelLoan.setOnClickListener {
+            showCancelLoanDialog(loan.id, loan.isAdvance)
         }
 
         binding.tvHeroOutstanding.text = LoansAdapter.formatRupees(loan.outstandingBalance)
@@ -427,6 +436,30 @@ class LoansFragment : Fragment() {
         
         // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
         setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+    }
+
+    /** Mirrors the My Permissions cancel flow: reuses
+     *  dialog_cancel_leave for the confirmation, then routes to
+     *  cancelLoan() which calls the backend. */
+    private fun showCancelLoanDialog(loanId: String, isAdvance: Boolean) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogView.findViewById<TextView?>(R.id.tvDialogTitle)?.text =
+            if (isAdvance) "Delete this advance?" else "Delete this loan?"
+
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            cancelLoan(loanId)
+        }
+        dialog.show()
     }
 
     private fun cancelLoan(loanId: String) {

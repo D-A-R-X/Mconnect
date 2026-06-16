@@ -33,6 +33,26 @@
             android:textColor="#101828"
             android:textSize="13sp" />
 
+        <!-- Status pill (Present / Absent / Half-day / Week Off / Holiday).
+             Visibility + background + text are set programmatically by the
+             fragment per row. Stays gone for today's row and for past
+             rows still awaiting HR review with non-zero worked time. -->
+        <TextView
+            android:id="@+id/tvHistoryItemStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_pill_green_light"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:textColor="#067647"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="Present"
+            tools:visibility="visible" />
+
         <LinearLayout
             android:id="@+id/badgeRemarkSubmitted"
             android:layout_width="wrap_content"
@@ -186,6 +206,16 @@
             android:textSize="12sp"
             tools:text="Fine : ₹700" />
     </LinearLayout>
+
+    <!-- Other fines container — populated programmatically with one
+         row per HR-logged deduction the server returns under
+         record.otherFines. Stays gone when the list is empty. -->
+    <LinearLayout
+        android:id="@+id/llOtherFinesContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone" />
 
     <!--
       Decision footer — visible only on approved / rejected rows.
