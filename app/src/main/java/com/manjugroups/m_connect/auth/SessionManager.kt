@@ -195,6 +195,15 @@ class SessionManager(context: Context) {
         get() = getCachedString(KEY_ON_DUTY_VEHICLE_TYPE, null)
         set(value) = setCachedString(KEY_ON_DUTY_VEHICLE_TYPE, value)
 
+    // geoTrips _id returned by /api/geotrack/on-duty/start. Cached so
+    // Complete On Duty can pass it back to the server's complete route.
+    // The server tolerates a missing id and falls back to the staff's
+    // most recent active no-fieldVisit trip — this just makes the call
+    // unambiguous.
+    var onDutyTripId: String?
+        get() = prefs.getString(KEY_ON_DUTY_TRIP_ID, null)
+        set(value) = prefs.edit().putString(KEY_ON_DUTY_TRIP_ID, value).apply()
+
     fun clearOnDutyDetails() {
         memoryCache.remove(KEY_IS_ON_DUTY)
         memoryCache.remove(KEY_ON_DUTY_TYPE)
@@ -209,6 +218,7 @@ class SessionManager(context: Context) {
             .remove(KEY_ON_DUTY_TARGET_ID)
             .remove(KEY_ON_DUTY_VEHICLE_OWNERSHIP)
             .remove(KEY_ON_DUTY_VEHICLE_TYPE)
+            .remove(KEY_ON_DUTY_TRIP_ID)
             .apply()
     }
 
@@ -465,5 +475,6 @@ class SessionManager(context: Context) {
         private const val KEY_ON_DUTY_TARGET_ID = "on_duty_target_id"
         private const val KEY_ON_DUTY_VEHICLE_OWNERSHIP = "on_duty_vehicle_ownership"
         private const val KEY_ON_DUTY_VEHICLE_TYPE = "on_duty_vehicle_type"
+        private const val KEY_ON_DUTY_TRIP_ID = "on_duty_trip_id"
     }
 }

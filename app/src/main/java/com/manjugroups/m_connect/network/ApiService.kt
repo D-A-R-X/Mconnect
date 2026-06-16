@@ -85,6 +85,22 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): VendorsResponse
 
+    // On-Duty trip lifecycle — creates / closes a free-standing geoTrips
+    // row so the HR Attendance modal shows the on-duty session in its
+    // Trips strip alongside site-visit trips (with status, distance and
+    // route polyline derived from the locationPoints stream).
+    @POST("api/geotrack/on-duty/start")
+    suspend fun startOnDutyTrip(
+        @Header("Authorization") token: String,
+        @Body body: StartOnDutyTripRequest,
+    ): StartOnDutyTripResponse
+
+    @POST("api/geotrack/on-duty/complete")
+    suspend fun completeOnDutyTrip(
+        @Header("Authorization") token: String,
+        @Body body: CompleteOnDutyTripRequest,
+    ): CompleteOnDutyTripResponse
+
     @POST("api/hr/attendance/punch-in")
     suspend fun punchIn(
         @Header("Authorization") token: String,
@@ -1124,6 +1140,44 @@ data class VendorRemote(
     val status: String? = null,
 )
 
+// On-Duty trip lifecycle payloads. The server stamps a geoTrips row with
+// status="active" on start and patches it to "completed" with distance
+// computed from the locationPoints stream on complete.
+data class StartOnDutyTripRequest(
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+    val category: String? = null, // "Projects" | "Vendors" | "Others"
+    val targetId: String? = null,
+    val targetName: String? = null,
+    val targetAddress: String? = null,
+    val vehicleOwnership: String? = null, // "Own Vehicle" | "Office Vehicle"
+    val vehicleType: String? = null,      // "2 Wheeler" | "4 Wheeler"
+)
+
+data class StartOnDutyTripResponse(
+    val success: Boolean = false,
+    val tripId: String? = null,
+    val alreadyActive: Boolean = false,
+    val error: String? = null,
+)
+
+data class CompleteOnDutyTripRequest(
+    val tripId: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+)
+
+data class CompleteOnDutyTripResponse(
+    val success: Boolean = false,
+    val tripId: String? = null,
+    val distanceMeters: Long? = null,
+    val alreadyCompleted: Boolean = false,
+    val reason: String? = null,
+    val error: String? = null,
+)
+
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
 
@@ -1630,7 +1684,11 @@ data class ConversationData(
     val lastMessageSenderId: String? = null,
     val participants: List<ParticipantData>?
 )
-data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?, val photo: String? = null)
+data class ParticipantData(
+    @SerializedName("_id") val id: String?,
+    val name: String?,
+    val photo: String? = null
+)
 data class MessagesResponse(
     val success: Boolean,
     val page: List<MessageData>? = null,

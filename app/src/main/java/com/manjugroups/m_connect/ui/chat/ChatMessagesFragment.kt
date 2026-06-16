@@ -2177,11 +2177,20 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         fallbackStamp = conversation?.lastMessageAt
                     )
 
+                    // Use the photo embedded in the conversation
+                    // response first — server already resolved the
+                    // storage id to a public URL, so the avatar
+                    // renders without waiting for a second round-trip.
+                    photoUrl = participant?.photo?.takeIf { it.isNotBlank() }
+
                     val staffId = otherStaffId
                     if (staffId != null) {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffResp.staff?.photo)
+                            val staffPhoto = staffResp.staff?.photo
+                            if (!staffPhoto.isNullOrBlank()) {
+                                photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffPhoto)
+                            }
                             otherStaffPhone = staffResp.staff?.phone
                         }
                     }

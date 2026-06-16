@@ -212,10 +212,11 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         }
 
         binding.btnSelfieClockIn.setOnClickListener {
-            // Button stays visually active. Refuse the tap with a
-            // top-of-screen Toast if the user is inside their home fence.
+            // Button stays visually active. Refuse the tap with the
+            // "You are at Home!" warning dialog if the user is inside
+            // their home fence.
             if (isInsideHomeFence) {
-                showTopToast("Move away from home to clock in")
+                HomeFenceWarningDialog.show(parentFragmentManager)
                 return@setOnClickListener
             }
             beginPunchCapture(PunchMode.PUNCH_IN)
