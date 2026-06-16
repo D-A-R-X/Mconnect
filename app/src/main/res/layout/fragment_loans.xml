@@ -618,10 +618,9 @@
                             android:id="@+id/advanceStepHr"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:minWidth="110dp"
                             android:background="@drawable/bg_advance_step_pending"
                             android:orientation="horizontal"
-                            android:gravity="center"
+                            android:gravity="center_vertical"
                             android:paddingHorizontal="16dp"
                             android:paddingVertical="8dp">
 
@@ -654,10 +653,9 @@
                             android:id="@+id/advanceStepAccs"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:minWidth="110dp"
                             android:background="@drawable/bg_advance_step_pending"
                             android:orientation="horizontal"
-                            android:gravity="center"
+                            android:gravity="center_vertical"
                             android:paddingHorizontal="16dp"
                             android:paddingVertical="8dp">
 
