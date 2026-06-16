@@ -34,11 +34,15 @@ class LoansFragment : Fragment() {
     // Raw lists loaded from API
     private val allActive = mutableListOf<Loan>()
     private val allPrevious = mutableListOf<Loan>()
-    
+    // Raw pending-approvals list (loans + advances both, exactly as
+    // returned by the backend). The visible adapter gets a per-tab
+    // slice in render(); this is the source of truth.
+    private val allPending = mutableListOf<com.manjugroups.m_connect.network.LoanData>()
+
     // Filtered lists for the active tab
     private val active = mutableListOf<Loan>()
     private val previous = mutableListOf<Loan>()
-    
+
     private var loaded = false
 
     private val TAB_LOANS = 0
@@ -252,7 +256,19 @@ class LoansFragment : Fragment() {
         binding.loansEmptyState.visibility = View.GONE
         binding.loansContent.visibility = View.VISIBLE
 
-        val bothEmpty = active.isEmpty() && previous.isEmpty()
+        // Re-slice pending approvals against the new tab so a loan
+        // request never lingers on the Advance tab (and vice versa).
+        renderPendingApprovals()
+
+        // Empty state shows ONLY when there's truly nothing on this
+        // tab — neither user-owned loans NOR a pending-approval card
+        // belonging to this tab. Showing the empty graphic below an
+        // already-visible request card was misleading.
+        val pendingOnThisTab = allPending.any {
+            val isAdv = it.requestType?.lowercase()?.trim() == "salary_advance"
+            if (selectedTab == TAB_LOANS) !isAdv else isAdv
+        }
+        val bothEmpty = active.isEmpty() && previous.isEmpty() && !pendingOnThisTab
         if (bothEmpty) {
             binding.inlineLoansEmptyState.visibility = View.VISIBLE
             binding.inlineLoansEmptyState.setTitle(
@@ -435,22 +451,35 @@ class LoansFragment : Fragment() {
             runCatching { api.getPendingLoanApprovals(token) }
                 .onSuccess { response ->
                     if (_binding == null) return@onSuccess
-                    val pending = response.pending
-                    requestedLoansAdapter.submitList(pending)
-                    // The Pending Approvals section only appears when this
-                    // user actually has loans to act on (the backend decided
-                    // that by their role + each loan's stage).
-                    binding.layoutRequestedLoans.visibility =
-                        if (pending.isEmpty()) View.GONE else View.VISIBLE
+                    allPending.clear()
+                    allPending.addAll(response.pending)
+                    renderPendingApprovals()
                 }
                 .onFailure {
                     if (_binding == null) return@onFailure
                     // No approvals to show (or a transient error) — hide the
                     // section silently; most staff never approve loans.
-                    requestedLoansAdapter.submitList(emptyList())
-                    binding.layoutRequestedLoans.visibility = View.GONE
+                    allPending.clear()
+                    renderPendingApprovals()
                 }
         }
+    }
+
+    /** Push the per-tab slice of pending approvals into the adapter.
+     *  A loan request goes on the Loans tab, a salary-advance request
+     *  on the Advance tab — driven by LoanData.requestType the same
+     *  way the user's own active/previous lists are split. Section
+     *  hides when the slice is empty so the tab doesn't show a
+     *  request that belongs to the other tab. */
+    private fun renderPendingApprovals() {
+        if (_binding == null) return
+        val slice = allPending.filter { isAdvance ->
+            val isAdv = isAdvance.requestType?.lowercase()?.trim() == "salary_advance"
+            if (selectedTab == TAB_LOANS) !isAdv else isAdv
+        }
+        requestedLoansAdapter.submitList(slice)
+        binding.layoutRequestedLoans.visibility =
+            if (slice.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {

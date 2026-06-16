@@ -1709,7 +1709,13 @@ data class MessageData(
     val isDeleted: Boolean?, val isEdited: Boolean?,
     val replyCount: Int?, val parentMessageId: String?,
     val attachments: List<MessageAttachmentData>? = null,
-    val reactions: List<ReactionData>? = null
+    val reactions: List<ReactionData>? = null,
+    // Local-only optimistic-send fields. Never serialised back to the
+    // server (Gson ignores Transient + nulls). When set, the UI marks
+    // the bubble as pending (clock icon) and the ChatPendingQueue is
+    // the source of truth for retrying delivery.
+    @Transient val localPendingId: String? = null,
+    @Transient val hasFailed: Boolean = false,
 )
 data class MessageAttachmentData(
     @SerializedName("_id") val id: String? = null,

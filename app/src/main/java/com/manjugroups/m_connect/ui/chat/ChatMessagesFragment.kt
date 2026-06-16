@@ -1797,6 +1797,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
         }
         startPolling()
+        // Take a swing at the offline outbox every time the user opens
+        // / returns to this chat — most of the time it's empty; when
+        // it isn't, we send what's pending in queued order.
+        flushPendingMessages()
+        registerChatNetworkCallback()
     }
 
     override fun onPause() {
@@ -1804,7 +1809,40 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         pollJob = null
         typingDebounceJob?.cancel()
         typingDebounceJob = null
+        unregisterChatNetworkCallback()
         super.onPause()
+    }
+
+    private var chatNetworkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
+    /** Listen for connectivity gain → immediately flush the chat outbox
+     *  so the user doesn't have to wait for the next manual screen open. */
+    private fun registerChatNetworkCallback() {
+        if (chatNetworkCallback != null) return
+        val cm = requireContext().getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                if (_binding == null) return
+                requireActivity().runOnUiThread { flushPendingMessages() }
+            }
+        }
+        try {
+            val req = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(req, cb)
+            chatNetworkCallback = cb
+        } catch (_: Exception) { /* permission / API edge case — ignore */ }
+    }
+
+    private fun unregisterChatNetworkCallback() {
+        val cb = chatNetworkCallback ?: return
+        try {
+            requireContext().getSystemService(android.net.ConnectivityManager::class.java)
+                ?.unregisterNetworkCallback(cb)
+        } catch (_: Exception) {}
+        chatNetworkCallback = null
     }
 
     private var attachTilesWired = false
@@ -3153,20 +3191,31 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             localAttachmentUriMap[attachment.fileName] = attachment.uri.toString()
         }
 
+        // Clear composer state IMMEDIATELY (WhatsApp-style) — the user
+        // can keep typing the next message without waiting on the
+        // network. The optimistic bubble is rendered below; the real
+        // server send runs in the background and replaces it on success.
         binding.etMessage.setText("")
         pendingAttachments.clear()
         cancelReply()
         renderPendingAttachments()
         updateSendIcon()
 
-        // Create temporary message for optimistic UI update
-        val tempId = "temp_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}"
-        val tempMessage = MessageData(
-            id = tempId,
-            creationTime = System.currentTimeMillis().toDouble(),
+        // Build the optimistic message — a local-only MessageData with a
+        // UUID id + senderId=self + creationTime=now. The adapter reads
+        // localPendingId to flag this bubble as "sending…" until either
+        // the API confirms (replace) or stays unsent (leave as-is for
+        // the retry queue to handle later).
+        val localId = "local-" + java.util.UUID.randomUUID().toString()
+        val nowEpochMicro = System.currentTimeMillis().toDouble()
+        val myStaffId = session.staffId
+        val myName = session.userName
+        val optimistic = com.manjugroups.m_connect.network.MessageData(
+            id = localId,
+            creationTime = nowEpochMicro,
             body = previousText,
             senderId = myStaffId,
-            senderName = session.userName,
+            senderName = myName,
             channelId = channelId,
             conversationId = conversationId,
             isDeleted = false,
@@ -3174,6 +3223,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             replyCount = 0,
             parentMessageId = parentId,
             attachments = pendingSnapshot.map {
+                // Local preview attachments so the optimistic bubble
+                // shows the picked file immediately. The real upload
+                // happens below; on success the server-confirmed message
+                // replaces these with proper storage IDs + URLs.
                 com.manjugroups.m_connect.network.MessageAttachmentData(
                     id = "temp_attachment_${it.fileName}",
                     storageId = it.fileName,
@@ -3182,14 +3235,30 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     fileSize = it.fileSize,
                     url = it.uri.toString()
                 )
-            }
+            }.ifEmpty { null },
+            reactions = null,
+            localPendingId = localId,
         )
-
-        messages.add(tempMessage)
+        messages.add(optimistic)
         renderMessages(scrollToBottom = true)
 
+        // Persist into the offline queue FIRST so a process-death
+        // between here and the API call doesn't lose the message.
+        // Attachment-bearing sends still take the legacy path (one-shot
+        // upload + send) — for plain text we use the queue.
+        val ctx = requireContext().applicationContext
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching {
+            if (pendingSnapshot.isEmpty()) {
+                ChatPendingQueue.enqueue(
+                    context = ctx,
+                    localId = localId,
+                    conversationId = conversationId,
+                    channelId = channelId,
+                    body = previousText,
+                    parentMessageId = parentId,
+                )
+            }
+            val result = runCatching {
                 val uploadedAttachments = uploadPendingAttachments(pendingSnapshot)
                 api.sendMessage(
                     token = session.bearerToken,
@@ -3198,25 +3267,88 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         conversationId = conversationId,
                         body = previousText,
                         parentMessageId = parentId,
-                        attachments = uploadedAttachments
-                    )
+                        attachments = uploadedAttachments,
+                    ),
                 )
-            }.onSuccess { response ->
+            }
+            result.onSuccess { response ->
                 if (!response.success) {
-                    messages.removeAll { it.id == tempId }
-                    renderMessages(scrollToBottom = false)
-                    restoreComposer(previousText, pendingSnapshot)
-                    toast("Failed to send message")
+                    markOptimisticFailed(localId)
+                    toast("Will retry when online")
                     return@onSuccess
                 }
-                appendSentMessage(response.messageId, tempId)
+                // Replace the optimistic bubble with the server-confirmed
+                // version + drop the queue row.
+                if (pendingSnapshot.isEmpty()) {
+                    ChatPendingQueue.confirmSent(ctx, localId)
+                }
+                replaceOptimisticWithServer(localId, response.messageId)
                 markRead()
             }.onFailure {
-                messages.removeAll { it.id == tempId }
-                renderMessages(scrollToBottom = false)
-                restoreComposer(previousText, pendingSnapshot)
-                toast("Network error while sending")
+                // Network down / 5xx / etc — leave the row in the queue.
+                // onResume + the NetworkCallback below will drain it once
+                // connectivity is back. The UI shows pending until then.
+                markOptimisticFailed(localId)
             }
+        }
+    }
+
+    /** Find the optimistic placeholder and replace it with the real
+     *  server message (fetched by id) so the bubble's metadata
+     *  (creationTime, reactions, etc.) matches the persisted row. */
+    private suspend fun replaceOptimisticWithServer(localId: String, serverMessageId: String?) {
+        val idx = messages.indexOfFirst { it.localPendingId == localId }
+        if (idx < 0) {
+            if (serverMessageId != null) appendSentMessage(serverMessageId)
+            return
+        }
+        if (serverMessageId.isNullOrBlank()) {
+            // Still flip pending off so the bubble doesn't show "sending"
+            // forever — the next message poll will replace it with the
+            // real row.
+            messages[idx] = messages[idx].copy(localPendingId = null)
+            renderMessages(scrollToBottom = false)
+            return
+        }
+        runCatching { api.getMessage(session.bearerToken, serverMessageId) }
+            .onSuccess { resp ->
+                val sent = resp.message
+                if (sent != null) {
+                    messages[idx] = sent
+                    latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 }
+                        ?: latestMessageTime
+                    renderMessages(scrollToBottom = false)
+                } else {
+                    messages[idx] = messages[idx].copy(localPendingId = null)
+                    renderMessages(scrollToBottom = false)
+                }
+            }
+            .onFailure {
+                messages[idx] = messages[idx].copy(localPendingId = null)
+                renderMessages(scrollToBottom = false)
+            }
+    }
+
+    /** Mark the optimistic bubble as "failed but pending" so the adapter
+     *  can render a retry indicator. Leaves the queue row in place. */
+    private fun markOptimisticFailed(localId: String) {
+        val idx = messages.indexOfFirst { it.localPendingId == localId }
+        if (idx >= 0) {
+            messages[idx] = messages[idx].copy(hasFailed = true)
+            renderMessages(scrollToBottom = false)
+        }
+    }
+
+    /** Drain the offline outbox via ChatPendingQueue and update the UI
+     *  for any optimistic bubbles that finally land. */
+    private fun flushPendingMessages() {
+        val ctx = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                ChatPendingQueue.flush(ctx) { localId, serverMessageId ->
+                    replaceOptimisticWithServer(localId, serverMessageId)
+                }
+            } catch (_: Exception) { /* network blip — try next time */ }
         }
     }
 

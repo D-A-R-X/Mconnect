@@ -20,7 +20,60 @@ import android.util.Log
 
 object PushTokenManager {
 
+    // Legacy single channel — kept for backwards compatibility on older
+    // build payloads that don't carry a `type` field, AND as the default
+    // fallback in MconnectFirebaseMessagingService when the FCM data
+    // payload has no recognised type tag.
     const val CHANNEL_ID = "hr_workflow_notifications"
+
+    // ── Per-type channels — created at app boot in MconnectApp. ──
+    // Splitting these out lets the user toggle each category in system
+    // Settings → Apps → Notifications, and gives chats / alerts the
+    // heads-up behaviour they need while keeping background informational
+    // pings quiet. The FCM data payload's "type" field routes here.
+    const val CHANNEL_CHAT      = "mconnect_chat"
+    const val CHANNEL_TASKS     = "mconnect_tasks"
+    const val CHANNEL_VISITS    = "mconnect_visits"
+    const val CHANNEL_APPROVALS = "mconnect_approvals"
+    const val CHANNEL_LOANS     = "mconnect_loans"
+    const val CHANNEL_ALERTS    = "mconnect_alerts"
+
+    /**
+     * Map a server-side notification `type` to a channel id. Unknown
+     * types fall back to the legacy general channel so a new server-side
+     * notification type never silently disappears on the device — the
+     * user still sees it, just on the general channel.
+     */
+    fun channelForType(type: String?): String = when (type) {
+        // Chat — server emits `chat-dm` for direct-message pushes and
+        // `chat-channel` for channel fan-outs; `chat-mention` is the
+        // @-mention path. Earlier the canonical keys were only
+        // `chat-message` / `channel-message`, but the convex chat layer
+        // now uses the more descriptive ones — keep both so older
+        // payloads still route to the chat channel instead of falling
+        // through to the legacy general channel (which doesn't bubble
+        // a heads-up display, the visible symptom the user reported).
+        "chat-message", "chat-mention", "channel-message",
+        "chat-dm", "chat-channel" -> CHANNEL_CHAT
+        // Tasks / daily work
+        "task-assigned", "daily-task", "task-due" -> CHANNEL_TASKS
+        // Visits (CP / SV)
+        "cp-visit-assigned", "site-visit-assigned", "field-visit",
+        "client-place-visit" -> CHANNEL_VISITS
+        // Approvals / requests (leave, permission, WFH, attendance)
+        "leave-request", "leave-decision",
+        "permission-request", "permission-decision",
+        "wfh-request", "wfh-decision",
+        "attendance-review", "attendance-correction" -> CHANNEL_APPROVALS
+        // Loans / advance
+        "loan-needs-review", "loan-approval-needed",
+        "loan-decision", "loan-disbursed" -> CHANNEL_LOANS
+        // Real-time alerts (tamper, on-duty, geotrack)
+        "geotrack-tamper-alert", "on-duty-started",
+        "on-duty-completed", "near-planned-visit" -> CHANNEL_ALERTS
+        else -> CHANNEL_ID
+    }
+
     private val api by lazy { ApiService.create() }
 
     fun ensureFirebaseInitialized(context: Context): Boolean {

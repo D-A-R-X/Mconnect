@@ -42,6 +42,27 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var selectedProject: MarketingProject? = null
     private var selectedDate: String = ""
     private var selectedTime: String = ""
+    // CP Type — visit intent enum (sv_cum_cp / follow_up / booking_cp /
+    // collection_cp / old_client / gift_distribution). Optional; null
+    // means no type was picked and the server stores the row without it.
+    private var selectedCpType: CpTypeOption? = null
+
+    /** CP visit intent enum shared with the web form. The `id` is the
+     *  wire value sent to convex; `label` is what the picker shows. */
+    private data class CpTypeOption(
+        val id: String,
+        val label: String,
+        val sublabel: String,
+    )
+
+    private val cpTypeOptions = listOf(
+        CpTypeOption("sv_cum_cp", "SV cum CP", "Combo site visit + CP"),
+        CpTypeOption("follow_up", "Follow-up", "Continues a postponed client"),
+        CpTypeOption("booking_cp", "Booking CP", "Paperwork run for an active booking"),
+        CpTypeOption("collection_cp", "Collection CP", "Payment chase at client place"),
+        CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
+        CpTypeOption("gift_distribution", "Gift Distribution", "Loyalty drop-off"),
+    )
 
     // Caches for fast display
     private var staffCache: List<StaffData> = emptyList()
@@ -76,6 +97,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etPhone = view.findViewById<EditText>(R.id.etClientPhone)
         val etStaff = view.findViewById<EditText>(R.id.etFieldStaff)
         val etProj = view.findViewById<EditText>(R.id.etProject)
+        val etCpType = view.findViewById<EditText>(R.id.etCpType)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
 
         val etDoorNo = view.findViewById<EditText>(R.id.etDoorNo)
@@ -116,6 +138,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
         etProj.setOnClickListener { pickProject(etProj) }
+        etCpType.setOnClickListener { pickCpType(etCpType) }
         etDateTime.setOnClickListener { pickDateTime(etDateTime) }
 
         btnCancel.setOnClickListener { dismissAllowingStateLoss() }
@@ -210,7 +233,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             visitLng = lngVal,
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
-                            projectId = project.id
+                            projectId = project.id,
+                            cpType = selectedCpType?.id,
                         )
                     )
                     btnSubmit.isEnabled = true
@@ -304,6 +328,25 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { project ->
             selectedProject = project
             label.setText(project.name ?: "Selected")
+        }
+    }
+
+    private fun pickCpType(label: EditText) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select CP type",
+            options = cpTypeOptions.map { opt ->
+                SearchableOption(
+                    item = opt,
+                    title = opt.label,
+                    subtitle = opt.sublabel,
+                    keywords = opt.id + " " + opt.label + " " + opt.sublabel,
+                )
+            },
+            emptyMessage = "No CP types available",
+        ) { picked ->
+            selectedCpType = picked
+            label.setText(picked.label)
         }
     }
 

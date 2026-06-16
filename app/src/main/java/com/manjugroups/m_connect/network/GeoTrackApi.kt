@@ -718,6 +718,10 @@ data class CreateCpVisitRequest(
     val googleMapsLink: String? = null,
     val notes: String? = null,
     val projectId: String? = null,
+    // CP Type — visit intent. One of: sv_cum_cp, follow_up, booking_cp,
+    // collection_cp, old_client, gift_distribution. Optional so older
+    // builds without the picker still create successfully.
+    val cpType: String? = null,
 )
 
 data class CreateCpVisitResponse(

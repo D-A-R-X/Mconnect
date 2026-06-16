@@ -54,22 +54,86 @@ class MconnectApp : Application(), ImageLoaderFactory {
         }.start()
 
         PushTokenManager.ensureFirebaseInitialized(this)
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createNotificationChannel() {
+    /**
+     * Create one [NotificationChannel] per notification category so the
+     * staff can mute / customise each in system settings (Settings →
+     * Apps → Mconnect → Notifications) and so chat / alerts get a
+     * heads-up while background pings stay quiet.
+     *
+     * createNotificationChannel is idempotent — re-creating an existing
+     * channel updates its label/description but keeps user-controlled
+     * sound/vibration preferences. Safe to call on every cold start.
+     */
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        val channel = NotificationChannel(
-            PushTokenManager.CHANNEL_ID,
-            "Mconnect Notifications",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "HR approvals, chat messages, and app updates"
-            enableLights(true)
-            enableVibration(true)
-            vibrationPattern = longArrayOf(100, 200, 300, 400, 500, 400, 300, 200, 400)
-        }
-        manager.createNotificationChannel(channel)
+
+        // Legacy / general — preserves behaviour for any old payloads
+        // still floating around without a `type` tag. Lights + vibration
+        // are enabled here so the catch-all channel feels alive on
+        // pre-API-26 devices where per-channel settings don't apply.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_ID,
+                "Mconnect Notifications",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "App updates and uncategorised alerts"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(100, 200, 300, 400, 500, 400, 300, 200, 400)
+            }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_CHAT,
+                "Chat Messages",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Direct messages, channel messages and mentions" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_TASKS,
+                "Tasks",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "Tasks assigned to you and daily task updates" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_VISITS,
+                "CP / Site Visits",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "CP visits and site visits assigned to you" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_APPROVALS,
+                "Approvals & Requests",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Leave, permission, WFH and attendance requests" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_LOANS,
+                "Loans & Advance",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Loan and salary advance approvals" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_ALERTS,
+                "Real-time Alerts",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Tamper alerts, on-duty status, planned visit reminders" }
+        )
     }
 }

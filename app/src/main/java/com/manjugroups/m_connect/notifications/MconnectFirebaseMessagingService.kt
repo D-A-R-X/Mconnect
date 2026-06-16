@@ -121,24 +121,49 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
 
+        // Notification ID strategy — pick the most distinctive field
+        // available so two messages don't collide and clobber each other:
+        //   1. messageId / conversationId — per-chat unique, so each
+        //      DM lands as a separate heads-up.
+        //   2. eventId — for HR/workflow notifications.
+        //   3. body + sentTime hash — fallback that still varies per
+        //      arrival, so two identical-bodied messages a minute apart
+        //      get two notifications instead of one.
+        val notifKey = message.data["messageId"]
+            ?: message.data["eventId"]
+            ?: ((body) + ":" + message.sentTime)
+        val notifId = notifKey.hashCode()
+
         val pendingIntent = PendingIntent.getActivity(
             this,
-            (message.data["eventId"] ?: body).hashCode(),
+            notifId,
             routeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, PushTokenManager.CHANNEL_ID)
+        // Route to the right per-type channel so the user can mute /
+        // customise each category in system settings. Unknown types fall
+        // back to the general channel so a new server-side notification
+        // type still surfaces instead of silently dropping.
+        val type = message.data["type"]
+        val channelId = PushTokenManager.channelForType(type)
+
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            // Heads-up for chat / approvals / alerts; the channel
+            // importance already governs sound + heads-up on API 26+.
+            // DEFAULT_ALL adds the default sound + vibration + lights so
+            // the legacy general channel (API < 26 fallback) still feels
+            // alive without per-channel config.
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        showNotification((message.data["eventId"] ?: body).hashCode(), notification)
+        showNotification(notifId, notification)
     }
 
     @SuppressLint("MissingPermission")

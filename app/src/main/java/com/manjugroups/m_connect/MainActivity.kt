@@ -118,6 +118,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
+        // the user gets push notifications for chats / tasks / approvals.
+        // Guarded on the persisted `notificationPermissionPrompted` flag
+        // so a user who already declined isn't pestered every cold start
+        // — they can still re-enable from system settings or the in-app
+        // toggle. The launcher's grant callback re-runs token sync so
+        // the device becomes reachable the moment permission is granted.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !PushTokenManager.hasNotificationPermission(this) &&
             !session.notificationPermissionPrompted
