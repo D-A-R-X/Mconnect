@@ -26,6 +26,16 @@
             android:layout_height="match_parent"
             android:background="#F1F3F8" />
 
+        <!-- Fade/blur overlay behind bottom navigation bar -->
+        <View
+            android:id="@+id/bottomNavFadeOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="130dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_nav_fade_grey"
+            android:clickable="false"
+            android:focusable="false" />
+
         <!-- Floating pill bottom nav. Transparent background so the
              scrolling page content (the panel grey, or the cards
              themselves) shows through behind the pill's side / top

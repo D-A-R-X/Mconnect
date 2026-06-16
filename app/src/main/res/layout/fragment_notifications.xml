@@ -91,88 +91,101 @@
         </LinearLayout>
     </LinearLayout>
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/notificationsRefresh"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <ScrollView
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/notificationsRefresh"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:layout_height="match_parent">
 
-            <FrameLayout
+            <ScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-            <LinearLayout
-                android:id="@+id/skeletonContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <include layout="@layout/skeleton_list_item" />
-                <include layout="@layout/skeleton_list_item" />
-                <include layout="@layout/skeleton_list_item" />
-                <include layout="@layout/skeleton_list_item" />
-                <include layout="@layout/skeleton_list_item" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/notificationList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="24dp" />
-
-            <LinearLayout
-                android:id="@+id/emptyState"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:paddingHorizontal="28dp"
-                android:paddingTop="120dp"
-                android:visibility="gone">
+                android:layout_height="match_parent"
+                android:fillViewport="true">
 
                 <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:background="@drawable/bg_notif_btn">
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
 
-                    <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                    <LinearLayout
+                        android:id="@+id/skeletonContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <include layout="@layout/skeleton_list_item" />
+                        <include layout="@layout/skeleton_list_item" />
+                        <include layout="@layout/skeleton_list_item" />
+                        <include layout="@layout/skeleton_list_item" />
+                        <include layout="@layout/skeleton_list_item" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/notificationList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="40dp" />
+
+                    <LinearLayout
+                        android:id="@+id/emptyState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:layout_gravity="center"
-                        android:contentDescription="Notifications"
-                        android:src="@drawable/ic_bell"
-                        android:tint="?attr/colorForegroundPrimary" />
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="28dp"
+                        android:paddingTop="120dp"
+                        android:visibility="gone">
+
+                        <FrameLayout
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:background="@drawable/bg_notif_btn">
+
+                            <ImageView
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Notifications"
+                                android:src="@drawable/ic_bell"
+                                android:tint="?attr/colorForegroundPrimary" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:id="@+id/tvEmptyState"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="No notifications yet"
+                            android:textColor="?attr/colorForegroundPrimary"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center"
+                            android:text="Approvals, chat updates, and reminders will show up here."
+                            android:textColor="?attr/colorForegroundMuted"
+                            android:textSize="13sp" />
+                    </LinearLayout>
                 </FrameLayout>
+            </ScrollView>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-                <TextView
-                    android:id="@+id/tvEmptyState"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="No notifications yet"
-                    android:textColor="?attr/colorForegroundPrimary"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="Approvals, chat updates, and reminders will show up here."
-                    android:textColor="?attr/colorForegroundMuted"
-                    android:textSize="13sp" />
-            </LinearLayout>
-        </FrameLayout>
-        </ScrollView>
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_nav_fade_white"
+            android:clickable="false"
+            android:focusable="false" />
+    </FrameLayout>
 </LinearLayout>

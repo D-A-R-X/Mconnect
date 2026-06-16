@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
@@ -25,13 +26,15 @@ class ChatContactInfoFragment : Fragment() {
             channelId: String?,
             conversationId: String?,
             title: String,
-            otherStaffId: String?
+            otherStaffId: String?,
+            photoUrl: String? = null
         ) = ChatContactInfoFragment().apply {
             arguments = Bundle().apply {
                 putString("channelId", channelId)
                 putString("conversationId", conversationId)
                 putString("title", title)
                 putString("otherStaffId", otherStaffId)
+                putString("photoUrl", photoUrl)
             }
         }
     }
@@ -219,7 +222,9 @@ class ChatContactInfoFragment : Fragment() {
             val contactId = otherStaffId
                 ?: conversation?.participants?.firstOrNull { it.id != null && it.id != com.manjugroups.m_connect.auth.SessionManager(requireContext()).staffId }?.id
                 ?: conversation?.participants?.firstOrNull()?.id
-            val staff = contactId?.let { api.getStaffDetail(requireSession(), it).staff }
+            val staff = contactId?.let {
+                runCatching { api.getStaffDetail(requireSession(), it).staff }.getOrNull()
+            }
             Triple(conversation, staff, contactId)
         }.onSuccess { (conversation, staff, contactId) ->
             context?.applicationContext?.let { ctx ->
@@ -252,15 +257,14 @@ class ChatContactInfoFragment : Fragment() {
         binding.tvEmail.text = staff?.email ?: "alicia.rochefort@starkindustries.com"
         binding.tvAddress.text = staff?.address ?: "Ashok Nagar Main Road"
 
-        val photoUrl = staff?.photo
-        if (!photoUrl.isNullOrBlank()) {
-            binding.ivAvatarPhoto.visibility = View.VISIBLE
-            binding.ivAvatarPhoto.load(photoUrl)
-        } else {
-            binding.ivAvatarPhoto.visibility = View.GONE
-        }
-
         val contactId = staff?.id ?: otherStaffId()
+        val myStaffId = com.manjugroups.m_connect.auth.SessionManager(requireContext()).staffId
+        val fallbackParticipant = conversation?.participants?.firstOrNull { it.id != null && it.id != myStaffId }
+            ?: conversation?.participants?.firstOrNull()
+        val participantPhoto = conversation?.participants?.firstOrNull { it.id == contactId }?.photo
+            ?: fallbackParticipant?.photo
+        val rawPhoto = staff?.photo?.ifBlank { null } ?: participantPhoto?.ifBlank { null } ?: arguments?.getString("photoUrl")
+
         if (!contactId.isNullOrBlank()) {
             binding.statusDot.visibility = View.GONE
             viewLifecycleOwner.lifecycleScope.launch {
@@ -283,7 +287,7 @@ class ChatContactInfoFragment : Fragment() {
 
         val about = staff?.department
             ?: "Start a conversation and keep your project communication in one place."
-        render(title, about)
+        render(title, about, rawPhoto)
     }
 
     private fun otherStaffId(): String? {
@@ -308,7 +312,7 @@ class ChatContactInfoFragment : Fragment() {
         }
     }
 
-    private fun render(title: String, about: String) {
+    private fun render(title: String, about: String, photoUrl: String? = null) {
         if (_binding == null) return
         hasLoadedData = true
         val initials = title.split(" ")
@@ -318,6 +322,18 @@ class ChatContactInfoFragment : Fragment() {
             .ifBlank { "C" }
 
         binding.tvAvatar.text = initials
+        val resolvedPhotoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photoUrl)
+        if (!resolvedPhotoUrl.isNullOrBlank()) {
+            binding.ivAvatarPhoto.visibility = View.VISIBLE
+            binding.tvAvatar.visibility = View.GONE
+            binding.ivAvatarPhoto.load(resolvedPhotoUrl) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            binding.ivAvatarPhoto.visibility = View.GONE
+            binding.tvAvatar.visibility = View.VISIBLE
+        }
         binding.tvTitle.text = title
         binding.tvHeaderTitle.text = title
         binding.tvAbout.text = about

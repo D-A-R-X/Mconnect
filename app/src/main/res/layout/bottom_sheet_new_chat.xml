@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_chat_sheet_top"
+    android:background="@drawable/bg_bottom_sheet"
     android:orientation="vertical">
 
     <View
@@ -12,7 +12,8 @@
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="2dp"
-        android:background="@drawable/bg_chat_sheet_handle" />
+        android:background="@drawable/bg_chat_sheet_handle"
+        android:visibility="gone" />
 
     <!-- Header -->
     <FrameLayout
@@ -71,6 +72,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:background="#FFF2F2F7"
         android:orientation="vertical"
         android:paddingHorizontal="16dp"
         android:paddingTop="8dp"

@@ -22,164 +22,178 @@ class SessionManager(context: Context) {
 
     private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
 
+    private fun getCachedString(key: String, defValue: String? = null): String? {
+        val cached = memoryCache[key]
+        if (cached != null) {
+            return if (cached === NULL_PLACEHOLDER) null else cached as String
+        }
+        val value = prefs.getString(key, defValue)
+        memoryCache[key] = value ?: NULL_PLACEHOLDER
+        return value
+    }
+
+    private fun setCachedString(key: String, value: String?) {
+        if (value == null) {
+            memoryCache[key] = NULL_PLACEHOLDER
+            prefs.edit().remove(key).apply()
+        } else {
+            memoryCache[key] = value
+            prefs.edit().putString(key, value).apply()
+        }
+    }
+
+    private fun getCachedBoolean(key: String, defValue: Boolean): Boolean {
+        val cached = memoryCache[key]
+        if (cached != null) {
+            return cached as Boolean
+        }
+        val value = prefs.getBoolean(key, defValue)
+        memoryCache[key] = value
+        return value
+    }
+
+    private fun setCachedBoolean(key: String, value: Boolean) {
+        memoryCache[key] = value
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun getCachedStringSet(key: String, defValue: Set<String>): Set<String> {
+        val cached = memoryCache[key]
+        if (cached != null) {
+            return cached as Set<String>
+        }
+        val value = prefs.getStringSet(key, defValue) ?: defValue
+        memoryCache[key] = value
+        return value
+    }
+
+    private fun setCachedStringSet(key: String, value: Set<String>) {
+        memoryCache[key] = value
+        prefs.edit().putStringSet(key, value).apply()
+    }
+
     var token: String?
-        get() = prefs.getString(KEY_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_TOKEN, value).apply()
+        get() = getCachedString(KEY_TOKEN, null)
+        set(value) = setCachedString(KEY_TOKEN, value)
 
     var userName: String?
-        get() = prefs.getString(KEY_USER_NAME, null)
-        set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
+        get() = getCachedString(KEY_USER_NAME, null)
+        set(value) = setCachedString(KEY_USER_NAME, value)
 
     var userPhone: String?
-        get() = prefs.getString(KEY_USER_PHONE, null)
-        set(value) = prefs.edit().putString(KEY_USER_PHONE, value).apply()
+        get() = getCachedString(KEY_USER_PHONE, null)
+        set(value) = setCachedString(KEY_USER_PHONE, value)
 
     var employeeId: String?
-        get() = prefs.getString(KEY_EMPLOYEE_ID, null)
-        set(value) = prefs.edit().putString(KEY_EMPLOYEE_ID, value).apply()
+        get() = getCachedString(KEY_EMPLOYEE_ID, null)
+        set(value) = setCachedString(KEY_EMPLOYEE_ID, value)
 
     var mustChangePassword: Boolean
-        get() = prefs.getBoolean(KEY_MUST_CHANGE_PASSWORD, false)
-        set(value) = prefs.edit().putBoolean(KEY_MUST_CHANGE_PASSWORD, value).apply()
+        get() = getCachedBoolean(KEY_MUST_CHANGE_PASSWORD, false)
+        set(value) = setCachedBoolean(KEY_MUST_CHANGE_PASSWORD, value)
 
     var userPhotoUrl: String?
-        get() = prefs.getString(KEY_USER_PHOTO_URL, null)
-        set(value) = prefs.edit().putString(KEY_USER_PHOTO_URL, value).apply()
+        get() = getCachedString(KEY_USER_PHOTO_URL, null)
+        set(value) = setCachedString(KEY_USER_PHOTO_URL, value)
 
     var iamPermissions: Set<String>
-        get() = prefs.getStringSet(KEY_IAM_PERMISSIONS, emptySet()) ?: emptySet()
-        set(value) = prefs.edit().putStringSet(KEY_IAM_PERMISSIONS, value).apply()
+        get() = getCachedStringSet(KEY_IAM_PERMISSIONS, emptySet())
+        set(value) = setCachedStringSet(KEY_IAM_PERMISSIONS, value)
 
     var isAdmin: Boolean
-        get() = prefs.getBoolean(KEY_IS_ADMIN, false)
-        set(value) = prefs.edit().putBoolean(KEY_IS_ADMIN, value).apply()
+        get() = getCachedBoolean(KEY_IS_ADMIN, false)
+        set(value) = setCachedBoolean(KEY_IS_ADMIN, value)
 
-    // Reporting officer (manager) — sent in leave/permission apply requests so
-    // the backend can route the approval to the right person. Populated from
-    // the user's staff record on bootstrap and on every profile refresh.
     var reportingToId: String?
-        get() = prefs.getString(KEY_REPORTING_TO_ID, null)
-        set(value) = prefs.edit().putString(KEY_REPORTING_TO_ID, value).apply()
+        get() = getCachedString(KEY_REPORTING_TO_ID, null)
+        set(value) = setCachedString(KEY_REPORTING_TO_ID, value)
 
     var reportingToName: String?
-        get() = prefs.getString(KEY_REPORTING_TO_NAME, null)
-        set(value) = prefs.edit().putString(KEY_REPORTING_TO_NAME, value).apply()
+        get() = getCachedString(KEY_REPORTING_TO_NAME, null)
+        set(value) = setCachedString(KEY_REPORTING_TO_NAME, value)
 
     var pushToken: String?
-        get() = prefs.getString(KEY_PUSH_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_PUSH_TOKEN, value).apply()
+        get() = getCachedString(KEY_PUSH_TOKEN, null)
+        set(value) = setCachedString(KEY_PUSH_TOKEN, value)
 
     var notificationPermissionPrompted: Boolean
-        get() = prefs.getBoolean(KEY_NOTIFICATION_PERMISSION_PROMPTED, false)
-        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_PERMISSION_PROMPTED, value).apply()
+        get() = getCachedBoolean(KEY_NOTIFICATION_PERMISSION_PROMPTED, false)
+        set(value) = setCachedBoolean(KEY_NOTIFICATION_PERMISSION_PROMPTED, value)
 
-    // GeoTrack fields
     var staffId: String?
-        get() = prefs.getString(KEY_STAFF_ID, null)
-        set(value) = prefs.edit().putString(KEY_STAFF_ID, value).apply()
+        get() = getCachedString(KEY_STAFF_ID, null)
+        set(value) = setCachedString(KEY_STAFF_ID, value)
 
     var geoTrackingEnabled: Boolean
-        get() = prefs.getBoolean(KEY_GEO_TRACKING_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_GEO_TRACKING_ENABLED, value).apply()
+        get() = getCachedBoolean(KEY_GEO_TRACKING_ENABLED, false)
+        set(value) = setCachedBoolean(KEY_GEO_TRACKING_ENABLED, value)
 
     var geoConsentGiven: Boolean
-        get() = prefs.getBoolean(KEY_GEO_CONSENT_GIVEN, false)
-        set(value) = prefs.edit().putBoolean(KEY_GEO_CONSENT_GIVEN, value).apply()
+        get() = getCachedBoolean(KEY_GEO_CONSENT_GIVEN, false)
+        set(value) = setCachedBoolean(KEY_GEO_CONSENT_GIVEN, value)
 
     var geoConsentDeclined: Boolean
-        get() = prefs.getBoolean(KEY_GEO_CONSENT_DECLINED, false)
-        set(value) = prefs.edit().putBoolean(KEY_GEO_CONSENT_DECLINED, value).apply()
+        get() = getCachedBoolean(KEY_GEO_CONSENT_DECLINED, false)
+        set(value) = setCachedBoolean(KEY_GEO_CONSENT_DECLINED, value)
 
     var trackingDeviceId: String
         get() {
-            val existing = prefs.getString(KEY_TRACKING_DEVICE_ID, null)
+            val existing = getCachedString(KEY_TRACKING_DEVICE_ID, null)
             if (!existing.isNullOrBlank()) return existing
             val created = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_TRACKING_DEVICE_ID, created).apply()
+            setCachedString(KEY_TRACKING_DEVICE_ID, created)
             return created
         }
-        set(value) = prefs.edit().putString(KEY_TRACKING_DEVICE_ID, value).apply()
+        set(value) = setCachedString(KEY_TRACKING_DEVICE_ID, value)
 
     var activeTrackingSessionId: String?
-        get() = prefs.getString(KEY_ACTIVE_TRACKING_SESSION_ID, null)
-        set(value) = prefs.edit().putString(KEY_ACTIVE_TRACKING_SESSION_ID, value).apply()
+        get() = getCachedString(KEY_ACTIVE_TRACKING_SESSION_ID, null)
+        set(value) = setCachedString(KEY_ACTIVE_TRACKING_SESSION_ID, value)
 
     var shouldTrackNow: Boolean
-        get() = prefs.getBoolean(KEY_SHOULD_TRACK_NOW, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOULD_TRACK_NOW, value).apply()
+        get() = getCachedBoolean(KEY_SHOULD_TRACK_NOW, false)
+        set(value) = setCachedBoolean(KEY_SHOULD_TRACK_NOW, value)
 
-    /**
-     * Staff designation cached on login bootstrap (from `getStaffDetail`).
-     * Source of truth for role-aware UI gates like the driver/executive
-     * branch on the Home screen — mirrors the web's `hasDriverDesignation`
-     * check in `convex/lib/mmsFleetDriverSessionLib.ts`, which does the
-     * same case-insensitive "Driver" match against `staff.designation`.
-     */
     var designation: String?
-        get() = prefs.getString(KEY_DESIGNATION, null)
-        set(value) = prefs.edit().putString(KEY_DESIGNATION, value).apply()
+        get() = getCachedString(KEY_DESIGNATION, null)
+        set(value) = setCachedString(KEY_DESIGNATION, value)
 
-    /**
-     * Set at login bootstrap to mirror the backend's authoritative
-     * answer to "is this account a fleet driver?". The web's
-     * `requireMmsFleetDriverStaff` (convex/lib/mmsFleetDriverSessionLib.ts)
-     * accepts TWO paths: designation === "Driver" OR a fleetDrivers
-     * row whose phone matches the staff's phone. The designation
-     * string alone misses the second path — a staff IAM-provisioned
-     * as a driver by adding a fleetDrivers row never flipped into
-     * driver mode on the app even though the backend would happily
-     * return their trips.
-     *
-     * Bootstrap pokes /api/mms-fleet/driver/trips once after OTP /
-     * password login and writes true here when it returns success,
-     * regardless of HTTP body. False / unset means either not a
-     * driver or the probe failed (we fall back to designation in
-     * that case).
-     */
     var fleetDriverByBackend: Boolean
-        get() = prefs.getBoolean(KEY_FLEET_DRIVER_BY_BACKEND, false)
-        set(value) = prefs.edit().putBoolean(KEY_FLEET_DRIVER_BY_BACKEND, value).apply()
+        get() = getCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, false)
+        set(value) = setCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, value)
 
-    /**
-     * True when the logged-in staff is a Driver — derived from
-     * designation OR the backend-probe flag above. The old Executive /
-     * Driver dropdown on the Home tab let any operator flip this
-     * flag, which broke the audit story (a Site Supervisor could
-     * impersonate the driver view) and didn't match the web, where
-     * the driver UI shows only when the staff record's designation
-     * is "Driver". Read-only by design.
-     */
     val isDriverMode: Boolean
         get() = fleetDriverByBackend ||
             (designation ?: "").trim().equals("Driver", ignoreCase = true)
 
     var isNotificationEnabled: Boolean
-        get() = prefs.getBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_IS_NOTIFICATION_ENABLED, value).apply()
+        get() = getCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
+        set(value) = setCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, value)
 
     var isOnDuty: Boolean
-        get() = prefs.getBoolean(KEY_IS_ON_DUTY, false)
-        set(value) = prefs.edit().putBoolean(KEY_IS_ON_DUTY, value).apply()
+        get() = getCachedBoolean(KEY_IS_ON_DUTY, false)
+        set(value) = setCachedBoolean(KEY_IS_ON_DUTY, value)
 
     var onDutyType: String?
-        get() = prefs.getString(KEY_ON_DUTY_TYPE, null)
-        set(value) = prefs.edit().putString(KEY_ON_DUTY_TYPE, value).apply()
+        get() = getCachedString(KEY_ON_DUTY_TYPE, null)
+        set(value) = setCachedString(KEY_ON_DUTY_TYPE, value)
 
     var onDutyTargetName: String?
-        get() = prefs.getString(KEY_ON_DUTY_TARGET_NAME, null)
-        set(value) = prefs.edit().putString(KEY_ON_DUTY_TARGET_NAME, value).apply()
+        get() = getCachedString(KEY_ON_DUTY_TARGET_NAME, null)
+        set(value) = setCachedString(KEY_ON_DUTY_TARGET_NAME, value)
 
     var onDutyTargetId: String?
-        get() = prefs.getString(KEY_ON_DUTY_TARGET_ID, null)
-        set(value) = prefs.edit().putString(KEY_ON_DUTY_TARGET_ID, value).apply()
+        get() = getCachedString(KEY_ON_DUTY_TARGET_ID, null)
+        set(value) = setCachedString(KEY_ON_DUTY_TARGET_ID, value)
 
     var onDutyVehicleOwnership: String?
-        get() = prefs.getString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, null)
-        set(value) = prefs.edit().putString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, value).apply()
+        get() = getCachedString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, null)
+        set(value) = setCachedString(KEY_ON_DUTY_VEHICLE_OWNERSHIP, value)
 
     var onDutyVehicleType: String?
-        get() = prefs.getString(KEY_ON_DUTY_VEHICLE_TYPE, null)
-        set(value) = prefs.edit().putString(KEY_ON_DUTY_VEHICLE_TYPE, value).apply()
+        get() = getCachedString(KEY_ON_DUTY_VEHICLE_TYPE, null)
+        set(value) = setCachedString(KEY_ON_DUTY_VEHICLE_TYPE, value)
 
     // geoTrips _id returned by /api/geotrack/on-duty/start. Cached so
     // Complete On Duty can pass it back to the server's complete route.
@@ -191,6 +205,12 @@ class SessionManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_ON_DUTY_TRIP_ID, value).apply()
 
     fun clearOnDutyDetails() {
+        memoryCache.remove(KEY_IS_ON_DUTY)
+        memoryCache.remove(KEY_ON_DUTY_TYPE)
+        memoryCache.remove(KEY_ON_DUTY_TARGET_NAME)
+        memoryCache.remove(KEY_ON_DUTY_TARGET_ID)
+        memoryCache.remove(KEY_ON_DUTY_VEHICLE_OWNERSHIP)
+        memoryCache.remove(KEY_ON_DUTY_VEHICLE_TYPE)
         prefs.edit()
             .remove(KEY_IS_ON_DUTY)
             .remove(KEY_ON_DUTY_TYPE)
@@ -203,7 +223,7 @@ class SessionManager(context: Context) {
     }
 
     fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
-        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        val tripsJson = getCachedString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
         try {
             val obj = org.json.JSONObject(tripsJson)
             val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
@@ -212,27 +232,27 @@ class SessionManager(context: Context) {
             trip.put("startTime", startTime)
             trip.put("status", "started")
             obj.put(visitId, trip)
-            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+            setCachedString(KEY_DRIVER_TRIPS, obj.toString())
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun saveDriverTripArrival(visitId: String) {
-        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        val tripsJson = getCachedString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
         try {
             val obj = org.json.JSONObject(tripsJson)
             val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
             trip.put("status", "reached")
             obj.put(visitId, trip)
-            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+            setCachedString(KEY_DRIVER_TRIPS, obj.toString())
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun saveDriverTripEnd(visitId: String, endKm: String, endImagePath: String, endTime: String) {
-        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        val tripsJson = getCachedString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
         try {
             val obj = org.json.JSONObject(tripsJson)
             val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
@@ -253,14 +273,14 @@ class SessionManager(context: Context) {
             }
             
             obj.put(visitId, trip)
-            prefs.edit().putString(KEY_DRIVER_TRIPS, obj.toString()).apply()
+            setCachedString(KEY_DRIVER_TRIPS, obj.toString())
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun getDriverTrip(visitId: String): DriverTrip? {
-        val tripsJson = prefs.getString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        val tripsJson = getCachedString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
         try {
             val obj = org.json.JSONObject(tripsJson)
             if (!obj.has(visitId)) return null
@@ -281,7 +301,6 @@ class SessionManager(context: Context) {
         }
     }
 
-
     val isLoggedIn: Boolean
         get() = token != null
 
@@ -289,8 +308,8 @@ class SessionManager(context: Context) {
         get() = "Bearer $token"
 
     var boundBaseUrl: String?
-        get() = prefs.getString(KEY_BOUND_BASE_URL, null)
-        set(value) = prefs.edit().putString(KEY_BOUND_BASE_URL, value).apply()
+        get() = getCachedString(KEY_BOUND_BASE_URL, null)
+        set(value) = setCachedString(KEY_BOUND_BASE_URL, value)
 
     fun hasPermission(perm: String): Boolean = isAdmin || iamPermissions.contains(perm)
 
@@ -303,6 +322,7 @@ class SessionManager(context: Context) {
     }
 
     fun clearSession() {
+        memoryCache.clear()
         prefs.edit().clear().apply()
     }
 
@@ -335,6 +355,12 @@ class SessionManager(context: Context) {
         private const val TAG = "SessionManager"
         private const val PREFS_NAME = "mconnect_session"
 
+        @Volatile
+        private var cachedPrefs: SharedPreferences? = null
+
+        private val memoryCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+        private val NULL_PLACEHOLDER = Any()
+
         /**
          * Open the encrypted prefs, recovering automatically if the keystore
          * master key can no longer decrypt the stored blob.
@@ -353,44 +379,50 @@ class SessionManager(context: Context) {
          * forced re-login; benefit is the app actually starts.
          */
         private fun openEncryptedPrefs(context: Context): SharedPreferences {
-            return try {
-                buildEncryptedPrefs(context)
-            } catch (first: Throwable) {
-                // AEADBadTagException + its KeyStoreException cause sit
-                // under GeneralSecurityException / IOException; catch the
-                // widest net so OEM-specific subclass leaks don't slip
-                // past us.
-                Log.w(
-                    TAG,
-                    "EncryptedSharedPreferences open failed; wiping and retrying.",
-                    first,
-                )
-                // 1. Drop the on-disk prefs file (this is the cipher blob
-                //    that no longer decrypts).
-                try {
-                    context.deleteSharedPreferences(PREFS_NAME)
-                } catch (deleteErr: Throwable) {
-                    Log.w(TAG, "deleteSharedPreferences failed", deleteErr)
-                }
-                // 2. Rebuild — MasterKey.Builder will re-create the
-                //    keystore alias if it was missing/invalid, and the
-                //    empty prefs file gets a fresh encrypted header.
-                try {
+            cachedPrefs?.let { return it }
+            synchronized(this) {
+                cachedPrefs?.let { return it }
+                val instance = try {
                     buildEncryptedPrefs(context)
-                } catch (second: Throwable) {
-                    // Last-resort fallback: plaintext prefs. We surrender
-                    // the at-rest encryption to keep the app launchable.
-                    // The session token still lives behind the user's
-                    // OTP login, and any subsequent successful
-                    // MasterKey rotation will let us flip back to
-                    // encrypted on the next clean install.
-                    Log.e(
+                } catch (first: Throwable) {
+                    // AEADBadTagException + its KeyStoreException cause sit
+                    // under GeneralSecurityException / IOException; catch the
+                    // widest net so OEM-specific subclass leaks don't slip
+                    // past us.
+                    Log.w(
                         TAG,
-                        "EncryptedSharedPreferences still failing — falling back to plaintext prefs.",
-                        second,
+                        "EncryptedSharedPreferences open failed; wiping and retrying.",
+                        first,
                     )
-                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    // 1. Drop the on-disk prefs file (this is the cipher blob
+                    //    that no longer decrypts).
+                    try {
+                        context.deleteSharedPreferences(PREFS_NAME)
+                    } catch (deleteErr: Throwable) {
+                        Log.w(TAG, "deleteSharedPreferences failed", deleteErr)
+                    }
+                    // 2. Rebuild — MasterKey.Builder will re-create the
+                    //    keystore alias if it was missing/invalid, and the
+                    //    empty prefs file gets a fresh encrypted header.
+                    try {
+                        buildEncryptedPrefs(context)
+                    } catch (second: Throwable) {
+                        // Last-resort fallback: plaintext prefs. We surrender
+                        // the at-rest encryption to keep the app launchable.
+                        // The session token still lives behind the user's
+                        // OTP login, and any subsequent successful
+                        // MasterKey rotation will let us flip back to
+                        // encrypted on the next clean install.
+                        Log.e(
+                            TAG,
+                            "EncryptedSharedPreferences still failing — falling back to plaintext prefs.",
+                            second,
+                        )
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    }
                 }
+                cachedPrefs = instance
+                return instance
             }
         }
 

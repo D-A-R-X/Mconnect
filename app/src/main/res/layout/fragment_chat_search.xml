@@ -28,7 +28,7 @@
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_arrow_left"
+                    android:src="@drawable/ic_back_chevron"
                     app:tint="#0B61CA" />
             </FrameLayout>
 

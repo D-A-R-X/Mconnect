@@ -39,7 +39,7 @@
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Telecaller" />
     <LinearLayout android:id="@+id/rowStaffTelecaller" style="@style/OutcomeFieldPillClickable">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_phone_outline" />
         <TextView android:id="@+id/tvStaffTelecaller" style="@style/OutcomeFieldValue" android:hint="Select" />
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
@@ -64,7 +64,7 @@
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Mobile 1" />
     <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_phone_outline" />
         <EditText android:id="@+id/etStaffRefMobile1" style="@style/OutcomeFieldEdit" android:hint="Enter No" android:inputType="phone" />
     </LinearLayout>
 
@@ -82,7 +82,7 @@
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Mobile 2" />
     <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_phone_outline" />
         <EditText android:id="@+id/etStaffRefMobile2" style="@style/OutcomeFieldEdit" android:hint="Enter No" android:inputType="phone" />
     </LinearLayout>
 

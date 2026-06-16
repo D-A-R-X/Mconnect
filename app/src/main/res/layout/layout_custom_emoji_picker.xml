@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F8F9FA">
+
+    <!-- Search Bar Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#F8F9FA"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_emoji_search_bar"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_chat_search"
+                app:tint="#667085" />
+
+            <EditText
+                android:id="@+id/etEmojiSearch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@android:color/transparent"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Search emoji..."
+                android:textColor="#101828"
+                android:textColorHint="#98A2B3"
+                android:textSize="13sp"
+                android:singleLine="true"
+                android:imeOptions="actionSearch"
+                android:inputType="text" />
+
+            <ImageView
+                android:id="@+id/btnSearchClear"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_sheet_close"
+                app:tint="#98A2B3"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Categories Tabs -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:background="#F8F9FA"
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp">
+        
+        <LinearLayout
+            android:id="@+id/categoryTabsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp" />
+    </HorizontalScrollView>
+
+    <!-- Emoji Grid List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvEmojis"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#F8F9FA"
+        android:paddingHorizontal="8dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+
+</LinearLayout>

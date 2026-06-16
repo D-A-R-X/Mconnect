@@ -25,6 +25,13 @@ class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // First-launch experience (logo video + onboarding screens) shows once.
+        // Subsequent launches skip straight to login/main.
+        if (OnboardingPrefs(this).onboardingCompleted) {
+            navigateNext()
+            return
+        }
+
         window.setBackgroundDrawableResource(android.R.color.white)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -33,14 +40,6 @@ class SplashActivity : AppCompatActivity() {
 
         window.statusBarColor = Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
-
-        // First-launch experience (logo video + onboarding screens) shows once.
-        // Subsequent launches skip straight to login/main.
-        if (OnboardingPrefs(this).onboardingCompleted) {
-            binding.videoSplash.visibility = android.view.View.INVISIBLE
-            navigateNext()
-            return
-        }
 
         val videoUri = Uri.parse("android.resource://$packageName/${R.raw.logo}")
         binding.videoSplash.setVideoURI(videoUri)

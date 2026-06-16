@@ -3,6 +3,8 @@ package com.manjugroups.m_connect.ui.chat
 import android.os.Bundle
 import android.text.InputType
 import android.util.TypedValue
+import coil.load
+import coil.transform.CircleCropTransformation
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -136,9 +138,20 @@ class ChatListFragment : Fragment() {
             onItemLongClick = { _, item ->
                 toggleChatSelection(item.id)
             },
-            avatarBinder = { container, label, text, seed ->
+            avatarBinder = { container, label, imageView, text, seed, photoUrl ->
                 if (_binding != null) {
-                    bindAvatar(container, label, text, seed)
+                    if (!photoUrl.isNullOrBlank()) {
+                        imageView.visibility = View.VISIBLE
+                        label.visibility = View.GONE
+                        imageView.load(photoUrl) {
+                            crossfade(true)
+                            transformations(CircleCropTransformation())
+                        }
+                    } else {
+                        imageView.visibility = View.GONE
+                        label.visibility = View.VISIBLE
+                        bindAvatar(container, label, text, seed)
+                    }
                 }
             },
             timestampBinder = { view, millis ->
@@ -397,10 +410,7 @@ class ChatListFragment : Fragment() {
                 if (isActive) R.drawable.bg_chat_tab_badge_white
                 else R.drawable.bg_chat_tab_badge_blue
             )
-            badgeView.setTextColor(
-                if (isActive) Color.parseColor("#0B61CA")
-                else Color.parseColor("#FFFFFF")
-            )
+            badgeView.setTextColor(Color.parseColor("#FFFFFF"))
         } else {
             badgeView.visibility = View.GONE
         }
@@ -419,11 +429,13 @@ class ChatListFragment : Fragment() {
             runCatching {
                 val conversations = api.getConversations(session.bearerToken).conversations
                 val channels = api.getChannels(session.bearerToken).channels
-                conversations to channels
-            }.onSuccess { (conversations, channels) ->
+                val staffList = runCatching { api.getStaff(session.bearerToken, status = "active").staff }.getOrDefault(emptyList())
+                Triple(conversations, channels, staffList)
+            }.onSuccess { (conversations, channels, staffList) ->
                 if (_binding == null) { isLoadingChats = false; return@onSuccess }
                 allConversations = conversations
                 allChannels = channels
+                activeStaffCache = staffList
                 hasLoadedOnce = true
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 renderCurrentList()
@@ -553,6 +565,11 @@ class ChatListFragment : Fragment() {
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
             val title = conversation.displayName?.ifBlank { null } ?: "Chat"
+            // Look up photo from conversation participants, fallback to activeStaffCache
+            val participant = conversation.participants?.firstOrNull { it.id != null && it.id != session.staffId }
+            val otherId = participant?.id
+            val rawPhoto = participant?.photo ?: activeStaffCache.firstOrNull { it.id == otherId }?.photo
+            val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(rawPhoto)
 
             // Resolve last message preview text and icon
             val previewResult = conversation.lastMessage?.let { resolveMessagePreview(it) }
@@ -562,13 +579,6 @@ class ChatListFragment : Fragment() {
             val lastActive = conversation.lastMessageAt ?: 0L
             val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
 
-            // Pick the OTHER participant's photo for the avatar — server
-            // already resolved the storage id to a public URL in
-            // convex/chat/conversations.list. Group chats don't carry a
-            // single representative photo; we leave the initial there.
-            val otherParticipant = conversation.participants
-                ?.firstOrNull { it.id != null && it.id != selfStaffId }
-            val avatarPhoto = otherParticipant?.photo?.takeIf { it.isNotBlank() }
 
             ChatListItem(
                 id = id,
@@ -582,7 +592,7 @@ class ChatListFragment : Fragment() {
                 isMuted = conversation.muted ?: false,
                 isOnline = isOnline,
                 previewIconRes = previewResult.iconResId,
-                avatarPhotoUrl = avatarPhoto,
+                photoUrl = resolvedPhoto
             )
         }
 
@@ -706,22 +716,17 @@ class ChatListFragment : Fragment() {
         val dialog = BottomSheetDialog(requireContext())
         dialog.setContentView(content)
 
-        dialog.setOnShowListener {
-            val sheet = dialog.findViewById<View>(
-                com.google.android.material.R.id.design_bottom_sheet
-            )
-            sheet?.let {
-                val params = it.layoutParams
-                params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
-                it.layoutParams = params
-                it.setBackgroundResource(android.R.color.transparent)
-                BottomSheetBehavior.from(it).apply {
-                    val peekHeightPx = (resources.displayMetrics.heightPixels * 0.65f).toInt()
-                    peekHeight = peekHeightPx
-                    state = BottomSheetBehavior.STATE_COLLAPSED
-                    skipCollapsed = false
-                    isDraggable = true
-                }
+        // Configure sheet directly after setContentView to animate up smoothly without sudden height jumping
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
+            val params = sheet.layoutParams
+            params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+            sheet.layoutParams = params
+            sheet.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            androidx.core.view.ViewCompat.setElevation(sheet, 0f)
+            BottomSheetBehavior.from(sheet).apply {
+                state = BottomSheetBehavior.STATE_EXPANDED
+                skipCollapsed = true
+                isDraggable = true
             }
         }
 
@@ -736,6 +741,13 @@ class ChatListFragment : Fragment() {
 
         dialog.setOnDismissListener {
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+        }
+        dialog.setOnShowListener { dialogInterface ->
+            val d = dialogInterface as BottomSheetDialog
+            d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { s ->
+                s.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(s, 0f)
+            }
         }
 
         var people: List<StaffData> = emptyList()
@@ -782,10 +794,13 @@ class ChatListFragment : Fragment() {
                     peopleCard,
                     false
                 )
+                row.tag = member
                 val initials = initialsFor(member.name ?: "User")
                 bindAvatar(
                     row.findViewById(R.id.avatarContainer),
                     row.findViewById(R.id.tvAvatar),
+                    row.findViewById(R.id.ivAvatarPhoto),
+                    member.photo,
                     initials,
                     index + (member.name?.length ?: 0)
                 )
@@ -811,7 +826,20 @@ class ChatListFragment : Fragment() {
 
                 row.setOnClickListener {
                     selectedStaff = if (selectedStaff?.id == member.id) null else member
-                    renderPeople()
+                    for (i in 0 until peopleCard.childCount) {
+                        val child = peopleCard.getChildAt(i)
+                        if (child is LinearLayout) {
+                            val childMember = child.tag as? StaffData
+                            if (childMember != null) {
+                                val isSel = selectedStaff?.id == childMember.id && childMember.id != null
+                                child.findViewById<View>(R.id.radioButton).setBackgroundResource(
+                                    if (isSel) R.drawable.bg_sheet_radio_on
+                                    else R.drawable.bg_sheet_radio_off
+                                )
+                                child.findViewById<View>(R.id.avatarCheck).visibility = if (isSel) View.VISIBLE else View.GONE
+                            }
+                        }
+                    }
                     bindStartButton()
                 }
 
@@ -869,13 +897,21 @@ class ChatListFragment : Fragment() {
                     api.getOnlineStaff(session.bearerToken)
                 }.onSuccess { resp ->
                     onlineStaffIds = resp.online?.mapNotNull { it?.staffId }?.toSet().orEmpty()
+                    delay(300)
+                    if (_binding != null) {
+                        renderPeople()
+                    }
+                }
+            }
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(300)
+                if (_binding != null) {
+                    SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                    skeletonContainer.visibility = View.GONE
+                    emptyState.text = "No people match your search."
                     renderPeople()
                 }
             }
-            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-            skeletonContainer.visibility = View.GONE
-            emptyState.text = "No people match your search."
-            renderPeople()
         }
     }
 
@@ -884,20 +920,17 @@ class ChatListFragment : Fragment() {
         val dialog = BottomSheetDialog(requireContext())
         dialog.setContentView(content)
 
-        dialog.setOnShowListener {
-            val sheet = dialog.findViewById<View>(
-                com.google.android.material.R.id.design_bottom_sheet
-            )
-            sheet?.let {
-                val params = it.layoutParams
-                params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
-                it.layoutParams = params
-                it.setBackgroundResource(android.R.color.transparent)
-                BottomSheetBehavior.from(it).apply {
-                    state = BottomSheetBehavior.STATE_EXPANDED
-                    skipCollapsed = true
-                    isDraggable = true
-                }
+        // Configure sheet directly after setContentView to animate up smoothly without sudden height jumping
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
+            val params = sheet.layoutParams
+            params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+            sheet.layoutParams = params
+            sheet.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            androidx.core.view.ViewCompat.setElevation(sheet, 0f)
+            BottomSheetBehavior.from(sheet).apply {
+                state = BottomSheetBehavior.STATE_EXPANDED
+                skipCollapsed = true
+                isDraggable = true
             }
         }
 
@@ -915,6 +948,13 @@ class ChatListFragment : Fragment() {
 
         dialog.setOnDismissListener {
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+        }
+        dialog.setOnShowListener { dialogInterface ->
+            val d = dialogInterface as BottomSheetDialog
+            d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { s ->
+                s.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(s, 0f)
+            }
         }
 
         var people: List<StaffData> = emptyList()
@@ -1043,10 +1083,13 @@ class ChatListFragment : Fragment() {
                     peopleCard,
                     false
                 )
+                row.tag = member
                 val initials = initialsFor(member.name ?: "User")
                 bindAvatar(
                     row.findViewById(R.id.avatarContainer),
                     row.findViewById(R.id.tvAvatar),
+                    row.findViewById(R.id.ivAvatarPhoto),
+                    member.photo,
                     initials,
                     index + (member.name?.length ?: 0)
                 )
@@ -1076,7 +1119,20 @@ class ChatListFragment : Fragment() {
                         selectedIds.add(memberId)
                         selectedById[memberId] = member
                     }
-                    renderPeopleList()
+                    for (i in 0 until peopleCard.childCount) {
+                        val child = peopleCard.getChildAt(i)
+                        if (child is LinearLayout) {
+                            val childMember = child.tag as? StaffData
+                            if (childMember != null) {
+                                val isSel = childMember.id != null && selectedIds.contains(childMember.id)
+                                child.findViewById<View>(R.id.radioButton).setBackgroundResource(
+                                    if (isSel) R.drawable.bg_sheet_radio_on
+                                    else R.drawable.bg_sheet_radio_off
+                                )
+                                child.findViewById<View>(R.id.avatarCheck).visibility = if (isSel) View.VISIBLE else View.GONE
+                            }
+                        }
+                    }
                     renderSelectedChips()
                     bindCreateButton()
                 }
@@ -1133,10 +1189,15 @@ class ChatListFragment : Fragment() {
             }
         ) { staff ->
             people = staff
-            SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-            skeletonContainer.visibility = View.GONE
-            emptyView.text = "No people match your search."
-            renderPeopleList()
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(300)
+                if (_binding != null) {
+                    SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                    skeletonContainer.visibility = View.GONE
+                    emptyView.text = "No people match your search."
+                    renderPeopleList()
+                }
+            }
         }
     }
 
@@ -1400,6 +1461,29 @@ class ChatListFragment : Fragment() {
         }
         label.setTextColor(palette.second)
         label.text = text
+    }
+
+    private fun bindAvatar(
+        container: View,
+        label: TextView,
+        ivPhoto: ImageView,
+        photoUrl: String?,
+        text: String,
+        seed: Int
+    ) {
+        val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photoUrl)
+        if (!resolved.isNullOrBlank()) {
+            ivPhoto.visibility = View.VISIBLE
+            label.visibility = View.GONE
+            ivPhoto.load(resolved) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            ivPhoto.visibility = View.GONE
+            label.visibility = View.VISIBLE
+            bindAvatar(container, label, text, seed)
+        }
     }
 
     private fun avatarPalette(seed: Int): Pair<Int, Int> {

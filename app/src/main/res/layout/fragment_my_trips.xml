@@ -122,43 +122,56 @@
         app:scv_text_size="11sp"
         app:scv_font_family="@font/inter_semibold" />
 
-    <!-- Skeleton placeholder — shown while today's trips load so the
-         screen reads as "loading" instead of looking empty. Three
-         card-shaped placeholders pulse via SkeletonUtils. -->
-    <LinearLayout
-        android:id="@+id/tripsSkeleton"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:visibility="gone">
+        android:layout_height="match_parent">
 
-        <include layout="@layout/skeleton_trip_card" />
+        <!-- Skeleton placeholder — shown while today's trips load so the
+             screen reads as "loading" instead of looking empty. Three
+             card-shaped placeholders pulse via SkeletonUtils. -->
+        <LinearLayout
+            android:id="@+id/tripsSkeleton"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:visibility="gone">
 
-        <include layout="@layout/skeleton_trip_card" />
+            <include layout="@layout/skeleton_trip_card" />
 
-        <include layout="@layout/skeleton_trip_card" />
-    </LinearLayout>
+            <include layout="@layout/skeleton_trip_card" />
 
-    <!-- Empty State -->
-    <com.manjugroups.m_connect.ui.common.EmptyStateView
-        android:id="@+id/emptyState"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="32dp"
-        android:gravity="center"
-        android:visibility="gone"
-        app:es_image="@drawable/ic_apps_pill_v_fleet"
-        app:es_title="No Trips Found"
-        app:es_description="There are no trips matching your search or filter." />
+            <include layout="@layout/skeleton_trip_card" />
+        </LinearLayout>
 
-    <!-- Trips List -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvTrips"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp" />
+        <!-- Empty State -->
+        <com.manjugroups.m_connect.ui.common.EmptyStateView
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="32dp"
+            android:gravity="center"
+            android:visibility="gone"
+            app:es_image="@drawable/ic_apps_pill_v_fleet"
+            app:es_title="No Trips Found"
+            app:es_description="There are no trips matching your search or filter." />
+
+        <!-- Trips List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvTrips"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="40dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_nav_fade_grey"
+            android:clickable="false"
+            android:focusable="false" />
+    </FrameLayout>
 </LinearLayout>

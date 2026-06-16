@@ -16,6 +16,8 @@ import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.util.Log
+
 
 class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -33,6 +35,7 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        Log.d("MconnectFCM", "onMessageReceived: from=${message.from}, data=${message.data}, notificationTitle=${message.notification?.title}, notificationBody=${message.notification?.body}")
 
         if (message.data["type"] == "geotrack_sync") {
             CoroutineScope(Dispatchers.IO).launch {
@@ -43,8 +46,25 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             if (message.data["silent"] == "true") return
         }
 
-        val title = message.data["title"] ?: message.notification?.title ?: getString(R.string.app_name)
-        val body = message.data["body"] ?: message.notification?.body ?: return
+        val title = message.data["title"]
+            ?: message.data["subject"]
+            ?: message.data["chatTitle"]
+            ?: message.data["targetTitle"]
+            ?: message.notification?.title
+            ?: getString(R.string.app_name)
+
+        val body = message.data["body"]
+            ?: message.data["message"]
+            ?: message.data["text"]
+            ?: message.data["content"]
+            ?: message.data["desc"]
+            ?: message.data["description"]
+            ?: message.notification?.body
+
+        if (body.isNullOrBlank()) {
+            Log.w("MconnectFCM", "onMessageReceived: empty/null body, returning early")
+            return
+        }
         val inferredTab = when {
             message.data["targetTab"] != null -> message.data["targetTab"]
             message.data["channelId"] != null || message.data["conversationId"] != null -> WorkflowNotificationRoute.TAB_CHAT
@@ -134,6 +154,10 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             .setContentText(body)
             // Heads-up for chat / approvals / alerts; the channel
             // importance already governs sound + heads-up on API 26+.
+            // DEFAULT_ALL adds the default sound + vibration + lights so
+            // the legacy general channel (API < 26 fallback) still feels
+            // alive without per-channel config.
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
@@ -144,12 +168,9 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
     @SuppressLint("MissingPermission")
     private fun showNotification(id: Int, notification: android.app.Notification) {
-        // Respect the in-app "Manage Notification" toggle. The backend
-        // also stops targeting this device once it unregisters the push
-        // token, but a push can still arrive in the gap between the user
-        // toggling off and the unregister landing — suppress it here so
-        // the toggle is honoured immediately.
-        if (!com.manjugroups.m_connect.auth.SessionManager(this).isNotificationEnabled) {
+        val session = com.manjugroups.m_connect.auth.SessionManager(this)
+        if (!session.isNotificationEnabled) {
+            Log.w("MconnectFCM", "showNotification: skipped because notifications are toggled off in settings")
             return
         }
         if (
@@ -157,9 +178,11 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            Log.w("MconnectFCM", "showNotification: skipped because POST_NOTIFICATIONS permission is not granted")
             return
         }
 
+        Log.d("MconnectFCM", "showNotification: calling notify for notification id=$id")
         NotificationManagerCompat.from(this).notify(id, notification)
     }
 }

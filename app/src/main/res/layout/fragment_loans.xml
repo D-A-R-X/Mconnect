@@ -73,6 +73,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:paddingBottom="40dp"
         android:fillViewport="true"
         android:overScrollMode="never"
         android:visibility="gone">
@@ -716,11 +717,19 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="48dp"
-                android:paddingBottom="80dp"
+                android:paddingBottom="40dp"
                 android:visibility="gone"
                 app:es_image="@drawable/img_loans_empty"
                 app:es_title="No Loans Yet"
                 app:es_description="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history." />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_bottom_nav_fade_grey"
+        android:clickable="false"
+        android:focusable="false" />
 </FrameLayout>

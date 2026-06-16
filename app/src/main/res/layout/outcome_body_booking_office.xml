@@ -21,13 +21,13 @@
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Office Mobile" />
     <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_phone_outline" />
         <EditText android:id="@+id/etOfficeMobile" style="@style/OutcomeFieldEdit" android:hint="Enter Number" android:inputType="phone" />
     </LinearLayout>
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Office Phone" />
     <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_phone_outline" />
         <EditText android:id="@+id/etOfficePhone" style="@style/OutcomeFieldEdit" android:hint="Enter Number" android:inputType="phone" />
     </LinearLayout>
 

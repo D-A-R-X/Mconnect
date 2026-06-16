@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -88,6 +89,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var otherStaffPhone: String? = null
+    private var chatPhotoUrl: String? = null
     private var latestMessageTime: Double = 0.0
     private var currentTypingText: String? = null
     private var presencePollCounter = 0
@@ -113,6 +115,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var isAttachmentMenuOpen = false
     private var hasLoadedMessages = false
     private var isEmojiPanelVisible = false
+    private var isEmojiPickerInitialized = false
     private var isDocumentPickerMode = false
 
     private var mediaRecorder: MediaRecorder? = null
@@ -350,8 +353,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         binding.btnCancelReply.setOnClickListener {
             cancelReply()
         }
-
-        setupEmojiPicker()
 
         binding.btnEmoji.setOnClickListener { toggleEmojiPanel() }
         binding.btnCloseEmojiPanel.setOnClickListener { hideEmojiPanel() }
@@ -969,15 +970,109 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun setupEmojiPicker() {
-        val emojiPicker = EmojiPickerView(requireContext()).apply {
-            emojiGridColumns = 9
-            setOnEmojiPickedListener { emoji ->
-                val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
-                binding.etMessage.text?.insert(cursorPos, emoji.emoji)
-                binding.etMessage.setSelection(cursorPos + emoji.emoji.length)
-            }
+        if (isEmojiPickerInitialized) return
+        val context = context ?: return
+
+        // Inflate custom emoji picker layout
+        val pickerLayout = LayoutInflater.from(context).inflate(
+            R.layout.layout_custom_emoji_picker,
+            binding.emojiPickerContainer,
+            false
+        )
+        binding.emojiPickerContainer.addView(pickerLayout)
+
+        val etEmojiSearch = pickerLayout.findViewById<android.widget.EditText>(R.id.etEmojiSearch)
+        val btnSearchClear = pickerLayout.findViewById<ImageView>(R.id.btnSearchClear)
+        val categoryTabsContainer = pickerLayout.findViewById<LinearLayout>(R.id.categoryTabsContainer)
+        val rvEmojis = pickerLayout.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvEmojis)
+
+        // Set up 7-column Grid Recycler
+        val columns = 7
+        val adapter = CustomEmojiAdapter(emptyList()) { emoji ->
+            val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
+            binding.etMessage.text?.insert(cursorPos, emoji)
+            binding.etMessage.setSelection(cursorPos + emoji.length)
+            CustomEmojiData.addFavorite(context, emoji)
         }
-        binding.emojiPickerContainer.addView(emojiPicker)
+        rvEmojis.layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, columns)
+        rvEmojis.adapter = adapter
+
+        var activeCategory = "Recents"
+
+        fun loadCategory(category: String) {
+            activeCategory = category
+            
+            // Highlight selected tab, reset others
+            for (i in 0 until categoryTabsContainer.childCount) {
+                val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                if (tvName.text == category) {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_selected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
+                } else {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                }
+            }
+
+            val list = if (category == "Recents") {
+                CustomEmojiData.getFavorites(context)
+            } else {
+                CustomEmojiData.categories[category] ?: emptyList()
+            }
+            adapter.updateList(list)
+            rvEmojis.scrollToPosition(0)
+        }
+
+        // Dynamically build category tabs
+        val categoriesList = listOf("Recents") + CustomEmojiData.categories.keys.toList()
+        categoriesList.forEach { category ->
+            val tabView = LayoutInflater.from(context).inflate(
+                R.layout.item_emoji_category_tab,
+                categoryTabsContainer,
+                false
+            ) as ViewGroup
+            val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName)
+            tvName.text = category
+            tabView.setOnClickListener {
+                etEmojiSearch.setText("")
+                loadCategory(category)
+            }
+            categoryTabsContainer.addView(tabView)
+        }
+
+        // Search TextWatcher for keyword-based filtering
+        etEmojiSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString().orEmpty().trim()
+                if (query.isNotEmpty()) {
+                    btnSearchClear.visibility = View.VISIBLE
+                    // Clear tab highlights during search
+                    for (i in 0 until categoryTabsContainer.childCount) {
+                        val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                        val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                        tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                        tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                    }
+                    val results = CustomEmojiData.searchEmojis(query)
+                    adapter.updateList(results)
+                } else {
+                    btnSearchClear.visibility = View.GONE
+                    loadCategory(activeCategory)
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        btnSearchClear.setOnClickListener {
+            etEmojiSearch.setText("")
+        }
+
+        // Load default category (Recents) on start
+        loadCategory("Recents")
+
+        isEmojiPickerInitialized = true
     }
 
     private fun toggleEmojiPanel() {
@@ -985,6 +1080,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showEmojiPanel() {
+        setupEmojiPicker()
         isEmojiPanelVisible = true
         binding.emojiPanel.visibility = View.VISIBLE
         val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
@@ -1238,7 +1334,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 api.deleteMessage(session.bearerToken, DeleteMessageRequest(messageId))
             }.onSuccess {
                 purgeMessageFromCache(listOf(messageId))
-                loadInitialMessages(scrollToBottom = false)
+                loadInitialMessages(scrollToBottom = true)
             }.onFailure {
                 toast("Unable to delete message")
             }
@@ -1251,7 +1347,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val removed = messages.removeAll { it.id in ids }
         originalBodyCache.keys.removeAll(ids)
         if (removed) {
-            renderMessages(scrollToBottom = false)
+            renderMessages(scrollToBottom = true)
         }
         persistMessageCache()
     }
@@ -1268,9 +1364,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         channelId?.let { "channel-$it" } ?: conversationId?.let { "conversation-$it" }
 
     private fun persistMessageCache() {
+        if (_binding == null) return
         val key = cacheKey() ?: return
         val ctx = context?.applicationContext ?: return
-        ChatMessageCache.save(ctx, key, messages.toList())
+        val messagesCopy = messages.toList()
+        viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            ChatMessageCache.save(ctx, key, messagesCopy)
+        }
     }
 
     private fun showChatHeaderMenu(anchor: View) {
@@ -1477,7 +1577,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         purgeMessageFromCache(deleted)
                         exitSelectionMode()
                         if (failures > 0) toast("Deleted with $failures error(s)")
-                        loadInitialMessages(scrollToBottom = false)
+                        loadInitialMessages(scrollToBottom = true)
                     }
                 }
                 .show()
@@ -2009,6 +2109,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewLifecycleOwner.lifecycleScope.launch {
+            launch { refreshPresence() }
             var refreshCounter = 0
             while (true) {
                 pollForMessages()
@@ -2016,7 +2117,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 presencePollCounter++
                 refreshCounter++
                 if (presencePollCounter % 6 == 0) {
-                    refreshPresence()
+                    launch { refreshPresence() }
+                    runCatching {
+                        api.presenceHeartbeat(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.PresenceHeartbeatRequest("online")
+                        )
+                    }
                 }
                 // The `pollMessages` endpoint only returns rows created after
                 // `latestMessageTime`, so updates to existing messages
@@ -2118,18 +2225,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     if (staffId != null) {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            // Only overwrite if we got something — don't
-                            // wipe the participant-supplied URL with null
-                            // when /api/hr/staff/get fails or is stale.
                             val staffPhoto = staffResp.staff?.photo
                             if (!staffPhoto.isNullOrBlank()) {
-                                photoUrl = staffPhoto
+                                photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffPhoto)
                             }
                             otherStaffPhone = staffResp.staff?.phone
                         }
                     }
                 }
             }
+            chatPhotoUrl = photoUrl
         }
 
         if (_binding != null) {
@@ -2142,6 +2247,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (photoUrl != null) {
                 binding.ivHeaderAvatar.load(photoUrl) {
                     crossfade(true)
+                    transformations(CircleCropTransformation())
                 }
                 binding.tvHeaderAvatarInitials.visibility = View.GONE
             } else {
@@ -2184,9 +2290,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         chatMuted = snap.muted
         snap.otherStaffId?.takeIf { it.isNotBlank() }?.let { otherStaffId = it }
         snap.initials?.takeIf { it.isNotBlank() }?.let { binding.tvHeaderAvatarInitials.text = it }
-        val photo = snap.photoUrl
+        val photo = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(snap.photoUrl)
+        chatPhotoUrl = photo
         if (!photo.isNullOrBlank()) {
-            binding.ivHeaderAvatar.load(photo) { crossfade(false) }
+            binding.ivHeaderAvatar.load(photo) {
+                crossfade(false)
+                transformations(CircleCropTransformation())
+            }
             binding.tvHeaderAvatarInitials.visibility = View.GONE
         } else {
             binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
@@ -2211,7 +2321,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private suspend fun refreshPresence() {
         val staffId = otherStaffId ?: return
         if (channelId != null) return
-        val updated = buildPresenceSubtitle(staffId, fallbackStamp = null)
+
+        var updated = chatSubtitle
+        runCatching {
+            val presence = api.getPresence(session.bearerToken, staffId = staffId).presence
+            if (presence != null) {
+                val isOnline = presence.status == "online"
+                val lastSeenAt = presence.lastSeenAt
+                chatAdapter.updateOtherParticipantPresence(isOnline, lastSeenAt)
+
+                updated = if (isOnline) {
+                    "Online"
+                } else {
+                    formatLastSeen(lastSeenAt)
+                }
+            }
+        }.onFailure {
+            updated = formatLastSeen(null)
+        }
+
         if (chatSubtitle != updated) {
             chatSubtitle = updated
             applySubtitleState()
@@ -2253,7 +2381,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             channelId = channelId,
             conversationId = conversationId,
             title = chatTitle,
-            otherStaffId = otherStaffId
+            otherStaffId = otherStaffId,
+            photoUrl = chatPhotoUrl
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
@@ -3067,7 +3196,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         // network. The optimistic bubble is rendered below; the real
         // server send runs in the background and replaces it on success.
         binding.etMessage.setText("")
-        if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
         cancelReply()
         renderPendingAttachments()
@@ -3094,8 +3222,20 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isEdited = false,
             replyCount = 0,
             parentMessageId = parentId,
-            attachments = null, // attachments still flush through the
-                                // legacy path on the same coroutine
+            attachments = pendingSnapshot.map {
+                // Local preview attachments so the optimistic bubble
+                // shows the picked file immediately. The real upload
+                // happens below; on success the server-confirmed message
+                // replaces these with proper storage IDs + URLs.
+                com.manjugroups.m_connect.network.MessageAttachmentData(
+                    id = "temp_attachment_${it.fileName}",
+                    storageId = it.fileName,
+                    fileName = it.fileName,
+                    fileType = it.fileType,
+                    fileSize = it.fileSize,
+                    url = it.uri.toString()
+                )
+            }.ifEmpty { null },
             reactions = null,
             localPendingId = localId,
         )
@@ -3212,8 +3352,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
-    private suspend fun appendSentMessage(messageId: String?) {
+    private suspend fun appendSentMessage(messageId: String?, tempId: String? = null) {
         if (messageId.isNullOrBlank()) {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
             return
         }
@@ -3222,18 +3366,30 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }.onSuccess { resp ->
             val sent = resp.message
             if (sent == null) {
+                if (tempId != null) {
+                    messages.removeAll { it.id == tempId }
+                    renderMessages(scrollToBottom = false)
+                }
                 loadInitialMessages(scrollToBottom = true)
                 return@onSuccess
             }
-            val existingIndex = messages.indexOfFirst { it.id == sent.id }
-            if (existingIndex >= 0) {
-                messages[existingIndex] = sent
+            val existingIndexByTemp = if (tempId != null) messages.indexOfFirst { it.id == tempId } else -1
+            val existingIndexById = messages.indexOfFirst { it.id == sent.id }
+            
+            if (existingIndexByTemp >= 0) {
+                messages[existingIndexByTemp] = sent
+            } else if (existingIndexById >= 0) {
+                messages[existingIndexById] = sent
             } else {
                 messages.add(sent)
             }
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
             renderMessages(scrollToBottom = true)
         }.onFailure {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
         }
     }
@@ -3269,28 +3425,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         attachments: List<PendingAttachment>
     ) {
         if (_binding == null) return
-        binding.etMessage.setText(text)
+        val currentText = binding.etMessage.text?.toString().orEmpty()
+        val newText = if (currentText.isBlank()) text else "$text\n$currentText"
+        binding.etMessage.setText(newText)
         binding.etMessage.setSelection(binding.etMessage.text?.length ?: 0)
-        pendingAttachments.clear()
         pendingAttachments.addAll(attachments)
         renderPendingAttachments()
         updateSendIcon()
     }
 
     private fun setComposerBusy(isBusy: Boolean) {
-        isSendingMessage = isBusy
-        if (_binding == null) return
-        binding.btnSend.isEnabled = !isBusy
-        binding.btnAttach.isEnabled = !isBusy
-        // Intentionally NOT disabling etMessage. Disabling a focused
-        // EditText causes Android to strip focus + dismiss the IME, so
-        // every send was killing the keyboard and the user had to tap
-        // the field again to type the next message. The isSendingMessage
-        // guard at the top of sendMessage() already prevents double-fires,
-        // so the field can stay enabled — the user can keep typing the
-        // next message while the previous one is still uploading.
-        binding.btnSend.alpha = if (isBusy) 0.6f else 1f
-        binding.btnAttach.alpha = if (isBusy) 0.6f else 1f
+        // Keep it empty to avoid blocking the input field and send button,
+        // allowing smooth WhatsApp-style concurrent background sending.
     }
 
     private fun markRead() {
@@ -3401,8 +3547,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
 
                 val sysBottom = sys.bottom
-                binding.attachPanel.setPadding(0, 0, 0, sysBottom)
-                binding.emojiPanel.setPadding(0, 0, 0, sysBottom)
+                val panelPaddingBottom = if (ime.bottom > sys.bottom) {
+                    ime.bottom
+                } else {
+                    sys.bottom
+                }
+                binding.attachPanel.setPadding(0, 0, 0, panelPaddingBottom)
+                binding.emojiPanel.setPadding(0, 0, 0, panelPaddingBottom)
+
+                val basePanelHeight = dpToPx(280)
+                val totalPanelHeight = basePanelHeight + panelPaddingBottom
+
+                binding.emojiPanel.layoutParams = binding.emojiPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.attachPanel.layoutParams = binding.attachPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.emojiPanel.requestLayout()
+                binding.attachPanel.requestLayout()
 
                 binding.rvMessages.setPadding(
                     binding.rvMessages.paddingLeft,

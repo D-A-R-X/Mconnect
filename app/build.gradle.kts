@@ -3,8 +3,28 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-fun envOrEmpty(name: String): String = System.getenv(name) ?: ""
-fun envOrDefault(name: String, defaultValue: String): String = System.getenv(name) ?: defaultValue
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = project.rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun envOrEmpty(name: String): String {
+    val env = System.getenv(name)
+    if (!env.isNullOrBlank()) return env
+    val localProp = localProperties.getProperty(name)
+    if (!localProp.isNullOrBlank()) return localProp
+    val gradProp = project.findProperty(name) as? String
+    if (!gradProp.isNullOrBlank()) return gradProp
+    return ""
+}
+fun envOrDefault(name: String, defaultValue: String): String {
+    val value = envOrEmpty(name)
+    return if (value.isBlank()) defaultValue else value
+}
 fun ensureScheme(url: String): String =
     if (url.isBlank() || url.startsWith("http://") || url.startsWith("https://")) url
     else "https://$url"
