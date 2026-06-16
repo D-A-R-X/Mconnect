@@ -118,16 +118,40 @@ object CustomEmojiData {
     private const val KEY_FAVS = "favorite_emojis_list"
     private const val MAX_FAVORITES = 35
 
+    private fun isValidEmoji(emoji: String): Boolean {
+        if (emoji.isBlank()) return false
+        val trimmed = emoji.trim()
+        if (trimmed.isEmpty()) return false
+        // Ensure there is at least one non-whitespace, non-control, non-formatting-only character.
+        return trimmed.any { char ->
+            val code = char.code
+            val type = Character.getType(char)
+            !Character.isWhitespace(char) &&
+                    code != 0 &&
+                    code != 0x200B && // Zero Width Space
+                    char != '\uFEFF' && // BOM
+                    char != '\u200B' &&
+                    char != '\u200C' &&
+                    char != '\u200D' && // Keep ZWJ if accompanied by visible emoji parts
+                    type != Character.CONTROL.toInt() &&
+                    type != Character.FORMAT.toInt()
+        }
+    }
+
     fun getFavorites(context: Context): List<String> {
         val prefs = context.getSharedPreferences(PREFS_FAVORITES, Context.MODE_PRIVATE)
         val raw = prefs.getString(KEY_FAVS, null) ?: return defaultFavorites()
-        return raw.split(",").filter { it.isNotBlank() }
+        return raw.split(",")
+            .map { it.trim() }
+            .filter { isValidEmoji(it) }
     }
 
     fun addFavorite(context: Context, emoji: String) {
+        val trimmedEmoji = emoji.trim()
+        if (!isValidEmoji(trimmedEmoji)) return
         val current = getFavorites(context).toMutableList()
-        current.remove(emoji)
-        current.add(0, emoji) // Bring to front
+        current.remove(trimmedEmoji)
+        current.add(0, trimmedEmoji) // Bring to front
         val trimmed = if (current.size > MAX_FAVORITES) current.take(MAX_FAVORITES) else current
         val prefs = context.getSharedPreferences(PREFS_FAVORITES, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_FAVS, trimmed.joinToString(",")).apply()

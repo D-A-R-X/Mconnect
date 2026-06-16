@@ -46,6 +46,40 @@ class ChatMessageAdapter(
     private val selectedIds = mutableSetOf<String>()
     private val selectionTint = android.graphics.Color.parseColor("#1A0B61CA")
 
+    private var otherParticipantLastSeenAt: Long? = null
+    private var isOtherParticipantOnline: Boolean = false
+
+    fun updateOtherParticipantPresence(online: Boolean, lastSeenAt: Long?) {
+        if (isOtherParticipantOnline != online || otherParticipantLastSeenAt != lastSeenAt) {
+            isOtherParticipantOnline = online
+            otherParticipantLastSeenAt = lastSeenAt
+            notifyDataSetChanged()
+        }
+    }
+
+    private fun isMessageSeen(message: MessageData, position: Int): Boolean {
+        if (isOtherParticipantOnline) return true
+
+        val msgTime = message.creationTime?.toLong()
+        val otherSeenTime = otherParticipantLastSeenAt
+        if (otherSeenTime != null && msgTime != null && otherSeenTime >= msgTime) {
+            return true
+        }
+
+        val totalItems = itemCount
+        for (i in (position + 1) until totalItems) {
+            val item = getItem(i)
+            if (item is ChatItem.Message && !item.isMine) {
+                val otherMsgTime = item.data.creationTime?.toLong()
+                if (msgTime != null && otherMsgTime != null && otherMsgTime > msgTime) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
     fun isSelected(id: String?): Boolean = id != null && id in selectedIds
 
     fun selectedIdsSnapshot(): List<String> = selectedIds.toList()
@@ -224,7 +258,7 @@ class ChatMessageAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is ChatItem.Message -> {
-                if (holder is SentViewHolder) holder.bind(item)
+                if (holder is SentViewHolder) holder.bind(item, position)
                 else if (holder is ReceivedViewHolder) holder.bind(item)
             }
             is ChatItem.DateSeparator -> (holder as DateViewHolder).bind(item)
@@ -232,11 +266,13 @@ class ChatMessageAdapter(
     }
 
     inner class SentViewHolder(val binding: ItemChatMessageSentBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(item: ChatItem.Message) {
+        fun bind(item: ChatItem.Message, position: Int) {
             val isDeleted = item.data.isDeleted == true
             resetBodyStyle(binding.tvMessageBody, isSent = true)
             binding.tvMessageTime.setTextColor(android.graphics.Color.parseColor("#CCFFFFFF"))
-            binding.ivSeenStatus.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#80FFFFFF"))
+            val isSeen = isMessageSeen(item.data, position)
+            val tickColor = if (isSeen) "#FFFFFF" else "#80FFFFFF"
+            binding.ivSeenStatus.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(tickColor))
             applyBubbleChrome(binding.bubbleFrame, binding.tvMessageTime, item, isSent = true)
             applyBodyMaxWidth(binding.tvMessageBody)
             binding.ivSeenStatus.visibility = if (isDeleted) View.GONE else View.VISIBLE
@@ -280,7 +316,8 @@ class ChatMessageAdapter(
                         timeView = binding.tvMessageTime,
                         tickIcon = binding.ivSeenStatus,
                         text = bodyText,
-                        isMine = true
+                        isMine = true,
+                        isSeen = isSeen
                     )
                 }
             }
@@ -1342,7 +1379,8 @@ class ChatMessageAdapter(
         timeView: TextView,
         tickIcon: View?,
         text: String,
-        isMine: Boolean
+        isMine: Boolean,
+        isSeen: Boolean = false
     ) {
         val emojiCount = getEmojiCountIfOnlyEmojis(text)
         if (emojiCount in 1..3) {
@@ -1350,13 +1388,14 @@ class ChatMessageAdapter(
             bubbleFrame.setPadding(0, 0, 0, 0)
             timeView.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
             if (tickIcon is ImageView) {
-                tickIcon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#8E8E93"))
+                val tickColor = if (isSeen) "#FFFFFF" else "#8E8E93"
+                tickIcon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(tickColor))
             }
 
             body.textSize = when (emojiCount) {
-                1 -> 48f
-                2 -> 36f
-                else -> 28f
+                1 -> 80f
+                2 -> 60f
+                else -> 48f
             }
 
             val parent = body.parent as? ViewGroup
@@ -1373,6 +1412,12 @@ class ChatMessageAdapter(
         emojiCount: Int,
         isMine: Boolean
     ) {
+        // Find existing container if any and remove it
+        val oldView = parent.findViewWithTag<View>("DYNAMIC_EMOJI_VIEW")
+        if (oldView != null) {
+            parent.removeView(oldView)
+        }
+
         body.visibility = View.GONE
 
         val emojis = mutableListOf<String>()
@@ -1411,13 +1456,19 @@ class ChatMessageAdapter(
         }
 
         val sizePx = dp(context, sizeDp)
+        var anyFailed = false
 
-        emojis.take(emojiCount).forEach { emoji ->
-            val url = getEmojiCdnUrl(emoji)
-            if (url == null) {
-                body.visibility = View.VISIBLE
-                return@forEach
-            }
+        val urls = emojis.take(emojiCount).map { emoji ->
+            getEmojiCdnUrl(emoji)
+        }
+
+        if (urls.any { it == null }) {
+            body.visibility = View.VISIBLE
+            return
+        }
+
+        urls.forEach { url ->
+            if (url == null) return@forEach
             val imageView = ImageView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(sizePx, sizePx).apply {
                     marginStart = dp(context, 4)
@@ -1428,7 +1479,11 @@ class ChatMessageAdapter(
                     crossfade(true)
                     listener(
                         onError = { _, _ ->
-                            body.visibility = View.VISIBLE
+                            if (!anyFailed) {
+                                anyFailed = true
+                                container.visibility = View.GONE
+                                body.visibility = View.VISIBLE
+                            }
                         }
                     )
                 }

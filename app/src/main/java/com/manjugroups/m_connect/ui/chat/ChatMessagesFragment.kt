@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -88,6 +89,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var otherStaffPhone: String? = null
+    private var chatPhotoUrl: String? = null
     private var latestMessageTime: Double = 0.0
     private var currentTypingText: String? = null
     private var presencePollCounter = 0
@@ -995,7 +997,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         rvEmojis.layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, columns)
         rvEmojis.adapter = adapter
 
-        var activeCategory = "Favorites"
+        var activeCategory = "Recents"
 
         fun loadCategory(category: String) {
             activeCategory = category
@@ -1013,7 +1015,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             }
 
-            val list = if (category == "Favorites") {
+            val list = if (category == "Recents") {
                 CustomEmojiData.getFavorites(context)
             } else {
                 CustomEmojiData.categories[category] ?: emptyList()
@@ -1023,7 +1025,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
 
         // Dynamically build category tabs
-        val categoriesList = listOf("Favorites") + CustomEmojiData.categories.keys.toList()
+        val categoriesList = listOf("Recents") + CustomEmojiData.categories.keys.toList()
         categoriesList.forEach { category ->
             val tabView = LayoutInflater.from(context).inflate(
                 R.layout.item_emoji_category_tab,
@@ -1067,8 +1069,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             etEmojiSearch.setText("")
         }
 
-        // Load default category (Favorites) on start
-        loadCategory("Favorites")
+        // Load default category (Recents) on start
+        loadCategory("Recents")
 
         isEmojiPickerInitialized = true
     }
@@ -1332,7 +1334,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 api.deleteMessage(session.bearerToken, DeleteMessageRequest(messageId))
             }.onSuccess {
                 purgeMessageFromCache(listOf(messageId))
-                loadInitialMessages(scrollToBottom = false)
+                loadInitialMessages(scrollToBottom = true)
             }.onFailure {
                 toast("Unable to delete message")
             }
@@ -1345,7 +1347,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val removed = messages.removeAll { it.id in ids }
         originalBodyCache.keys.removeAll(ids)
         if (removed) {
-            renderMessages(scrollToBottom = false)
+            renderMessages(scrollToBottom = true)
         }
         persistMessageCache()
     }
@@ -1575,7 +1577,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         purgeMessageFromCache(deleted)
                         exitSelectionMode()
                         if (failures > 0) toast("Deleted with $failures error(s)")
-                        loadInitialMessages(scrollToBottom = false)
+                        loadInitialMessages(scrollToBottom = true)
                     }
                 }
                 .show()
@@ -2069,6 +2071,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewLifecycleOwner.lifecycleScope.launch {
+            launch { refreshPresence() }
             var refreshCounter = 0
             while (true) {
                 pollForMessages()
@@ -2076,7 +2079,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 presencePollCounter++
                 refreshCounter++
                 if (presencePollCounter % 6 == 0) {
-                    refreshPresence()
+                    launch { refreshPresence() }
+                    runCatching {
+                        api.presenceHeartbeat(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.PresenceHeartbeatRequest("online")
+                        )
+                    }
                 }
                 // The `pollMessages` endpoint only returns rows created after
                 // `latestMessageTime`, so updates to existing messages
@@ -2172,12 +2181,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     if (staffId != null) {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            photoUrl = staffResp.staff?.photo
+                            photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffResp.staff?.photo)
                             otherStaffPhone = staffResp.staff?.phone
                         }
                     }
                 }
             }
+            chatPhotoUrl = photoUrl
         }
 
         if (_binding != null) {
@@ -2190,6 +2200,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (photoUrl != null) {
                 binding.ivHeaderAvatar.load(photoUrl) {
                     crossfade(true)
+                    transformations(CircleCropTransformation())
                 }
                 binding.tvHeaderAvatarInitials.visibility = View.GONE
             } else {
@@ -2232,9 +2243,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         chatMuted = snap.muted
         snap.otherStaffId?.takeIf { it.isNotBlank() }?.let { otherStaffId = it }
         snap.initials?.takeIf { it.isNotBlank() }?.let { binding.tvHeaderAvatarInitials.text = it }
-        val photo = snap.photoUrl
+        val photo = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(snap.photoUrl)
+        chatPhotoUrl = photo
         if (!photo.isNullOrBlank()) {
-            binding.ivHeaderAvatar.load(photo) { crossfade(false) }
+            binding.ivHeaderAvatar.load(photo) {
+                crossfade(false)
+                transformations(CircleCropTransformation())
+            }
             binding.tvHeaderAvatarInitials.visibility = View.GONE
         } else {
             binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
@@ -2259,7 +2274,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private suspend fun refreshPresence() {
         val staffId = otherStaffId ?: return
         if (channelId != null) return
-        val updated = buildPresenceSubtitle(staffId, fallbackStamp = null)
+
+        var updated = chatSubtitle
+        runCatching {
+            val presence = api.getPresence(session.bearerToken, staffId = staffId).presence
+            if (presence != null) {
+                val isOnline = presence.status == "online"
+                val lastSeenAt = presence.lastSeenAt
+                chatAdapter.updateOtherParticipantPresence(isOnline, lastSeenAt)
+
+                updated = if (isOnline) {
+                    "Online"
+                } else {
+                    formatLastSeen(lastSeenAt)
+                }
+            }
+        }.onFailure {
+            updated = formatLastSeen(null)
+        }
+
         if (chatSubtitle != updated) {
             chatSubtitle = updated
             applySubtitleState()
@@ -2301,7 +2334,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             channelId = channelId,
             conversationId = conversationId,
             title = chatTitle,
-            otherStaffId = otherStaffId
+            otherStaffId = otherStaffId,
+            photoUrl = chatPhotoUrl
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)

@@ -239,7 +239,7 @@
                         android:orientation="vertical"
                         android:paddingHorizontal="16dp"
                         android:paddingTop="16dp"
-                        android:paddingBottom="32dp" />
+                        android:paddingBottom="40dp" />
 
                     <LinearLayout
                         android:id="@+id/bkEmptyState"
@@ -303,5 +303,13 @@
             <include layout="@layout/skeleton_list_item" />
             <include layout="@layout/skeleton_list_item" />
         </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_nav_fade_grey"
+            android:clickable="false"
+            android:focusable="false" />
     </FrameLayout>
 </LinearLayout>

@@ -22,7 +22,8 @@ data class ChatListItem(
     val isMuted: Boolean,
     val isOnline: Boolean = false,
     val isFavourite: Boolean = false,
-    val previewIconRes: Int? = null
+    val previewIconRes: Int? = null,
+    val photoUrl: String? = null
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }
@@ -30,7 +31,7 @@ data class ChatListItem(
 class ChatListAdapter(
     private val onItemClick: (ChatListItem) -> Unit,
     private val onItemLongClick: (View, ChatListItem) -> Unit,
-    private val avatarBinder: (View, TextView, String, Int) -> Unit,
+    private val avatarBinder: (View, TextView, android.widget.ImageView, String, Int, String?) -> Unit,
     private val timestampBinder: (TextView, Long?) -> Unit,
     private val isSelectedProvider: (ChatListItem) -> Boolean = { false }
 ) : ListAdapter<ChatListItem, ChatListAdapter.ViewHolder>(ChatListItemDiffCallback()) {
@@ -63,7 +64,14 @@ class ChatListAdapter(
             val avatarContainer = binding.avatarContainer as ViewGroup
             if (avatarContainer.childCount > 0) {
                 val avatarFrame = avatarContainer.getChildAt(0)
-                avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+                avatarBinder(
+                    avatarFrame,
+                    binding.tvChatAvatar,
+                    binding.ivChatAvatarImage,
+                    item.avatarText,
+                    item.avatarSeed,
+                    item.photoUrl
+                )
             }
             timestampBinder(binding.tvChatTime, item.timestamp)
 

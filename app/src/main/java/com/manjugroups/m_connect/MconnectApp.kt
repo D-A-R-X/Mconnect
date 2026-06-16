@@ -66,6 +66,9 @@ class MconnectApp : Application(), ImageLoaderFactory {
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "HR approvals, chat messages, and app updates"
+            enableLights(true)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(100, 200, 300, 400, 500, 400, 300, 200, 400)
         }
         manager.createNotificationChannel(channel)
     }

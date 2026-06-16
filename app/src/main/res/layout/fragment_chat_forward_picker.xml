@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_chat_action_sheet"
-    android:orientation="vertical"
-    android:paddingBottom="16dp">
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:orientation="vertical">
 
     <View
         android:layout_width="40dp"
@@ -38,9 +37,9 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvForwardTargets"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:maxHeight="420dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:overScrollMode="never"
         android:paddingHorizontal="8dp"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="16dp" />
 </LinearLayout>

@@ -21,8 +21,7 @@
         <ImageView
             android:layout_width="16dp"
             android:layout_height="16dp"
-            android:src="@drawable/ic_tab_calendar_pencil"
-            android:tint="#7A5AF8" />
+            android:src="@drawable/ic_tab_calendar_pencil" />
 
         <TextView
             android:id="@+id/tvHistoryItemDate"
@@ -78,8 +77,7 @@
             android:focusable="true"
             android:padding="2dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_edit_white"
-            app:tint="#444CE7" />
+            android:src="@drawable/ic_edit_gradient" />
     </LinearLayout>
 
     <LinearLayout

@@ -4,6 +4,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.manjugroups.m_connect.R
 
 class CustomEmojiAdapter(
     private var emojis: List<String>,
@@ -15,22 +16,30 @@ class CustomEmojiAdapter(
         notifyDataSetChanged()
     }
 
+    private fun dp(context: android.content.Context, dp: Int): Int {
+        return (dp * context.resources.displayMetrics.density).toInt()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = TextView(parent.context).apply {
-            layoutParams = ViewGroup.LayoutParams(
+        val context = parent.context
+        val sizePx = dp(context, 44) // 44dp height/width for perfect sticker circles
+        val view = TextView(context).apply {
+            layoutParams = ViewGroup.MarginLayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+                sizePx
+            ).apply {
+                val margin = dp(context, 4)
+                setMargins(margin, margin, margin, margin)
+            }
             gravity = android.view.Gravity.CENTER
-            textSize = 30f // Make emojis nice and large!
-            setTextColor(android.graphics.Color.BLACK) // Prevent emoji translucency
-            alpha = 1f                                // Force full opacity
-            setPadding(0, 10, 0, 10)
+            textSize = 25f // Perfectly balanced emoji text size
+            setTextColor(android.graphics.Color.BLACK)
+            alpha = 1f
+            setBackgroundResource(R.drawable.bg_emoji_item)
+            elevation = dp(context, 2).toFloat()
+            clipToOutline = false
             isClickable = true
             isFocusable = true
-            val outValue = android.util.TypedValue()
-            context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
-            setBackgroundResource(outValue.resourceId)
         }
         return ViewHolder(view)
     }

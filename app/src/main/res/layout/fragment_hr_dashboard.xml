@@ -482,8 +482,7 @@
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:src="@drawable/ic_tab_calendar_pencil"
-                        android:tint="#101828" />
+                        android:src="@drawable/ic_tab_calendar_pencil" />
 
                     <TextView
                         android:id="@+id/tvHistoryDate1"
@@ -592,8 +591,7 @@
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:src="@drawable/ic_tab_calendar_pencil"
-                        android:tint="#101828" />
+                        android:src="@drawable/ic_tab_calendar_pencil" />
 
                     <TextView
                         android:id="@+id/tvHistoryDate2"
@@ -693,8 +691,7 @@
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:src="@drawable/ic_tab_calendar_pencil"
-                        android:tint="#101828" />
+                        android:src="@drawable/ic_tab_calendar_pencil" />
 
                     <TextView
                         android:id="@+id/tvHistoryDate3"

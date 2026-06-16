@@ -1063,7 +1063,8 @@ data class StaffData(
     val reportingTo: String? = null,
     val reportingToId: String? = null,
     val geoTrackingEnabled: Boolean = false,
-    val trackingDeviceHealth: TrackingDeviceHealth? = null
+    val trackingDeviceHealth: TrackingDeviceHealth? = null,
+    val photo: String? = null
 )
 
 data class TrackingDeviceHealth(
@@ -1629,7 +1630,7 @@ data class ConversationData(
     val lastMessageSenderId: String? = null,
     val participants: List<ParticipantData>?
 )
-data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?)
+data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?, val photo: String? = null)
 data class MessagesResponse(
     val success: Boolean,
     val page: List<MessageData>? = null,

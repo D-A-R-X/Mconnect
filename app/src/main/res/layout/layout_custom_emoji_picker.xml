@@ -67,7 +67,8 @@
         android:layout_height="wrap_content"
         android:scrollbars="none"
         android:background="#F8F9FA"
-        android:paddingBottom="6dp">
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp">
         
         <LinearLayout
             android:id="@+id/categoryTabsContainer"

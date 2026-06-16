@@ -21,6 +21,13 @@
                 android:layout_height="52dp"
                 android:background="@drawable/bg_chat_avatar_circle">
 
+                <ImageView
+                    android:id="@+id/ivChatAvatarImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/tvChatAvatar"
                     android:layout_width="wrap_content"
