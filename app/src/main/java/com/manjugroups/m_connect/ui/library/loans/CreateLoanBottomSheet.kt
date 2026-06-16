@@ -316,16 +316,13 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                     binding.btnSubmitLoan.alpha = 1f
                 }
             } catch (e: retrofit2.HttpException) {
-                val errorStr = try {
-                    e.response()?.errorBody()?.string()?.take(200) ?: e.message()
-                } catch (ex: Exception) {
-                    e.message()
-                }
-                android.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Server Error")
-                    .setMessage(errorStr)
-                    .setPositiveButton("OK", null)
-                    .show()
+                // Toast the parsed error instead of the raw JSON +
+                // convex stack trace. Matches CreateSalaryAdvanceSheet.
+                Toast.makeText(
+                    requireContext(),
+                    LoanErrorParser.friendlyMessage(e),
+                    Toast.LENGTH_LONG,
+                ).show()
                 binding.btnSubmitLoan.isEnabled = true
                 binding.btnSubmitLoan.alpha = 1f
             } catch (e: Exception) {

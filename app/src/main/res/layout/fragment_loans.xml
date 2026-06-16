@@ -155,12 +155,31 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- Hero active loan card overlapping the header -->
+            <!-- White card that overlaps the blue header by 44dp and
+                 wraps every card below it (hero, tab segment, empty
+                 state, history list). Before this wrapper existed,
+                 hiding the heroActiveCard left the tabs floating on
+                 the gray bg with no rounded-corner shoulder — empty
+                 state read as ungrouped. Now the wrapper carries the
+                 30dp top corners + the -44dp pull-up, and the hero
+                 inside it just contributes its own card visual when
+                 a loan exists. -->
+            <LinearLayout
+                android:id="@+id/loansWhiteWrapper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-44dp"
+                android:background="@drawable/bg_loan_hero_card"
+                android:orientation="vertical"
+                android:paddingBottom="16dp">
+
+            <!-- Hero active loan card — inherits the wrapper's white
+                 floor; its own background keeps it visually distinct
+                 when a loan is present. -->
             <LinearLayout
                 android:id="@+id/heroActiveCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="-44dp"
                 android:background="@drawable/bg_loan_hero_card"
                 android:clickable="true"
                 android:focusable="true"
@@ -251,14 +270,29 @@
                             android:textColor="#0B61CA"
                             android:textSize="12sp" />
 
-                        <ImageView
+                        <!-- Delete affordance — matches the per-row
+                             delete on My Permissions (FrameLayout with
+                             the same rounded-rect bg + trash icon).
+                             Visible on the user's own active and
+                             pending rows; click opens the same
+                             cancel-leave confirm dialog used elsewhere. -->
+                        <FrameLayout
                             android:id="@+id/btnCancelLoan"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:layout_marginTop="8dp"
                             android:layout_marginEnd="4dp"
-                            android:src="@drawable/ic_trash_red"
-                            android:visibility="gone" />
+                            android:background="@drawable/bg_leave_delete_icon"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_leave_trash_red" />
+                        </FrameLayout>
                     </LinearLayout>
                 </LinearLayout>
 
@@ -635,6 +669,7 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/tvRequestedLoansTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingHorizontal="20dp"
@@ -721,7 +756,8 @@
                 android:visibility="gone"
                 app:es_image="@drawable/img_loans_empty"
                 app:es_title="No Loans Yet"
-                app:es_description="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history." />
+                app:es_description="Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place." />
+            </LinearLayout> <!-- /loansWhiteWrapper -->
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

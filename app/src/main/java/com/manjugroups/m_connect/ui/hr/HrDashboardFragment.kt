@@ -944,6 +944,17 @@ class HrDashboardFragment : Fragment() {
             // live ONLY inside the dedicated "My Attendance" history screen.
             card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
                 .visibility = View.GONE
+
+            // Present / Absent pill on every past-day card. Today's row
+            // (index 0) is skipped — the day is still running so a verdict
+            // would be premature; the helper also short-circuits on
+            // today's date as a second guard.
+            if (index > 0) {
+                AttendanceStatusBadge.bind(
+                    card.findViewById(R.id.tvHistoryItemStatus),
+                    record,
+                )
+            }
             binding.historyListContainer.addView(card)
         }
     }

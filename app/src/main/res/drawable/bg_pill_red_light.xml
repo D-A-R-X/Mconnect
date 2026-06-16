@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Red companion to bg_pill_green_light, used by the attendance day
+  cards to badge an Absent verdict (past day with zero worked
+  minutes, or HR-marked absent). Same shape + radius as the green
+  pill so the two read as a paired set on the same row.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FEF3F2" />
+    <corners android:radius="16dp" />
+</shape>
