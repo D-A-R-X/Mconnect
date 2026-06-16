@@ -14,6 +14,7 @@
   - tvDoneLabel
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_chat_sheet_top"
@@ -51,7 +52,7 @@
             android:id="@+id/btnSheetClose"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:background="@drawable/bg_chat_header_action"
+            android:background="@drawable/bg_sheet_close_circle"
             android:clickable="true"
             android:focusable="true">
 
@@ -60,8 +61,8 @@
                 android:layout_height="16dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_close_pill"
-                android:tint="#475467" />
+                android:src="@drawable/ic_sheet_close"
+                app:tint="#101828" />
         </FrameLayout>
     </LinearLayout>
 

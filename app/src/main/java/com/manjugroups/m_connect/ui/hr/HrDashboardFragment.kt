@@ -893,21 +893,31 @@ class HrDashboardFragment : Fragment() {
         // Static cardHistory1 is retired; today lives inline in the list.
         binding.cardHistory1.visibility = View.GONE
 
-        // Build the list: Today first (tagged "Today" with live clock-in +
-        // live hours), then yesterday, day-before, etc — all in the same card
-        // style so the user sees one consistent log strip.
-        binding.historyListContainer.removeAllViews()
+        val container = binding.historyListContainer
+        val childCount = container.childCount
+        val targetCount = sorted.size
+
+        if (childCount > targetCount) {
+            container.removeViews(targetCount, childCount - targetCount)
+        }
+
         todayCardHoursView = null
         val liveState = flowViewModel.uiState.value
         val liveInIso = liveState.firstPunchInIso
         val liveInMs = liveInIso?.let { parseIsoMillisOrNull(it) }
 
         sorted.forEachIndexed { index, record ->
-            val card = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_attendance_history_card,
-                binding.historyListContainer,
-                false
-            )
+            val card = if (index < childCount) {
+                container.getChildAt(index)
+            } else {
+                val newCard = LayoutInflater.from(requireContext()).inflate(
+                    R.layout.item_attendance_history_card,
+                    container,
+                    false
+                )
+                container.addView(newCard)
+                newCard
+            }
             val dateView = card.findViewById<TextView>(R.id.tvHistoryItemDate)
             val hoursView = card.findViewById<TextView>(R.id.tvHistoryItemHours)
             val rangeView = card.findViewById<TextView>(R.id.tvHistoryItemRange)
@@ -955,7 +965,6 @@ class HrDashboardFragment : Fragment() {
                     record,
                 )
             }
-            binding.historyListContainer.addView(card)
         }
     }
 

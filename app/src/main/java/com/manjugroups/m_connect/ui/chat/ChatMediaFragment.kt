@@ -216,6 +216,9 @@ class ChatMediaFragment : Fragment() {
 
                             if (!resolvedUrl.isNullOrBlank()) {
                                 if (isMedia) {
+                                    val msgTimeMs = msg.creationTime?.let {
+                                        if (it < 10000000000.0) (it * 1000).toLong() else it.toLong()
+                                    }
                                     parsedMedia.add(
                                         MediaItem(
                                             id = att.id ?: att.storageId ?: "",
@@ -223,11 +226,14 @@ class ChatMediaFragment : Fragment() {
                                             isVideo = mime.startsWith("video/"),
                                             duration = if (mime.startsWith("video/")) "0:05" else null,
                                             senderName = msg.senderName,
-                                            sentAt = msg.creationTime?.toLong()
+                                            sentAt = msgTimeMs
                                         )
                                     )
                                 } else {
-                                    val dateStr = msg.creationTime?.let { timeFmt.format(Date(it.toLong())) } ?: ""
+                                    val msgTimeMs = msg.creationTime?.let {
+                                        if (it < 10000000000.0) (it * 1000).toLong() else it.toLong()
+                                    }
+                                    val dateStr = msgTimeMs?.let { timeFmt.format(Date(it)) } ?: ""
                                     val ext = att.fileName?.substringAfterLast('.', "")?.uppercase(Locale.US) ?: "FILE"
                                     parsedDocs.add(
                                         DocItem(
@@ -244,7 +250,10 @@ class ChatMediaFragment : Fragment() {
 
                         // Extract text links from message body
                         val urls = extractUrls(msg.body)
-                        val dateStr = msg.creationTime?.let { timeFmt.format(Date(it.toLong())) } ?: ""
+                        val msgTimeMs = msg.creationTime?.let {
+                            if (it < 10000000000.0) (it * 1000).toLong() else it.toLong()
+                        }
+                        val dateStr = msgTimeMs?.let { timeFmt.format(Date(it)) } ?: ""
                         urls.forEach { url ->
                             val uri = Uri.parse(url)
                             val host = uri.host?.removePrefix("www.") ?: "Link"

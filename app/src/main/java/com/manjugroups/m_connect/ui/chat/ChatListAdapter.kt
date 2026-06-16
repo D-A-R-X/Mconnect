@@ -57,8 +57,14 @@ class ChatListAdapter(
                 binding.ivPreviewIcon.setColorFilter(
                     androidx.core.content.ContextCompat.getColor(binding.root.context, R.color.chat_text_secondary)
                 )
+                if (item.previewIconRes == R.drawable.ic_chat_msg_deleted) {
+                    binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.ITALIC)
+                } else {
+                    binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.NORMAL)
+                }
             } else {
                 binding.ivPreviewIcon.visibility = View.GONE
+                binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.NORMAL)
             }
 
             // Find the inner FrameLayout that has the background in item_chat.xml
