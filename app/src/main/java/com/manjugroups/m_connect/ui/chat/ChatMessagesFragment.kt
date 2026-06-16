@@ -35,6 +35,12 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import coil.transform.CircleCropTransformation
+import androidx.core.content.ContextCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import android.widget.EditText
+import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -200,23 +206,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         // chat header doesn't flicker from arguments → API result.
         hydrateHeaderFromCache()
 
-        // Hydrate from local cache before hitting the network so the screen
-        // paints instantly when re-entering a chat.
-        if (messages.isEmpty()) {
-            val cached = ChatMessageCache.load(requireContext().applicationContext, cacheKey())
-            if (cached.isNotEmpty()) {
-                messages.addAll(cached)
-                latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
-            }
-        }
+        // Show skeleton by default until cache or server loads
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        binding.rvMessages.visibility = View.GONE
 
-        if (messages.isEmpty()) {
-            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-            binding.rvMessages.visibility = View.GONE
-        } else {
-            binding.skeletonContainer.visibility = View.GONE
-            binding.rvMessages.visibility = View.VISIBLE
-            renderMessages(scrollToBottom = true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            if (messages.isEmpty()) {
+                val cached = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    ChatMessageCache.load(requireContext().applicationContext, cacheKey())
+                }
+                if (cached.isNotEmpty() && _binding != null) {
+                    messages.addAll(cached)
+                    latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
+                    renderMessages(scrollToBottom = true)
+                }
+            } else {
+                renderMessages(scrollToBottom = true)
+            }
         }
         binding.btnBack.setOnClickListener { navigateUp() }
         binding.titleGroup.setOnClickListener { openContactInfo() }
@@ -380,12 +386,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     myStaffId = response.user?.staffId.orEmpty()
                 }
             }
-            refreshChatMetadata()
-            // If cache hydrated the list, don't force-scroll again after the
-            // server refresh — that double scroll is the visible "glitch" on
-            // re-entering a chat. Only scroll on a true cold open.
-            loadInitialMessages(scrollToBottom = messages.isEmpty())
-            markRead()
+            launch {
+                refreshChatMetadata()
+            }
+            launch {
+                // If cache hydrated the list, don't force-scroll again after the
+                // server refresh — that double scroll is the visible "glitch" on
+                // re-entering a chat. Only scroll on a true cold open.
+                loadInitialMessages(scrollToBottom = messages.isEmpty())
+                markRead()
+            }
         }
     }
 
@@ -425,6 +435,62 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             onMessageTap = { _ ->
                 updateSelectionToolbar()
                 true
+            },
+            onContactClick = { name, phone ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val formattedPhone = phone.replace("[^0-9]".toRegex(), "")
+                    var foundStaff: StaffData? = null
+                    runCatching {
+                        api.getStaff(session.bearerToken, status = "active")
+                    }.onSuccess { response ->
+                        foundStaff = response.staff.find { staff ->
+                            val sPhone = staff.phone?.replace("[^0-9]".toRegex(), "").orEmpty()
+                            sPhone.isNotEmpty() && (sPhone == formattedPhone || formattedPhone.endsWith(sPhone) || sPhone.endsWith(formattedPhone))
+                        }
+                    }
+
+                    if (foundStaff == null) {
+                        runCatching {
+                            api.getStaff(session.bearerToken, status = "active")
+                        }.onSuccess { response ->
+                            foundStaff = response.staff.find { staff ->
+                                staff.name?.equals(name, ignoreCase = true) == true
+                            }
+                        }
+                    }
+
+                    val otherStaffId = foundStaff?.id
+                    if (otherStaffId == null) {
+                        toast("Cannot message: contact is not registered in the app")
+                        return@launch
+                    }
+
+                    runCatching {
+                        api.startDm(session.bearerToken, StartDmRequest(otherStaffId))
+                    }.onSuccess { response ->
+                        val conversationId = response.conversationId
+                        if (!response.success || conversationId == null) {
+                            toast("Unable to start direct message")
+                            return@onSuccess
+                        }
+                        
+                        parentFragmentManager.beginTransaction()
+                            .replace(
+                                R.id.fragmentContainer,
+                                ChatMessagesFragment.forConversation(
+                                    id = conversationId,
+                                    name = foundStaff?.name ?: name
+                                )
+                            )
+                            .addToBackStack(null)
+                            .commit()
+                    }.onFailure {
+                        toast("Unable to start direct message")
+                    }
+                }
+            },
+            onSaveAsClick = { url, mime, storageId, fileName ->
+                handleSaveAsClick(url, mime, storageId, fileName)
             }
         )
         binding.rvMessages.apply {
@@ -522,6 +588,97 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
         } else {
             routeAttachment(url, mime, storageId, fileName)
+        }
+    }
+
+    private fun handleSaveAsClick(url: String, mime: String, storageId: String?, fileName: String?) {
+        if (url.isBlank() && storageId.isNullOrBlank()) {
+            toast("Attachment unavailable")
+            return
+        }
+        
+        val name = fileName ?: "document_${System.currentTimeMillis()}"
+
+        val doSave = { resolvedUrl: String ->
+            val ctx = context
+            if (ctx != null) {
+                val isRemote = resolvedUrl.startsWith("http://", true) || resolvedUrl.startsWith("https://", true)
+                if (isRemote) {
+                    toast("Downloading…")
+                    try {
+                        val downloadManager = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                        val request = android.app.DownloadManager.Request(Uri.parse(resolvedUrl)).apply {
+                            setTitle(name)
+                            setDescription("Downloading document")
+                            setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+                            setMimeType(mime)
+                        }
+                        downloadManager.enqueue(request)
+                    } catch (e: Exception) {
+                        saveDocumentManual(resolvedUrl, name, mime)
+                    }
+                } else {
+                    saveDocumentManual(resolvedUrl, name, mime)
+                }
+            }
+        }
+
+        if (url.isBlank()) {
+            resolveStorageUrl(storageId!!) { resolved ->
+                if (resolved.isNullOrBlank()) {
+                    toast("Unable to resolve document URL")
+                } else {
+                    doSave(resolved)
+                }
+            }
+        } else {
+            doSave(url)
+        }
+    }
+
+    private fun saveDocumentManual(url: String, name: String, mime: String) {
+        toast("Downloading…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val fileUriString = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = java.net.URL(url).openStream().use { it.readBytes() }
+                    val ctx = context?.applicationContext ?: return@runCatching null
+                    val resolver = ctx.contentResolver
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val collection = android.provider.MediaStore.Downloads.getContentUri(
+                            android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                        )
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                        }
+                        val uri = resolver.insert(collection, values) ?: return@runCatching null
+                        resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        
+                        values.clear()
+                        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                        resolver.update(uri, values, null, null)
+                        uri.toString()
+                    } else {
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                            android.os.Environment.DIRECTORY_DOWNLOADS
+                        )
+                        val file = File(downloadsDir, name)
+                        file.parentFile?.mkdirs()
+                        file.writeBytes(bytes)
+                        
+                        android.media.MediaScannerConnection.scanFile(ctx, arrayOf(file.absolutePath), arrayOf(mime), null)
+                        Uri.fromFile(file).toString()
+                    }
+                }.getOrNull()
+            }
+            if (_binding != null) {
+                toast(if (fileUriString != null) "Saved to Downloads" else "Couldn't save document")
+            }
         }
     }
 
@@ -1333,6 +1490,15 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             runCatching {
                 api.deleteMessage(session.bearerToken, DeleteMessageRequest(messageId))
             }.onSuccess {
+                context?.let { ctx -> 
+                    DeletedMessagesTracker.markAsDeleted(ctx, messageId)
+                    val msg = messages.find { it.id == messageId }
+                    if (msg != null) {
+                        val timestamp = getNormalizedTimestamp(msg.creationTime).toLong()
+                        val chatId = conversationId ?: channelId
+                        DeletedMessagesTracker.markPreviewDeleted(ctx, chatId, timestamp)
+                    }
+                }
                 purgeMessageFromCache(listOf(messageId))
                 loadInitialMessages(scrollToBottom = true)
             }.onFailure {
@@ -1565,14 +1731,28 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     viewLifecycleOwner.lifecycleScope.launch {
                         var failures = 0
                         val deleted = mutableListOf<String>()
+                        val deletedMessages = mutableListOf<MessageData>()
                         ids.forEach { id ->
                             runCatching {
                                 api.deleteMessage(
                                     session.bearerToken,
                                     com.manjugroups.m_connect.network.DeleteMessageRequest(id)
                                 )
-                            }.onSuccess { deleted += id }
-                                .onFailure { failures++ }
+                            }.onSuccess {
+                                deleted += id
+                                context?.let { ctx -> DeletedMessagesTracker.markAsDeleted(ctx, id) }
+                                val msg = messages.find { it.id == id }
+                                if (msg != null) {
+                                    deletedMessages.add(msg)
+                                }
+                            }.onFailure { failures++ }
+                        }
+                        context?.let { ctx ->
+                            val maxTimestamp = deletedMessages.maxOfOrNull { getNormalizedTimestamp(it.creationTime).toLong() } ?: 0L
+                            if (maxTimestamp > 0) {
+                                val chatId = conversationId ?: channelId
+                                DeletedMessagesTracker.markPreviewDeleted(ctx, chatId, maxTimestamp)
+                            }
                         }
                         purgeMessageFromCache(deleted)
                         exitSelectionMode()
@@ -1940,7 +2120,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isDocumentPickerMode = true
             pickAttachmentsLauncher.launch(arrayOf("*/*"))
         }
-        tile(R.id.tileAttachContact) { launchContactPicker() }
+        tile(R.id.tileAttachContact) { showCustomContactPickerSheet() }
         tile(R.id.tileAttachCamera) { launchCamera() }
         attachTilesWired = true
     }
@@ -2033,19 +2213,281 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         sendMessage()
     }
 
-    private val pickContactLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode != android.app.Activity.RESULT_OK) return@registerForActivityResult
-            val uri = result.data?.data ?: return@registerForActivityResult
-            handlePickedContact(uri)
+    private fun showCustomContactPickerSheet() {
+        if (!isAdded) return
+        val context = requireContext()
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_multi_people_picker, null)
+        val dialog = BottomSheetDialog(context)
+        dialog.setContentView(content)
+
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
+            val params = sheet.layoutParams
+            params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+            sheet.layoutParams = params
+            sheet.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            androidx.core.view.ViewCompat.setElevation(sheet, 0f)
+            BottomSheetBehavior.from(sheet).apply {
+                state = BottomSheetBehavior.STATE_EXPANDED
+                skipCollapsed = true
+                isDraggable = true
+            }
         }
 
-    private fun launchContactPicker() {
-        val intent = android.content.Intent(android.content.Intent.ACTION_PICK).apply {
-            type = android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+        dialog.setOnShowListener { dialogInterface ->
+            val d = dialogInterface as BottomSheetDialog
+            d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { s ->
+                s.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(s, 0f)
+            }
         }
-        runCatching { pickContactLauncher.launch(intent) }
-            .onFailure { toast("No contacts app available") }
+
+        val titleView = content.findViewById<TextView>(R.id.tvSheetTitle)
+        val closeBtn = content.findViewById<View>(R.id.btnSheetClose)
+        val searchField = content.findViewById<EditText>(R.id.etSearchPeople)
+        val peopleCard = content.findViewById<LinearLayout>(R.id.peopleCard)
+        val emptyView = content.findViewById<TextView>(R.id.tvEmptyPeople)
+        val doneBtn = content.findViewById<FrameLayout>(R.id.btnDone)
+        val doneLabel = content.findViewById<TextView>(R.id.tvDoneLabel)
+        val countView = content.findViewById<TextView>(R.id.tvSelectedCount)
+
+        titleView.text = "Share Contacts"
+        doneLabel.text = "Share"
+        countView.text = "0 selected"
+
+        val selectedContacts = mutableSetOf<StaffData>()
+        var allPeople = emptyList<StaffData>()
+        var onlineStaffIds = emptySet<String>()
+
+        closeBtn.setOnClickListener { dialog.dismiss() }
+
+        fun updateDoneButton() {
+            val count = selectedContacts.size
+            countView.text = "$count selected"
+            val enabled = count > 0
+            doneBtn.isClickable = enabled
+            doneBtn.isFocusable = enabled
+            doneBtn.setBackgroundResource(
+                if (enabled) R.drawable.bg_sheet_start_button
+                else R.drawable.bg_sheet_start_button_disabled
+            )
+        }
+
+        fun bindPeople(staffList: List<StaffData>) {
+            peopleCard.removeAllViews()
+            if (staffList.isEmpty()) {
+                emptyView.text = "No matching people"
+                emptyView.visibility = View.VISIBLE
+                peopleCard.visibility = View.GONE
+                return
+            }
+            emptyView.visibility = View.GONE
+            peopleCard.visibility = View.VISIBLE
+
+            peopleCard.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            val dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setSize(0, (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1))
+                setColor(ContextCompat.getColor(context, R.color.chat_separator))
+            }
+            peopleCard.dividerDrawable = dividerDrawable
+
+            staffList.forEachIndexed { index, member ->
+                val row = layoutInflater.inflate(R.layout.item_chat_sheet_person, peopleCard, false)
+                row.tag = member
+
+                val tvName = row.findViewById<TextView>(R.id.tvName)
+                val tvSubtitle = row.findViewById<TextView>(R.id.tvSubtitle)
+                val radio = row.findViewById<View>(R.id.radioButton)
+                val avatarCheck = row.findViewById<View>(R.id.avatarCheck)
+                val onlineDot = row.findViewById<View>(R.id.onlineDot)
+
+                tvName.text = member.name ?: "User"
+                tvSubtitle.text = listOfNotNull(member.designation, member.department)
+                    .takeIf { it.isNotEmpty() }
+                    ?.joinToString(" • ")
+                    ?: member.phone ?: ""
+
+                val initials = initialsFor(member.name ?: "User")
+                bindAvatar(
+                    row.findViewById(R.id.avatarContainer),
+                    row.findViewById(R.id.tvAvatar),
+                    row.findViewById(R.id.ivAvatarPhoto),
+                    member.photo,
+                    initials,
+                    index + (member.name?.length ?: 0)
+                )
+
+                val isSel = selectedContacts.any { it.id == member.id }
+                radio.setBackgroundResource(
+                    if (isSel) R.drawable.bg_sheet_radio_on
+                    else R.drawable.bg_sheet_radio_off
+                )
+                avatarCheck.visibility = if (isSel) View.VISIBLE else View.GONE
+                onlineDot.visibility = if (onlineStaffIds.contains(member.id)) View.VISIBLE else View.GONE
+
+                row.setOnClickListener {
+                    val alreadySel = selectedContacts.any { it.id == member.id }
+                    if (alreadySel) {
+                        selectedContacts.removeAll { it.id == member.id }
+                    } else {
+                        selectedContacts.add(member)
+                    }
+
+                    val newSel = selectedContacts.any { it.id == member.id }
+                    radio.setBackgroundResource(
+                        if (newSel) R.drawable.bg_sheet_radio_on
+                        else R.drawable.bg_sheet_radio_off
+                    )
+                    avatarCheck.visibility = if (newSel) View.VISIBLE else View.GONE
+
+                    updateDoneButton()
+                }
+
+                peopleCard.addView(row)
+            }
+        }
+
+        fun filterPeople(query: String) {
+            var visibleCount = 0
+            val trimmedQuery = query.trim()
+            for (i in 0 until peopleCard.childCount) {
+                val child = peopleCard.getChildAt(i)
+                val member = child.tag as? StaffData
+                if (member == null) continue
+                
+                val matches = if (trimmedQuery.isEmpty()) {
+                    true
+                } else {
+                    (member.name ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.designation ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.department ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.phone ?: "").contains(trimmedQuery)
+                }
+                
+                if (matches) {
+                    child.visibility = View.VISIBLE
+                    visibleCount++
+                } else {
+                    child.visibility = View.GONE
+                }
+            }
+            
+            if (visibleCount == 0) {
+                emptyView.text = "No matching people"
+                emptyView.visibility = View.VISIBLE
+                peopleCard.visibility = View.GONE
+            } else {
+                emptyView.visibility = View.GONE
+                peopleCard.visibility = View.VISIBLE
+            }
+        }
+
+        searchField.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterPeople(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        doneBtn.setOnClickListener {
+            if (selectedContacts.isEmpty()) return@setOnClickListener
+            selectedContacts.forEach { contact ->
+                val contactName = contact.name ?: "Contact"
+                val contactPhone = contact.phone ?: ""
+                val contactLabel = "Mobile"
+                sendContactMessageDirect(contactName, contactPhone, contactLabel)
+            }
+            dialog.dismiss()
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.getOnlineStaff(session.bearerToken)
+            }.onSuccess { resp ->
+                onlineStaffIds = resp.online?.mapNotNull { it?.staffId }?.toSet().orEmpty()
+            }
+
+            runCatching {
+                api.getStaff(session.bearerToken, status = "active")
+            }.onSuccess { response ->
+                val currentStaffId = session.staffId
+                allPeople = response.staff.filter { it.id != null && it.id != currentStaffId }
+                bindPeople(allPeople)
+            }.onFailure {
+                toast("Unable to load contacts list")
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun sendContactMessageDirect(name: String, number: String, label: String) {
+        val text = buildString {
+            append("📇 Contact\n")
+            append(name).append('\n')
+            append(label).append(": ").append(number)
+        }
+        sendDirectMessage(text)
+    }
+
+    private fun sendDirectMessage(text: String) {
+        val originalText = binding.etMessage.text?.toString() ?: ""
+        binding.etMessage.setText(text)
+        sendMessage()
+        if (originalText.isNotEmpty()) {
+            binding.etMessage.setText(originalText)
+        }
+    }
+
+    private fun initialsFor(name: String): String =
+        name.split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .ifBlank { name.take(1).uppercase(Locale.getDefault()) }
+
+    private fun avatarPalette(seed: Int): Pair<Int, Int> {
+        return when (seed.mod(4)) {
+            0 -> resolveColor(R.attr.colorAccentLight) to resolveColor(R.attr.colorAccentPrimary)
+            1 -> resolveColor(R.attr.colorInfoLight) to resolveColor(R.attr.colorInfo)
+            2 -> resolveColor(R.attr.colorSuccessLight) to resolveColor(R.attr.colorSuccess)
+            else -> resolveColor(R.attr.colorWarningLight) to resolveColor(R.attr.colorWarning)
+        }
+    }
+
+    private fun bindAvatar(container: View, label: TextView, text: String, seed: Int) {
+        val palette = avatarPalette(seed)
+        val bg = container.background
+        if (bg != null) {
+            bg.mutate().setTint(palette.first)
+        } else {
+            container.setBackgroundColor(palette.first)
+        }
+        label.setTextColor(palette.second)
+        label.text = text
+    }
+
+    private fun bindAvatar(
+        container: View,
+        label: TextView,
+        ivPhoto: ImageView,
+        photoUrl: String?,
+        text: String,
+        seed: Int
+    ) {
+        val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photoUrl)
+        if (!resolved.isNullOrBlank()) {
+            ivPhoto.visibility = View.VISIBLE
+            label.visibility = View.GONE
+            ivPhoto.load(resolved) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            ivPhoto.visibility = View.GONE
+            label.visibility = View.VISIBLE
+            bindAvatar(container, label, text, seed)
+        }
     }
 
     private fun handlePickedContact(uri: android.net.Uri) {
@@ -2593,7 +3035,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             val byId = linkedMapOf<String, MessageData>()
             mainMessages.forEach { msg -> msg.id?.let { byId[it] = msg } }
             val mergedInitial = byId.values
-                .sortedBy { it.creationTime ?: 0.0 }
+                .sortedBy { getNormalizedTimestamp(it.creationTime) }
                 .toList()
 
             // If cache already produced an identical list, skip the second
@@ -2610,8 +3052,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 msg.id?.let { initialParentMap[it] = originalBodyCache[it] ?: msg }
             }
             chatAdapter.setParentMessageCache(initialParentMap)
-            if (!cacheMatchesServer) {
-                renderMessages(scrollToBottom = scrollToBottom)
+            if (!cacheMatchesServer || messages.isEmpty()) {
+                renderMessages(scrollToBottom = scrollToBottom || !cacheMatchesServer)
             } else {
                 // Still need to persist the freshly-stamped cache (timestamps
                 // get refreshed) and let the poll loop handle future deltas.
@@ -2669,7 +3111,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         if (listDidChange) {
             val merged = byId.values
-                .sortedBy { it.creationTime ?: 0.0 }
+                .sortedBy { getNormalizedTimestamp(it.creationTime) }
                 .toList()
             messages.clear()
             messages.addAll(merged)
@@ -3010,9 +3452,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val chatItems = mutableListOf<ChatItem>()
         var lastDayKey: String? = null
 
+        messages.sortBy { getNormalizedTimestamp(it.creationTime) }
+
         messages
             .forEach { message ->
-                val createdMillis = message.creationTime?.toLong() ?: 0L
+                val createdMillis = getNormalizedTimestamp(message.creationTime).toLong()
                 val dayKey = dayKey(createdMillis)
                 if (dayKey != lastDayKey && createdMillis > 0L) {
                     chatItems.add(ChatItem.DateSeparator(friendlyDateLabel(createdMillis)))
@@ -3030,7 +3474,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         chatAdapter.submitList(chatItems) {
             if (scrollToBottom && chatItems.isNotEmpty()) {
-                binding.rvMessages.scrollToPosition(chatItems.size - 1)
+                binding.rvMessages.post {
+                    if (_binding != null) {
+                        binding.rvMessages.scrollToPosition(chatItems.size - 1)
+                    }
+                }
             }
         }
         persistMessageCache()
@@ -3052,6 +3500,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             yesterday.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
         if (isYesterday) return "Yesterday"
         return SimpleDateFormat("dd MMMM", Locale.getDefault()).format(Date(timestamp))
+    }
+
+    private fun getNormalizedTimestamp(timestamp: Double?): Double {
+        if (timestamp == null) return 0.0
+        return if (timestamp < 10000000000.0) timestamp * 1000.0 else timestamp
     }
 
     private fun buildAttachmentBadge(fileType: String): TextView {
@@ -3376,12 +3829,17 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             val existingIndexByTemp = if (tempId != null) messages.indexOfFirst { it.id == tempId } else -1
             val existingIndexById = messages.indexOfFirst { it.id == sent.id }
             
-            if (existingIndexByTemp >= 0) {
-                messages[existingIndexByTemp] = sent
-            } else if (existingIndexById >= 0) {
+            if (existingIndexById >= 0) {
                 messages[existingIndexById] = sent
+                if (existingIndexByTemp >= 0) {
+                    messages.removeAt(existingIndexByTemp)
+                }
             } else {
-                messages.add(sent)
+                if (existingIndexByTemp >= 0) {
+                    messages[existingIndexByTemp] = sent
+                } else {
+                    messages.add(sent)
+                }
             }
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
             renderMessages(scrollToBottom = true)

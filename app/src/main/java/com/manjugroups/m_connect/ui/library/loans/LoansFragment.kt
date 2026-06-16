@@ -373,15 +373,6 @@ class LoansFragment : Fragment() {
         // the other. Salary advances start at hr_pending (they skip the
         // nominee/GM/AVP chain), so those earlier dots read as done —
         // matching "it's already past those" semantics.
-        // Advances run ONLY HR → Accounts (no nominee/GM/AVP chain), so
-        // hide those four steps for an advance — the tracker then shows
-        // just the two relevant stages.
-        val loanStepVis = if (loan.isAdvance) View.GONE else View.VISIBLE
-        binding.trackStepNominee1.visibility = loanStepVis
-        binding.trackStepNominee2.visibility = loanStepVis
-        binding.trackStepGm.visibility = loanStepVis
-        binding.trackStepAvp.visibility = loanStepVis
-
         val stage = loan.currentStage?.lowercase()?.trim().orEmpty()
         // Numeric rank of the current stage; -1 for unknown/blank so an
         // un-stamped legacy row lights nothing rather than everything.
@@ -394,48 +385,79 @@ class LoansFragment : Fragment() {
             "disbursed", "completed", "active", "approved" -> 5
             else -> if (loan.status == LoanStatus.ACTIVE) 5 else -1
         }
-        val nominee1Signed = loan.nominee1Status.equals("approved", ignoreCase = true)
-        val nominee2Signed = loan.nominee2Status.equals("approved", ignoreCase = true)
-
-        // A nominee dot lights when the chain has moved past nominees
-        // (rank >= 1, i.e. gm_pending or later) OR that specific nominee
-        // has individually signed while still in nominee_pending.
-        val n1Done = rank >= 1 || nominee1Signed
-        val n2Done = rank >= 1 || nominee2Signed
-        val gmDone = rank >= 2
-        val avpDone = rank >= 3
         val hrDone = rank >= 4
 
-        fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
-            frame.setBackgroundResource(R.drawable.bg_loan_track_active)
-            icon.setImageResource(R.drawable.ic_loan_track_check)
-            text.setTextColor(Color.parseColor("#0B61CA"))
-            text.setTypeface(null, Typeface.BOLD)
-        }
-        fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
-            frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
-            icon.setImageResource(defaultIcon)
-            text.setTextColor(Color.parseColor("#98A2B3"))
-            text.setTypeface(null, Typeface.NORMAL)
-        }
+        if (loan.isAdvance) {
+            binding.loanTrackerLine.visibility = View.GONE
+            binding.layoutLoanTracker.visibility = View.GONE
+            binding.advanceTrackerLine.visibility = View.VISIBLE
+            binding.layoutAdvanceTracker.visibility = View.VISIBLE
 
-        if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
-        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
-        
-        if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
-        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
-        
-        if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
-        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
-        
-        if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
-        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
-        
-        if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
-        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
-        
-        // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
-        setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+            // HR is always green (active) for advances
+            binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
+            binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
+            binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
+            binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
+
+            if (hrDone) {
+                binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_green)
+                binding.advanceIconAccs.setColorFilter(Color.parseColor("#1BCA0B"))
+                binding.advanceTextAccs.setTextColor(Color.parseColor("#1BCA0B"))
+                binding.advanceTextAccs.setTypeface(null, Typeface.BOLD)
+            } else {
+                binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_pending)
+                binding.advanceIconAccs.setColorFilter(Color.parseColor("#98A2B3"))
+                binding.advanceTextAccs.setTextColor(Color.parseColor("#98A2B3"))
+                binding.advanceTextAccs.setTypeface(null, Typeface.NORMAL)
+            }
+        } else {
+            binding.loanTrackerLine.visibility = View.VISIBLE
+            binding.layoutLoanTracker.visibility = View.VISIBLE
+            binding.advanceTrackerLine.visibility = View.GONE
+            binding.layoutAdvanceTracker.visibility = View.GONE
+
+            val nominee1Signed = loan.nominee1Status.equals("approved", ignoreCase = true)
+            val nominee2Signed = loan.nominee2Status.equals("approved", ignoreCase = true)
+
+            // A nominee dot lights when the chain has moved past nominees
+            // (rank >= 1, i.e. gm_pending or later) OR that specific nominee
+            // has individually signed while still in nominee_pending.
+            val n1Done = rank >= 1 || nominee1Signed
+            val n2Done = rank >= 1 || nominee2Signed
+            val gmDone = rank >= 2
+            val avpDone = rank >= 3
+
+            fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
+                frame.setBackgroundResource(R.drawable.bg_loan_track_active)
+                icon.setImageResource(R.drawable.ic_loan_track_check)
+                text.setTextColor(Color.parseColor("#0B61CA"))
+                text.setTypeface(null, Typeface.BOLD)
+            }
+            fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
+                frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
+                icon.setImageResource(defaultIcon)
+                text.setTextColor(Color.parseColor("#98A2B3"))
+                text.setTypeface(null, Typeface.NORMAL)
+            }
+
+            if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
+            else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
+
+            if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
+            else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
+
+            if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
+            else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
+
+            if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
+            else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
+
+            if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
+            else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
+
+            // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
+            setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+        }
     }
 
     /** Mirrors the My Permissions cancel flow: reuses

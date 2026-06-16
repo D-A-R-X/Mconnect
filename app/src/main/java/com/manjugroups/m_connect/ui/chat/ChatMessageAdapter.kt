@@ -38,7 +38,9 @@ class ChatMessageAdapter(
     private val onReactionPillClick: (MessageData, View) -> Unit,
     private val onAttachmentClick: (url: String, mime: String, storageId: String?, fileName: String?) -> Unit,
     private val onReplyClick: (messageId: String) -> Unit,
-    private val onMessageTap: ((MessageData) -> Boolean)? = null
+    private val onMessageTap: ((MessageData) -> Boolean)? = null,
+    private val onContactClick: ((name: String, phone: String) -> Unit)? = null,
+    private val onSaveAsClick: ((url: String, mime: String, storageId: String?, fileName: String?) -> Unit)? = null
 ) : ListAdapter<ChatItem, RecyclerView.ViewHolder>(ChatItemDiffCallback()) {
 
     var selectionMode: Boolean = false
@@ -57,12 +59,17 @@ class ChatMessageAdapter(
         }
     }
 
+    private fun getNormalizedTimestamp(timestamp: Double?): Long {
+        if (timestamp == null) return 0L
+        return if (timestamp < 10000000000.0) (timestamp * 1000).toLong() else timestamp.toLong()
+    }
+
     private fun isMessageSeen(message: MessageData, position: Int): Boolean {
         if (isOtherParticipantOnline) return true
 
-        val msgTime = message.creationTime?.toLong()
+        val msgTime = getNormalizedTimestamp(message.creationTime)
         val otherSeenTime = otherParticipantLastSeenAt
-        if (otherSeenTime != null && msgTime != null && otherSeenTime >= msgTime) {
+        if (otherSeenTime != null && msgTime > 0L && otherSeenTime >= msgTime) {
             return true
         }
 
@@ -70,8 +77,8 @@ class ChatMessageAdapter(
         for (i in (position + 1) until totalItems) {
             val item = getItem(i)
             if (item is ChatItem.Message && !item.isMine) {
-                val otherMsgTime = item.data.creationTime?.toLong()
-                if (msgTime != null && otherMsgTime != null && otherMsgTime > msgTime) {
+                val otherMsgTime = getNormalizedTimestamp(item.data.creationTime)
+                if (msgTime > 0L && otherMsgTime > 0L && otherMsgTime > msgTime) {
                     return true
                 }
             }
@@ -297,7 +304,8 @@ class ChatMessageAdapter(
             }
 
             val telemetry = parseLocationMessage(item.data.body)
-            if (telemetry != null) {
+            val contact = parseContactMessage(item.data.body)
+            if (telemetry != null || contact != null) {
                 binding.tvMessageBody.visibility = View.GONE
             } else {
                 binding.tvMessageBody.text = item.data.body
@@ -307,7 +315,7 @@ class ChatMessageAdapter(
             }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
-            if (telemetry == null) {
+            if (telemetry == null && contact == null) {
                 // Apply animated emoji style if body contains only 1-3 emojis
                 item.data.body?.let { bodyText ->
                     applyEmojiOnlyStyle(
@@ -406,6 +414,37 @@ class ChatMessageAdapter(
                 }
 
                 binding.attachmentsContainer.addView(cardView)
+            } else if (contact != null) {
+                val cardView = LayoutInflater.from(binding.root.context).inflate(
+                    R.layout.item_chat_contact_card,
+                    binding.attachmentsContainer,
+                    false
+                )
+                val tvName = cardView.findViewById<TextView>(R.id.tvContactName)
+                val tvPhone = cardView.findViewById<TextView>(R.id.tvContactPhone)
+                val btnMessage = cardView.findViewById<View>(R.id.btnMessageContact)
+                val avatarText = cardView.findViewById<TextView>(R.id.tvAvatar)
+
+                tvName.text = contact.name
+                tvPhone.text = "${contact.label}: ${contact.phone}"
+
+                val initials = contact.name.split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .takeIf { it.isNotEmpty() } ?: "C"
+                avatarText.text = initials
+
+                btnMessage.setOnClickListener {
+                    onContactClick?.invoke(contact.name, contact.phone)
+                }
+
+                cardView.setOnLongClickListener {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                    true
+                }
+
+                binding.attachmentsContainer.addView(cardView)
             } else {
                 val sentLongPress: () -> Unit = {
                     handleLongPress(item.data, binding.bubbleFrame)
@@ -475,7 +514,8 @@ class ChatMessageAdapter(
             }
 
             val telemetry = parseLocationMessage(item.data.body)
-            if (telemetry != null) {
+            val contact = parseContactMessage(item.data.body)
+            if (telemetry != null || contact != null) {
                 binding.tvMessageBody.visibility = View.GONE
             } else {
                 binding.tvMessageBody.text = item.data.body
@@ -485,7 +525,7 @@ class ChatMessageAdapter(
             }
             binding.tvMessageTime.text = formatTime(item.data.creationTime)
 
-            if (telemetry == null) {
+            if (telemetry == null && contact == null) {
                 // Apply animated emoji style if body contains only 1-3 emojis
                 item.data.body?.let { bodyText ->
                     applyEmojiOnlyStyle(
@@ -575,6 +615,37 @@ class ChatMessageAdapter(
                     val clip = android.content.ClipData.newPlainText("Coordinates", "${telemetry.lat}, ${telemetry.lon}")
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(binding.root.context, "Coordinates copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+
+                cardView.setOnLongClickListener {
+                    handleLongPress(item.data, binding.bubbleFrame)
+                    true
+                }
+
+                binding.attachmentsContainer.addView(cardView)
+            } else if (contact != null) {
+                val cardView = LayoutInflater.from(binding.root.context).inflate(
+                    R.layout.item_chat_contact_card,
+                    binding.attachmentsContainer,
+                    false
+                )
+                val tvName = cardView.findViewById<TextView>(R.id.tvContactName)
+                val tvPhone = cardView.findViewById<TextView>(R.id.tvContactPhone)
+                val btnMessage = cardView.findViewById<View>(R.id.btnMessageContact)
+                val avatarText = cardView.findViewById<TextView>(R.id.tvAvatar)
+
+                tvName.text = contact.name
+                tvPhone.text = "${contact.label}: ${contact.phone}"
+
+                val initials = contact.name.split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .takeIf { it.isNotEmpty() } ?: "C"
+                avatarText.text = initials
+
+                btnMessage.setOnClickListener {
+                    onContactClick?.invoke(contact.name, contact.phone)
                 }
 
                 cardView.setOnLongClickListener {
@@ -721,7 +792,7 @@ class ChatMessageAdapter(
         // Load a clean deleted/trash icon next to the text
         val deleteDrawable = androidx.core.content.res.ResourcesCompat.getDrawable(
             body.resources,
-            R.drawable.ic_chat_delete,
+            R.drawable.ic_chat_msg_deleted,
             body.context.theme
         )?.mutate()?.apply {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
@@ -1296,10 +1367,9 @@ class ChatMessageAdapter(
             layoutParams = LinearLayout.LayoutParams(0, dp(context, 36), 1f)
             isClickable = true
             isFocusable = true
-            // "Save as…" routes to the same open intent — the OS doc viewer
-            // surfaces its own share/save actions. Keeping it on the same
-            // callback avoids needing a new permission flow for this round.
-            setOnClickListener(openClick)
+            setOnClickListener {
+                onSaveAsClick?.invoke(url, mime, attachment.storageId, attachment.fileName)
+            }
         }
         actionsRow.addView(openBtn)
         actionsRow.addView(vDivider)
@@ -1659,6 +1729,37 @@ private fun parseLocationMessage(body: String?): TelemetryLocation? {
             }
         }
         TelemetryLocation(lat, lon, label, battery, speed, status)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+data class SharedContact(
+    val name: String,
+    val phone: String,
+    val label: String
+)
+
+private fun parseContactMessage(body: String?): SharedContact? {
+    if (body == null || !body.startsWith("📇 Contact\n")) {
+        return null
+    }
+    return try {
+        val lines = body.split("\n")
+        if (lines.size >= 3) {
+            val name = lines[1].trim()
+            val phoneLine = lines[2].trim()
+            val colonIndex = phoneLine.indexOf(":")
+            if (colonIndex != -1) {
+                val label = phoneLine.substring(0, colonIndex).trim()
+                val phone = phoneLine.substring(colonIndex + 1).trim()
+                SharedContact(name, phone, label)
+            } else {
+                SharedContact(name, phoneLine, "Mobile")
+            }
+        } else {
+            null
+        }
     } catch (e: Exception) {
         null
     }

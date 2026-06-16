@@ -41,6 +41,7 @@ import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -426,21 +427,45 @@ class ChatListFragment : Fragment() {
                 SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
                 binding.rvChatList.visibility = View.GONE
             }
-            runCatching {
-                val conversations = api.getConversations(session.bearerToken).conversations
-                val channels = api.getChannels(session.bearerToken).channels
-                val staffList = runCatching { api.getStaff(session.bearerToken, status = "active").staff }.getOrDefault(emptyList())
-                Triple(conversations, channels, staffList)
-            }.onSuccess { (conversations, channels, staffList) ->
-                if (_binding == null) { isLoadingChats = false; return@onSuccess }
+            var conversations: List<ConversationData> = emptyList()
+            var channels: List<ChannelData> = emptyList()
+            var staffList: List<StaffData> = emptyList()
+            var fetchSuccess = false
+
+            try {
+                kotlinx.coroutines.coroutineScope {
+                    val conversationsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                        api.getConversations(session.bearerToken).conversations
+                    }
+                    val channelsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                        api.getChannels(session.bearerToken).channels
+                    }
+                    val staffListDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            api.getStaff(session.bearerToken, status = "active").staff
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
+                    conversations = conversationsDeferred.await()
+                    channels = channelsDeferred.await()
+                    staffList = staffListDeferred.await()
+                    fetchSuccess = true
+                }
+            } catch (e: Exception) {
+                // Error handled by fetchSuccess = false
+            }
+
+            if (fetchSuccess) {
+                if (_binding == null) { isLoadingChats = false; return@launch }
                 allConversations = conversations
                 allChannels = channels
                 activeStaffCache = staffList
                 hasLoadedOnce = true
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 renderCurrentList()
-            }.onFailure {
-                if (_binding == null) { isLoadingChats = false; return@onFailure }
+            } else {
+                if (_binding == null) { isLoadingChats = false; return@launch }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 if (!hasLoadedOnce) {
                     showEmptyState(
@@ -572,9 +597,24 @@ class ChatListFragment : Fragment() {
             val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(rawPhoto)
 
             // Resolve last message preview text and icon
-            val previewResult = conversation.lastMessage?.let { resolveMessagePreview(it) }
-                ?: conversation.lastMessagePreview?.let { resolveRawPreviewText(it) }
-                ?: MessagePreviewResult("No messages yet", null)
+            val previewResult = conversation.lastMessage?.let { msg ->
+                val deletedTime = DeletedMessagesTracker.getDeletedTimestamp(requireContext(), conversation.id)
+                val lastActive = conversation.lastMessageAt ?: 0L
+                val isLocalDeleted = DeletedMessagesTracker.isDeleted(requireContext(), msg.id) ||
+                        (deletedTime > 0 && lastActive <= deletedTime)
+                val resolvedMsg = if (isLocalDeleted) msg.copy(isDeleted = true) else msg
+                resolveMessagePreview(resolvedMsg, selfStaffId = selfStaffId)
+            } ?: run {
+                val deletedTime = DeletedMessagesTracker.getDeletedTimestamp(requireContext(), conversation.id)
+                val lastActive = conversation.lastMessageAt ?: 0L
+                if (deletedTime > 0 && lastActive <= deletedTime) {
+                    val isMine = conversation.lastMessageSenderId == selfStaffId
+                    val text = if (isMine) "You deleted this message" else "This message was deleted"
+                    MessagePreviewResult(text, com.manjugroups.m_connect.R.drawable.ic_chat_delete)
+                } else {
+                    conversation.lastMessagePreview?.let { resolveRawPreviewText(it) }
+                }
+            } ?: MessagePreviewResult("No messages yet", null)
 
             val lastActive = conversation.lastMessageAt ?: 0L
             val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
@@ -601,13 +641,19 @@ class ChatListFragment : Fragment() {
             val title = channel.name?.ifBlank { null } ?: "Channel"
             
             // Resolve last message preview text and icon
-            val previewResult = channel.lastMessagePreview?.let { resolveRawPreviewText(it) }
-                ?: channel.description?.let { MessagePreviewResult(it, null) }
-                ?: run {
-                    val memberCount = channel.memberCount ?: 0
-                    val text = if (memberCount > 0) "$memberCount members" else "Channel"
-                    MessagePreviewResult(text, null)
-                }
+            val deletedTime = DeletedMessagesTracker.getDeletedTimestamp(requireContext(), channel.id)
+            val lastActive = channel.lastMessageAt ?: 0L
+            val previewResult = if (deletedTime > 0 && lastActive <= deletedTime) {
+                MessagePreviewResult("You deleted this message", com.manjugroups.m_connect.R.drawable.ic_chat_delete)
+            } else {
+                channel.lastMessagePreview?.let { resolveRawPreviewText(it) }
+                    ?: channel.description?.let { MessagePreviewResult(it, null) }
+                    ?: run {
+                        val memberCount = channel.memberCount ?: 0
+                        val text = if (memberCount > 0) "$memberCount members" else "Channel"
+                        MessagePreviewResult(text, null)
+                    }
+            }
                 
             ChatListItem(
                 id = id,
@@ -765,30 +811,16 @@ class ChatListFragment : Fragment() {
             startLabel.text = "Start Chat"
         }
 
-        fun renderPeople() {
-            val query = searchField.text?.toString().orEmpty().trim()
-            val filtered = people.filter { member ->
-                if (query.isBlank()) return@filter true
-                val haystack = listOfNotNull(
-                    member.name,
-                    member.designation,
-                    member.department,
-                    member.employeeId
-                ).joinToString(" ").lowercase(Locale.getDefault())
-                haystack.contains(query.lowercase(Locale.getDefault()))
-            }
-
+        fun prePopulatePeople() {
             peopleCard.removeAllViews()
-            if (filtered.isEmpty()) {
-                peopleCard.visibility = View.GONE
-                emptyState.visibility = View.VISIBLE
-                return
+            peopleCard.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            val dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setSize(0, (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1))
+                setColor(ContextCompat.getColor(requireContext(), R.color.chat_separator))
             }
+            peopleCard.dividerDrawable = dividerDrawable
 
-            emptyState.visibility = View.GONE
-            peopleCard.visibility = View.VISIBLE
-
-            filtered.forEachIndexed { index, member ->
+            people.forEachIndexed { index, member ->
                 val row = layoutInflater.inflate(
                     R.layout.item_chat_sheet_person,
                     peopleCard,
@@ -842,24 +874,46 @@ class ChatListFragment : Fragment() {
                     }
                     bindStartButton()
                 }
-
                 peopleCard.addView(row)
+            }
+        }
 
-                if (index < filtered.lastIndex) {
-                    val divider = View(requireContext()).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1)
-                        ).apply {
-                            marginStart = dpToPx(74)
+        fun renderPeople() {
+            val query = searchField.text?.toString().orEmpty().trim().lowercase(Locale.getDefault())
+            var visibleCount = 0
+            for (i in 0 until peopleCard.childCount) {
+                val child = peopleCard.getChildAt(i)
+                if (child is LinearLayout) {
+                    val member = child.tag as? StaffData
+                    if (member != null) {
+                        val matches = if (query.isBlank()) {
+                            true
+                        } else {
+                            val haystack = listOfNotNull(
+                                member.name,
+                                member.designation,
+                                member.department,
+                                member.employeeId
+                            ).joinToString(" ").lowercase(Locale.getDefault())
+                            haystack.contains(query)
                         }
-                        setBackgroundColor(
-                            ContextCompat.getColor(requireContext(), R.color.chat_separator)
-                        )
-                        alpha = 0.5f
+                        if (matches) {
+                            child.visibility = View.VISIBLE
+                            visibleCount++
+                        } else {
+                            child.visibility = View.GONE
+                        }
                     }
-                    peopleCard.addView(divider)
                 }
+            }
+
+            if (visibleCount == 0) {
+                peopleCard.visibility = View.GONE
+                emptyState.text = "No people match your search."
+                emptyState.visibility = View.VISIBLE
+            } else {
+                emptyState.visibility = View.GONE
+                peopleCard.visibility = View.VISIBLE
             }
         }
 
@@ -897,9 +951,18 @@ class ChatListFragment : Fragment() {
                     api.getOnlineStaff(session.bearerToken)
                 }.onSuccess { resp ->
                     onlineStaffIds = resp.online?.mapNotNull { it?.staffId }?.toSet().orEmpty()
-                    delay(300)
                     if (_binding != null) {
-                        renderPeople()
+                        for (i in 0 until peopleCard.childCount) {
+                            val child = peopleCard.getChildAt(i)
+                            if (child is LinearLayout) {
+                                val childMember = child.tag as? StaffData
+                                if (childMember != null) {
+                                    val onlineDot = child.findViewById<View>(R.id.onlineDot)
+                                    val isOnline = onlineStaffIds.contains(childMember.id)
+                                    onlineDot.visibility = if (isOnline) View.VISIBLE else View.GONE
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -908,7 +971,7 @@ class ChatListFragment : Fragment() {
                 if (_binding != null) {
                     SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                     skeletonContainer.visibility = View.GONE
-                    emptyState.text = "No people match your search."
+                    prePopulatePeople()
                     renderPeople()
                 }
             }
@@ -964,6 +1027,7 @@ class ChatListFragment : Fragment() {
         var renderSelectedChips: () -> Unit = {}
         var renderPeopleList: () -> Unit = {}
         var bindCreateButton: () -> Unit = {}
+        var prePopulatePeopleList: () -> Unit = {}
 
         renderSelectedChips = render@{
             membersContainer.removeAllViews()
@@ -1035,6 +1099,20 @@ class ChatListFragment : Fragment() {
                         selectedIds.remove(id)
                         selectedById.remove(id)
                         renderSelectedChips()
+                        for (i in 0 until peopleCard.childCount) {
+                            val child = peopleCard.getChildAt(i)
+                            if (child is LinearLayout) {
+                                val childMember = child.tag as? StaffData
+                                if (childMember != null) {
+                                    val isSel = childMember.id != null && selectedIds.contains(childMember.id)
+                                    child.findViewById<View>(R.id.radioButton).setBackgroundResource(
+                                        if (isSel) R.drawable.bg_sheet_radio_on
+                                        else R.drawable.bg_sheet_radio_off
+                                    )
+                                    child.findViewById<View>(R.id.avatarCheck).visibility = if (isSel) View.VISIBLE else View.GONE
+                                }
+                            }
+                        }
                         renderPeopleList()
                         bindCreateButton()
                     }
@@ -1054,30 +1132,16 @@ class ChatListFragment : Fragment() {
             createLabel.text = if (selectedIds.size >= 2) "Create" else "Select at least 2"
         }
 
-        renderPeopleList = render@{
-            val query = searchField.text?.toString().orEmpty().trim()
-            val filtered = people.filter { member ->
-                if (query.isBlank()) return@filter true
-                val haystack = listOfNotNull(
-                    member.name,
-                    member.designation,
-                    member.department,
-                    member.employeeId
-                ).joinToString(" ").lowercase(Locale.getDefault())
-                haystack.contains(query.lowercase(Locale.getDefault()))
-            }
-
+        prePopulatePeopleList = {
             peopleCard.removeAllViews()
-            if (filtered.isEmpty()) {
-                peopleCard.visibility = View.GONE
-                emptyView.visibility = View.VISIBLE
-                return@render
+            peopleCard.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            val dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setSize(0, (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1))
+                setColor(ContextCompat.getColor(requireContext(), R.color.chat_separator))
             }
+            peopleCard.dividerDrawable = dividerDrawable
 
-            emptyView.visibility = View.GONE
-            peopleCard.visibility = View.VISIBLE
-
-            filtered.forEachIndexed { index, member ->
+            people.forEachIndexed { index, member ->
                 val row = layoutInflater.inflate(
                     R.layout.item_chat_sheet_person,
                     peopleCard,
@@ -1136,24 +1200,46 @@ class ChatListFragment : Fragment() {
                     renderSelectedChips()
                     bindCreateButton()
                 }
-
                 peopleCard.addView(row)
+            }
+        }
 
-                if (index < filtered.lastIndex) {
-                    val divider = View(requireContext()).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1)
-                        ).apply {
-                            marginStart = dpToPx(74)
+        renderPeopleList = {
+            val query = searchField.text?.toString().orEmpty().trim().lowercase(Locale.getDefault())
+            var visibleCount = 0
+            for (i in 0 until peopleCard.childCount) {
+                val child = peopleCard.getChildAt(i)
+                if (child is LinearLayout) {
+                    val member = child.tag as? StaffData
+                    if (member != null) {
+                        val matches = if (query.isBlank()) {
+                            true
+                        } else {
+                            val haystack = listOfNotNull(
+                                member.name,
+                                member.designation,
+                                member.department,
+                                member.employeeId
+                            ).joinToString(" ").lowercase(Locale.getDefault())
+                            haystack.contains(query)
                         }
-                        setBackgroundColor(
-                            ContextCompat.getColor(requireContext(), R.color.chat_separator)
-                        )
-                        alpha = 0.5f
+                        if (matches) {
+                            child.visibility = View.VISIBLE
+                            visibleCount++
+                        } else {
+                            child.visibility = View.GONE
+                        }
                     }
-                    peopleCard.addView(divider)
                 }
+            }
+
+            if (visibleCount == 0) {
+                peopleCard.visibility = View.GONE
+                emptyView.text = "No people match your search."
+                emptyView.visibility = View.VISIBLE
+            } else {
+                emptyView.visibility = View.GONE
+                peopleCard.visibility = View.VISIBLE
             }
         }
 
@@ -1194,7 +1280,7 @@ class ChatListFragment : Fragment() {
                 if (_binding != null) {
                     SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                     skeletonContainer.visibility = View.GONE
-                    emptyView.text = "No people match your search."
+                    prePopulatePeopleList()
                     renderPeopleList()
                 }
             }
