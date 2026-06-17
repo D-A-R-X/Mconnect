@@ -33,6 +33,7 @@ import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.telecaller.DialerFragment
 import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
+import com.manjugroups.m_connect.ui.library.collections.CollectionsFragment
 
 class AppLibraryFragment : Fragment() {
 
@@ -477,7 +478,7 @@ class AppLibraryFragment : Fragment() {
         bindIamEntry(
             row = binding.itemSalesCollections,
             allowed = true,
-        ) { comingSoon("Collections") }
+        ) { openScreen(CollectionsFragment()) }
         bindIamEntry(
             row = binding.itemSalesLoanDesk,
             allowed = true,
