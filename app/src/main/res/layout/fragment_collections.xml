@@ -68,17 +68,24 @@
             android:id="@+id/etSearchCollections"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:background="@drawable/bg_search_bar"
-            android:drawableStart="@drawable/ic_chat_search"
-            android:drawablePadding="10dp"
+            android:background="@drawable/bg_collections_search_bar"
             android:fontFamily="@font/inter_medium"
             android:hint="Search Collections"
             android:imeOptions="actionSearch"
             android:inputType="text"
-            android:paddingHorizontal="16dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="48dp"
             android:textColor="#101828"
             android:textColorHint="#98A2B3"
             android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="16dp"
+            android:src="@drawable/ic_chat_search"
+            app:tint="#101828" />
     </FrameLayout>
 
     <!-- Filter Tab Pills (All, Self Finance, Bank Loan) -->
@@ -87,7 +94,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:layout_marginHorizontal="16dp"
-        android:background="@drawable/bg_loans_segment"
+        android:background="@drawable/bg_collections_segment"
         android:orientation="horizontal"
         android:padding="4dp">
 
@@ -101,7 +108,7 @@
             android:text="All"
             android:textSize="13sp"
             android:textColor="#FFFFFF"
-            android:background="@drawable/bg_loans_segment_active"
+            android:background="@drawable/bg_collections_segment_active"
             android:clickable="true"
             android:focusable="true" />
 
@@ -140,7 +147,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:layout_marginHorizontal="16dp"
-        android:background="@drawable/bg_attendance_btn_blue_gradient"
+        android:background="@drawable/bg_collections_summary_banner"
         android:orientation="horizontal"
         android:padding="16dp"
         android:gravity="center_vertical">
@@ -155,7 +162,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:layout_gravity="center"
-                android:src="@drawable/ic_loan_document"
+                android:src="@drawable/ic_apps_collections"
                 app:tint="#FFFFFF" />
         </FrameLayout>
 

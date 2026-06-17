@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
-    android:background="@drawable/bg_apps_card"
+    android:background="@drawable/bg_collection_item_card"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -66,11 +66,12 @@
     </RelativeLayout>
 
     <!-- Dotted Divider Line -->
-    <View
+    <ImageView
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="2dp"
         android:layout_marginTop="12dp"
-        android:background="@drawable/bg_apps_divider_gradient" />
+        android:layerType="software"
+        android:src="@drawable/bg_line_dashed" />
 
     <!-- Details and Image Attachment -->
     <LinearLayout
@@ -103,7 +104,7 @@
                         android:layout_width="16dp"
                         android:layout_height="16dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_vuesax_linear_coin"
+                        android:src="@drawable/ic_pm_upi"
                         app:tint="#0B61CA" />
                 </FrameLayout>
 
@@ -147,7 +148,7 @@
                         android:layout_width="16dp"
                         android:layout_height="16dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_loan_document"
+                        android:src="@drawable/ic_pm_card"
                         app:tint="#0B61CA" />
                 </FrameLayout>
 

@@ -212,7 +212,7 @@ class CollectionsFragment : Fragment() {
     }
 
     private fun updateTabStyles() {
-        val activeBg = R.drawable.bg_loans_segment_active
+        val activeBg = R.drawable.bg_collections_segment_active
         val trans = android.R.color.transparent
         val activeColor = Color.WHITE
         val inactiveColor = Color.parseColor("#667085")
@@ -220,14 +220,17 @@ class CollectionsFragment : Fragment() {
         binding.tabAll.apply {
             setBackgroundResource(if (selectedTypeFilter == null) activeBg else trans)
             setTextColor(if (selectedTypeFilter == null) activeColor else inactiveColor)
+            typeface = android.graphics.Typeface.create(typeface, if (selectedTypeFilter == null) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         }
         binding.tabSelfFinance.apply {
             setBackgroundResource(if (selectedTypeFilter == CollectionType.SELF_FINANCE) activeBg else trans)
             setTextColor(if (selectedTypeFilter == CollectionType.SELF_FINANCE) activeColor else inactiveColor)
+            typeface = android.graphics.Typeface.create(typeface, if (selectedTypeFilter == CollectionType.SELF_FINANCE) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         }
         binding.tabBankLoan.apply {
             setBackgroundResource(if (selectedTypeFilter == CollectionType.BANK_LOAN) activeBg else trans)
             setTextColor(if (selectedTypeFilter == CollectionType.BANK_LOAN) activeColor else inactiveColor)
+            typeface = android.graphics.Typeface.create(typeface, if (selectedTypeFilter == CollectionType.BANK_LOAN) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         }
     }
 
@@ -248,7 +251,7 @@ class CollectionsFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
             main.setTabBarVisible(false)
-            main.setTopBarAppearance(Color.WHITE, true, fullBleed = true)
+            main.setTopBarAppearance(Color.WHITE, true, fullBleed = false)
         }
     }
 

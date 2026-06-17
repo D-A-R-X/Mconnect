@@ -38,7 +38,7 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     inner class CollectionVH(private val b: ItemCollectionBinding) : RecyclerView.ViewHolder(b.root) {
         fun bind(item: CollectionItem) {
             b.tvAmount.text = formatRupees(item.amount)
-            b.tvSiteName.text = item.bookingName
+            b.tvSiteName.text = item.bookingName.split(" - ").firstOrNull() ?: item.bookingName
             b.tvPaymentMode.text = item.paymentMode
             b.tvRefId.text = item.refId
             b.tvDate.text = item.dateString
