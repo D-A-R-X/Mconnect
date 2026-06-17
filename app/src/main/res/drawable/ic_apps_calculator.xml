@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer container: rounded rect with stroke -->
+    <path
+        android:strokeColor="#FF101828"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,3 L17,3 C19.2,3 21,4.8 21,7 L21,17 C21,19.2 19.2,21 17,21 L7,21 C4.8,21 3,19.2 3,17 L3,7 C3,4.8 4.8,3 7,3 Z" />
+    <!-- Display screen: rounded rect stroke -->
+    <path
+        android:strokeColor="#FF101828"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8,7 L16,7 C16.6,7 17,7.4 17,8 L17,9 C17,9.6 16.6,10 16,10 L8,10 C7.4,10 7,9.6 7,9 L7,8 C7,7.4 7.4,7 8,7 Z" />
+    <!-- 6 Buttons -->
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M8,13m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M12,13m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M16,13m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M8,17m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M12,17m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+    <path
+        android:fillColor="#FF101828"
+        android:pathData="M16,17m-1,0a1,1 0,1,1 2,0a1,1 0,1,1 -2,0" />
+</vector>

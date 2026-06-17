@@ -17,6 +17,12 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
 
     private val items = mutableListOf<CollectionItem>()
 
+    var isAccountantRole: Boolean = false
+    var onAcceptClick: ((CollectionItem) -> Unit)? = null
+    var onRejectClick: ((CollectionItem) -> Unit)? = null
+    var onRectifyClick: ((CollectionItem) -> Unit)? = null
+    var onImageClick: ((CollectionItem) -> Unit)? = null
+
     fun submit(list: List<CollectionItem>) {
         items.clear()
         items.addAll(list)
@@ -66,8 +72,9 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
             }
 
             // Proof thumbnail
-            if (item.photoPath != null) {
-                val file = File(item.photoPath)
+            val photoPath = item.photoPath
+            if (photoPath != null) {
+                val file = File(photoPath)
                 if (file.exists()) {
                     b.cardThumbnail.visibility = View.VISIBLE
                     b.ivThumbnail.setImageURI(Uri.fromFile(file))
@@ -79,6 +86,32 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 b.cardThumbnail.visibility = View.VISIBLE
                 b.ivThumbnail.setImageResource(R.drawable.ic_cash_proof)
             }
+
+            // Role and Status visibility configuration
+            if (isAccountantRole && item.status == CollectionStatus.PENDING) {
+                b.layoutAccountantActions.visibility = View.VISIBLE
+            } else {
+                b.layoutAccountantActions.visibility = View.GONE
+            }
+
+            if (item.status == CollectionStatus.REJECTED) {
+                b.layoutRemarks.visibility = View.VISIBLE
+                b.tvRemarks.text = item.remarks ?: "No remarks provided"
+            } else {
+                b.layoutRemarks.visibility = View.GONE
+            }
+
+            if (!isAccountantRole && item.status == CollectionStatus.REJECTED) {
+                b.btnRectify.visibility = View.VISIBLE
+            } else {
+                b.btnRectify.visibility = View.GONE
+            }
+
+            // Event bindings
+            b.btnAccept.setOnClickListener { onAcceptClick?.invoke(item) }
+            b.btnReject.setOnClickListener { onRejectClick?.invoke(item) }
+            b.btnRectify.setOnClickListener { onRectifyClick?.invoke(item) }
+            b.cardThumbnail.setOnClickListener { onImageClick?.invoke(item) }
         }
     }
 

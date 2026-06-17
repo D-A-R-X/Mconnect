@@ -35,26 +35,9 @@
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:fontFamily="@font/inter_semibold"
-            android:text="Collections"
+            android:text="Post Sales Verification"
             android:textColor="#101828"
             android:textSize="18sp" />
-
-        <FrameLayout
-            android:id="@+id/btnAddCollection"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:background="@drawable/bg_home_new_action_circle"
-            android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_chat_plus"
-                app:tint="#0B61CA" />
-        </FrameLayout>
     </RelativeLayout>
 
     <!-- Scrollable Content Area -->
@@ -88,7 +71,7 @@
                         android:layout_height="48dp"
                         android:background="@drawable/bg_collections_search_bar"
                         android:fontFamily="@font/inter_medium"
-                        android:hint="Search Collections"
+                        android:hint="Search Sales Verification"
                         android:imeOptions="actionSearch"
                         android:inputType="text"
                         android:paddingStart="16dp"
@@ -106,7 +89,7 @@
                         app:tint="#101828" />
                 </FrameLayout>
 
-                <!-- Filter Tab Pills (All, Self Finance, Bank Loan) -->
+                <!-- Filter Tab Pills -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -159,7 +142,7 @@
                         android:focusable="true" />
                 </LinearLayout>
 
-                <!-- Today's Summary Banner -->
+                <!-- Summary Banner -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -170,7 +153,6 @@
                     android:padding="16dp"
                     android:gravity="center_vertical">
 
-                    <!-- Icon on left -->
                     <FrameLayout
                         android:layout_width="32dp"
                         android:layout_height="32dp"
@@ -184,7 +166,6 @@
                             app:tint="#FFFFFF" />
                     </FrameLayout>
 
-                    <!-- Count text -->
                     <TextView
                         android:id="@+id/tvSummaryCount"
                         android:layout_width="0dp"
@@ -194,9 +175,8 @@
                         android:fontFamily="@font/inter_semibold"
                         android:textColor="#FFFFFF"
                         android:textSize="15sp"
-                        android:text="4 Collections Today" />
+                        android:text="0 Pending Verification" />
 
-                    <!-- Total amount on right -->
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -216,7 +196,7 @@
                             android:fontFamily="@font/inter_bold"
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
-                            android:text="₹12,400" />
+                            android:text="₹0" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -245,4 +225,3 @@
     </FrameLayout>
 
 </LinearLayout>
-

@@ -7,4 +7,5 @@
     <cache-path name="chat_photos" path="chat_photos/" />
     <cache-path name="chat_videos" path="chat_videos/" />
     <cache-path name="chat_documents" path="chat_documents/" />
+    <cache-path name="collections" path="collections/" />
 </paths>

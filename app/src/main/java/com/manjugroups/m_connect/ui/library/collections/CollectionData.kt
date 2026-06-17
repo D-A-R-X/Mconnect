@@ -4,15 +4,16 @@ import java.io.Serializable
 
 data class CollectionItem(
     val id: String,
-    val bookingName: String,
-    val amount: Double,
-    val paymentMode: String,
-    val refId: String,
-    val notes: String,
-    val photoPath: String?,
-    val dateString: String,
-    val status: CollectionStatus,
-    val type: CollectionType
+    var bookingName: String,
+    var amount: Double,
+    var paymentMode: String,
+    var refId: String,
+    var notes: String,
+    var photoPath: String?,
+    var dateString: String,
+    var status: CollectionStatus,
+    var type: CollectionType,
+    var remarks: String? = null
 ) : Serializable
 
 enum class CollectionStatus {

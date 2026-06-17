@@ -1,4 +1,4 @@
-package com.manjugroups.m_connect.ui.library.collections
+package com.manjugroups.m_connect.ui.library.accounts
 
 import android.graphics.Color
 import android.os.Bundle
@@ -10,16 +10,19 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.manjugroups.m_connect.R
-import com.manjugroups.m_connect.databinding.FragmentCollectionsBinding
+import com.manjugroups.m_connect.databinding.FragmentPostSalesVerificationBinding
+import com.manjugroups.m_connect.ui.library.collections.CollectionItem
+import com.manjugroups.m_connect.ui.library.collections.CollectionStatus
+import com.manjugroups.m_connect.ui.library.collections.CollectionType
+import com.manjugroups.m_connect.ui.library.collections.CollectionsAdapter
+import com.manjugroups.m_connect.ui.library.collections.CollectionRejectBottomSheet
 import android.widget.Toast
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
-class CollectionsFragment : Fragment() {
+class PostSalesVerificationFragment : Fragment() {
 
-    private var _binding: FragmentCollectionsBinding? = null
+    private var _binding: FragmentPostSalesVerificationBinding? = null
     private val binding get() = _binding!!
 
     private lateinit var adapter: CollectionsAdapter
@@ -33,7 +36,7 @@ class CollectionsFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = FragmentCollectionsBinding.inflate(inflater, container, false)
+        _binding = FragmentPostSalesVerificationBinding.inflate(inflater, container, false)
         return binding.root
     }
 
@@ -51,36 +54,35 @@ class CollectionsFragment : Fragment() {
         if (masterList.isEmpty()) {
             masterList.add(
                 CollectionItem(
-                    id = "1",
+                    id = "v1",
                     bookingName = "Manju Groups Site A - Plot 12",
                     amount = 42000.0,
                     paymentMode = "UPI",
                     refId = "48782328100",
-                    notes = "Initial mock collection approved",
+                    notes = "Pending verification",
                     photoPath = null,
                     dateString = "Oct 24, 2026 • 10:30 AM",
-                    status = CollectionStatus.APPROVED,
+                    status = CollectionStatus.PENDING,
                     type = CollectionType.BANK_LOAN
                 )
             )
             masterList.add(
                 CollectionItem(
-                    id = "2",
+                    id = "v2",
                     bookingName = "Manju Groups Site A - Plot 45",
                     amount = 42000.0,
                     paymentMode = "UPI",
                     refId = "48782328100",
-                    notes = "Initial mock collection rejected",
+                    notes = "Pending verification",
                     photoPath = null,
                     dateString = "Oct 24, 2026 • 10:30 AM",
-                    status = CollectionStatus.REJECTED,
-                    type = CollectionType.SELF_FINANCE,
-                    remarks = "Invalid UPI reference ID. Please rectify reference ID details."
+                    status = CollectionStatus.PENDING,
+                    type = CollectionType.SELF_FINANCE
                 )
             )
             masterList.add(
                 CollectionItem(
-                    id = "3",
+                    id = "v3",
                     bookingName = "Manju Groups Site B - Plot 8",
                     amount = 3000.0,
                     paymentMode = "Cash",
@@ -88,13 +90,13 @@ class CollectionsFragment : Fragment() {
                     notes = "Cash collection",
                     photoPath = null,
                     dateString = "Jun 17, 2026 • 11:30 AM",
-                    status = CollectionStatus.APPROVED,
+                    status = CollectionStatus.PENDING,
                     type = CollectionType.SELF_FINANCE
                 )
             )
             masterList.add(
                 CollectionItem(
-                    id = "4",
+                    id = "v4",
                     bookingName = "Manju Groups Site C - Plot 19",
                     amount = 9400.0,
                     paymentMode = "Bank Transfer",
@@ -111,13 +113,19 @@ class CollectionsFragment : Fragment() {
 
     private fun setupRecyclerView() {
         adapter = CollectionsAdapter().apply {
-            isAccountantRole = false
-            onAcceptClick = { /* Not available in employee mode */ }
-            onRejectClick = { /* Not available in employee mode */ }
-            onRectifyClick = { item ->
-                CollectionCreateBottomSheet.newInstance(item)
-                    .show(parentFragmentManager, "CollectionCreateBottomSheet")
+            isAccountantRole = true
+            onAcceptClick = { item ->
+                item.status = CollectionStatus.APPROVED
+                item.remarks = null
+                notifyDataSetChanged()
+                filterCollections()
+                Toast.makeText(requireContext(), "Collection Approved", Toast.LENGTH_SHORT).show()
             }
+            onRejectClick = { item ->
+                CollectionRejectBottomSheet.newInstance(item.id)
+                    .show(parentFragmentManager, "CollectionRejectBottomSheet")
+            }
+            onRectifyClick = { /* No rectify in accountant mode */ }
             onImageClick = { item ->
                 showFullscreenImagePreview(item)
             }
@@ -127,18 +135,10 @@ class CollectionsFragment : Fragment() {
     }
 
     private fun setupListeners() {
-        // Back Button
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
 
-        // Add Collection Button
-        binding.btnAddCollection.setOnClickListener {
-            CollectionCreateBottomSheet.newInstance()
-                .show(parentFragmentManager, "CollectionCreateBottomSheet")
-        }
-
-        // Filter Tabs
         binding.tabAll.setOnClickListener {
             selectedTypeFilter = null
             updateTabStyles()
@@ -155,7 +155,6 @@ class CollectionsFragment : Fragment() {
             filterCollections()
         }
 
-        // Search Text Watcher
         binding.etSearchCollections.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -165,7 +164,6 @@ class CollectionsFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
     }
-
 
     private fun showFullscreenImagePreview(item: CollectionItem) {
         val context = requireContext()
@@ -233,72 +231,30 @@ class CollectionsFragment : Fragment() {
 
     private fun setupResultListener() {
         parentFragmentManager.setFragmentResultListener(
-            CollectionCreateBottomSheet.RESULT_KEY,
+            CollectionRejectBottomSheet.RESULT_KEY,
             viewLifecycleOwner
         ) { _, bundle ->
-            val amount = bundle.getDouble("amount", 0.0)
-            val booking = bundle.getString("booking").orEmpty()
-            val paymentMode = bundle.getString("paymentMode").orEmpty()
-            val refId = bundle.getString("refId").orEmpty()
-            val notes = bundle.getString("notes").orEmpty()
-            val photoPath = bundle.getString("photoPath")
-            val rectifiedId = bundle.getString("rectifiedId")
-
-            if (rectifiedId != null) {
-                val existingItem = masterList.find { it.id == rectifiedId }
-                if (existingItem != null) {
-                    existingItem.amount = amount
-                    existingItem.bookingName = booking
-                    existingItem.paymentMode = paymentMode
-                    existingItem.refId = refId
-                    existingItem.notes = notes
-                    existingItem.photoPath = photoPath
-                    existingItem.status = CollectionStatus.PENDING
-                    existingItem.remarks = null
-
-                    val sdf = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.US)
-                    existingItem.dateString = sdf.format(Date())
+            val itemId = bundle.getString("itemId")
+            val remarks = bundle.getString("remarks")
+            if (itemId != null && remarks != null) {
+                val item = masterList.find { it.id == itemId }
+                if (item != null) {
+                    item.status = CollectionStatus.REJECTED
+                    item.remarks = remarks
+                    adapter.notifyDataSetChanged()
+                    filterCollections()
+                    Toast.makeText(requireContext(), "Collection Rejected", Toast.LENGTH_SHORT).show()
                 }
-            } else {
-                val type = if (booking.contains("Plot 12") || booking.contains("Plot 19")) {
-                    CollectionType.BANK_LOAN
-                } else {
-                    CollectionType.SELF_FINANCE
-                }
-
-                val sdf = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.US)
-                val dateString = sdf.format(Date())
-
-                val newItem = CollectionItem(
-                    id = (masterList.size + 1).toString(),
-                    bookingName = booking,
-                    amount = amount,
-                    paymentMode = paymentMode,
-                    refId = refId,
-                    notes = notes,
-                    photoPath = photoPath,
-                    dateString = dateString,
-                    status = CollectionStatus.PENDING,
-                    type = type
-                )
-
-                masterList.add(0, newItem)
             }
-            filterCollections()
         }
-
     }
 
     private fun filterCollections() {
         val filtered = masterList.filter { item ->
-            // Filter by Tab Type
             val matchesTab = selectedTypeFilter == null || item.type == selectedTypeFilter
-
-            // Filter by Search Query
             val matchesSearch = currentSearchQuery.isBlank() ||
                     item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
                     item.refId.contains(currentSearchQuery, ignoreCase = true)
-
             matchesTab && matchesSearch
         }
 
@@ -330,10 +286,10 @@ class CollectionsFragment : Fragment() {
     }
 
     private fun updateSummaryBanner(list: List<CollectionItem>) {
-        val count = list.size
+        val pendingCount = list.count { it.status == CollectionStatus.PENDING }
         val totalAmount = list.sumOf { it.amount }
 
-        binding.tvSummaryCount.text = if (count == 1) "1 Collection Today" else "$count Collections Today"
+        binding.tvSummaryCount.text = if (pendingCount == 1) "1 Pending Verification" else "$pendingCount Pending Verification"
         binding.tvSummaryTotal.text = formatRupees(totalAmount)
     }
 

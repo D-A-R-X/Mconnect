@@ -70,7 +70,7 @@
                 app:boxStrokeColor="#D0D5DD"
                 app:hintEnabled="false"
                 app:startIconDrawable="@drawable/ic_outcome_booking"
-                app:startIconTint="#0B61CA">
+                app:startIconTint="@null">
 
                 <AutoCompleteTextView
                     android:id="@+id/etBooking"
@@ -107,7 +107,7 @@
                 app:boxStrokeColor="#D0D5DD"
                 app:hintEnabled="false"
                 app:startIconDrawable="@drawable/ic_vuesax_linear_coin"
-                app:startIconTint="#0B61CA">
+                app:startIconTint="@null">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etAmount"
@@ -142,7 +142,7 @@
                 app:boxStrokeColor="#D0D5DD"
                 app:hintEnabled="false"
                 app:startIconDrawable="@drawable/ic_pm_card"
-                app:startIconTint="#0B61CA">
+                app:startIconTint="@null">
 
                 <AutoCompleteTextView
                     android:id="@+id/etPaymentMode"
@@ -179,7 +179,7 @@
                 app:boxStrokeColor="#D0D5DD"
                 app:hintEnabled="false"
                 app:startIconDrawable="@drawable/ic_loan_document"
-                app:startIconTint="#0B61CA">
+                app:startIconTint="@null">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etRefId"
@@ -255,8 +255,7 @@
                     android:id="@+id/ivUploadIcon"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:src="@drawable/ic_upload_cloud"
-                    app:tint="#0B61CA" />
+                    android:src="@drawable/ic_upload_cloud" />
 
                 <TextView
                     android:id="@+id/tvUploadTitle"
@@ -302,15 +301,18 @@
                 app:boxStrokeColor="#D0D5DD"
                 app:hintEnabled="false"
                 app:startIconDrawable="@drawable/ic_cp_notes"
-                app:startIconTint="#0B61CA">
+                app:startIconTint="@null">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etNotes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_medium"
+                    android:gravity="top"
                     android:hint="Enter Notes"
-                    android:inputType="textCapSentences"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="2"
+                    android:maxLines="4"
                     android:textColor="#101828"
                     android:textSize="14sp" />
             </com.google.android.material.textfield.TextInputLayout>

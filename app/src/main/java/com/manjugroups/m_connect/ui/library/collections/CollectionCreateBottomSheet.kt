@@ -137,6 +137,26 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         tvUploadSubtitle = view.findViewById(R.id.tvUploadSubtitle)
         ivUploadIcon = view.findViewById(R.id.ivUploadIcon)
 
+        // Retrieve item for rectification if passed
+        @Suppress("DEPRECATION")
+        val rectifyItem = arguments?.getSerializable("extra_item") as? CollectionItem
+
+        // Prefill fields if rectifying
+        if (rectifyItem != null) {
+            etBooking.setText(rectifyItem.bookingName)
+            etAmount.setText(rectifyItem.amount.toString())
+            etPaymentMode.setText(rectifyItem.paymentMode)
+            etRefId.setText(rectifyItem.refId)
+            etNotes.setText(rectifyItem.notes)
+            rectifyItem.photoPath?.let { path ->
+                val file = File(path)
+                if (file.exists()) {
+                    selectedPhotoFile = file
+                    showImageAttached(file.name)
+                }
+            }
+        }
+
         // Bookings adapter
         etBooking.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, bookings))
         etBooking.setOnClickListener { etBooking.showDropDown() }
@@ -194,6 +214,9 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                 putString("refId", refId)
                 putString("notes", notes)
                 putString("photoPath", selectedPhotoFile?.absolutePath)
+                if (rectifyItem != null) {
+                    putString("rectifiedId", rectifyItem.id)
+                }
             }
             setFragmentResult(RESULT_KEY, bundle)
             dismissAllowingStateLoss()
@@ -259,6 +282,10 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
 
     companion object {
         const val RESULT_KEY = "CollectionCreated"
-        fun newInstance() = CollectionCreateBottomSheet()
+        fun newInstance(item: CollectionItem? = null) = CollectionCreateBottomSheet().apply {
+            arguments = Bundle().apply {
+                putSerializable("extra_item", item)
+            }
+        }
     }
 }
