@@ -3,28 +3,8 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-import java.util.Properties
-
-val localProperties = Properties().apply {
-    val localPropertiesFile = project.rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { load(it) }
-    }
-}
-
-fun envOrEmpty(name: String): String {
-    val env = System.getenv(name)
-    if (!env.isNullOrBlank()) return env
-    val localProp = localProperties.getProperty(name)
-    if (!localProp.isNullOrBlank()) return localProp
-    val gradProp = project.findProperty(name) as? String
-    if (!gradProp.isNullOrBlank()) return gradProp
-    return ""
-}
-fun envOrDefault(name: String, defaultValue: String): String {
-    val value = envOrEmpty(name)
-    return if (value.isBlank()) defaultValue else value
-}
+fun envOrEmpty(name: String): String = System.getenv(name) ?: ""
+fun envOrDefault(name: String, defaultValue: String): String = System.getenv(name) ?: defaultValue
 fun ensureScheme(url: String): String =
     if (url.isBlank() || url.startsWith("http://") || url.startsWith("https://")) url
     else "https://$url"
@@ -55,13 +35,13 @@ val googleMapsApiKey = envOrDefault(
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
 // touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://brainy-dinosaur-306.convex.site/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://dev-convex-http.aivida.in/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
-)   
+)
 val defaultAppUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_APP_URL", "https://brainy-dinosaur-306.convex.site/")
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
 )
 val appUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
