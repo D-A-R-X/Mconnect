@@ -271,20 +271,16 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                // Sort by creationTime descending so the most recently
-                // ASSIGNED / created CP lands at the top — which is what
-                // "newest" means to the field staff opening the app. The
-                // previous sortedByDescending { scheduledDate } ordered
-                // by FUTURE-most planned visit instead, pushing brand-
-                // new assignments below older-but-later-scheduled ones.
-                // Falls back to scheduledDate when creationTime is
-                // missing (legacy rows from before the Convex
-                // auto-populated _creationTime got threaded through to
-                // the mobile envelope).
+                // Sort: ongoing first (in-progress / arrived / reaching),
+                // then pending (scheduled / not started), then completed
+                // at the bottom. Within each status group, newest-first
+                // by creationTime (= most recently assigned) with
+                // scheduledDate as the legacy-row fallback.
                 allVisits = resp.visits
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedWith(
-                        compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                        compareBy<TodayVisit> { statusGroupPriority(it.status) }
+                            .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
                 // Empty-state diagnostic toasts removed — the
@@ -749,6 +745,25 @@ class CpVisitsFragment : Fragment() {
                 actionBtn.isClickable = false
                 actionBtn.setOnClickListener(null)
             }
+        }
+    }
+
+    /** Three-bucket status priority used by the list sort. Lower
+     *  number = higher in the list:
+     *    0 → ongoing (in-progress / arrived / on-site / reaching)
+     *    1 → pending (scheduled / not started)
+     *    2 → completed / cancelled (done — pinned to the bottom)
+     *  Unknown statuses fall into the pending bucket so a stale
+     *  enum from an older backend never gets buried. */
+    private fun statusGroupPriority(rawStatus: String?): Int {
+        val s = rawStatus.orEmpty().lowercase(Locale.US)
+        return when (s) {
+            "in-progress", "in_progress", "ongoing", "started", "active",
+            "arrived", "arrival_verified", "arrival-verified",
+            "on_site", "on-site", "reaching" -> 0
+            "completed", "complete", "done", "closed",
+            "cancelled", "canceled" -> 2
+            else -> 1
         }
     }
 
