@@ -95,9 +95,14 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
+                it.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(it, 0f)
                 val behavior = BottomSheetBehavior.from(it)
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
+                val metrics = resources.displayMetrics
+                val peekH = (metrics.heightPixels * 0.55f).toInt()
+                behavior.peekHeight = peekH
+                behavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                behavior.skipCollapsed = false
             }
         }
         return dialog
