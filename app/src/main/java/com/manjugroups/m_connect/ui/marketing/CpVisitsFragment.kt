@@ -271,20 +271,16 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                // Sort by creationTime descending so the most recently
-                // ASSIGNED / created CP lands at the top — which is what
-                // "newest" means to the field staff opening the app. The
-                // previous sortedByDescending { scheduledDate } ordered
-                // by FUTURE-most planned visit instead, pushing brand-
-                // new assignments below older-but-later-scheduled ones.
-                // Falls back to scheduledDate when creationTime is
-                // missing (legacy rows from before the Convex
-                // auto-populated _creationTime got threaded through to
-                // the mobile envelope).
+                // Sort: ongoing first (in-progress / arrived / reaching),
+                // then pending (scheduled / not started), then completed
+                // at the bottom. Within each status group, newest-first
+                // by creationTime (= most recently assigned) with
+                // scheduledDate as the legacy-row fallback.
                 allVisits = resp.visits
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedWith(
-                        compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                        compareBy<TodayVisit> { statusGroupPriority(it.status) }
+                            .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
                 // Empty-state diagnostic toasts removed — the
@@ -377,6 +373,7 @@ class CpVisitsFragment : Fragment() {
             clientNoShowReason = this.clientNoShowReason,
             outcome = effectiveOutcome,
             postponeReasons = this.postponeReasons,
+            cpType = this.cpType,
         )
         return TodayVisit(
             id = cpId,
@@ -484,12 +481,11 @@ class CpVisitsFragment : Fragment() {
         // Category badge now lives in the body's Type cell (tvVisitItemTitle),
         // so the standalone tvVisitItemLead row underneath the grid is hidden.
         // Same de-dupe rule HomeFragment follows on Today's Trip.
-        val categoryLabel = when (visit.visitCategory) {
-            "sv_cum_cp" -> "SV confirmation CP"
-            "direct_cp" -> "Direct CP"
-            "site_visit" -> "Site Visit"
-            else -> if (visit.clientPlaceVisitId != null) "CP visit" else "Visit"
-        }
+        val categoryLabel = formatCpVisitTypeLabel(
+            visitCategory = visit.visitCategory,
+            cpType = visit.cpVisit?.cpType,
+            hasCpRow = visit.clientPlaceVisitId != null,
+        )
         lead.visibility = View.GONE
 
         // Identity header — CP visits identify the CLIENT, not the staff member.
@@ -752,6 +748,25 @@ class CpVisitsFragment : Fragment() {
         }
     }
 
+    /** Three-bucket status priority used by the list sort. Lower
+     *  number = higher in the list:
+     *    0 → ongoing (in-progress / arrived / on-site / reaching)
+     *    1 → pending (scheduled / not started)
+     *    2 → completed / cancelled (done — pinned to the bottom)
+     *  Unknown statuses fall into the pending bucket so a stale
+     *  enum from an older backend never gets buried. */
+    private fun statusGroupPriority(rawStatus: String?): Int {
+        val s = rawStatus.orEmpty().lowercase(Locale.US)
+        return when (s) {
+            "in-progress", "in_progress", "ongoing", "started", "active",
+            "arrived", "arrival_verified", "arrival-verified",
+            "on_site", "on-site", "reaching" -> 0
+            "completed", "complete", "done", "closed",
+            "cancelled", "canceled" -> 2
+            else -> 1
+        }
+    }
+
     private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, REOPEN_CONFIRM, NONE }
 
     /**
@@ -763,6 +778,17 @@ class CpVisitsFragment : Fragment() {
      */
     private fun reopenConfirmSheet(visit: TodayVisit) {
         val cpId = visit.clientPlaceVisitId ?: visit.id
+        // Per-cpType routing — gift_distribution / old_client /
+        // collection_cp have dedicated sheets handled by the trip nav
+        // screen; opening the default booking-outcome sheet here is
+        // wrong UI for them. Punt those into the trip nav, which has
+        // both the per-type click dispatcher and the belt-and-braces
+        // guard in showCpCompletionSheet().
+        val cpType = visit.cpVisit?.cpType?.lowercase()
+        if (cpType == "collection_cp" || cpType == "old_client" || cpType == "gift_distribution") {
+            openVisit(visit)
+            return
+        }
         // Pre-pass the SV-fixed hint only when the row is actually a
         // telecaller-fixed SV-via-CP visit. For regular CP visits the
         // sheet should open in its default multi-tab Booking flow, not
@@ -824,6 +850,8 @@ class CpVisitsFragment : Fragment() {
                     cpClientMet = visit.cpVisit?.clientMet,
                     cpOutcome = visit.cpVisit?.outcome,
                     visitCategory = visit.visitCategory,
+                    cpType = visit.cpVisit?.cpType,
+                    clientMobile = visit.leadPhone,
                 )
             )
             .addToBackStack(null)

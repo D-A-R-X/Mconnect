@@ -206,6 +206,51 @@ interface GeoTrackApi {
         @Body body: ConvertCpVisitToSiteVisitRequest
     ): ConvertCpVisitToSiteVisitResponse
 
+    // ── Address service — paste → OpenAI parse, autocomplete, place ──
+    // Drives the unified address widget on the CP create form (and
+    // every other form once the rollout finishes). Bearer-auth. Mirror
+    // the web /api/address/* endpoints.
+
+    @POST("api/address/parse")
+    suspend fun parseAddress(
+        @Header("Authorization") token: String,
+        @Body body: AddressParseRequest,
+    ): AddressParseResponse
+
+    @GET("api/address/autocomplete")
+    suspend fun autocompleteAddress(
+        @Header("Authorization") token: String,
+        @Query("q") query: String,
+        @Query("sessionToken") sessionToken: String? = null,
+    ): AddressAutocompleteResponse
+
+    @GET("api/address/place")
+    suspend fun resolveAddressPlace(
+        @Header("Authorization") token: String,
+        @Query("placeId") placeId: String? = null,
+        @Query("lat") lat: Double? = null,
+        @Query("lng") lng: Double? = null,
+        @Query("sessionToken") sessionToken: String? = null,
+    ): AddressPlaceResponse
+
+    // ── Collection CP — post-sales lookup + collection submit ──
+    // Drives both the creation-side gate (no completed booking →
+    // block selecting "Collection CP") and the in-trip Payment
+    // Entry sheet (lists bookings to collect against, then writes a
+    // customerCollections row in `pending_accounts` for Accounts).
+
+    @GET("api/postsales/cases/byMobile")
+    suspend fun getPostSaleCasesByMobile(
+        @Header("Authorization") token: String,
+        @Query("mobile") mobile: String,
+    ): PostSaleCasesByMobileResponse
+
+    @POST("api/postsales/collections/submit")
+    suspend fun submitCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: SubmitCollectionRequest,
+    ): SubmitCollectionResponse
+
     // ── Site Visits (mobile outcome sheet) ──────────────────────────
     // The CompleteCpVisitBottomSheet drives the same outcome capture
     // for pure-SV visits (not CP-converted). These wrappers mirror
@@ -777,6 +822,115 @@ data class ConvertCpVisitToSiteVisitResponse(
     val error: String? = null,
 )
 
+// ── Address service ─────────────────────────────────────────────
+// Wire-level shape for the 7-field address-parser endpoint, the
+// Places-Autocomplete proxy, and the Places-Details / reverse-Geocode
+// resolver. See convex/http.ts for the matching server side.
+
+data class AddressParseRequest(val raw: String)
+
+data class AddressParseFields(
+    val doorNo: String? = null,
+    val street: String? = null,
+    val addressLine1: String? = null,
+    val addressLine2: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null,
+)
+
+data class AddressParseResponse(
+    val success: Boolean = false,
+    val fields: AddressParseFields? = null,
+    val error: String? = null,
+)
+
+data class AddressAutocompleteSuggestion(
+    val placeId: String,
+    val description: String,
+    val mainText: String,
+    val secondaryText: String? = null,
+)
+
+data class AddressAutocompleteResponse(
+    val success: Boolean = false,
+    val suggestions: List<AddressAutocompleteSuggestion> = emptyList(),
+    val error: String? = null,
+)
+
+data class AddressPlaceComponents(
+    val doorNo: String? = null,
+    val street: String? = null,
+    val addressLine1: String? = null,
+    val addressLine2: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pincode: String? = null,
+)
+
+data class AddressPlaceResponse(
+    val success: Boolean = false,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val formattedAddress: String? = null,
+    val googleMapsLink: String? = null,
+    val components: AddressPlaceComponents? = null,
+    val error: String? = null,
+)
+
+// Collection CP — post-sales booking lookup + collection submit.
+// Returned by /api/postsales/cases/byMobile. One row per confirmed
+// booking the client has. balanceAmount drives the Payment Entry
+// sheet's "Balance ₹X" caption on each option, totalAmount/
+// approvedCollectedAmount let mobile pick a milestone label
+// without re-asking the user.
+data class PostSaleCaseSummary(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val bookingId: String? = null,
+    val bookingRefNo: String,
+    val clientName: String,
+    val mobileNumber: String,
+    val projectName: String? = null,
+    val plotNo: String? = null,
+    val totalAmount: Double = 0.0,
+    val approvedCollectedAmount: Double = 0.0,
+    val pendingCollectedAmount: Double = 0.0,
+    val balanceAmount: Double = 0.0,
+    val tenPercentAmount: Double = 0.0,
+    val currentStage: String? = null,
+)
+
+data class PostSaleCasesByMobileResponse(
+    val success: Boolean = false,
+    val cases: List<PostSaleCaseSummary> = emptyList(),
+    val error: String? = null,
+)
+
+/** POST /api/postsales/collections/submit — Payment Entry submission
+ *  from the in-trip Collection CP flow. `collectedByName` /
+ *  `collectedByStaffId` come from the authenticated session on the
+ *  server, so we only send the form fields. `proofStorageId` is the
+ *  id returned by /api/storage/upload after the user attaches a
+ *  proof file. `paymentMode` mirrors the web union (cash/upi/neft/
+ *  rtgs/cheque/dd/bank). */
+data class SubmitCollectionRequest(
+    val caseId: String,
+    val amount: Double,
+    val paymentMode: String,
+    val transactionReference: String? = null,
+    val bankName: String? = null,
+    val proofStorageId: String? = null,
+    val proofFileName: String? = null,
+    val notes: String? = null,
+)
+
+data class SubmitCollectionResponse(
+    val success: Boolean = false,
+    val collectionId: String? = null,
+    val collectionRefNo: String? = null,
+    val error: String? = null,
+)
+
 // ── SV outcome (mobile) ───────────────────────────────────────────
 // Used when the field staff records an outcome on a pure SV from
 // the CompleteCpVisitBottomSheet. Mirrors the CP SetOutcomeRequest
@@ -867,6 +1021,13 @@ data class CpVisitDetail(
     val clientNoShowReason: String? = null,
     val outcome: String? = null,
     val postponeReasons: List<String>? = null,
+    // CP type — set at creation, drives the Gift Distribution /
+    // Old Client / Collection CP post-arrival branches on mobile.
+    // Server-side this lives on the clientPlaceVisits row and is
+    // returned by /api/marketing/clientPlaceVisits/my; Gson silently
+    // drops it without this field, leaving every merged CP row
+    // looking like a generic Direct CP downstream.
+    val cpType: String? = null,
     val convertedSiteVisitId: String? = null,
     val convertedBookingId: String? = null,
     val fieldVisitId: String? = null,
@@ -1161,7 +1322,11 @@ data class CpVisitState(
     val clientMetAt: Long? = null,
     val clientNoShowReason: String? = null,
     val outcome: String? = null,
-    val postponeReasons: List<String>? = null
+    val postponeReasons: List<String>? = null,
+    // Visit intent from the CP create form. "gift_distribution"
+    // tells the trip flow to skip the booking-outcome sheet after
+    // arrival and finalise directly with outcome=gift_distributed.
+    val cpType: String? = null,
 )
 
 data class TodayVisitsResponse(

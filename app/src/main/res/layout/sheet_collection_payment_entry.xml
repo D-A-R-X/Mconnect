@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Payment Entry sheet — Collection CP Yes path.
+
+  Mirrors the web `Payment Entry` dialog from post-sales-workbench so
+  the field staff sees the same form regardless of platform. After
+  arrival photo + OTP the trip flow opens this sheet, lets the user
+  pick which booking they collected against, enter the amount + mode,
+  attach a proof, and submit. On submit the row is written to
+  customerCollections in `pending_accounts` and the CP visit closes
+  with outcome="collection_done".
+
+  Field order (matches web):
+    Customer (Select booking) — dropdown of postSaleCases
+    Amount received  · Mode   — two-column row
+    Transaction ID            — single-line text
+    Proof attachment          — dashed drop-zone
+    Notes                     — multi-line free text
+  Footer: Cancel · Submit for Accounts
+-->
+<!--
+  Outer container splits the sheet into a scrollable content area and
+  a pinned footer. The form rows are tall enough on a typical phone
+  that without this the Submit button scrolls below the bottom-sheet
+  fold and the user only sees Cancel.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+<androidx.core.widget.NestedScrollView
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:maxHeight="520dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="16dp">
+
+        <!-- Drag handle -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:background="@drawable/bg_chat_sheet_handle" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="Payment Entry"
+            android:textColor="#101828"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Log the collection against the client's confirmed booking."
+            android:textColor="#667085"
+            android:textSize="13sp" />
+
+        <!-- Customer (booking) picker -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Customer *"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etCustomerBooking"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:clickable="true"
+            android:cursorVisible="false"
+            android:focusable="false"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center_vertical"
+            android:hint="Select booking"
+            android:inputType="none"
+            android:paddingHorizontal="14dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+        <!-- Amount + Mode row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Amount received *"
+                    android:textColor="#344054"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/etCollectionAmount"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_cp_creation_input_box"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="0"
+                    android:inputType="numberDecimal"
+                    android:paddingHorizontal="14dp"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Mode *"
+                    android:textColor="#344054"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/etCollectionMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_cp_creation_input_box"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center_vertical"
+                    android:hint="UPI"
+                    android:inputType="none"
+                    android:paddingHorizontal="14dp"
+                    android:text="UPI"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Transaction ID -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Transaction ID *"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etCollectionReference"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:fontFamily="@font/inter_medium"
+            android:hint="UTR / Cheque / Ref no"
+            android:inputType="text"
+            android:paddingHorizontal="14dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+        <!-- Proof attachment -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Proof attachment"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <FrameLayout
+            android:id="@+id/proofDropZone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_dash_upload"
+            android:clickable="true"
+            android:focusable="true"
+            android:minHeight="120dp"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:id="@+id/proofEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Upload payment proof"
+                    android:textColor="#101828"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center"
+                    android:text="PDF, JPG, PNG or WebP up to 10 MB. Accounts can review this before approval."
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/proofFilledState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvProofFileName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="middle"
+                        android:fontFamily="@font/inter_semibold"
+                        android:singleLine="true"
+                        android:text=""
+                        android:textColor="#101828"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/tvProofFileSize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:text=""
+                        android:textColor="#667085"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnRemoveProof"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_edit_btn_outline"
+                    android:fontFamily="@font/inter_semibold"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="Remove"
+                    android:textAllCaps="false"
+                    android:textColor="#475467"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Notes -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Notes"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etCollectionNotes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top|start"
+            android:hint="Optional remarks for Accounts"
+            android:inputType="textMultiLine|textCapSentences"
+            android:lines="3"
+            android:minLines="3"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="12dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
+
+    <!-- Pinned footer — sits outside the NestedScrollView so the
+         Submit button is always visible regardless of how far the
+         user has scrolled the content. Matches the web's
+         DialogFooter pattern. -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7EC" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="14dp">
+
+        <!-- Footer buttons — same exact widget + style the CP create
+             form uses (bottom_sheet_create_cp_visit.xml). Rounded
+             pill 27dp, height 54dp, inter_bold, OutlinedButton style
+             for Cancel + #1BCA0B backgroundTint for the primary
+             action. Cancel on the LEFT, Submit on the RIGHT, weighted
+             1:1 so the layout matches the rest of the app. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancelCollection"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textColor="#475467"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmitCollection"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Submit"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+</LinearLayout>
