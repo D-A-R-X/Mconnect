@@ -377,6 +377,7 @@ class CpVisitsFragment : Fragment() {
             clientNoShowReason = this.clientNoShowReason,
             outcome = effectiveOutcome,
             postponeReasons = this.postponeReasons,
+            cpType = this.cpType,
         )
         return TodayVisit(
             id = cpId,
@@ -484,12 +485,11 @@ class CpVisitsFragment : Fragment() {
         // Category badge now lives in the body's Type cell (tvVisitItemTitle),
         // so the standalone tvVisitItemLead row underneath the grid is hidden.
         // Same de-dupe rule HomeFragment follows on Today's Trip.
-        val categoryLabel = when (visit.visitCategory) {
-            "sv_cum_cp" -> "SV confirmation CP"
-            "direct_cp" -> "Direct CP"
-            "site_visit" -> "Site Visit"
-            else -> if (visit.clientPlaceVisitId != null) "CP visit" else "Visit"
-        }
+        val categoryLabel = formatCpVisitTypeLabel(
+            visitCategory = visit.visitCategory,
+            cpType = visit.cpVisit?.cpType,
+            hasCpRow = visit.clientPlaceVisitId != null,
+        )
         lead.visibility = View.GONE
 
         // Identity header — CP visits identify the CLIENT, not the staff member.
@@ -763,6 +763,17 @@ class CpVisitsFragment : Fragment() {
      */
     private fun reopenConfirmSheet(visit: TodayVisit) {
         val cpId = visit.clientPlaceVisitId ?: visit.id
+        // Per-cpType routing — gift_distribution / old_client /
+        // collection_cp have dedicated sheets handled by the trip nav
+        // screen; opening the default booking-outcome sheet here is
+        // wrong UI for them. Punt those into the trip nav, which has
+        // both the per-type click dispatcher and the belt-and-braces
+        // guard in showCpCompletionSheet().
+        val cpType = visit.cpVisit?.cpType?.lowercase()
+        if (cpType == "collection_cp" || cpType == "old_client" || cpType == "gift_distribution") {
+            openVisit(visit)
+            return
+        }
         // Pre-pass the SV-fixed hint only when the row is actually a
         // telecaller-fixed SV-via-CP visit. For regular CP visits the
         // sheet should open in its default multi-tab Booking flow, not
@@ -824,6 +835,8 @@ class CpVisitsFragment : Fragment() {
                     cpClientMet = visit.cpVisit?.clientMet,
                     cpOutcome = visit.cpVisit?.outcome,
                     visitCategory = visit.visitCategory,
+                    cpType = visit.cpVisit?.cpType,
+                    clientMobile = visit.leadPhone,
                 )
             )
             .addToBackStack(null)

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Remarks popup for the Old Client CP flow. Lands after the staff
+  has captured photo + arrival OTP — the OK button closes the trip
+  with outcome="old_client_visited" and the typed remarks as notes.
+  Same styling palette as the other CP bottom sheets so it feels
+  like a native part of the trip flow.
+-->
+<!--
+  Outer container splits the sheet into a scrollable content area and
+  a pinned footer. Without this the Submit button sits below the
+  bottom-sheet fold on narrow phones and the user only sees Cancel.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+<androidx.core.widget.NestedScrollView
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:maxHeight="420dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <!-- Drag handle -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:background="@drawable/bg_chat_sheet_handle" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="Visit Remarks"
+            android:textColor="#101828"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Capture any feedback or observations from this old-client visit."
+            android:textColor="#667085"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Remarks *"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etRemarks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="top|start"
+            android:hint="What did the client say? Anything HR should know?"
+            android:inputType="textMultiLine|textCapSentences"
+            android:lines="5"
+            android:minLines="4"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="12dp"
+            android:textColor="#101828"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
+
+    <!-- Pinned footer — sits outside the NestedScrollView so the
+         Submit button is always visible regardless of scroll. -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7EC" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="14dp">
+
+        <!-- Footer buttons — same exact widget + style the CP create
+             form uses (bottom_sheet_create_cp_visit.xml). Rounded
+             pill 27dp, height 54dp, inter_bold, OutlinedButton style
+             for Cancel + #1BCA0B backgroundTint for the primary
+             action. Cancel on the LEFT, Submit on the RIGHT, weighted
+             1:1 so the layout matches the rest of the app. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancelRemarks"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textColor="#475467"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmitRemarks"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Submit"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+</LinearLayout>

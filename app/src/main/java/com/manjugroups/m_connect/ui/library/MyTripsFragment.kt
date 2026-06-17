@@ -472,6 +472,8 @@ class MyTripsFragment : Fragment() {
             cpClientMet = visit.cpVisit?.clientMet,
             cpOutcome = visit.cpVisit?.outcome,
             visitCategory = visit.visitCategory,
+            cpType = visit.cpVisit?.cpType,
+            clientMobile = visit.leadPhone,
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)

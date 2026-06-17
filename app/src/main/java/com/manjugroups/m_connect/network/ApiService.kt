@@ -2369,6 +2369,13 @@ data class ManualProfilePatch(
     val state: String? = null,
     val district: String? = null,
     val alternateMobileNumber: String? = null,
+    // Inbound-only fields — server stores them on telecallerLeads
+    // .manualProfile but they're not yet wired into the Edit-mode
+    // outcome-sheet POST, so they stay null on writes. Adding them
+    // lets the CP create form autofill door / landmark out of an
+    // operator-edited profile when available.
+    val doorNo: String? = null,
+    val landmark: String? = null,
 )
 
 data class TelecallerLeadSearchData(
@@ -2385,6 +2392,35 @@ data class TelecallerLeadSearchData(
     // latestAnalysisProfile — they reflect explicit corrections the
     // operator typed, not the AI's best guess at parsing the call.
     val manualProfile: ManualProfilePatch? = null,
+    // Snapshot of the saved clientPlaces row tied to this lead. Set
+    // after a prior CP visit was created — carries the most reliable
+    // door/pincode/address since it was confirmed by an actual visit.
+    // The CP create form prefers this over both AI analysis and
+    // manual edits.
+    val clientPlaceProfile: LeadClientPlaceProfile? = null,
+    // Best free-text/coord hints surfaced alongside the structured
+    // profiles. Used to pre-populate the lat/lng + maps-link cells
+    // on the CP create form when the lead already has them.
+    val suggestedVisitLat: Double? = null,
+    val suggestedVisitLng: Double? = null,
+    val suggestedGoogleMapsLink: String? = null,
+    val projectId: String? = null,
+    val assignedToStaffId: String? = null,
+    val assignedToStaffName: String? = null,
+)
+
+/** Inbound-only — corresponds to clientPlaces row enrichment from
+ *  telecallerLeads.searchByPhone. doorNo / pincode / city / state /
+ *  landmark are surfaced for the CP create form's autofill. */
+data class LeadClientPlaceProfile(
+    val doorNo: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val landmark: String? = null,
+    val formattedAddress: String? = null,
 )
 
 data class LeadAnalysisProfile(
@@ -2394,6 +2430,9 @@ data class LeadAnalysisProfile(
     val landmark: String? = null,
     val state: String? = null,
     val district: String? = null,
+    // Server-side telecallerLeads.searchByPhone enriches the AI
+    // analysis with doorNo when the analysis itself extracted one.
+    val doorNo: String? = null,
     val alternateMobileNumber: String? = null,
     val propertyType: String? = null,
     val propertyInterest: LeadPropertyInterest? = null,
