@@ -23,7 +23,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingHorizontal="20dp"
-        android:layout_marginBottom="20dp">
+        android:layout_marginBottom="12dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -55,221 +55,557 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 1. PAN Card -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="PAN Card *"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
+            <!-- 1. PAN Card Slot -->
             <RelativeLayout
-                android:id="@+id/btnUploadDoc1"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_loan_input_box"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:paddingHorizontal="12dp">
-
-                <ImageView
-                    android:id="@+id/ivDocIcon1"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/ic_loan_document"
-                    app:tint="#667085"
-                    android:importantForAccessibility="no" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
 
                 <TextView
-                    android:id="@+id/tvDocStatus1"
+                    android:id="@+id/tvDocTitle1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
-                    android:layout_toEndOf="@id/ivDocIcon1"
-                    android:layout_marginStart="10dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Tap to upload PAN Card"
-                    android:textColor="#98A2B3"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="PAN Card *"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
 
-                <ImageView
-                    android:id="@+id/ivDocCheck1"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                <LinearLayout
+                    android:id="@+id/btnCamera1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:src="@drawable/ic_leave_action_check"
-                    app:tint="#1BCA0B"
-                    android:visibility="gone"
-                    android:importantForAccessibility="no" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingVertical="4dp"
+                    android:paddingStart="8dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#0B61CA"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Camera"
+                        android:textColor="#0B61CA"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </RelativeLayout>
 
-            <!-- 2. Aadhaar Card -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Aadhaar Card *"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
-            <RelativeLayout
-                android:id="@+id/btnUploadDoc2"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_loan_input_box"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:paddingHorizontal="12dp">
+                android:layout_marginBottom="16dp">
 
-                <ImageView
-                    android:id="@+id/ivDocIcon2"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/ic_loan_document"
-                    app:tint="#667085"
-                    android:importantForAccessibility="no" />
+                <!-- Unuploaded State (Dashed Box) -->
+                <LinearLayout
+                    android:id="@+id/layoutUnuploaded1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="18dp"
+                    android:paddingHorizontal="16dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_upload_cloud" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Upload PAN Card"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="To avoid reject, ensure PAN Card size is max 2MB\n(Supports: JPG,PNG,PDF)"
+                        android:textColor="#98A2B3"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- Uploaded State (Solid Box with tick) -->
+                <RelativeLayout
+                    android:id="@+id/layoutUploaded1"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_loan_input_box"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivDocIcon1"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_loan_document"
+                        app:tint="#667085"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/tvUploadedName1"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_toEndOf="@id/ivDocIcon1"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#101828"
+                        android:textSize="13sp"
+                        tools:text="pan_card_doc.pdf" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_leave_action_check"
+                        app:tint="#1BCA0B"
+                        android:importantForAccessibility="no" />
+                </RelativeLayout>
+            </FrameLayout>
+
+            <!-- 2. Aadhaar Card Slot -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
 
                 <TextView
-                    android:id="@+id/tvDocStatus2"
+                    android:id="@+id/tvDocTitle2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
-                    android:layout_toEndOf="@id/ivDocIcon2"
-                    android:layout_marginStart="10dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Tap to upload Aadhaar Card"
-                    android:textColor="#98A2B3"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Aadhaar Card *"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
 
-                <ImageView
-                    android:id="@+id/ivDocCheck2"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                <LinearLayout
+                    android:id="@+id/btnCamera2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:src="@drawable/ic_leave_action_check"
-                    app:tint="#1BCA0B"
-                    android:visibility="gone"
-                    android:importantForAccessibility="no" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingVertical="4dp"
+                    android:paddingStart="8dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#0B61CA"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Camera"
+                        android:textColor="#0B61CA"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </RelativeLayout>
 
-            <!-- 3. Bank Statement -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Bank Statement *"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
-            <RelativeLayout
-                android:id="@+id/btnUploadDoc3"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_loan_input_box"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:paddingHorizontal="12dp">
+                android:layout_marginBottom="16dp">
 
-                <ImageView
-                    android:id="@+id/ivDocIcon3"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/ic_loan_document"
-                    app:tint="#667085"
-                    android:importantForAccessibility="no" />
+                <!-- Unuploaded State (Dashed Box) -->
+                <LinearLayout
+                    android:id="@+id/layoutUnuploaded2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="18dp"
+                    android:paddingHorizontal="16dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_upload_cloud" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Upload Aadhaar Card"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="To avoid reject, ensure Aadhaar photo size is max 2MB\n(Supports: JPG,PNG,PDF)"
+                        android:textColor="#98A2B3"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- Uploaded State (Solid Box with tick) -->
+                <RelativeLayout
+                    android:id="@+id/layoutUploaded2"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_loan_input_box"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivDocIcon2"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_loan_document"
+                        app:tint="#667085"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/tvUploadedName2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_toEndOf="@id/ivDocIcon2"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#101828"
+                        android:textSize="13sp"
+                        tools:text="aadhaar_card_doc.pdf" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_leave_action_check"
+                        app:tint="#1BCA0B"
+                        android:importantForAccessibility="no" />
+                </RelativeLayout>
+            </FrameLayout>
+
+            <!-- 3. Bank Statement Slot -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
 
                 <TextView
-                    android:id="@+id/tvDocStatus3"
+                    android:id="@+id/tvDocTitle3"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
-                    android:layout_toEndOf="@id/ivDocIcon3"
-                    android:layout_marginStart="10dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Tap to upload Bank Statement"
-                    android:textColor="#98A2B3"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Bank Statement *"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
 
-                <ImageView
-                    android:id="@+id/ivDocCheck3"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                <LinearLayout
+                    android:id="@+id/btnCamera3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:src="@drawable/ic_leave_action_check"
-                    app:tint="#1BCA0B"
-                    android:visibility="gone"
-                    android:importantForAccessibility="no" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingVertical="4dp"
+                    android:paddingStart="8dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#0B61CA"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Camera"
+                        android:textColor="#0B61CA"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </RelativeLayout>
 
-            <!-- 4. Income Tax / Pay Slip -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Income Tax / Pay Slip *"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
-            <RelativeLayout
-                android:id="@+id/btnUploadDoc4"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:layout_marginBottom="24dp"
-                android:background="@drawable/bg_loan_input_box"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:paddingHorizontal="12dp">
+                android:layout_marginBottom="16dp">
 
-                <ImageView
-                    android:id="@+id/ivDocIcon4"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/ic_loan_document"
-                    app:tint="#667085"
-                    android:importantForAccessibility="no" />
+                <!-- Unuploaded State (Dashed Box) -->
+                <LinearLayout
+                    android:id="@+id/layoutUnuploaded3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="18dp"
+                    android:paddingHorizontal="16dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_upload_cloud" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Upload Bank Statement"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="To avoid reject, ensure Bank Statement size is max 2MB\n(Supports: JPG,PNG,PDF)"
+                        android:textColor="#98A2B3"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- Uploaded State (Solid Box with tick) -->
+                <RelativeLayout
+                    android:id="@+id/layoutUploaded3"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_loan_input_box"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivDocIcon3"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_loan_document"
+                        app:tint="#667085"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/tvUploadedName3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_toEndOf="@id/ivDocIcon3"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#101828"
+                        android:textSize="13sp"
+                        tools:text="bank_statement.pdf" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_leave_action_check"
+                        app:tint="#1BCA0B"
+                        android:importantForAccessibility="no" />
+                </RelativeLayout>
+            </FrameLayout>
+
+            <!-- 4. Income Tax / Pay Slip Slot -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
 
                 <TextView
-                    android:id="@+id/tvDocStatus4"
+                    android:id="@+id/tvDocTitle4"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
-                    android:layout_toEndOf="@id/ivDocIcon4"
-                    android:layout_marginStart="10dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Tap to upload IT / Pay Slip"
-                    android:textColor="#98A2B3"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Income Tax / Pay Slip *"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
 
-                <ImageView
-                    android:id="@+id/ivDocCheck4"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                <LinearLayout
+                    android:id="@+id/btnCamera4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:src="@drawable/ic_leave_action_check"
-                    app:tint="#1BCA0B"
-                    android:visibility="gone"
-                    android:importantForAccessibility="no" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingVertical="4dp"
+                    android:paddingStart="8dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#0B61CA"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Camera"
+                        android:textColor="#0B61CA"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </RelativeLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="24dp">
+
+                <!-- Unuploaded State (Dashed Box) -->
+                <LinearLayout
+                    android:id="@+id/layoutUnuploaded4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="18dp"
+                    android:paddingHorizontal="16dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_upload_cloud" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Upload IT / Pay Slip"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:gravity="center"
+                        android:text="To avoid reject, ensure file size is max 2MB\n(Supports: JPG,PNG,PDF)"
+                        android:textColor="#98A2B3"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- Uploaded State (Solid Box with tick) -->
+                <RelativeLayout
+                    android:id="@+id/layoutUploaded4"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_loan_input_box"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivDocIcon4"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_loan_document"
+                        app:tint="#667085"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/tvUploadedName4"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_toEndOf="@id/ivDocIcon4"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#101828"
+                        android:textSize="13sp"
+                        tools:text="pay_slip.pdf" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_leave_action_check"
+                        app:tint="#1BCA0B"
+                        android:importantForAccessibility="no" />
+                </RelativeLayout>
+            </FrameLayout>
 
             <!-- Submit Button -->
             <TextView
