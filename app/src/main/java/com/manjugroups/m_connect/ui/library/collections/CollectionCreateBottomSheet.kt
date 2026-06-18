@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.library.collections
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -11,12 +12,14 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,28 +27,38 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PostSaleCaseSummary
+import com.manjugroups.m_connect.ui.common.SearchableOption
+import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.Serializable
 
 /**
- * "Add Collection" sheet. The parent passes in a list of bookings
- * already resolved via /api/postsales/cases/byMobile, so this sheet is
- * UI-only — it never hits the network itself. Submit emits a
- * FragmentResult bundle carrying caseId + the form fields + the proof
- * file's local path; the parent uploads the proof to Convex storage
- * and posts /api/postsales/collections/submit on success.
+ * "Collection Creations" sheet — the designer's form.
  *
- * Rectify mode reuses the same form pre-populated from the rejected
- * row's previous values. The server records each submission as a new
- * customerCollections row, so the audit trail (rejected → re-submitted
- * → approved) stays intact.
+ * Opens directly when the "+" is tapped on the Collections screen, no
+ * intermediary prompt. The booking lookup is built into the Select
+ * Booking field: tapping it asks the field staff for the customer's
+ * mobile, hits /api/postsales/cases/byMobile, and renders the result
+ * in a picker. Selection populates the field.
+ *
+ * In Rectify mode the rejected row already carries the case (caseId,
+ * bookingRefNo, clientName, project + plot), so the Select Booking
+ * field is pre-filled and locked — the field staff only edits what
+ * Accounts flagged. Submit returns to the parent which handles the
+ * proof upload and POST to /api/postsales/collections/submit.
  */
 class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
 
@@ -60,11 +73,16 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     )
 
     private data class ModeOption(val id: String, val label: String) : Serializable
-    private data class BookingDisplay(val case: PostSaleCaseSummary, val label: String)
 
-    private var cases: List<PostSaleCaseSummary> = emptyList()
-    private var bookingDisplays: List<BookingDisplay> = emptyList()
+    private val api = GeoTrackApi.create()
+    private lateinit var session: SessionManager
+
+    private var rectifyItem: CollectionItem? = null
+    private var rectifyLocked: Boolean = false
+
     private var selectedCase: PostSaleCaseSummary? = null
+    private var selectedCaseId: String? = null
+    private var selectedCaseLabel: String? = null
     private var selectedMode: ModeOption = paymentModes.first()
 
     private var cameraFile: File? = null
@@ -75,6 +93,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     private lateinit var tvUploadTitle: TextView
     private lateinit var tvUploadSubtitle: TextView
     private lateinit var ivUploadIcon: android.widget.ImageView
+    private lateinit var etBooking: AutoCompleteTextView
 
     private val galleryLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -152,8 +171,9 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
 
-        val etBooking = view.findViewById<AutoCompleteTextView>(R.id.etBooking)
+        etBooking = view.findViewById(R.id.etBooking)
         val etAmount = view.findViewById<TextInputEditText>(R.id.etAmount)
         val etPaymentMode = view.findViewById<AutoCompleteTextView>(R.id.etPaymentMode)
         val etRefId = view.findViewById<TextInputEditText>(R.id.etRefId)
@@ -166,64 +186,45 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         tvUploadSubtitle = view.findViewById(R.id.tvUploadSubtitle)
         ivUploadIcon = view.findViewById(R.id.ivUploadIcon)
 
-        @Suppress("DEPRECATION", "UNCHECKED_CAST")
-        val argCases = arguments?.getSerializable(ARG_CASES) as? ArrayList<PostSaleCaseSummary>
         @Suppress("DEPRECATION")
-        val rectifyItem = arguments?.getSerializable(ARG_RECTIFY_ITEM) as? CollectionItem
+        rectifyItem = arguments?.getSerializable(ARG_RECTIFY_ITEM) as? CollectionItem
+        val rectifyCaseId = arguments?.getString(ARG_RECTIFY_CASE_ID)
+        val rectifyLabel = arguments?.getString(ARG_RECTIFY_BOOKING_LABEL)
 
-        cases = argCases.orEmpty()
-        bookingDisplays = cases.map { c ->
-            BookingDisplay(
-                case = c,
-                label = formatBookingLabel(c),
-            )
-        }
+        // Rectify mode: the rejected row already carries its caseId +
+        // booking caption, so we lock the booking field and only let
+        // the user fix what Accounts flagged (amount / mode / ref /
+        // notes / proof).
+        val r = rectifyItem
+        if (r != null && !rectifyCaseId.isNullOrBlank()) {
+            rectifyLocked = true
+            selectedCaseId = rectifyCaseId
+            selectedCaseLabel = rectifyLabel ?: r.bookingName
+            etBooking.setText(selectedCaseLabel)
+            etBooking.isEnabled = false
+            etBooking.isFocusable = false
 
-        if (cases.size == 1) {
-            selectedCase = cases.first()
-            etBooking.setText(bookingDisplays.first().label)
-        }
-
-        // Prefill from the rejected row if we're in Rectify mode. The
-        // amount / mode / reference / notes carry over directly; the
-        // proof has to be re-attached because we don't redownload the
-        // previous storage object onto the device.
-        if (rectifyItem != null) {
-            etAmount.setText(rectifyItem.amount.toString())
-            etPaymentMode.setText(rectifyItem.paymentMode)
-            paymentModes.firstOrNull { it.label.equals(rectifyItem.paymentMode, ignoreCase = true) }?.let {
+            etAmount.setText(r.amount.toString())
+            paymentModes.firstOrNull { it.label.equals(r.paymentMode, ignoreCase = true) }?.let {
                 selectedMode = it
+                etPaymentMode.setText(it.label)
             }
-            etRefId.setText(rectifyItem.refId)
-            etNotes.setText(rectifyItem.notes)
-            // Best-effort booking pre-select: match on the booking ref
-            // surface in the rectifyItem.bookingName if any of the
-            // freshly-loaded cases line up.
-            val match = bookingDisplays.firstOrNull { display ->
-                rectifyItem.bookingName.contains(display.case.bookingRefNo, ignoreCase = true) ||
-                    display.case.clientName.contains(rectifyItem.bookingName, ignoreCase = true)
-            }
-            if (match != null) {
-                selectedCase = match.case
-                etBooking.setText(match.label)
-            }
+            etRefId.setText(r.refId)
+            etNotes.setText(r.notes)
         }
 
-        etBooking.setAdapter(
-            ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_list_item_1,
-                bookingDisplays.map { it.label },
-            ),
-        )
-        etBooking.setOnClickListener { etBooking.showDropDown() }
-        etBooking.setOnItemClickListener { _, _, position, _ ->
-            bookingDisplays.getOrNull(position)?.let { picked ->
-                selectedCase = picked.case
-                etBooking.setText(picked.label)
-            }
+        if (!rectifyLocked) {
+            // Wire the Select Booking field to the in-form lookup.
+            // Both click and focus trigger it so the keyboard never
+            // takes over (the field doesn't accept free text).
+            etBooking.isFocusable = false
+            etBooking.isCursorVisible = false
+            etBooking.keyListener = null
+            etBooking.setOnClickListener { promptBookingLookup() }
         }
 
+        // Payment mode dropdown — keep on a static list of the seven
+        // server-recognised modes.
         etPaymentMode.setAdapter(
             ArrayAdapter(
                 requireContext(),
@@ -250,14 +251,11 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                 cameraPermLauncher.launch(Manifest.permission.CAMERA)
             }
         }
-
-        btnUploadImage.setOnClickListener {
-            galleryLauncher.launch("image/*")
-        }
+        btnUploadImage.setOnClickListener { galleryLauncher.launch("image/*") }
 
         btnSubmit.setOnClickListener {
-            val picked = selectedCase
-            if (picked == null) {
+            val caseId = selectedCaseId
+            if (caseId.isNullOrBlank()) {
                 toast("Select a booking")
                 return@setOnClickListener
             }
@@ -267,8 +265,6 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
             val typedMode = etPaymentMode.text?.toString()?.trim().orEmpty()
-            // The dropdown click handler keeps `selectedMode` in sync,
-            // but if the user types instead of picking we resolve here.
             val resolvedMode = paymentModes.firstOrNull { it.label.equals(typedMode, ignoreCase = true) }
                 ?: paymentModes.firstOrNull { it.id.equals(typedMode, ignoreCase = true) }
             if (resolvedMode == null) {
@@ -278,7 +274,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             selectedMode = resolvedMode
             val refId = etRefId.text?.toString()?.trim().orEmpty()
             if (refId.isBlank()) {
-                toast("Transaction ID is required (UTR / cheque / ref no)")
+                toast("Transaction reference is required")
                 return@setOnClickListener
             }
             val notes = etNotes.text?.toString()?.trim().orEmpty()
@@ -287,9 +283,9 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                 RESULT_KEY,
                 bundleOf(
                     KEY_SUBMITTED to true,
-                    KEY_CASE_ID to picked.id,
-                    KEY_BOOKING_REF to picked.bookingRefNo,
-                    KEY_CLIENT_NAME to picked.clientName,
+                    KEY_CASE_ID to caseId,
+                    KEY_BOOKING_REF to (selectedCase?.bookingRefNo ?: ""),
+                    KEY_CLIENT_NAME to (selectedCase?.clientName ?: ""),
                     KEY_AMOUNT to amount,
                     KEY_PAYMENT_MODE to selectedMode.id,
                     KEY_PAYMENT_MODE_LABEL to selectedMode.label,
@@ -309,12 +305,83 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         setFragmentResult(RESULT_KEY, bundleOf(KEY_SUBMITTED to false))
     }
 
-    private fun formatBookingLabel(c: PostSaleCaseSummary): String {
-        val location = listOfNotNull(c.projectName?.takeIf { it.isNotBlank() }, c.plotNo?.takeIf { it.isNotBlank() })
-            .joinToString(" · ")
+    // ── Booking lookup (inside the Select Booking field) ──────────────
+    //
+    // Field staff taps the Select Booking row → we prompt for the
+    // customer's 10-digit mobile (the only routine identifier on the
+    // exec's side) → /api/postsales/cases/byMobile returns the rows →
+    // we render them in a SearchableSelectionDialog so the staff can
+    // pick the right booking among the customer's multiple plots.
+
+    private fun promptBookingLookup() {
+        val ctx = requireContext()
+        val input = EditText(ctx).apply {
+            inputType = InputType.TYPE_CLASS_PHONE
+            hint = "Customer mobile (10 digits)"
+            setPadding(48, 24, 48, 24)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle("Find booking")
+            .setMessage("Enter the customer's mobile number to load their bookings.")
+            .setView(input)
+            .setPositiveButton("Search") { dialog, _ ->
+                val mobile = input.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                if (mobile == null) {
+                    toast("Mobile number is required")
+                } else {
+                    fetchAndPickBooking(mobile)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun fetchAndPickBooking(mobile: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.getPostSaleCasesByMobile(session.bearerToken, mobile)
+                }
+                if (!resp.success || resp.cases.isEmpty()) {
+                    toast(resp.error ?: "No bookings found for $mobile")
+                    return@launch
+                }
+                showBookingPicker(resp.cases)
+            } catch (e: Exception) {
+                toast(e.message ?: "Lookup failed")
+            }
+        }
+    }
+
+    private fun showBookingPicker(cases: List<PostSaleCaseSummary>) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select Booking",
+            options = cases.map { c ->
+                SearchableOption(
+                    item = c,
+                    title = "${c.clientName} · ${c.bookingRefNo}",
+                    subtitle = buildBookingSubtitle(c),
+                    keywords = "${c.clientName} ${c.bookingRefNo} ${c.projectName.orEmpty()} ${c.plotNo.orEmpty()}",
+                )
+            },
+            emptyMessage = "No bookings",
+        ) { picked ->
+            selectedCase = picked
+            selectedCaseId = picked.id
+            selectedCaseLabel = "${picked.clientName} · ${picked.bookingRefNo}"
+            etBooking.setText(selectedCaseLabel)
+        }
+    }
+
+    private fun buildBookingSubtitle(c: PostSaleCaseSummary): String {
+        val location = listOfNotNull(
+            c.projectName?.takeIf { it.isNotBlank() },
+            c.plotNo?.takeIf { it.isNotBlank() }?.let { "Plot $it" },
+        ).joinToString(" · ")
         val balance = "Balance ₹${"%,.0f".format(c.balanceAmount)}"
-        val base = "${c.clientName} · ${c.bookingRefNo}"
-        return if (location.isNotBlank()) "$base · $location · $balance" else "$base · $balance"
+        return if (location.isNotBlank()) "$location · $balance" else balance
     }
 
     private fun showImageAttached(fileName: String) {
@@ -394,16 +461,27 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         const val KEY_PROOF_FILE_NAME = "proofFileName"
         const val KEY_PROOF_MIME = "proofMime"
 
-        private const val ARG_CASES = "arg_cases"
         private const val ARG_RECTIFY_ITEM = "arg_rectify_item"
+        private const val ARG_RECTIFY_CASE_ID = "arg_rectify_case_id"
+        private const val ARG_RECTIFY_BOOKING_LABEL = "arg_rectify_booking_label"
 
-        fun newInstance(
-            cases: List<PostSaleCaseSummary>,
-            rectifyItem: CollectionItem? = null,
+        /** Fresh collection — the booking is picked inside the sheet. */
+        fun newInstance(): CollectionCreateBottomSheet = CollectionCreateBottomSheet()
+
+        /**
+         * Rectify a previously-rejected collection. The original row
+         * carries the caseId so the booking field is locked; the
+         * label is the same booking caption the list row displays.
+         */
+        fun forRectify(
+            item: CollectionItem,
+            caseId: String,
+            bookingLabel: String,
         ): CollectionCreateBottomSheet = CollectionCreateBottomSheet().apply {
             arguments = Bundle().apply {
-                putSerializable(ARG_CASES, ArrayList(cases))
-                if (rectifyItem != null) putSerializable(ARG_RECTIFY_ITEM, rectifyItem)
+                putSerializable(ARG_RECTIFY_ITEM, item)
+                putString(ARG_RECTIFY_CASE_ID, caseId)
+                putString(ARG_RECTIFY_BOOKING_LABEL, bookingLabel)
             }
         }
     }

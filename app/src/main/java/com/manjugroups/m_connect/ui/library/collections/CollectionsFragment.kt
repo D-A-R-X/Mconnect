@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.library.collections
 
-import android.app.AlertDialog
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -8,7 +7,6 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -95,7 +93,10 @@ class CollectionsFragment : Fragment() {
     private fun setupListeners() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
 
-        binding.btnAddCollection.setOnClickListener { promptCustomerMobileThenOpenSheet() }
+        binding.btnAddCollection.setOnClickListener {
+            CollectionCreateBottomSheet.newInstance()
+                .show(parentFragmentManager, "CollectionCreateBottomSheet")
+        }
 
         binding.tabAll.setOnClickListener {
             selectedTypeFilter = null
@@ -123,101 +124,35 @@ class CollectionsFragment : Fragment() {
         })
     }
 
-    // ── Add Collection flow ────────────────────────────────────────────
+    // ── Rectify flow ───────────────────────────────────────────────────
     //
-    // We need a caseId to write a collection row, so the entry point is
-    // a customer-mobile prompt. If /cases/byMobile returns nothing the
-    // user is told (mirrors the same gate used by the in-trip Collection
-    // CP creation flow) and the create sheet never opens.
-
-    private fun promptCustomerMobileThenOpenSheet() {
-        val input = EditText(requireContext()).apply {
-            inputType = android.text.InputType.TYPE_CLASS_PHONE
-            hint = "Customer mobile (10 digits)"
-            setPadding(48, 24, 48, 24)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("New Collection")
-            .setMessage("Enter the customer's mobile number to look up their booking.")
-            .setView(input)
-            .setPositiveButton("Continue") { dialog, _ ->
-                val mobile = input.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-                if (mobile == null) {
-                    toast("Mobile number is required")
-                } else {
-                    lookupCasesAndOpenSheet(mobile, rectifyItem = null)
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
-            .show()
-    }
+    // The rejected row already carries its caseId + booking caption
+    // (clientName, bookingRefNo, project, plot). Rectify opens the same
+    // designer form with the booking field locked to that case — staff
+    // only edits the fields Accounts flagged.
 
     private fun startRectifyFlow(item: CollectionItem) {
-        // The rectify path replays the rejected row. To populate the
-        // booking dropdown with the same case the original collection
-        // was filed against we look up by the stored case's customer
-        // mobile — the row gives us bookingRefNo + customerName but not
-        // the mobile, so we fall back to the caseId for direct match.
         val row = rowsById[item.id]
         if (row == null) {
             toast("Could not load the original collection details")
             return
         }
-        lookupCasesByCaseIdAndOpenSheet(row, item)
+        val bookingLabel = buildBookingLabel(row)
+        CollectionCreateBottomSheet.forRectify(
+            item = item,
+            caseId = row.caseId,
+            bookingLabel = bookingLabel,
+        ).show(parentFragmentManager, "CollectionCreateBottomSheet")
     }
 
-    private fun lookupCasesByCaseIdAndOpenSheet(row: CustomerCollectionRow, item: CollectionItem) {
-        // We don't have a /cases/get-by-id endpoint, so the cleanest
-        // recovery is to ask the user for the customer mobile again —
-        // they'll usually know it. Skip the prompt if the row carries
-        // enough context to filter the existing list locally.
-        promptCustomerMobileThenOpenSheet(item, prefillHint = row.customerName)
-    }
-
-    private fun promptCustomerMobileThenOpenSheet(rectifyItem: CollectionItem, prefillHint: String?) {
-        val input = EditText(requireContext()).apply {
-            inputType = android.text.InputType.TYPE_CLASS_PHONE
-            hint = "Customer mobile (10 digits)"
-            setPadding(48, 24, 48, 24)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Rectify Collection")
-            .setMessage(
-                "Enter the customer's mobile to reload their booking" +
-                    (prefillHint?.takeIf { it.isNotBlank() }?.let { " (originally $it)" } ?: "") +
-                    "."
-            )
-            .setView(input)
-            .setPositiveButton("Continue") { dialog, _ ->
-                val mobile = input.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-                if (mobile == null) {
-                    toast("Mobile number is required")
-                } else {
-                    lookupCasesAndOpenSheet(mobile, rectifyItem)
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
-            .show()
-    }
-
-    private fun lookupCasesAndOpenSheet(mobile: String, rectifyItem: CollectionItem?) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = withContext(Dispatchers.IO) {
-                    api.getPostSaleCasesByMobile(session.bearerToken, mobile)
-                }
-                val cases = resp.cases
-                if (!resp.success || cases.isEmpty()) {
-                    toast(resp.error ?: "No bookings found for $mobile")
-                    return@launch
-                }
-                CollectionCreateBottomSheet.newInstance(cases, rectifyItem)
-                    .show(parentFragmentManager, "CollectionCreateBottomSheet")
-            } catch (e: Exception) {
-                toast(e.message ?: "Lookup failed")
-            }
+    private fun buildBookingLabel(row: CustomerCollectionRow): String {
+        val client = row.customerName.orEmpty().trim()
+        val ref = row.bookingRefNo.orEmpty().trim()
+        return when {
+            client.isNotBlank() && ref.isNotBlank() -> "$client · $ref"
+            client.isNotBlank() -> client
+            ref.isNotBlank() -> ref
+            else -> "Booking ${row.caseId.takeLast(6)}"
         }
     }
 

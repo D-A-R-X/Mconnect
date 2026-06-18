@@ -194,7 +194,8 @@
                         android:fontFamily="@font/inter_semibold"
                         android:textColor="#FFFFFF"
                         android:textSize="15sp"
-                        android:text="4 Collections Today" />
+                        android:text="0 Collections"
+                        tools:text="4 Collections" />
 
                     <!-- Total amount on right -->
                     <LinearLayout
@@ -216,7 +217,8 @@
                             android:fontFamily="@font/inter_bold"
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
-                            android:text="₹12,400" />
+                            android:text="₹0"
+                            tools:text="₹12,400" />
                     </LinearLayout>
                 </LinearLayout>
 
