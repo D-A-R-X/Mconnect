@@ -1563,7 +1563,7 @@
                                     android:layout_gravity="center"
                                     android:contentDescription="@null"
                                     android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_calculator"
+                                    android:src="@drawable/ic_apps_verified_outline"
                                     app:tint="#1F2937" />
                             </FrameLayout>
 
