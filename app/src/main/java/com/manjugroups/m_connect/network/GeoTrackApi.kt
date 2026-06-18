@@ -251,6 +251,36 @@ interface GeoTrackApi {
         @Body body: SubmitCollectionRequest,
     ): SubmitCollectionResponse
 
+    // ── Collections: Library list + Accounts verification queue ─────
+    // Wraps customerCollections.listByStaff / listForAccounts so the
+    // two new Library screens (Sales-Executive Collections + Accounts
+    // Post-Sales Verification) can populate without going through the
+    // Convex JS client. Approve / reject hit updateVerification with
+    // the bearer-auth caller stamped as verifiedByStaffId.
+
+    @GET("api/postsales/collections/my")
+    suspend fun listMyCustomerCollections(
+        @Header("Authorization") token: String,
+        @Query("verificationStatus") verificationStatus: String? = null,
+    ): CustomerCollectionsListResponse
+
+    @GET("api/postsales/collections/for-accounts")
+    suspend fun listCustomerCollectionsForAccounts(
+        @Header("Authorization") token: String,
+    ): CustomerCollectionsListResponse
+
+    @POST("api/postsales/collections/approve")
+    suspend fun approveCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: ApproveCollectionRequest,
+    ): VerifyCollectionResponse
+
+    @POST("api/postsales/collections/reject")
+    suspend fun rejectCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: RejectCollectionRequest,
+    ): VerifyCollectionResponse
+
     // ── Site Visits (mobile outcome sheet) ──────────────────────────
     // The CompleteCpVisitBottomSheet drives the same outcome capture
     // for pure-SV visits (not CP-converted). These wrappers mirror
@@ -898,7 +928,7 @@ data class PostSaleCaseSummary(
     val balanceAmount: Double = 0.0,
     val tenPercentAmount: Double = 0.0,
     val currentStage: String? = null,
-)
+) : java.io.Serializable
 
 data class PostSaleCasesByMobileResponse(
     val success: Boolean = false,
@@ -928,6 +958,73 @@ data class SubmitCollectionResponse(
     val success: Boolean = false,
     val collectionId: String? = null,
     val collectionRefNo: String? = null,
+    val error: String? = null,
+)
+
+/**
+ * One customerCollections row enriched with the case/booking caption
+ * strings the two Library screens need. The "my" feed and the
+ * "for-accounts" feed both return this shape — only `receipt` is
+ * accounts-only and stays null on the executive's list.
+ *
+ * `customerPaymentCategory` is what the executive's UI uses to bucket
+ * a row as SELF_FINANCE (`cash_in_hand`) vs BANK_LOAN (`loan`). It
+ * comes from the booking's payment category, not from any field on
+ * the collection itself, so it can be null if the underlying case is
+ * deleted.
+ */
+data class CustomerCollectionRow(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val collectionRefNo: String,
+    val caseId: String,
+    val bookingId: String,
+    val amount: Double = 0.0,
+    val collectionDate: String? = null,
+    val paymentMode: String,
+    val transactionReference: String? = null,
+    val bankName: String? = null,
+    val notes: String? = null,
+    val collectedByName: String? = null,
+    val collectedByStaffId: String? = null,
+    val proofStorageId: String? = null,
+    val proofFileName: String? = null,
+    val verificationStatus: String,
+    val verificationNotes: String? = null,
+    val verifiedByName: String? = null,
+    val verifiedAt: String? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+    val customerName: String? = null,
+    val bookingRefNo: String? = null,
+    val projectName: String? = null,
+    val plotNo: String? = null,
+    val customerPaymentCategory: String? = null,
+)
+
+data class CustomerCollectionsListResponse(
+    val success: Boolean = false,
+    val collections: List<CustomerCollectionRow> = emptyList(),
+    val error: String? = null,
+)
+
+/** Accountant taps Approve. `notes` is optional remarks attached to
+ *  the approval — most flows leave it empty. */
+data class ApproveCollectionRequest(
+    val collectionId: String,
+    val notes: String? = null,
+)
+
+/** Accountant taps Reject. `remarks` is required — server returns 400
+ *  if missing. Drives the rejected-row's "Rectify" prefill on the
+ *  executive's side. */
+data class RejectCollectionRequest(
+    val collectionId: String,
+    val remarks: String,
+)
+
+data class VerifyCollectionResponse(
+    val success: Boolean = false,
+    val collection: CustomerCollectionRow? = null,
     val error: String? = null,
 )
 

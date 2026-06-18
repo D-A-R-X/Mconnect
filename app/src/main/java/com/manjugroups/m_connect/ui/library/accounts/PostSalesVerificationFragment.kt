@@ -7,26 +7,49 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentPostSalesVerificationBinding
+import com.manjugroups.m_connect.network.ApproveCollectionRequest
+import com.manjugroups.m_connect.network.CustomerCollectionRow
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.RejectCollectionRequest
 import com.manjugroups.m_connect.ui.library.collections.CollectionItem
+import com.manjugroups.m_connect.ui.library.collections.CollectionMapper
+import com.manjugroups.m_connect.ui.library.collections.CollectionRejectBottomSheet
 import com.manjugroups.m_connect.ui.library.collections.CollectionStatus
 import com.manjugroups.m_connect.ui.library.collections.CollectionType
 import com.manjugroups.m_connect.ui.library.collections.CollectionsAdapter
-import com.manjugroups.m_connect.ui.library.collections.CollectionRejectBottomSheet
-import android.widget.Toast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
 
+/**
+ * Accountant verification queue. Loads pending + recently-approved
+ * collections from `/api/postsales/collections/for-accounts`, lets the
+ * accountant Approve in one tap or open the Reject sheet for remarks.
+ * Approve/reject both hit the corresponding HTTP wrapper around
+ * `customerCollections.updateVerification`; the list refreshes from
+ * the server after each action so the caller sees the authoritative
+ * state instead of an optimistic local toggle.
+ */
 class PostSalesVerificationFragment : Fragment() {
 
     private var _binding: FragmentPostSalesVerificationBinding? = null
     private val binding get() = _binding!!
 
+    private val api = GeoTrackApi.create()
+    private lateinit var session: SessionManager
+
     private lateinit var adapter: CollectionsAdapter
     private val masterList = mutableListOf<CollectionItem>()
+    private val rowsById = mutableMapOf<String, CustomerCollectionRow>()
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
@@ -42,102 +65,31 @@ class PostSalesVerificationFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
 
-        setupInitialMockData()
         setupRecyclerView()
         setupListeners()
         setupResultListener()
-        filterCollections()
-    }
-
-    private fun setupInitialMockData() {
-        if (masterList.isEmpty()) {
-            masterList.add(
-                CollectionItem(
-                    id = "v1",
-                    bookingName = "Manju Groups Site A - Plot 12",
-                    amount = 42000.0,
-                    paymentMode = "UPI",
-                    refId = "48782328100",
-                    notes = "Pending verification",
-                    photoPath = null,
-                    dateString = "Oct 24, 2026 • 10:30 AM",
-                    status = CollectionStatus.PENDING,
-                    type = CollectionType.BANK_LOAN
-                )
-            )
-            masterList.add(
-                CollectionItem(
-                    id = "v2",
-                    bookingName = "Manju Groups Site A - Plot 45",
-                    amount = 42000.0,
-                    paymentMode = "UPI",
-                    refId = "48782328100",
-                    notes = "Pending verification",
-                    photoPath = null,
-                    dateString = "Oct 24, 2026 • 10:30 AM",
-                    status = CollectionStatus.PENDING,
-                    type = CollectionType.SELF_FINANCE
-                )
-            )
-            masterList.add(
-                CollectionItem(
-                    id = "v3",
-                    bookingName = "Manju Groups Site B - Plot 8",
-                    amount = 3000.0,
-                    paymentMode = "Cash",
-                    refId = "98127392182",
-                    notes = "Cash collection",
-                    photoPath = null,
-                    dateString = "Jun 17, 2026 • 11:30 AM",
-                    status = CollectionStatus.PENDING,
-                    type = CollectionType.SELF_FINANCE
-                )
-            )
-            masterList.add(
-                CollectionItem(
-                    id = "v4",
-                    bookingName = "Manju Groups Site C - Plot 19",
-                    amount = 9400.0,
-                    paymentMode = "Bank Transfer",
-                    refId = "12837283721",
-                    notes = "Bank transfer collection",
-                    photoPath = null,
-                    dateString = "Jun 17, 2026 • 02:45 PM",
-                    status = CollectionStatus.APPROVED,
-                    type = CollectionType.BANK_LOAN
-                )
-            )
-        }
+        refreshFromApi()
     }
 
     private fun setupRecyclerView() {
         adapter = CollectionsAdapter().apply {
             isAccountantRole = true
-            onAcceptClick = { item ->
-                item.status = CollectionStatus.APPROVED
-                item.remarks = null
-                notifyDataSetChanged()
-                filterCollections()
-                Toast.makeText(requireContext(), "Collection Approved", Toast.LENGTH_SHORT).show()
-            }
+            onAcceptClick = { item -> approveCollection(item) }
             onRejectClick = { item ->
                 CollectionRejectBottomSheet.newInstance(item.id)
                     .show(parentFragmentManager, "CollectionRejectBottomSheet")
             }
-            onRectifyClick = { /* No rectify in accountant mode */ }
-            onImageClick = { item ->
-                showFullscreenImagePreview(item)
-            }
+            onRectifyClick = { /* No rectify on the accountant side */ }
+            onImageClick = { item -> showFullscreenImagePreview(item) }
         }
         binding.rvCollections.layoutManager = LinearLayoutManager(requireContext())
         binding.rvCollections.adapter = adapter
     }
 
     private fun setupListeners() {
-        binding.btnBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
-        }
+        binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
 
         binding.tabAll.setOnClickListener {
             selectedTypeFilter = null
@@ -158,52 +110,114 @@ class PostSalesVerificationFragment : Fragment() {
         binding.etSearchCollections.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                currentSearchQuery = s?.toString()?.trim() ?: ""
+                currentSearchQuery = s?.toString()?.trim().orEmpty()
                 filterCollections()
             }
             override fun afterTextChanged(s: Editable?) {}
         })
     }
 
+    private fun setupResultListener() {
+        parentFragmentManager.setFragmentResultListener(
+            CollectionRejectBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val itemId = bundle.getString("itemId").orEmpty()
+            val remarks = bundle.getString("remarks").orEmpty()
+            if (itemId.isBlank() || remarks.isBlank()) {
+                toast("Rejection requires remarks")
+                return@setFragmentResultListener
+            }
+            rejectCollection(itemId, remarks)
+        }
+    }
+
+    private fun approveCollection(item: CollectionItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.approveCustomerCollection(
+                        token = session.bearerToken,
+                        body = ApproveCollectionRequest(collectionId = item.id, notes = null),
+                    )
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not approve collection")
+                    return@launch
+                }
+                toast("Collection approved")
+                refreshFromApi()
+            } catch (e: Exception) {
+                toast(e.message ?: "Approval failed")
+            }
+        }
+    }
+
+    private fun rejectCollection(collectionId: String, remarks: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.rejectCustomerCollection(
+                        token = session.bearerToken,
+                        body = RejectCollectionRequest(collectionId = collectionId, remarks = remarks),
+                    )
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not reject collection")
+                    return@launch
+                }
+                toast("Collection rejected")
+                refreshFromApi()
+            } catch (e: Exception) {
+                toast(e.message ?: "Rejection failed")
+            }
+        }
+    }
+
+    private fun refreshFromApi() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.listCustomerCollectionsForAccounts(session.bearerToken)
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Failed to load verification queue")
+                    return@launch
+                }
+                rowsById.clear()
+                resp.collections.forEach { rowsById[it.id] = it }
+                masterList.clear()
+                masterList.addAll(resp.collections.map(CollectionMapper::map))
+                filterCollections()
+            } catch (e: Exception) {
+                toast(e.message ?: "Failed to load verification queue")
+            }
+        }
+    }
+
     private fun showFullscreenImagePreview(item: CollectionItem) {
         val context = requireContext()
         val dialog = android.app.Dialog(context, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-
         val root = android.widget.RelativeLayout(context).apply {
             setBackgroundColor(Color.BLACK)
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
             )
         }
-
         val imageView = android.widget.ImageView(context).apply {
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             layoutParams = android.widget.RelativeLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
             )
+            setImageResource(R.drawable.ic_cash_proof)
         }
-
-        val photoPath = item.photoPath
-        if (photoPath != null) {
-            val file = java.io.File(photoPath)
-            if (file.exists()) {
-                imageView.setImageURI(android.net.Uri.fromFile(file))
-            } else {
-                imageView.setImageResource(R.drawable.ic_cash_proof)
-            }
-        } else {
-            imageView.setImageResource(R.drawable.ic_cash_proof)
-        }
-
         root.addView(imageView)
-
         val density = resources.displayMetrics.density
         val btnSize = (48 * density).toInt()
         val btnMarginTop = (48 * density).toInt()
         val btnMarginStart = (24 * density).toInt()
-
         val closeButton = android.widget.ImageView(context).apply {
             setImageResource(R.drawable.ic_outcome_close)
             imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
@@ -212,7 +226,6 @@ class PostSalesVerificationFragment : Fragment() {
             setPadding(16, 16, 16, 16)
             isClickable = true
             isFocusable = true
-
             val params = android.widget.RelativeLayout.LayoutParams(btnSize, btnSize).apply {
                 addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
                 addRule(android.widget.RelativeLayout.ALIGN_PARENT_LEFT)
@@ -222,42 +235,19 @@ class PostSalesVerificationFragment : Fragment() {
             layoutParams = params
             setOnClickListener { dialog.dismiss() }
         }
-
         root.addView(closeButton)
-
         dialog.setContentView(root)
         dialog.show()
-    }
-
-    private fun setupResultListener() {
-        parentFragmentManager.setFragmentResultListener(
-            CollectionRejectBottomSheet.RESULT_KEY,
-            viewLifecycleOwner
-        ) { _, bundle ->
-            val itemId = bundle.getString("itemId")
-            val remarks = bundle.getString("remarks")
-            if (itemId != null && remarks != null) {
-                val item = masterList.find { it.id == itemId }
-                if (item != null) {
-                    item.status = CollectionStatus.REJECTED
-                    item.remarks = remarks
-                    adapter.notifyDataSetChanged()
-                    filterCollections()
-                    Toast.makeText(requireContext(), "Collection Rejected", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
     }
 
     private fun filterCollections() {
         val filtered = masterList.filter { item ->
             val matchesTab = selectedTypeFilter == null || item.type == selectedTypeFilter
             val matchesSearch = currentSearchQuery.isBlank() ||
-                    item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
-                    item.refId.contains(currentSearchQuery, ignoreCase = true)
+                item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
+                item.refId.contains(currentSearchQuery, ignoreCase = true)
             matchesTab && matchesSearch
         }
-
         adapter.submit(filtered)
         updateSummaryBanner(filtered)
     }
@@ -288,7 +278,6 @@ class PostSalesVerificationFragment : Fragment() {
     private fun updateSummaryBanner(list: List<CollectionItem>) {
         val pendingCount = list.count { it.status == CollectionStatus.PENDING }
         val totalAmount = list.sumOf { it.amount }
-
         binding.tvSummaryCount.text = if (pendingCount == 1) "1 Pending Verification" else "$pendingCount Pending Verification"
         binding.tvSummaryTotal.text = formatRupees(totalAmount)
     }
@@ -296,6 +285,10 @@ class PostSalesVerificationFragment : Fragment() {
     private fun formatRupees(amount: Double): String {
         val rupeeFormatter = NumberFormat.getInstance(Locale("en", "IN"))
         return "₹" + rupeeFormatter.format(amount.toLong())
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {
