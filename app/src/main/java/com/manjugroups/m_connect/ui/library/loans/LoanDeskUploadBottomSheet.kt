@@ -59,7 +59,13 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
     // Launchers
     private val filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        object : ActivityResultContracts.GetContent() {
+            override fun createIntent(context: android.content.Context, input: String): Intent {
+                val intent = super.createIntent(context, input)
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf"))
+                return intent
+            }
+        }
     ) { uri ->
         if (uri != null) {
             val name = getFileName(uri) ?: when (activeSlot) {
@@ -113,6 +119,9 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             bottomSheet?.let {
                 it.setBackgroundResource(R.drawable.bg_auth_sheet)
                 androidx.core.view.ViewCompat.setElevation(it, 0f)
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
             }
         }
         return dialog
@@ -158,7 +167,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         // --- Doc 1 Action Listeners ---
         layoutUnuploaded1.setOnClickListener {
             activeSlot = 1
-            filePickerLauncher.launch("image/*")
+            filePickerLauncher.launch("*/*")
         }
         btnCamera1.setOnClickListener {
             activeSlot = 1
@@ -174,7 +183,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         // --- Doc 2 Action Listeners ---
         layoutUnuploaded2.setOnClickListener {
             activeSlot = 2
-            filePickerLauncher.launch("image/*")
+            filePickerLauncher.launch("*/*")
         }
         btnCamera2.setOnClickListener {
             activeSlot = 2

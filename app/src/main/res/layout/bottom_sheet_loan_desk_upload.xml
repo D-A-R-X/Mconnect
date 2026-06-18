@@ -3,10 +3,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:background="@drawable/bg_auth_sheet"
-    android:orientation="vertical"
-    android:paddingBottom="24dp">
+    android:orientation="vertical">
 
     <!-- Bottom sheet drag handle -->
     <View
@@ -46,7 +45,9 @@
     <!-- Scrollable content -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
         android:overScrollMode="never"
         android:paddingHorizontal="20dp">
 
@@ -606,26 +607,38 @@
                         android:importantForAccessibility="no" />
                 </RelativeLayout>
             </FrameLayout>
-
-            <!-- Submit Button -->
-            <TextView
-                android:id="@+id/btnSubmitUploads"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_leave_submit_button"
-                android:clickable="true"
-                android:focusable="true"
-                android:enabled="false"
-                android:alpha="0.5"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
-                android:gravity="center"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Submit Now"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp" />
-
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#D0D5DD" />
+
+    <!-- Docked Submit Button Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="14dp"
+        android:background="@android:color/transparent">
+
+        <TextView
+            android:id="@+id/btnSubmitUploads"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_leave_submit_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:enabled="false"
+            android:alpha="0.5"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Submit Now"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+    </FrameLayout>
 
 </LinearLayout>
