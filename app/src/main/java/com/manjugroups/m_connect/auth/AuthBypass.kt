@@ -11,26 +11,28 @@ import com.manjugroups.m_connect.network.VerifyOtpResponse
 // shortcut is only for UI/navigation exploration.
 object AuthBypass {
     const val PHONE = "8807588547"
+    const val PHONE_TEST = "9000000001"
     const val OTP = "000000"
     const val TOKEN = "dev-super-admin-bypass"
     const val NAME = "Super Admin"
     const val STAFF_ID = "dev-super-admin"
     const val ROLE = "Super Admin"
 
-    fun matchesPhone(phone: String): Boolean = phone == PHONE
+    fun matchesPhone(phone: String): Boolean = phone == PHONE || phone == PHONE_TEST
 
-    fun matches(phone: String, otp: String): Boolean = phone == PHONE && otp == OTP
+    fun matches(phone: String, otp: String): Boolean =
+        (phone == PHONE || phone == PHONE_TEST) && otp == OTP
 
     fun isBypassToken(token: String?): Boolean = token == TOKEN
 
-    fun syntheticVerifyResponse(): VerifyOtpResponse = VerifyOtpResponse(
+    fun syntheticVerifyResponse(matchedPhone: String = PHONE): VerifyOtpResponse = VerifyOtpResponse(
         success = true,
         token = TOKEN,
         user = UserInfo(
             staffId = STAFF_ID,
             name = NAME,
             role = ROLE,
-            phone = PHONE,
+            phone = matchedPhone,
             geoTrackingEnabled = false
         ),
         error = null

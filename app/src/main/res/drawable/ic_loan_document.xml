@@ -1,25 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Blue rounded square with two green horizontal bars inside.
-  Used for document / interest type fields in loan / advance forms.
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="20dp"
     android:height="20dp"
     android:viewportWidth="20"
     android:viewportHeight="20">
-    <!-- Rounded Square Outline (Blue Gradient) -->
+    
+    <!-- Receipt Page Outline (Blue Gradient) -->
     <path
-        android:pathData="M 7,3 H 13 C 15.2,3 17,4.8 17,7 V 13 C 17,15.2 15.2,17 13,17 H 7 C 4.8,17 3,15.2 3,13 V 7 C 3,4.8 4.8,3 7,3 Z"
+        android:fillColor="#00000000"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round">
+        android:strokeLineJoin="round"
+        android:pathData="M5.5,2 h9 c0.8,0 1.5,0.7 1.5,1.5 v13 l-1.5,-1 l-1.5,1 l-1.5,-1 l-1.5,1 l-1.5,-1 l-1.5,1 l-1.5,-1 l-1.5,1 v-13 c0,-0.8 0.7,-1.5 1.5,-1.5 Z">
         <aapt:attr name="android:strokeColor">
             <gradient
                 android:type="linear"
                 android:startX="10"
-                android:startY="3"
+                android:startY="2"
                 android:endX="10"
                 android:endY="17">
                 <item android:offset="0.0" android:color="#0B61CA" />
@@ -27,19 +25,21 @@
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Equal Bars Inside (Green Gradient) -->
+
+    <!-- Two Horizontal Dashes (Green Gradient) -->
     <path
-        android:pathData="M 7,8.5 H 13 M 7,11.5 H 13"
-        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round">
+        android:strokeLineJoin="round"
+        android:pathData="M7,6.5 h6 M7,10 h6">
         <aapt:attr name="android:strokeColor">
             <gradient
                 android:type="linear"
                 android:startX="10"
-                android:startY="8.5"
+                android:startY="6.5"
                 android:endX="10"
-                android:endY="11.5">
+                android:endY="10">
                 <item android:offset="0.0" android:color="#1BCA0B" />
                 <item android:offset="1.0" android:color="#3D9D02" />
             </gradient>

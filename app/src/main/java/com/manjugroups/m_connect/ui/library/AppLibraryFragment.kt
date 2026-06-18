@@ -33,13 +33,15 @@ import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment
 import com.manjugroups.m_connect.ui.tasks.TasksFragment
 import com.manjugroups.m_connect.ui.telecaller.DialerFragment
 import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
+import com.manjugroups.m_connect.ui.library.collections.CollectionsFragment
+import com.manjugroups.m_connect.ui.library.accounts.PostSalesVerificationFragment
 
 class AppLibraryFragment : Fragment() {
 
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SETTINGS }
+    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, SETTINGS }
     // Tracked so the IAM-bus listener can re-apply whichever filter
     // the user is currently looking at when tiles re-bind; otherwise
     // an IAM update would silently snap the filter back to ALL.
@@ -145,7 +147,8 @@ class AppLibraryFragment : Fragment() {
         //    a small "items dropping into place" rhythm.
         val pillIcons = listOf(
             binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
-            binding.pillProjectIcon, binding.pillLandIcon, binding.pillFleetIcon, binding.pillSettingsIcon
+            binding.pillProjectIcon, binding.pillLandIcon, binding.pillFleetIcon,
+            binding.pillSalesIcon, binding.pillAccountsIcon, binding.pillSettingsIcon
         )
         pillIcons.forEachIndexed { i, icon ->
             icon.animate().cancel()
@@ -241,6 +244,8 @@ class AppLibraryFragment : Fragment() {
                     binding.pillProject,
                     binding.pillLand,
                     binding.pillFleet,
+                    binding.pillSales,
+                    binding.pillAccounts,
                     binding.pillSettings,
                 ).forEach { pill ->
                     val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
@@ -470,6 +475,22 @@ class AppLibraryFragment : Fragment() {
         ) {
             openScreen(MyTripsFragment())
         }
+
+        // ── Post Sales ────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemSalesCollections,
+            allowed = true,
+        ) { openScreen(CollectionsFragment()) }
+        bindIamEntry(
+            row = binding.itemSalesLoanDesk,
+            allowed = true,
+        ) { comingSoon("Loan Desk") }
+
+        // ── Accounts ───────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemAccountsPostSalesVerification,
+            allowed = true,
+        ) { openScreen(PostSalesVerificationFragment()) }
     }
 
     private fun setupFilterPills() {
@@ -479,6 +500,8 @@ class AppLibraryFragment : Fragment() {
         binding.pillProject.setOnClickListener { applyFilter(Filter.PROJECT) }
         binding.pillLand.setOnClickListener { applyFilter(Filter.LAND) }
         binding.pillFleet.setOnClickListener { applyFilter(Filter.FLEET) }
+        binding.pillSales.setOnClickListener { applyFilter(Filter.SALES) }
+        binding.pillAccounts.setOnClickListener { applyFilter(Filter.ACCOUNTS) }
         binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
     }
 
@@ -504,6 +527,8 @@ class AppLibraryFragment : Fragment() {
         binding.cardProject.visibility = show(binding.cardProject, filter == Filter.ALL || filter == Filter.PROJECT, Filter.PROJECT)
         binding.cardLand.visibility = show(binding.cardLand, filter == Filter.ALL || filter == Filter.LAND, Filter.LAND)
         binding.cardFleet.visibility = show(binding.cardFleet, filter == Filter.ALL || filter == Filter.FLEET, Filter.FLEET)
+        binding.cardSales.visibility = show(binding.cardSales, filter == Filter.ALL || filter == Filter.SALES, Filter.SALES)
+        binding.cardAccounts.visibility = show(binding.cardAccounts, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
@@ -512,6 +537,8 @@ class AppLibraryFragment : Fragment() {
         styleTab(binding.pillProjectIcon, binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
         styleTab(binding.pillLandIcon, binding.pillLandText, binding.pillLandIndicator, filter == Filter.LAND)
         styleTab(binding.pillFleetIcon, binding.pillFleetText, binding.pillFleetIndicator, filter == Filter.FLEET)
+        styleTab(binding.pillSalesIcon, binding.pillSalesText, binding.pillSalesIndicator, filter == Filter.SALES)
+        styleTab(binding.pillAccountsIcon, binding.pillAccountsText, binding.pillAccountsIndicator, filter == Filter.ACCOUNTS)
         styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
@@ -593,6 +620,14 @@ class AppLibraryFragment : Fragment() {
             Triple(
                 Filter.FLEET, binding.cardFleet,
                 listOf(R.id.itemFleetMyTrips),
+            ),
+            Triple(
+                Filter.SALES, binding.cardSales,
+                listOf(R.id.itemSalesCollections, R.id.itemSalesLoanDesk),
+            ),
+            Triple(
+                Filter.ACCOUNTS, binding.cardAccounts,
+                listOf(R.id.itemAccountsPostSalesVerification),
             ),
             // Settings card: itemSettings is never IAM-gated (every
             // staff can edit their own profile), so this section is
@@ -691,6 +726,8 @@ class AppLibraryFragment : Fragment() {
         Filter.PROJECT -> binding.pillProject
         Filter.LAND -> binding.pillLand
         Filter.FLEET -> binding.pillFleet
+        Filter.SALES -> binding.pillSales
+        Filter.ACCOUNTS -> binding.pillAccounts
         Filter.SETTINGS -> binding.pillSettings
     }
 
