@@ -1,59 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Redesigned permissions gate dialog — matches the premium mockup:
+    • Shield-checkmark hero icon with sparkle decorations
+    • "Let's get you set up!" title + subtitle
+    • 4 permission rows with coloured icon circles, titles,
+      descriptions, "Enable" / "✓ Enabled" pill buttons, and chevrons
+    • Privacy note with lock icon
+    • Full-width green gradient "Continue →" button
+  All IDs preserved from the original layout so the Kotlin fragment
+  doesn't need changes beyond the new styling helpers.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#FFFFFF"
+    android:background="@drawable/bg_gate_dialog"
     android:orientation="vertical"
     android:paddingStart="20dp"
-    android:paddingTop="24dp"
+    android:paddingTop="28dp"
     android:paddingEnd="20dp"
-    android:paddingBottom="20dp">
+    android:paddingBottom="24dp">
 
-    <ImageView
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_gravity="center_horizontal"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_location_pin"
-        android:tint="#0B61CA" />
+    <!-- ── Hero icon ────────────────────────────────────────────── -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal">
 
+        <ImageView
+            android:id="@+id/ivGateShield"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="center_horizontal"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_gate_shield_check" />
+    </FrameLayout>
+
+    <!-- ── Title ────────────────────────────────────────────────── -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
+        android:layout_marginTop="16dp"
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
-        android:text="One More Step"
+        android:text="Let's get you set up!"
         android:textColor="#101828"
-        android:textSize="18sp" />
+        android:textSize="20sp" />
 
+    <!-- ── Subtitle ─────────────────────────────────────────────── -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:fontFamily="@font/inter_regular"
         android:gravity="center"
-        android:text="Mconnect needs background location and unrestricted battery use to track attendance and trips reliably while your phone is locked."
-        android:textColor="#475467"
-        android:textSize="13sp" />
+        android:text="Enable these permissions to ensure\na smooth and accurate experience."
+        android:textColor="#6B7280"
+        android:textSize="13sp"
+        android:lineSpacingExtra="2dp" />
 
-    <!-- Device location row -->
+    <!-- ── Row 1: Location Access (Device location) ─────────────── -->
     <LinearLayout
         android:id="@+id/rowDeviceLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
-        android:background="@drawable/bg_attendance_history_inner"
+        android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="12dp"
+        android:paddingTop="14dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="12dp">
+        android:paddingBottom="14dp">
+
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_gate_icon_teal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location_pin"
+                android:tint="#10B981" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -61,16 +97,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Device location"
+                android:text="Location Access"
                 android:textColor="#101828"
-                android:textSize="13sp" />
+                android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Turn on Location/GPS in phone settings."
+                android:text="Helps us verify your location\nand improve accuracy."
                 android:textColor="#6B7280"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -79,36 +115,58 @@
             android:id="@+id/btnFixDeviceLocation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_inspection_chip_active"
+            android:background="@drawable/bg_gate_btn_enable"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:paddingStart="14dp"
-            android:paddingTop="8dp"
+            android:paddingTop="7dp"
             android:paddingEnd="14dp"
-            android:paddingBottom="8dp"
-            android:text="Open"
-            android:textColor="#FFFFFF"
+            android:paddingBottom="7dp"
+            android:text="Enable"
+            android:textColor="#10B981"
             android:textSize="12sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
 
-    <!-- Background location row -->
+    <!-- ── Row 2: Background Location ────────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowBgLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_attendance_history_inner"
+        android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="12dp"
+        android:paddingTop="14dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="12dp">
+        android:paddingBottom="14dp">
+
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_gate_icon_purple">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location_pin"
+                android:tint="#7C3AED" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -116,16 +174,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Background location"
+                android:text="Background Location"
                 android:textColor="#101828"
-                android:textSize="13sp" />
+                android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Set the location permission to Allow all the time."
+                android:text="Allows tracking even when\nthe app is closed."
                 android:textColor="#6B7280"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -134,36 +192,58 @@
             android:id="@+id/btnFixBgLocation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_inspection_chip_active"
+            android:background="@drawable/bg_gate_btn_enable"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:paddingStart="14dp"
-            android:paddingTop="8dp"
+            android:paddingTop="7dp"
             android:paddingEnd="14dp"
-            android:paddingBottom="8dp"
-            android:text="Open"
-            android:textColor="#FFFFFF"
+            android:paddingBottom="7dp"
+            android:text="Enable"
+            android:textColor="#10B981"
             android:textSize="12sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
 
-    <!-- Battery optimization row -->
+    <!-- ── Row 3: Battery Optimization ───────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowBatteryOpt"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_attendance_history_inner"
+        android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="12dp"
+        android:paddingTop="14dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="12dp">
+        android:paddingBottom="14dp">
+
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_gate_icon_orange">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location_pin"
+                android:tint="#F97316" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -171,16 +251,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Unrestricted battery use"
+                android:text="Battery Optimization"
                 android:textColor="#101828"
-                android:textSize="13sp" />
+                android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Disable battery optimisation so the phone doesn't pause tracking."
+                android:text="Keeps the app running\nwithout interruptions."
                 android:textColor="#6B7280"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -189,40 +269,59 @@
             android:id="@+id/btnFixBatteryOpt"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_inspection_chip_active"
+            android:background="@drawable/bg_gate_btn_enable"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:paddingStart="14dp"
-            android:paddingTop="8dp"
+            android:paddingTop="7dp"
             android:paddingEnd="14dp"
-            android:paddingBottom="8dp"
-            android:text="Open"
-            android:textColor="#FFFFFF"
+            android:paddingBottom="7dp"
+            android:text="Enable"
+            android:textColor="#10B981"
             android:textSize="12sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
 
-    <!-- OEM Autostart row — only visible on Xiaomi / Vivo / Oppo /
-         Realme / Honor where the OS kills background services
-         regardless of the standard battery-opt grant. The fragment
-         toggles visibility based on Build.MANUFACTURER. -->
+    <!-- ── Row 4: Auto Start (OEM-specific, hidden by default) ──── -->
     <LinearLayout
         android:id="@+id/rowAutostart"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_attendance_history_inner"
+        android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="12dp"
+        android:paddingTop="14dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="12dp"
+        android:paddingBottom="14dp"
         android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_gate_icon_blue">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location_pin"
+                android:tint="#2563EB" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -230,9 +329,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Autostart"
+                android:text="Auto Start"
                 android:textColor="#101828"
-                android:textSize="13sp" />
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tvAutostartHint"
@@ -240,7 +339,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Enable Autostart so tracking survives a phone restart."
+                android:text="Helps the app start\nautomatically when needed."
                 android:textColor="#6B7280"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -249,51 +348,70 @@
             android:id="@+id/btnFixAutostart"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_inspection_chip_active"
+            android:background="@drawable/bg_gate_btn_enable"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:paddingStart="14dp"
-            android:paddingTop="8dp"
+            android:paddingTop="7dp"
             android:paddingEnd="14dp"
-            android:paddingBottom="8dp"
-            android:text="Open"
-            android:textColor="#FFFFFF"
+            android:paddingBottom="7dp"
+            android:text="Enable"
+            android:textColor="#10B981"
             android:textSize="12sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
 
-    <!-- Status footer auto-updates each time the dialog re-checks. -->
-    <TextView
-        android:id="@+id/tvGateStatus"
+    <!-- ── Privacy note ─────────────────────────────────────────── -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_medium"
-        android:gravity="center"
-        android:text="Both must be enabled before you can continue."
-        android:textColor="#92400E"
-        android:textSize="12sp" />
+        android:layout_marginTop="18dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <!-- Manual Continue / Re-check button — covers OEMs where returning
-         from Settings doesn't reliably trigger the auto-check (some
-         Samsung/Xiaomi/OnePlus skins). Tapping re-runs the gate; if
-         everything is granted the dialog dismisses, otherwise a toast
-         tells the user exactly which row still needs attention. -->
-    <TextView
-        android:id="@+id/btnGateContinue"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/bg_inspection_chip_active"
-        android:clickable="true"
-        android:focusable="true"
-        android:fontFamily="@font/inter_semibold"
-        android:gravity="center"
-        android:paddingStart="14dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="12dp"
-        android:text="Continue"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_gate_lock"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tvGateStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_regular"
+            android:text="We respect your privacy and\nonly use these permissions to\nenhance your experience."
+            android:textColor="#6B7280"
+            android:textSize="11sp"
+            android:lineSpacingExtra="1dp" />
+
+        <!-- Continue button: sits right-aligned beside privacy text -->
+        <TextView
+            android:id="@+id/btnGateContinue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_gate_btn_continue"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:paddingStart="24dp"
+            android:paddingTop="13dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="13dp"
+            android:text="Continue →"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+    </LinearLayout>
+
 </LinearLayout>

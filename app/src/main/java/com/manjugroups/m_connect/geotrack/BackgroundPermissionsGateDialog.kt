@@ -35,7 +35,7 @@ import java.util.Locale
  *
  * Behaviour:
  *  • Back button + outside touches do nothing.
- *  • Each row shows an "Open" button that launches the system settings
+ *  • Each row shows an "Enable" button that launches the system settings
  *    page for that specific toggle. Returning from settings triggers
  *    onResume → re-check → auto-dismiss if both are now satisfied.
  *  • Owner must invoke [show] every onResume so the dialog re-asserts
@@ -66,11 +66,10 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        // A DialogFragment window defaults to WRAP_CONTENT width, which lets
-        // our wrapping body text collapse the dialog to the width of its
-        // longest word (the "narrow strip" bug where buttons render as blank
-        // pills). Pin the window to most of the screen width so match_parent
-        // children lay out correctly.
+        // Transparent window background so the XML's rounded-corner
+        // bg_gate_dialog drawable is visible (otherwise the default
+        // dialog theme draws a rectangular white/grey surface behind it).
+        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         val width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
         dialog?.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
     }
@@ -157,6 +156,10 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         }
     }
 
+    /**
+     * Styles each permission row's "Enable" / "✓ Enabled" pill button
+     * and updates the privacy-note status text at the bottom.
+     */
     private fun refreshStatus(root: View) {
         val ctx = requireContext()
         val deviceLocationOk = isDeviceLocationEnabled(ctx)
@@ -173,52 +176,62 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         val autoHint = root.findViewById<TextView>(R.id.tvAutostartHint)
         val status = root.findViewById<TextView>(R.id.tvGateStatus)
 
-        deviceLocBtn.text = if (deviceLocationOk) "Enabled" else "Open"
-        deviceLocBtn.alpha = if (deviceLocationOk) 0.5f else 1f
-        deviceLocBtn.isEnabled = !deviceLocationOk
+        // Style helper: flips a pill between "Enable" (outline) and
+        // "✓ Enabled" (filled green-tinted) states.
+        fun stylePill(btn: TextView, granted: Boolean) {
+            if (granted) {
+                btn.text = "✓ Enabled"
+                btn.setBackgroundResource(R.drawable.bg_gate_btn_enabled)
+                btn.setTextColor(android.graphics.Color.parseColor("#10B981"))
+                btn.isEnabled = false
+                btn.alpha = 1f
+            } else {
+                btn.text = "Enable"
+                btn.setBackgroundResource(R.drawable.bg_gate_btn_enable)
+                btn.setTextColor(android.graphics.Color.parseColor("#10B981"))
+                btn.isEnabled = true
+                btn.alpha = 1f
+            }
+        }
+
+        stylePill(deviceLocBtn, deviceLocationOk)
 
         // Foreground location is the prerequisite for "Allow all the
         // time" being available at all — when the user denied at the
         // initial OS prompt, no amount of Settings poking surfaces the
         // background-location toggle. Surface the issue here.
         if (!fgOk) {
-            locBtn.text = "Open"
-            locBtn.alpha = 1f
-            locBtn.isEnabled = true
+            stylePill(locBtn, false)
         } else {
-            locBtn.text = if (bgOk) "Enabled" else "Open"
-            locBtn.alpha = if (bgOk) 0.5f else 1f
-            locBtn.isEnabled = !bgOk
+            stylePill(locBtn, bgOk)
         }
 
-        batBtn.text = if (batOk) "Enabled" else "Open"
-        batBtn.alpha = if (batOk) 0.5f else 1f
-        batBtn.isEnabled = !batOk
+        stylePill(batBtn, batOk)
 
         // OEM autostart row — only show on Xiaomi / Vivo / Oppo /
         // Realme / Honor where the OS kills background services
         // regardless of the standard "ignore battery optimisation"
         // grant. We can't programmatically check whether autostart is
         // ON for our package (no public API), so the row stays as a
-        // permanent "Open Autostart settings" CTA the user can tap.
+        // permanent "Enable" CTA the user can tap.
         if (needsAutostart) {
             autoRow.visibility = View.VISIBLE
-            autoHint.text = autostartHintForOem()
-            autoBtn.text = "Open"
-            autoBtn.alpha = 1f
-            autoBtn.isEnabled = true
+            autoHint.text = "Helps the app start\nautomatically when needed."
+            stylePill(autoBtn, false)
         } else {
             autoRow.visibility = View.GONE
         }
 
+        // Privacy note doubles as status text — shows a friendly
+        // message when everything is done, or the default privacy text.
         status.text = when {
-            !deviceLocationOk -> "Phone Location/GPS is off. Turn it on to continue."
-            !fgOk -> "Tap Open and select \"Allow all the time\" under Location for Mconnect."
-            !bgOk && !batOk -> "Background location + battery optimisation both need attention."
+            !deviceLocationOk -> "Turn on Location/GPS in phone settings to continue."
+            !fgOk -> "Tap Enable and select \"Allow all the time\" under Location."
+            !bgOk && !batOk -> "Background location + battery both need attention."
             !bgOk -> "Background location still needs \"Allow all the time\"."
             !batOk -> "Battery optimisation still needs to be off."
-            needsAutostart -> "On your phone brand, also enable Autostart — tap Open above."
-            else -> "All set — closing…"
+            needsAutostart -> "Also enable Auto Start — tap Enable above."
+            else -> "We respect your privacy and\nonly use these permissions to\nenhance your experience."
         }
     }
 
@@ -331,25 +344,6 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             brand.contains("huawei") ||
             brand.contains("honor") ||
             brand.contains("oneplus")
-    }
-
-    private fun autostartHintForOem(): String {
-        val brand = Build.MANUFACTURER.lowercase(Locale.US)
-        return when {
-            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") ->
-                "MIUI Security → Autostart → enable Mconnect."
-            brand.contains("vivo") ->
-                "iManager → Whitelisted apps → add Mconnect."
-            brand.contains("oppo") || brand.contains("realme") ->
-                "Phone Manager → Privacy permissions → Startup manager → enable Mconnect."
-            brand.contains("huawei") || brand.contains("honor") ->
-                "Phone Manager → App launch → set Mconnect to Manage manually with all three switches ON."
-            brand.contains("oneplus") ->
-                "Settings → Battery → Battery optimization → choose Don't optimize for Mconnect."
-            brand.contains("samsung") ->
-                "Settings → Apps → Mconnect → Battery → set to Unrestricted."
-            else -> "Enable Autostart so tracking survives a phone restart."
-        }
     }
 
     companion object {
