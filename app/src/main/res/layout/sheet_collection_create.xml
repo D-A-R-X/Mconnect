@@ -289,33 +289,47 @@
                 android:textColor="#667085"
                 android:textSize="12sp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxStrokeColor="#D0D5DD"
-                app:hintEnabled="false"
-                app:startIconDrawable="@drawable/ic_cp_notes"
-                app:startIconTint="@null">
+                android:layout_marginTop="6dp">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etNotes"
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/inter_medium"
-                    android:gravity="top"
-                    android:hint="Enter Notes"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="2"
-                    android:maxLines="4"
-                    android:textColor="#101828"
-                    android:textSize="14sp" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxStrokeColor="#D0D5DD"
+                    app:hintEnabled="false"
+                    app:startIconDrawable="@drawable/ic_cp_notes"
+                    app:startIconTint="@android:color/transparent">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etNotes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="top"
+                        android:hint="Enter Notes"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:minLines="2"
+                        android:maxLines="4"
+                        android:textColor="#101828"
+                        android:textSize="14sp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="18dp"
+                    android:src="@drawable/ic_cp_notes"
+                    android:importantForAccessibility="no" />
+            </FrameLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
