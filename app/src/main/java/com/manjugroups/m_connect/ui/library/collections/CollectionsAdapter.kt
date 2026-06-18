@@ -78,18 +78,11 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 }
             }
 
-            // Proof thumbnail.
-            //  1. Server-stored proof (`proofStorageId`) → fragment-
-            //     provided `proofLoader` resolves the signed URL and
-            //     Coil paints into `ivThumbnail`. We clear the view
-            //     first so a recycled tile doesn't flash the previous
-            //     row's image (or the cash mock) while the URL fetch
-            //     is in flight — Coil's crossfade reveals the real
-            //     image into a blank tile.
-            //  2. Local file still on disk (rectify reuse) → load it.
-            //  3. No proof at all → hide the whole thumbnail card so
-            //     the row shows a clean null state instead of the
-            //     cash drawing.
+            // Proof thumbnail. No placeholder mock — hide the tile
+            // entirely when there's nothing to show; render the real
+            // image when we have one. The slot stays empty rather
+            // than painting a cash icon for rows that were submitted
+            // without a proof attachment.
             val storageId = item.proofStorageId?.takeIf { it.isNotBlank() }
             val localPath = item.photoPath?.takeIf { it.isNotBlank() }
             when {

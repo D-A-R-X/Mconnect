@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CustomerCollectionRow
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.SubmitCollectionRequest
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +65,14 @@ class CollectionsFragment : Fragment() {
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
+    // Date-range filter, set when the user picks a range from the
+    // calendar pill in the header. Stored as YYYY-MM-DD strings so we
+    // can string-compare against the row's createdAt date portion.
+    private var dateFromYmd: String? = null
+    private var dateToYmd: String? = null
+    // Reused result key for the calendar picker so the listener
+    // registration below picks the same bundle out reliably.
+    private val calendarResultKey = "collections_calendar_range"
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -98,10 +107,9 @@ class CollectionsFragment : Fragment() {
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
-        // No `placeholder`/`error` drawables here — the adapter cleared
-        // the ImageView before calling us so a blank tile is the right
-        // intermediate state. Painting a cash-mock placeholder would
-        // re-introduce the flash the adapter just suppressed.
+        // No placeholder or error mock — adapter cleared the view
+        // before calling, and a blank tile is the right intermediate
+        // state until Coil crossfades the real image in.
         val cached = proofUrlCache[storageId]
         if (cached != null) {
             target.load(cached) { crossfade(true) }
@@ -118,8 +126,7 @@ class CollectionsFragment : Fragment() {
                     target.load(url) { crossfade(true) }
                 }
             } catch (_: Exception) {
-                // Leave the tile blank; one row's failure shouldn't
-                // toast on every scroll.
+                // Silent — one row's failure shouldn't toast on every scroll.
             }
         }
     }
@@ -130,6 +137,31 @@ class CollectionsFragment : Fragment() {
         binding.btnAddCollection.setOnClickListener {
             CollectionCreateBottomSheet.newInstance()
                 .show(parentFragmentManager, "CollectionCreateBottomSheet")
+        }
+
+        binding.btnCollectionsCalendar.setOnClickListener {
+            CalendarRangePickerSheet.newInstance(
+                title = "Filter Collections",
+                subtitle = "Pick a date range",
+                initialFrom = dateFromYmd,
+                initialTo = dateToYmd,
+                resultKey = calendarResultKey,
+            ).show(parentFragmentManager, "CollectionsCalendarRange")
+        }
+        parentFragmentManager.setFragmentResultListener(
+            calendarResultKey,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            dateFromYmd = bundle.getString(CalendarRangePickerSheet.KEY_FROM)?.takeIf { it.isNotBlank() }
+            dateToYmd = bundle.getString(CalendarRangePickerSheet.KEY_TO)?.takeIf { it.isNotBlank() }
+            filterCollections()
+            if (dateFromYmd != null && dateToYmd != null) {
+                Toast.makeText(
+                    requireContext(),
+                    "Showing $dateFromYmd to $dateToYmd",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
 
         binding.tabAll.setOnClickListener {
@@ -371,12 +403,25 @@ class CollectionsFragment : Fragment() {
     }
 
     private fun filterCollections() {
+        val from = dateFromYmd
+        val to = dateToYmd
         val filtered = masterList.filter { item ->
             val matchesTab = selectedTypeFilter == null || item.type == selectedTypeFilter
             val matchesSearch = currentSearchQuery.isBlank() ||
                 item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
                 item.refId.contains(currentSearchQuery, ignoreCase = true)
-            matchesTab && matchesSearch
+            val matchesDate = if (from == null || to == null) {
+                true
+            } else {
+                // Look up the original server row and compare the
+                // date portion of its ISO createdAt to the picked
+                // YYYY-MM-DD range. String comparison works because
+                // the ISO date prefix is lexicographically sortable.
+                val createdAt = rowsById[item.id]?.createdAt.orEmpty()
+                val ymd = createdAt.take(10) // "2026-06-18"
+                ymd.isNotEmpty() && ymd >= from && ymd <= to
+            }
+            matchesTab && matchesSearch && matchesDate
         }
         adapter.submit(filtered)
         updateSummaryBanner(filtered)

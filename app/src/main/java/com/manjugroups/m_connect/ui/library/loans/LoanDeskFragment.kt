@@ -13,8 +13,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.widget.PopupMenu
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,84 +25,108 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.network.AssignLoanRequest
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.LegalRejectLoanRequest
+import com.manjugroups.m_connect.network.LegalStaffRow
+import com.manjugroups.m_connect.network.LoanCaseIdBody
+import com.manjugroups.m_connect.network.LoanCaseRow
+import com.manjugroups.m_connect.network.SubmitLoanDocument
+import com.manjugroups.m_connect.network.SubmitLoanRequest
+import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
+/**
+ * Library → Loan Desk. Role dropdown (Sales Team / Legal Team / Legal
+ * Manager) picks which server feed to load and which actions render on
+ * each card:
+ *
+ *  Sales Team       — own submissions; rectify the row on a rejection
+ *                     by re-uploading the 4 documents.
+ *  Legal Manager    — all submitted cases; assign each to a Legal Team
+ *                     staffer via the people-picker sheet.
+ *  Legal Team       — only the cases assigned to me; Accept or
+ *                     Reject-with-remarks via the existing reject sheet.
+ *
+ * Sales-side submission walks the 4 cached files emitted by the upload
+ * sheet through /api/storage/upload (one storageId per file) and then
+ * POSTs /api/postsales/loans/submit with the full set; the server
+ * advances the case from document_collection → bank_allocation so it
+ * lands in the Legal Manager queue.
+ */
 class LoanDeskFragment : Fragment() {
+
+    private enum class RoleMode { SALES, LEGAL_TEAM, LEGAL_MANAGER }
 
     private lateinit var rvLoanDesk: RecyclerView
     private lateinit var etSearchLoanDesk: EditText
     private lateinit var adapter: LoanDeskAdapter
     private lateinit var tvSelectedRole: TextView
-
-    private val api by lazy { ApiService.create() }
     private lateinit var session: SessionManager
 
-    private var isLegalTeamMode = true // Default to Legal Team mode (matches screenshot!)
+    private val api by lazy { GeoTrackApi.create() }
+    private val storage by lazy { ApiService.create() }
 
-    // Initial mock list of cards matching the user screenshot
-    private var allItems = listOf(
-        LoanDeskItem(
-            id = "1",
-            name = "Karthi S",
-            phone = "7812828268",
-            amount = "₹13,50,000",
-            location = "OMR Road, Sholinganallur...",
-            date = "16 Jun '26",
-            status = "Docs Pending",
-            pills = listOf("PAN", "Aadhaar", "+7"),
-            rejectionRemarks = null
-        ),
-        LoanDeskItem(
-            id = "2",
-            name = "S_client3",
-            phone = "9000200003",
-            amount = "₹13,50,000",
-            location = "Anna Nagar, Chennai...",
-            date = "16 Jun '26",
-            status = "Docs Pending",
-            pills = listOf("PAN", "+6"),
-            rejectionRemarks = null
-        ),
-        LoanDeskItem(
-            id = "3",
-            name = "S Ramakrishnan",
-            phone = "9710085351",
-            amount = "₹30,00,000",
-            location = "T. Nagar, Chennai - 6...",
-            date = "16 Jun '26",
-            status = "App Received",
-            pills = listOf("PAN", "+8"),
-            rejectionRemarks = null,
-            doc1Name = "pan_card_proof.jpg",
-            doc2Name = "aadhaar_card_proof.jpg",
-            doc3Name = "bank_statement_proof.pdf",
-            doc4Name = "pay_slip_proof.jpg"
-        )
-    )
+    private var currentRole: RoleMode = RoleMode.LEGAL_TEAM
+    private var hasAccess: Boolean = true
+    // Date-range filter, set when the user taps the calendar pill in
+    // the header. YYYY-MM-DD strings; null means "no filter".
+    private var dateFromYmd: String? = null
+    private var dateToYmd: String? = null
+    private val calendarResultKey = "loan_desk_calendar_range"
 
-    private var filteredItems = allItems.toList()
+    // Server-side rows keyed by loan-case id so the action handlers can
+    // recover full server context (caseId, applicantType, etc) from the
+    // UI item without juggling two maps in callbacks.
+    private val rowsByLoanCaseId = mutableMapOf<String, LoanCaseRow>()
+
+    private var allItems: List<LoanDeskItem> = emptyList()
+    private var filteredItems: List<LoanDeskItem> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_loan_desk, container, false)
-    }
+    ): View? = inflater.inflate(R.layout.fragment_loan_desk, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        // Set up header back navigation
-        val btnBack = view.findViewById<View>(R.id.btnBack)
-        btnBack.setOnClickListener {
+        view.findViewById<View>(R.id.btnBack).setOnClickListener {
             parentFragmentManager.popBackStack()
         }
 
-        // Search Input Setup
+        view.findViewById<View>(R.id.btnCalendar).setOnClickListener {
+            CalendarRangePickerSheet.newInstance(
+                title = "Filter Loan Desk",
+                subtitle = "Pick a date range",
+                initialFrom = dateFromYmd,
+                initialTo = dateToYmd,
+                resultKey = calendarResultKey,
+            ).show(parentFragmentManager, "LoanDeskCalendarRange")
+        }
+        parentFragmentManager.setFragmentResultListener(
+            calendarResultKey,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            dateFromYmd = bundle.getString(CalendarRangePickerSheet.KEY_FROM)?.takeIf { it.isNotBlank() }
+            dateToYmd = bundle.getString(CalendarRangePickerSheet.KEY_TO)?.takeIf { it.isNotBlank() }
+            filterList(etSearchLoanDesk.text?.toString().orEmpty())
+            if (dateFromYmd != null && dateToYmd != null) {
+                toast("Showing $dateFromYmd to $dateToYmd")
+            }
+        }
+
         etSearchLoanDesk = view.findViewById(R.id.etSearchLoanDesk)
         etSearchLoanDesk.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -114,130 +136,276 @@ class LoanDeskFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Role Selector Setup
+        // Role is pinned to the signed-in user's designation — no
+        // selector UI at all. The pill that used to sit in the header
+        // is hidden so there's no chevron suggesting it can be tapped.
         val btnRoleSelector = view.findViewById<View>(R.id.btnRoleSelector)
         tvSelectedRole = view.findViewById(R.id.tvSelectedRole)
+        btnRoleSelector.visibility = View.GONE
 
-        // Enforce default role to "Legal Team"
-        tvSelectedRole.text = "Legal Team"
-        isLegalTeamMode = true
-
-        btnRoleSelector.setOnClickListener {
-            val popup = PopupMenu(requireContext(), btnRoleSelector)
-            popup.menu.add("Sales Team")
-            popup.menu.add("Legal Team")
-            popup.menu.add("Legal Manager")
-            popup.setOnMenuItemClickListener { menuItem ->
-                val selected = menuItem.title.toString()
-                tvSelectedRole.text = selected
-                when (selected) {
-                    "Sales Team" -> {
-                        isLegalTeamMode = false
-                        adapter.setRoleMode(LoanDeskAdapter.ROLE_SALES_TEAM)
-                    }
-                    "Legal Team" -> {
-                        isLegalTeamMode = true
-                        adapter.setRoleMode(LoanDeskAdapter.ROLE_LEGAL_TEAM)
-                    }
-                    "Legal Manager" -> {
-                        isLegalTeamMode = true
-                        adapter.setRoleMode(LoanDeskAdapter.ROLE_LEGAL_MANAGER)
-                    }
-                }
-                true
-            }
-            popup.show()
+        val resolved = resolveRoleFromDesignation(session.designation)
+        if (resolved != null) {
+            currentRole = resolved
+            hasAccess = true
+        } else {
+            hasAccess = false
+            toast("Loan Desk is only available for Sales / Legal Team / Legal Manager")
         }
 
-        // Recycler Setup
         rvLoanDesk = view.findViewById(R.id.rvLoanDesk)
         rvLoanDesk.layoutManager = LinearLayoutManager(requireContext())
-        
+
         adapter = LoanDeskAdapter(
             items = filteredItems,
-            onItemClick = { item ->
-                if (isLegalTeamMode) {
-                    showUploadBottomSheet(item, isViewMode = true)
-                } else {
-                    showUploadBottomSheet(item, isViewMode = false)
-                }
-            },
-            onAcceptClick = { item ->
-                item.status = "Approved"
-                item.rejectionRemarks = null
-                filterList(etSearchLoanDesk.text.toString())
-                Toast.makeText(requireContext(), "Documents approved successfully", Toast.LENGTH_SHORT).show()
-            },
+            onItemClick = { item -> openUploadSheet(item, isViewMode = currentRole != RoleMode.SALES) },
+            onAcceptClick = { item -> acceptCase(item) },
             onRejectClick = { item ->
                 LoanDeskRejectBottomSheet.newInstance(item.id)
                     .show(parentFragmentManager, "LoanDeskRejectBottomSheet")
             },
-            onRectifyClick = { item ->
-                showUploadBottomSheet(item, isViewMode = false)
-            },
-            onAssignClick = { item ->
-                showAssignBottomSheet(item)
+            onRectifyClick = { item -> openUploadSheet(item, isViewMode = false) },
+            onAssignClick = { item -> showAssignSheet(item) },
+        )
+        adapter.setRoleMode(
+            when (currentRole) {
+                RoleMode.SALES -> LoanDeskAdapter.ROLE_SALES_TEAM
+                RoleMode.LEGAL_TEAM -> LoanDeskAdapter.ROLE_LEGAL_TEAM
+                RoleMode.LEGAL_MANAGER -> LoanDeskAdapter.ROLE_LEGAL_MANAGER
             }
         )
-        adapter.setLegalTeamMode(isLegalTeamMode)
         rvLoanDesk.adapter = adapter
 
-        // Listen for rejection remarks
         parentFragmentManager.setFragmentResultListener(
             LoanDeskRejectBottomSheet.RESULT_KEY,
-            viewLifecycleOwner
+            viewLifecycleOwner,
         ) { _, bundle ->
-            val itemId = bundle.getString("itemId")
-            val remarks = bundle.getString("remarks")
-            if (itemId != null && remarks != null) {
-                val item = allItems.find { it.id == itemId }
-                if (item != null) {
-                    item.status = "Rejected"
-                    item.rejectionRemarks = remarks
-                    filterList(etSearchLoanDesk.text.toString())
-                    Toast.makeText(requireContext(), "Documents rejected with remarks", Toast.LENGTH_SHORT).show()
+            val itemId = bundle.getString("itemId").orEmpty()
+            val remarks = bundle.getString("remarks").orEmpty().trim()
+            if (itemId.isBlank() || remarks.isBlank()) {
+                toast("Rejection requires remarks")
+                return@setFragmentResultListener
+            }
+            rejectCase(itemId, remarks)
+        }
+
+        refreshForRole()
+    }
+
+    // ── Data load ─────────────────────────────────────────────────────
+
+    private fun refreshForRole() {
+        if (!hasAccess) {
+            // Designation didn't map to any of the 3 Loan Desk roles —
+            // leave the empty state in place, don't burn an API call.
+            allItems = emptyList()
+            filterList("")
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    when (currentRole) {
+                        RoleMode.SALES -> api.listLoanDeskForSales(session.bearerToken, null)
+                        RoleMode.LEGAL_MANAGER -> api.listLoanDeskForLegalManager(session.bearerToken)
+                        RoleMode.LEGAL_TEAM -> api.listLoanDeskForLegalTeam(session.bearerToken)
+                    }
                 }
+                if (!resp.success) {
+                    toast(resp.error ?: "Failed to load loan desk")
+                    return@launch
+                }
+                rowsByLoanCaseId.clear()
+                resp.cases.forEach { rowsByLoanCaseId[it.id] = it }
+                allItems = resp.cases.map(::mapRowToItem)
+                filterList(etSearchLoanDesk.text?.toString().orEmpty())
+            } catch (e: Exception) {
+                toast(e.message ?: "Failed to load loan desk")
             }
         }
     }
 
+    private fun mapRowToItem(row: LoanCaseRow): LoanDeskItem {
+        val docs = row.documentsChecklist.filter { !it.fileName.isNullOrBlank() || !it.storageId.isNullOrBlank() }
+        val firstTwoLabels = row.documentLabels.take(2)
+        val extraCount = (row.documentLabels.size - firstTwoLabels.size).coerceAtLeast(0)
+        val pills = buildList {
+            addAll(firstTwoLabels)
+            if (extraCount > 0) add("+$extraCount")
+        }
+        return LoanDeskItem(
+            id = row.id,
+            caseId = row.caseId,
+            applicantType = row.applicantType,
+            name = row.name.ifBlank { row.bookingRefNo ?: "Client" },
+            phone = row.phone,
+            amount = formatRupees(row.amount),
+            location = row.location,
+            date = formatDate(row.date),
+            status = row.statusLabel.ifBlank { "Docs Pending" },
+            pills = pills,
+            rejectionRemarks = row.legalRejectionRemarks,
+            doc1Name = docs.getOrNull(0)?.fileName,
+            doc2Name = docs.getOrNull(1)?.fileName,
+            doc3Name = docs.getOrNull(2)?.fileName,
+            doc4Name = docs.getOrNull(3)?.fileName,
+            assignedTo = row.legalAssignedName,
+        )
+    }
+
     private fun filterList(query: String) {
-        val trimmed = query.trim().lowercase()
-        filteredItems = if (trimmed.isEmpty()) {
-            allItems
-        } else {
-            allItems.filter {
-                it.name.lowercase().contains(trimmed) ||
-                it.phone.contains(trimmed) ||
-                it.location.lowercase().contains(trimmed)
+        val q = query.trim().lowercase(Locale.US)
+        val from = dateFromYmd
+        val to = dateToYmd
+        filteredItems = allItems.filter { item ->
+            val matchesSearch = q.isEmpty() ||
+                item.name.lowercase(Locale.US).contains(q) ||
+                item.phone.contains(q) ||
+                item.location.lowercase(Locale.US).contains(q)
+            val matchesDate = if (from == null || to == null) {
+                true
+            } else {
+                // Look up the original server row and compare the
+                // date portion of its ISO submittedAt / createdAt to
+                // the picked YYYY-MM-DD range. Lex string compare is
+                // fine because the ISO prefix is sortable.
+                val ymd = rowsByLoanCaseId[item.id]?.date?.take(10).orEmpty()
+                ymd.isNotEmpty() && ymd >= from && ymd <= to
             }
+            matchesSearch && matchesDate
         }
         adapter.updateList(filteredItems)
     }
 
-    private fun showUploadBottomSheet(item: LoanDeskItem, isViewMode: Boolean = false) {
-        val bottomSheet = LoanDeskUploadBottomSheet.newInstance(item, isViewMode) { doc1, doc2, doc3, doc4 ->
-            // Update item details upon successful documents submission / rectification
-            item.status = "App Received"
-            item.rejectionRemarks = null
-            item.doc1Name = doc1
-            item.doc2Name = doc2
-            item.doc3Name = doc3
-            item.doc4Name = doc4
-            // Update pills to show that multiple files were added
-            item.pills = when (item.id) {
-                "1" -> listOf("PAN", "Aadhaar", "+9") // Simulated update (+7 became +9 docs or similar)
-                "2" -> listOf("PAN", "Aadhaar", "+8")
-                else -> item.pills
+    // ── Action handlers ───────────────────────────────────────────────
+
+    private fun acceptCase(item: LoanDeskItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.legalAcceptLoan(session.bearerToken, LoanCaseIdBody(item.id))
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not approve loan")
+                    return@launch
+                }
+                toast("Loan application approved")
+                refreshForRole()
+            } catch (e: Exception) {
+                toast(e.message ?: "Approval failed")
             }
-            
-            // Refresh the adapter lists
-            filterList(etSearchLoanDesk.text.toString())
         }
-        bottomSheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }
 
-    private fun showAssignBottomSheet(item: LoanDeskItem) {
+    private fun rejectCase(loanCaseId: String, remarks: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.legalRejectLoan(
+                        session.bearerToken,
+                        LegalRejectLoanRequest(loanCaseId = loanCaseId, remarks = remarks),
+                    )
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not reject loan")
+                    return@launch
+                }
+                toast("Loan rejected — Sales will rectify")
+                refreshForRole()
+            } catch (e: Exception) {
+                toast(e.message ?: "Rejection failed")
+            }
+        }
+    }
+
+    private fun openUploadSheet(item: LoanDeskItem, isViewMode: Boolean) {
+        val sheet = LoanDeskUploadBottomSheet.newInstance(item, isViewMode) { d1, d2, d3, d4 ->
+            // Sales-side submit: locate the 4 cached files emitted by
+            // the sheet, upload each through /api/storage/upload, then
+            // POST the submission. View-mode opens never invoke this
+            // callback so Legal Team / Legal Manager taps stay read-only.
+            if (currentRole != RoleMode.SALES) return@newInstance
+            submitLoanFromSales(item, listOf(d1, d2, d3, d4))
+        }
+        sheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
+    }
+
+    private fun submitLoanFromSales(item: LoanDeskItem, fileNames: List<String>) {
+        val caseId = item.caseId
+        if (caseId.isNullOrBlank()) {
+            toast("This row has no booking case linked")
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Upload each cached file in sequence — sequential keeps
+                // memory bounded on low-end devices (parallel uploads
+                // would peak at 4x the file size in heap at once).
+                val uploaded = mutableListOf<SubmitLoanDocument>()
+                val labels = listOf("PAN Card", "Aadhaar Card", "Bank Statement", "Pay Slip")
+                fileNames.forEachIndexed { index, name ->
+                    val storageId = uploadCachedFile(name) ?: run {
+                        toast("Could not upload $name")
+                        return@launch
+                    }
+                    uploaded += SubmitLoanDocument(
+                        label = labels.getOrNull(index) ?: "Document ${index + 1}",
+                        storageId = storageId,
+                        fileName = name,
+                    )
+                }
+                val resp = withContext(Dispatchers.IO) {
+                    api.submitLoanRequest(
+                        session.bearerToken,
+                        SubmitLoanRequest(
+                            caseId = caseId,
+                            applicantType = item.applicantType ?: "salaried",
+                            requestedAmount = null,
+                            documents = uploaded,
+                        ),
+                    )
+                }
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not submit loan request")
+                    return@launch
+                }
+                toast("Loan request submitted")
+                refreshForRole()
+            } catch (e: Exception) {
+                toast(e.message ?: "Submission failed")
+            }
+        }
+    }
+
+    private suspend fun uploadCachedFile(fileName: String): String? {
+        // LoanDeskUploadBottomSheet copies the picked file into
+        // cacheDir/loandesk/<displayName>. Read it back here, post to
+        // /api/storage/upload, return the storageId.
+        val folder = File(requireContext().cacheDir, "loandesk")
+        val file = File(folder, fileName)
+        if (!file.exists() || file.length() <= 0) return null
+        val mime = when (file.extension.lowercase(Locale.US)) {
+            "pdf" -> "application/pdf"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            else -> "image/jpeg"
+        }
+        return withContext(Dispatchers.IO) {
+            try {
+                val bytes = file.readBytes()
+                val resp = storage.uploadStorageFile(
+                    token = session.bearerToken,
+                    body = bytes.toRequestBody(mime.toMediaTypeOrNull()),
+                )
+                if (resp.success) resp.storageId else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    // ── Assign sheet (Legal Manager) ─────────────────────────────────
+
+    private fun showAssignSheet(item: LoanDeskItem) {
         if (!isAdded) return
         val context = requireContext()
         val content = layoutInflater.inflate(R.layout.bottom_sheet_multi_people_picker, null)
@@ -257,14 +425,6 @@ class LoanDeskFragment : Fragment() {
             }
         }
 
-        dialog.setOnShowListener { dialogInterface ->
-            val d = dialogInterface as BottomSheetDialog
-            d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { s ->
-                s.setBackgroundResource(R.drawable.bg_bottom_sheet)
-                androidx.core.view.ViewCompat.setElevation(s, 0f)
-            }
-        }
-
         val titleView = content.findViewById<TextView>(R.id.tvSheetTitle)
         val closeBtn = content.findViewById<View>(R.id.btnSheetClose)
         val searchField = content.findViewById<EditText>(R.id.etSearchPeople)
@@ -278,14 +438,8 @@ class LoanDeskFragment : Fragment() {
         doneLabel.text = "Assign"
         countView.text = "0 selected"
 
-        var selectedStaff: StaffData? = null
-        val mockStaff = listOf(
-            StaffData(id = "m1", name = "Rajesh Kumar", phone = "+91 98765 43210", role = "Legal", designation = "Legal Executive", status = "active", employeeId = "EMP101", department = "Legal"),
-            StaffData(id = "m2", name = "Sandhya R", phone = "+91 98765 43211", role = "Legal", designation = "Senior Legal Specialist", status = "active", employeeId = "EMP102", department = "Legal"),
-            StaffData(id = "m3", name = "Vignesh Murthy", phone = "+91 98765 43212", role = "Legal", designation = "Legal Officer", status = "active", employeeId = "EMP103", department = "Legal"),
-            StaffData(id = "m4", name = "Aisha Banu", phone = "+91 98765 43213", role = "Legal", designation = "Verification Officer", status = "active", employeeId = "EMP104", department = "Legal")
-        )
-        var allPeople = mockStaff
+        var selectedStaff: LegalStaffRow? = null
+        var allLegal: List<LegalStaffRow> = emptyList()
 
         closeBtn.setOnClickListener { dialog.dismiss() }
 
@@ -300,17 +454,16 @@ class LoanDeskFragment : Fragment() {
             )
         }
 
-        fun bindPeople(staffList: List<StaffData>) {
+        fun bindPeople(list: List<LegalStaffRow>) {
             peopleCard.removeAllViews()
-            if (staffList.isEmpty()) {
-                emptyView.text = "No matching people"
+            if (list.isEmpty()) {
+                emptyView.text = "No legal-team staff configured"
                 emptyView.visibility = View.VISIBLE
                 peopleCard.visibility = View.GONE
                 return
             }
             emptyView.visibility = View.GONE
             peopleCard.visibility = View.VISIBLE
-
             peopleCard.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
             val dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
                 setSize(0, (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1))
@@ -318,94 +471,70 @@ class LoanDeskFragment : Fragment() {
             }
             peopleCard.dividerDrawable = dividerDrawable
 
-            staffList.forEachIndexed { index, member ->
+            list.forEachIndexed { index, member ->
                 val row = layoutInflater.inflate(R.layout.item_chat_sheet_person, peopleCard, false)
                 row.tag = member
-
                 val tvName = row.findViewById<TextView>(R.id.tvName)
                 val tvSubtitle = row.findViewById<TextView>(R.id.tvSubtitle)
                 val radio = row.findViewById<View>(R.id.radioButton)
                 val avatarCheck = row.findViewById<View>(R.id.avatarCheck)
                 val onlineDot = row.findViewById<View>(R.id.onlineDot)
-
-                tvName.text = member.name ?: "User"
+                tvName.text = member.name
                 tvSubtitle.text = listOfNotNull(member.designation, member.department)
                     .takeIf { it.isNotEmpty() }
                     ?.joinToString(" • ")
-                    ?: member.phone ?: ""
-
-                val initials = initialsFor(member.name ?: "User")
+                    ?: member.employeeId.orEmpty()
+                val initials = initialsFor(member.name)
                 bindAvatar(
                     row.findViewById(R.id.avatarContainer),
                     row.findViewById(R.id.tvAvatar),
                     row.findViewById(R.id.ivAvatarPhoto),
-                    member.photo,
+                    null,
                     initials,
-                    index + (member.name?.length ?: 0)
+                    index + member.name.length,
                 )
-
                 val isSel = selectedStaff?.id == member.id
                 radio.setBackgroundResource(
-                    if (isSel) R.drawable.bg_sheet_radio_on
-                    else R.drawable.bg_sheet_radio_off
+                    if (isSel) R.drawable.bg_sheet_radio_on else R.drawable.bg_sheet_radio_off
                 )
                 avatarCheck.visibility = if (isSel) View.VISIBLE else View.GONE
                 onlineDot.visibility = View.GONE
-
                 row.setOnClickListener {
-                    if (selectedStaff?.id == member.id) {
-                        selectedStaff = null
-                    } else {
-                        selectedStaff = member
-                    }
-
-                    // Update all row selections in-place
+                    selectedStaff = if (selectedStaff?.id == member.id) null else member
                     for (i in 0 until peopleCard.childCount) {
                         val child = peopleCard.getChildAt(i)
-                        val childMember = child.tag as? StaffData ?: continue
+                        val childMember = child.tag as? LegalStaffRow ?: continue
                         val childRadio = child.findViewById<View>(R.id.radioButton)
                         val childAvatarCheck = child.findViewById<View>(R.id.avatarCheck)
                         val childIsSel = selectedStaff?.id == childMember.id
                         childRadio.setBackgroundResource(
-                            if (childIsSel) R.drawable.bg_sheet_radio_on
-                            else R.drawable.bg_sheet_radio_off
+                            if (childIsSel) R.drawable.bg_sheet_radio_on else R.drawable.bg_sheet_radio_off
                         )
                         childAvatarCheck.visibility = if (childIsSel) View.VISIBLE else View.GONE
                     }
-
                     updateDoneButton()
                 }
-
                 peopleCard.addView(row)
             }
         }
 
         fun filterPeople(query: String) {
+            val trimmed = query.trim()
             var visibleCount = 0
-            val trimmedQuery = query.trim()
             for (i in 0 until peopleCard.childCount) {
                 val child = peopleCard.getChildAt(i)
-                val member = child.tag as? StaffData ?: continue
-                
-                val matches = if (trimmedQuery.isEmpty()) {
-                    true
-                } else {
-                    (member.name ?: "").contains(trimmedQuery, ignoreCase = true) ||
-                    (member.designation ?: "").contains(trimmedQuery, ignoreCase = true) ||
-                    (member.department ?: "").contains(trimmedQuery, ignoreCase = true) ||
-                    (member.phone ?: "").contains(trimmedQuery)
-                }
-                
-                if (matches) {
-                    child.visibility = View.VISIBLE
+                val member = child.tag as? LegalStaffRow ?: continue
+                val matches = trimmed.isEmpty() ||
+                    member.name.contains(trimmed, ignoreCase = true) ||
+                    member.designation?.contains(trimmed, ignoreCase = true) == true ||
+                    member.department?.contains(trimmed, ignoreCase = true) == true
+                child.visibility = if (matches) {
                     visibleCount++
-                } else {
-                    child.visibility = View.GONE
-                }
+                    View.VISIBLE
+                } else View.GONE
             }
-            
             if (visibleCount == 0) {
-                emptyView.text = "No matching people"
+                emptyView.text = "No matching legal staff"
                 emptyView.visibility = View.VISIBLE
                 peopleCard.visibility = View.GONE
             } else {
@@ -423,44 +552,55 @@ class LoanDeskFragment : Fragment() {
         })
 
         doneBtn.setOnClickListener {
-            val staff = selectedStaff
-            if (staff != null) {
-                item.assignedTo = staff.name
-                filterList(etSearchLoanDesk.text.toString())
-                Toast.makeText(context, "Assigned to ${staff.name} successfully", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
+            val staff = selectedStaff ?: return@setOnClickListener
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val resp = withContext(Dispatchers.IO) {
+                        api.assignLoanToLegalStaff(
+                            session.bearerToken,
+                            AssignLoanRequest(
+                                loanCaseId = item.id,
+                                legalStaffId = staff.id,
+                                legalStaffName = staff.name,
+                            ),
+                        )
+                    }
+                    if (!resp.success) {
+                        toast(resp.error ?: "Could not assign loan")
+                        return@launch
+                    }
+                    toast("Assigned to ${staff.name}")
+                    dialog.dismiss()
+                    refreshForRole()
+                } catch (e: Exception) {
+                    toast(e.message ?: "Assignment failed")
+                }
             }
         }
 
-        // Initial population with local mock verifiers
-        bindPeople(allPeople)
-
-        // Asynchronously load active staff from the API if possible
-        if (::session.isInitialized && session.isLoggedIn) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                runCatching {
-                    api.getStaff(session.bearerToken, status = "active")
-                }.onSuccess { response ->
-                    val apiStaff = response.staff.filter { it.id != null }
-                    if (apiStaff.isNotEmpty()) {
-                        // Filter for legal staff, or default to all active staff if no specific legal staff are found
-                        val legalOnly = apiStaff.filter {
-                            it.department?.contains("legal", ignoreCase = true) == true ||
-                            it.designation?.contains("legal", ignoreCase = true) == true ||
-                            it.role?.contains("legal", ignoreCase = true) == true
-                        }
-                        allPeople = if (legalOnly.isNotEmpty()) legalOnly else apiStaff
-                        if (dialog.isShowing) {
-                            bindPeople(allPeople)
-                            filterPeople(searchField.text.toString())
-                        }
-                    }
+        // Async load of legal staff from the server-side filter (the
+        // friend's mobile code filtered client-side; this is the same
+        // filter moved to the backend so the assign sheet doesn't need
+        // a pre-warmed staff cache).
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.listLegalStaffForLoanDesk(session.bearerToken)
                 }
+                if (resp.success) {
+                    allLegal = resp.staff
+                    if (dialog.isShowing) bindPeople(allLegal)
+                }
+            } catch (_: Exception) {
+                // Sheet shows the empty state until the user dismisses;
+                // the toast on dialog dismiss would be noise.
             }
         }
 
         dialog.show()
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────
 
     private fun initialsFor(name: String): String =
         name.split(" ")
@@ -475,7 +615,7 @@ class LoanDeskFragment : Fragment() {
         ivPhoto: ImageView,
         photoUrl: String?,
         text: String,
-        seed: Int
+        seed: Int,
     ) {
         val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photoUrl)
         if (!resolved.isNullOrBlank()) {
@@ -488,7 +628,6 @@ class LoanDeskFragment : Fragment() {
         } else {
             ivPhoto.visibility = View.GONE
             label.visibility = View.VISIBLE
-            
             val palette = when (seed.mod(4)) {
                 0 -> "#E0F2FE" to "#0284C7"
                 1 -> "#F0FDF4" to "#16A34A"
@@ -501,9 +640,62 @@ class LoanDeskFragment : Fragment() {
         }
     }
 
+    private fun formatRupees(amount: Double): String {
+        if (amount <= 0) return ""
+        val fmt = NumberFormat.getInstance(Locale("en", "IN"))
+        return "₹${fmt.format(amount.toLong())}"
+    }
+
+    private fun formatDate(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val parsers = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd",
+        )
+        val display = SimpleDateFormat("dd MMM ''yy", Locale.US)
+        for (p in parsers) {
+            try {
+                val d = SimpleDateFormat(p, Locale.US).parse(raw) ?: continue
+                return display.format(d)
+            } catch (_: Exception) { /* try next */ }
+        }
+        return raw
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Picks the Loan Desk view from the signed-in staff's designation.
+     * Order matters — "Legal Manager" is matched first so a designation
+     * like "Senior Legal Manager" doesn't fall into the broader
+     * "contains Legal" Team bucket. Returns null when none of the
+     * three known roles applies.
+     */
+    private fun resolveRoleFromDesignation(designation: String?): RoleMode? {
+        val d = designation?.trim()?.lowercase(Locale.US) ?: return null
+        if (d.isBlank()) return null
+        if (d.contains("legal manager") || d.contains("legal head")) return RoleMode.LEGAL_MANAGER
+        if (d.contains("legal")) return RoleMode.LEGAL_TEAM
+        // Sales bucket — explicit BDO / Sales / Marketing executive
+        // titles all funnel to the Sales submission queue. Anyone else
+        // (Driver, HR, Accountant, …) falls through to null, which the
+        // fragment treats as "no access" so unrelated roles can't see
+        // the queue.
+        if (d.contains("sales") || d.contains("bdo") || d.contains("marketing")) return RoleMode.SALES
+        return null
+    }
+
+    private fun roleLabel(role: RoleMode): String = when (role) {
+        RoleMode.SALES -> "Sales Team"
+        RoleMode.LEGAL_TEAM -> "Legal Team"
+        RoleMode.LEGAL_MANAGER -> "Legal Manager"
+    }
+
     override fun onResume() {
         super.onResume()
-        // Hide the main bottom tab bar when inside Loan Desk sub-page
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(false)
             main.setTopBarAppearance(Color.parseColor("#FFFFFF"), true, fullBleed = false)
