@@ -290,6 +290,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var ivPayOtherApplicable: ImageView? = null
     private var etPayAdvanceAmount: EditText? = null
     private var tvPayPaymentMode: TextView? = null
+    private var lblPayLoanAmount: TextView? = null
+    private var rowPayLoanAmount: View? = null
+    private var etPayLoanAmount: EditText? = null
     private var ivPayFlexi: ImageView? = null
     private var etPayAllotDue: EditText? = null
     private var tvPayAllotDate: TextView? = null
@@ -831,6 +834,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ivPayOtherApplicable = view.findViewById(R.id.ivPayOtherApplicable)
         etPayAdvanceAmount = view.findViewById(R.id.etPayAdvanceAmount)
         tvPayPaymentMode = view.findViewById(R.id.tvPayPaymentMode)
+        lblPayLoanAmount = view.findViewById(R.id.lblPayLoanAmount)
+        rowPayLoanAmount = view.findViewById(R.id.rowPayLoanAmount)
+        etPayLoanAmount = view.findViewById(R.id.etPayLoanAmount)
         ivPayFlexi = view.findViewById(R.id.ivPayFlexi)
         etPayAllotDue = view.findViewById(R.id.etPayAllotDue)
         tvPayAllotDate = view.findViewById(R.id.tvPayAllotDate)
@@ -994,17 +1000,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             pill?.isFocusable = true
             pill?.setOnClickListener {
                 if (activeOutcome != Outcome.BOOKING) return@setOnClickListener
-                if (target.ordinal > maxVisitedBookingSub.ordinal) {
-                    // Forward jump beyond what's been validated — not
-                    // allowed silently. Toast tells the operator why.
-                    Toast.makeText(
-                        requireContext(),
-                        "Finish this step first — tap Next to continue",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                    return@setOnClickListener
-                }
                 if (target == bookingSub) return@setOnClickListener
+                // Free navigation: any sub-tab can be jumped to in any
+                // order. The operator often has details for a later tab
+                // ready before an earlier one is complete (e.g. they
+                // already have the payment mode but are still finding
+                // the client's pincode). Submit-time validation in
+                // `confirmationMissingFields` is the gate that prevents
+                // an incomplete form from being saved.
                 switchBookingSub(target)
             }
         }
@@ -1026,10 +1029,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             picker("Select Nationality", listOf("Indian", "NRI", "Foreign National")) { tvFormNationality?.text = it }
         }
 
-        // Professional dropdown
-        view?.findViewById<View>(R.id.rowProfProfession)?.setOnClickListener {
-            picker("Select Profession", listOf("Business", "Salaried", "Self-Employed", "Other")) {
-                tvProfProfession?.text = it
+        // Profession dropdown. Matches the web Booking · Professional
+        // form's three options exactly (Business / Salaried / Pension)
+        // — the older Self-Employed / Other entries from mobile were
+        // never accepted by the web's profession union and have been
+        // removed. Uses an inline PopupMenu anchored to the row so the
+        // panel drops down under the field (like the web's <select>)
+        // instead of opening the generic SearchableSelectionDialog
+        // bottom sheet — only ~3 choices, no search needed.
+        view?.findViewById<View>(R.id.rowProfProfession)?.let { anchor ->
+            anchor.setOnClickListener {
+                val popup = android.widget.PopupMenu(requireContext(), anchor)
+                listOf("Business", "Salaried", "Pension").forEachIndexed { idx, label ->
+                    popup.menu.add(0, idx, idx, label)
+                }
+                popup.setOnMenuItemClickListener { menuItem ->
+                    tvProfProfession?.text = menuItem.title
+                    scheduleDraftPushIfActive()
+                    true
+                }
+                popup.show()
             }
         }
 
@@ -1124,8 +1143,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             )
         }
         view?.findViewById<View>(R.id.rowPayPaymentMode)?.setOnClickListener {
-            picker("Select Payment Mode", listOf("Lump Sum", "Construction-Linked", "Flexi")) {
+            // Customer Payment Category — matches the web Booking
+            // form's A/B/C union exactly. Selecting "B - Loan
+            // Customer" reveals the conditional Loan Amount Required
+            // field below; A and C hide it (and any value typed there
+            // is dropped on submit since loanAmountRequested is only
+            // emitted for B). The on-submit body parses the first
+            // char of this label to send "A"/"B"/"C" as
+            // customerPaymentCategory and the full label as
+            // paymentMode for backward-compat with what older mobile
+            // builds wrote.
+            picker(
+                "Select Customer Payment Category",
+                listOf(
+                    "A - Self Finance / Hand Cash",
+                    "B - Loan Customer",
+                    "C - High Risk",
+                ),
+            ) {
                 tvPayPaymentMode?.text = it
+                applyLoanAmountVisibility()
             }
         }
         view?.findViewById<View>(R.id.rowPayFlexi)?.setOnClickListener {
@@ -2235,6 +2272,41 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     // ---- Pickers ----------------------------------------------------
+    /**
+     * Toggles the conditional "Loan Amount Required" field below the
+     * Customer Payment Category dropdown. Visible only when the
+     * picked category starts with "B" (Loan Customer); otherwise the
+     * label + input row collapse and the typed value is dropped on
+     * submit. Mirrors the same conditional on the web Booking form.
+     */
+    private fun applyLoanAmountVisibility() {
+        val isLoanCustomer = parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B"
+        val vis = if (isLoanCustomer) View.VISIBLE else View.GONE
+        lblPayLoanAmount?.visibility = vis
+        rowPayLoanAmount?.visibility = vis
+        if (!isLoanCustomer) {
+            etPayLoanAmount?.text?.clear()
+        }
+    }
+
+    /**
+     * Pulls the leading category letter ("A" / "B" / "C") out of the
+     * picker's display label (e.g. "B - Loan Customer" → "B"). Returns
+     * null when the text doesn't start with a recognised letter — keeps
+     * old picker values written by previous mobile builds from getting
+     * forced into the union.
+     */
+    private fun parseCustomerPaymentCategory(text: CharSequence?): String? {
+        val raw = text?.toString()?.trim().orEmpty()
+        if (raw.length < 1) return null
+        return when (raw[0].uppercaseChar()) {
+            'A' -> "A"
+            'B' -> "B"
+            'C' -> "C"
+            else -> null
+        }
+    }
+
     private fun picker(title: String, items: List<String>, onPicked: (String) -> Unit) {
         SearchableSelectionDialog.show(
             context = requireContext(),
@@ -3366,6 +3438,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             advanceAmount = advanceAmount,
             balanceAmount = if (bookingCost != null && advanceAmount != null) bookingCost - advanceAmount else null,
             paymentMode = textOrNull(tvPayPaymentMode?.text),
+            customerPaymentCategory = parseCustomerPaymentCategory(tvPayPaymentMode?.text),
+            loanAmountRequested = if (parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B")
+                numberOrNull(etPayLoanAmount?.text)
+            else null,
             freePayment = payFlexi,
             allotmentDueAmount = numberOrNull(etPayAllotDue?.text),
             allotmentDueDate = dateTextForApi(tvPayAllotDate?.text),

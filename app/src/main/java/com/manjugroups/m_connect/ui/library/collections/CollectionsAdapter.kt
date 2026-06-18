@@ -6,6 +6,7 @@ import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ItemCollectionBinding
@@ -22,6 +23,12 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     var onRejectClick: ((CollectionItem) -> Unit)? = null
     var onRectifyClick: ((CollectionItem) -> Unit)? = null
     var onImageClick: ((CollectionItem) -> Unit)? = null
+    // Fragment-provided hook: takes the server-side _storage id, resolves
+    // it to a signed URL (/api/storage/get-url), and loads the result
+    // into the row's thumbnail ImageView via Coil. The fragment owns the
+    // coroutine scope + bearer token + a URL cache so we don't refetch
+    // the same id on every scroll bind.
+    var proofLoader: ((storageId: String, target: ImageView) -> Unit)? = null
 
     fun submit(list: List<CollectionItem>) {
         items.clear()
@@ -71,20 +78,34 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 }
             }
 
-            // Proof thumbnail
-            val photoPath = item.photoPath
-            if (photoPath != null) {
-                val file = File(photoPath)
-                if (file.exists()) {
+            // Proof thumbnail.
+            //  1. Server-stored proof (`proofStorageId`) → fragment-
+            //     provided `proofLoader` resolves the signed URL and
+            //     Coil paints into `ivThumbnail`. We clear the view
+            //     first so a recycled tile doesn't flash the previous
+            //     row's image (or the cash mock) while the URL fetch
+            //     is in flight — Coil's crossfade reveals the real
+            //     image into a blank tile.
+            //  2. Local file still on disk (rectify reuse) → load it.
+            //  3. No proof at all → hide the whole thumbnail card so
+            //     the row shows a clean null state instead of the
+            //     cash drawing.
+            val storageId = item.proofStorageId?.takeIf { it.isNotBlank() }
+            val localPath = item.photoPath?.takeIf { it.isNotBlank() }
+            when {
+                storageId != null && proofLoader != null -> {
                     b.cardThumbnail.visibility = View.VISIBLE
-                    b.ivThumbnail.setImageURI(Uri.fromFile(file))
-                } else {
-                    b.cardThumbnail.visibility = View.VISIBLE
-                    b.ivThumbnail.setImageResource(R.drawable.ic_cash_proof)
+                    b.ivThumbnail.setImageDrawable(null)
+                    proofLoader?.invoke(storageId, b.ivThumbnail)
                 }
-            } else {
-                b.cardThumbnail.visibility = View.VISIBLE
-                b.ivThumbnail.setImageResource(R.drawable.ic_cash_proof)
+                localPath != null && File(localPath).exists() -> {
+                    b.cardThumbnail.visibility = View.VISIBLE
+                    b.ivThumbnail.setImageURI(Uri.fromFile(File(localPath)))
+                }
+                else -> {
+                    b.cardThumbnail.visibility = View.GONE
+                    b.ivThumbnail.setImageDrawable(null)
+                }
             }
 
             // Role and Status visibility configuration

@@ -996,8 +996,15 @@ interface ApiService {
             // unless the token is invalid anyway, so we don't try to
             // distinguish — every 401 is treated as "session is dead."
             val authWatchdog = okhttp3.Interceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.code == 401) {
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // Skip the auto-logout when the outgoing request used the
+                // dev bypass token — the server can't validate a synthetic
+                // token so it will always 401, but the local dev session
+                // is still legitimately "logged in" for UI exploration.
+                // Without this, bypass users get kicked back to login on
+                // the very first authed call after AuthBypass succeeds.
+                if (response.code == 401 && !isBypassAuth(request)) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -1015,6 +1022,14 @@ interface ApiService {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(ApiService::class.java)
+        }
+
+        private fun isBypassAuth(request: okhttp3.Request): Boolean {
+            val header = request.header("Authorization") ?: return false
+            // Both "Bearer <token>" and bare "<token>" shapes turn up
+            // in the codebase, so strip the prefix before comparing.
+            val token = header.removePrefix("Bearer ").trim()
+            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
         }
     }
 }
@@ -2643,6 +2658,14 @@ data class CreateBookingRequest(
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -2781,6 +2804,14 @@ data class Booking(
     val balanceAmount: Double? = null,
     val agreedAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -2934,6 +2965,14 @@ data class UpdateBookingRequest(
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
