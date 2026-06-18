@@ -35,6 +35,7 @@ import com.manjugroups.m_connect.ui.telecaller.DialerFragment
 import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
 import com.manjugroups.m_connect.ui.library.collections.CollectionsFragment
 import com.manjugroups.m_connect.ui.library.accounts.PostSalesVerificationFragment
+import com.manjugroups.m_connect.ui.library.loans.LoanDeskFragment
 
 class AppLibraryFragment : Fragment() {
 
@@ -484,7 +485,7 @@ class AppLibraryFragment : Fragment() {
         bindIamEntry(
             row = binding.itemSalesLoanDesk,
             allowed = true,
-        ) { comingSoon("Loan Desk") }
+        ) { openScreen(LoanDeskFragment()) }
 
         // ── Accounts ───────────────────────────────────────────────────────
         bindIamEntry(

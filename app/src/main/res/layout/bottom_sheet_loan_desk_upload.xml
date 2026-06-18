@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical"
+    android:paddingBottom="24dp">
+
+    <!-- Bottom sheet drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
+    <!-- Title + Description -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:layout_marginBottom="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="Submit Documents"
+            android:textColor="#101828"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Please upload the 4 required files below to proceed"
+            android:textColor="#667085"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Scrollable content -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never"
+        android:paddingHorizontal="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 1. PAN Card -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="PAN Card *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <RelativeLayout
+                android:id="@+id/btnUploadDoc1"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_loan_input_box"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:id="@+id/ivDocIcon1"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_loan_document"
+                    app:tint="#667085"
+                    android:importantForAccessibility="no" />
+
+                <TextView
+                    android:id="@+id/tvDocStatus1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/ivDocIcon1"
+                    android:layout_marginStart="10dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to upload PAN Card"
+                    android:textColor="#98A2B3"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:id="@+id/ivDocCheck1"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_leave_action_check"
+                    app:tint="#1BCA0B"
+                    android:visibility="gone"
+                    android:importantForAccessibility="no" />
+            </RelativeLayout>
+
+            <!-- 2. Aadhaar Card -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Aadhaar Card *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <RelativeLayout
+                android:id="@+id/btnUploadDoc2"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_loan_input_box"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:id="@+id/ivDocIcon2"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_loan_document"
+                    app:tint="#667085"
+                    android:importantForAccessibility="no" />
+
+                <TextView
+                    android:id="@+id/tvDocStatus2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/ivDocIcon2"
+                    android:layout_marginStart="10dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to upload Aadhaar Card"
+                    android:textColor="#98A2B3"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:id="@+id/ivDocCheck2"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_leave_action_check"
+                    app:tint="#1BCA0B"
+                    android:visibility="gone"
+                    android:importantForAccessibility="no" />
+            </RelativeLayout>
+
+            <!-- 3. Bank Statement -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Bank Statement *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <RelativeLayout
+                android:id="@+id/btnUploadDoc3"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_loan_input_box"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:id="@+id/ivDocIcon3"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_loan_document"
+                    app:tint="#667085"
+                    android:importantForAccessibility="no" />
+
+                <TextView
+                    android:id="@+id/tvDocStatus3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/ivDocIcon3"
+                    android:layout_marginStart="10dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to upload Bank Statement"
+                    android:textColor="#98A2B3"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:id="@+id/ivDocCheck3"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_leave_action_check"
+                    app:tint="#1BCA0B"
+                    android:visibility="gone"
+                    android:importantForAccessibility="no" />
+            </RelativeLayout>
+
+            <!-- 4. Income Tax / Pay Slip -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Income Tax / Pay Slip *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <RelativeLayout
+                android:id="@+id/btnUploadDoc4"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="24dp"
+                android:background="@drawable/bg_loan_input_box"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:id="@+id/ivDocIcon4"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_loan_document"
+                    app:tint="#667085"
+                    android:importantForAccessibility="no" />
+
+                <TextView
+                    android:id="@+id/tvDocStatus4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/ivDocIcon4"
+                    android:layout_marginStart="10dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to upload IT / Pay Slip"
+                    android:textColor="#98A2B3"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:id="@+id/ivDocCheck4"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/ic_leave_action_check"
+                    app:tint="#1BCA0B"
+                    android:visibility="gone"
+                    android:importantForAccessibility="no" />
+            </RelativeLayout>
+
+            <!-- Submit Button -->
+            <TextView
+                android:id="@+id/btnSubmitUploads"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_leave_submit_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:enabled="false"
+                android:alpha="0.5"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Submit Now"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>
