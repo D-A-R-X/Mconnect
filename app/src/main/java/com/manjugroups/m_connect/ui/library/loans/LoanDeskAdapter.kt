@@ -19,7 +19,12 @@ data class LoanDeskItem(
     val date: String,
     var status: String, // "Docs Pending", "App Received", "Approved", "Rejected"
     var pills: List<String>,
-    var rejectionRemarks: String? = null
+    var rejectionRemarks: String? = null,
+    var doc1Name: String? = null,
+    var doc2Name: String? = null,
+    var doc3Name: String? = null,
+    var doc4Name: String? = null,
+    var assignedTo: String? = null
 )
 
 class LoanDeskAdapter(
@@ -27,13 +32,25 @@ class LoanDeskAdapter(
     private val onItemClick: (LoanDeskItem) -> Unit,
     private val onAcceptClick: (LoanDeskItem) -> Unit,
     private val onRejectClick: (LoanDeskItem) -> Unit,
-    private val onRectifyClick: (LoanDeskItem) -> Unit
+    private val onRectifyClick: (LoanDeskItem) -> Unit,
+    private val onAssignClick: (LoanDeskItem) -> Unit
 ) : RecyclerView.Adapter<LoanDeskAdapter.ViewHolder>() {
 
-    private var isLegalTeamMode = true // Default matches start state
+    companion object {
+        const val ROLE_SALES_TEAM = 0
+        const val ROLE_LEGAL_TEAM = 1
+        const val ROLE_LEGAL_MANAGER = 2
+    }
+
+    private var currentRole = ROLE_LEGAL_TEAM // Default matches start state
 
     fun setLegalTeamMode(enabled: Boolean) {
-        this.isLegalTeamMode = enabled
+        this.currentRole = if (enabled) ROLE_LEGAL_TEAM else ROLE_SALES_TEAM
+        notifyDataSetChanged()
+    }
+
+    fun setRoleMode(role: Int) {
+        this.currentRole = role
         notifyDataSetChanged()
     }
 
@@ -50,7 +67,7 @@ class LoanDeskAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
-        holder.bind(item, isLegalTeamMode, onItemClick, onAcceptClick, onRejectClick, onRectifyClick)
+        holder.bind(item, currentRole, onItemClick, onAcceptClick, onRejectClick, onRectifyClick, onAssignClick)
     }
 
     override fun getItemCount(): Int = items.size
@@ -59,6 +76,7 @@ class LoanDeskAdapter(
         private val tvInitial: TextView = itemView.findViewById(R.id.tvInitial)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
         private val tvPhone: TextView = itemView.findViewById(R.id.tvPhone)
+        private val tvAssignee: TextView = itemView.findViewById(R.id.tvAssignee)
         private val statusBadgeContainer: View = itemView.findViewById(R.id.statusBadgeContainer)
         private val ivStatusIcon: ImageView = itemView.findViewById(R.id.ivStatusIcon)
         private val tvStatus: TextView = itemView.findViewById(R.id.tvStatus)
@@ -77,14 +95,16 @@ class LoanDeskAdapter(
         private val btnAccept: View = itemView.findViewById(R.id.btnAccept)
         private val btnReject: View = itemView.findViewById(R.id.btnReject)
         private val btnRectify: View = itemView.findViewById(R.id.btnRectify)
+        private val btnAssign: View = itemView.findViewById(R.id.btnAssign)
 
         fun bind(
             item: LoanDeskItem,
-            isLegalTeamMode: Boolean,
+            currentRole: Int,
             onItemClick: (LoanDeskItem) -> Unit,
             onAcceptClick: (LoanDeskItem) -> Unit,
             onRejectClick: (LoanDeskItem) -> Unit,
-            onRectifyClick: (LoanDeskItem) -> Unit
+            onRectifyClick: (LoanDeskItem) -> Unit,
+            onAssignClick: (LoanDeskItem) -> Unit
         ) {
             // Set initials and select background tint based on name initials
             val initials = item.name.split(" ").mapNotNull { it.firstOrNull() }.joinToString("").take(2).uppercase()
@@ -103,6 +123,14 @@ class LoanDeskAdapter(
             tvAmount.text = item.amount
             tvLocation.text = item.location
             tvDate.text = item.date
+
+            // Display assignee if available
+            if (item.assignedTo != null) {
+                tvAssignee.visibility = View.VISIBLE
+                tvAssignee.text = "Assigned: ${item.assignedTo}"
+            } else {
+                tvAssignee.visibility = View.GONE
+            }
 
             // Style status badge
             when (item.status) {
@@ -149,35 +177,63 @@ class LoanDeskAdapter(
             }
 
             // Role and Status adaptive layout
-            if (isLegalTeamMode) {
-                btnRectify.visibility = View.GONE
-                layoutRemarks.visibility = View.GONE
-                
-                if (item.status == "App Received") {
-                    layoutLegalActions.visibility = View.VISIBLE
-                    btnAccept.setOnClickListener { onAcceptClick(item) }
-                    btnReject.setOnClickListener { onRejectClick(item) }
-                } else {
-                    layoutLegalActions.visibility = View.GONE
-                }
-                itemView.setOnClickListener(null)
-            } else {
-                layoutLegalActions.visibility = View.GONE
-                
-                if (item.status == "Rejected") {
-                    layoutRemarks.visibility = View.VISIBLE
-                    tvRemarks.text = item.rejectionRemarks ?: "No remarks specified."
-                    btnRectify.visibility = View.VISIBLE
-                    btnRectify.setOnClickListener { onRectifyClick(item) }
-                    itemView.setOnClickListener { onRectifyClick(item) }
-                } else {
-                    layoutRemarks.visibility = View.GONE
+            when (currentRole) {
+                ROLE_LEGAL_TEAM -> {
                     btnRectify.visibility = View.GONE
+                    layoutRemarks.visibility = View.GONE
+                    btnAssign.visibility = View.GONE
                     
-                    if (item.status == "Docs Pending") {
+                    if (item.status == "App Received") {
+                        layoutLegalActions.visibility = View.VISIBLE
+                        btnAccept.setOnClickListener { onAcceptClick(item) }
+                        btnReject.setOnClickListener { onRejectClick(item) }
+                    } else {
+                        layoutLegalActions.visibility = View.GONE
+                    }
+                    
+                    if (item.status != "Docs Pending") {
                         itemView.setOnClickListener { onItemClick(item) }
                     } else {
                         itemView.setOnClickListener(null)
+                    }
+                }
+                ROLE_LEGAL_MANAGER -> {
+                    btnRectify.visibility = View.GONE
+                    layoutRemarks.visibility = View.GONE
+                    layoutLegalActions.visibility = View.GONE
+                    
+                    if (item.status == "App Received") {
+                        btnAssign.visibility = View.VISIBLE
+                        btnAssign.setOnClickListener { onAssignClick(item) }
+                    } else {
+                        btnAssign.visibility = View.GONE
+                    }
+                    
+                    if (item.status != "Docs Pending") {
+                        itemView.setOnClickListener { onItemClick(item) }
+                    } else {
+                        itemView.setOnClickListener(null)
+                    }
+                }
+                ROLE_SALES_TEAM -> {
+                    layoutLegalActions.visibility = View.GONE
+                    btnAssign.visibility = View.GONE
+                    
+                    if (item.status == "Rejected") {
+                        layoutRemarks.visibility = View.VISIBLE
+                        tvRemarks.text = item.rejectionRemarks ?: "No remarks specified."
+                        btnRectify.visibility = View.VISIBLE
+                        btnRectify.setOnClickListener { onRectifyClick(item) }
+                        itemView.setOnClickListener { onRectifyClick(item) }
+                    } else {
+                        layoutRemarks.visibility = View.GONE
+                        btnRectify.visibility = View.GONE
+                        
+                        if (item.status == "Docs Pending") {
+                            itemView.setOnClickListener { onItemClick(item) }
+                        } else {
+                            itemView.setOnClickListener(null)
+                        }
                     }
                 }
             }
