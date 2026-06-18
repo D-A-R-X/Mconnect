@@ -17,14 +17,25 @@ data class LoanDeskItem(
     val amount: String,
     val location: String,
     val date: String,
-    var status: String, // "Docs Pending" or "App Received"
-    var pills: List<String>
+    var status: String, // "Docs Pending", "App Received", "Approved", "Rejected"
+    var pills: List<String>,
+    var rejectionRemarks: String? = null
 )
 
 class LoanDeskAdapter(
     private var items: List<LoanDeskItem>,
-    private val onItemClick: (LoanDeskItem) -> Unit
+    private val onItemClick: (LoanDeskItem) -> Unit,
+    private val onAcceptClick: (LoanDeskItem) -> Unit,
+    private val onRejectClick: (LoanDeskItem) -> Unit,
+    private val onRectifyClick: (LoanDeskItem) -> Unit
 ) : RecyclerView.Adapter<LoanDeskAdapter.ViewHolder>() {
+
+    private var isLegalTeamMode = true // Default matches start state
+
+    fun setLegalTeamMode(enabled: Boolean) {
+        this.isLegalTeamMode = enabled
+        notifyDataSetChanged()
+    }
 
     fun updateList(newItems: List<LoanDeskItem>) {
         this.items = newItems
@@ -39,7 +50,7 @@ class LoanDeskAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
-        holder.bind(item, onItemClick)
+        holder.bind(item, isLegalTeamMode, onItemClick, onAcceptClick, onRejectClick, onRectifyClick)
     }
 
     override fun getItemCount(): Int = items.size
@@ -60,7 +71,21 @@ class LoanDeskAdapter(
         private val pillCount: View = itemView.findViewById(R.id.pillCount)
         private val tvPillCountText: TextView = itemView.findViewById(R.id.tvPillCountText)
 
-        fun bind(item: LoanDeskItem, onItemClick: (LoanDeskItem) -> Unit) {
+        private val layoutRemarks: View = itemView.findViewById(R.id.layoutRemarks)
+        private val tvRemarks: TextView = itemView.findViewById(R.id.tvRemarks)
+        private val layoutLegalActions: View = itemView.findViewById(R.id.layoutLegalActions)
+        private val btnAccept: View = itemView.findViewById(R.id.btnAccept)
+        private val btnReject: View = itemView.findViewById(R.id.btnReject)
+        private val btnRectify: View = itemView.findViewById(R.id.btnRectify)
+
+        fun bind(
+            item: LoanDeskItem,
+            isLegalTeamMode: Boolean,
+            onItemClick: (LoanDeskItem) -> Unit,
+            onAcceptClick: (LoanDeskItem) -> Unit,
+            onRejectClick: (LoanDeskItem) -> Unit,
+            onRectifyClick: (LoanDeskItem) -> Unit
+        ) {
             // Set initials and select background tint based on name initials
             val initials = item.name.split(" ").mapNotNull { it.firstOrNull() }.joinToString("").take(2).uppercase()
             tvInitial.text = initials
@@ -80,18 +105,35 @@ class LoanDeskAdapter(
             tvDate.text = item.date
 
             // Style status badge
-            if (item.status == "Docs Pending") {
-                statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_pending)
-                ivStatusIcon.setImageResource(R.drawable.ic_clock_bold)
-                ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#B93815"))
-                tvStatus.text = "Docs Pending"
-                tvStatus.setTextColor(Color.parseColor("#B93815"))
-            } else {
-                statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_received)
-                ivStatusIcon.setImageResource(R.drawable.ic_leave_action_check)
-                ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#B42318"))
-                tvStatus.text = "App Received"
-                tvStatus.setTextColor(Color.parseColor("#B42318"))
+            when (item.status) {
+                "Docs Pending" -> {
+                    statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_pending)
+                    ivStatusIcon.setImageResource(R.drawable.ic_clock_bold)
+                    ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#B93815"))
+                    tvStatus.text = "Docs Pending"
+                    tvStatus.setTextColor(Color.parseColor("#B93815"))
+                }
+                "App Received" -> {
+                    statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_received)
+                    ivStatusIcon.setImageResource(R.drawable.ic_leave_action_check)
+                    ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#B42318"))
+                    tvStatus.text = "App Received"
+                    tvStatus.setTextColor(Color.parseColor("#B42318"))
+                }
+                "Approved" -> {
+                    statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_success)
+                    ivStatusIcon.setImageResource(R.drawable.ic_leave_action_check)
+                    ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#12B76A"))
+                    tvStatus.text = "Approved"
+                    tvStatus.setTextColor(Color.parseColor("#12B76A"))
+                }
+                "Rejected" -> {
+                    statusBadgeContainer.setBackgroundResource(R.drawable.bg_badge_error)
+                    ivStatusIcon.setImageResource(R.drawable.ic_outcome_close)
+                    ivStatusIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#F04438"))
+                    tvStatus.text = "Rejected"
+                    tvStatus.setTextColor(Color.parseColor("#F04438"))
+                }
             }
 
             // Bind document pills
@@ -106,8 +148,38 @@ class LoanDeskAdapter(
                 pillCount.visibility = View.GONE
             }
 
-            itemView.setOnClickListener {
-                onItemClick(item)
+            // Role and Status adaptive layout
+            if (isLegalTeamMode) {
+                btnRectify.visibility = View.GONE
+                layoutRemarks.visibility = View.GONE
+                
+                if (item.status == "App Received") {
+                    layoutLegalActions.visibility = View.VISIBLE
+                    btnAccept.setOnClickListener { onAcceptClick(item) }
+                    btnReject.setOnClickListener { onRejectClick(item) }
+                } else {
+                    layoutLegalActions.visibility = View.GONE
+                }
+                itemView.setOnClickListener(null)
+            } else {
+                layoutLegalActions.visibility = View.GONE
+                
+                if (item.status == "Rejected") {
+                    layoutRemarks.visibility = View.VISIBLE
+                    tvRemarks.text = item.rejectionRemarks ?: "No remarks specified."
+                    btnRectify.visibility = View.VISIBLE
+                    btnRectify.setOnClickListener { onRectifyClick(item) }
+                    itemView.setOnClickListener { onRectifyClick(item) }
+                } else {
+                    layoutRemarks.visibility = View.GONE
+                    btnRectify.visibility = View.GONE
+                    
+                    if (item.status == "Docs Pending") {
+                        itemView.setOnClickListener { onItemClick(item) }
+                    } else {
+                        itemView.setOnClickListener(null)
+                    }
+                }
             }
         }
     }

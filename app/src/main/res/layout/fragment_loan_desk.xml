@@ -110,6 +110,46 @@
                         android:importantForAccessibility="no" />
                 </FrameLayout>
 
+                <!-- Role Selector Dropdown -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="end"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginHorizontal="16dp">
+
+                    <LinearLayout
+                        android:id="@+id/btnRoleSelector"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_collections_search_bar"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:paddingHorizontal="14dp">
+
+                        <TextView
+                            android:id="@+id/tvSelectedRole"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Legal Team"
+                            android:textColor="#344054"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:layout_marginStart="8dp"
+                            android:src="@drawable/ic_chevron_down"
+                            app:tint="#344054"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <!-- Recycler List -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rvLoanDesk"

@@ -8,6 +8,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -19,6 +22,9 @@ class LoanDeskFragment : Fragment() {
     private lateinit var rvLoanDesk: RecyclerView
     private lateinit var etSearchLoanDesk: EditText
     private lateinit var adapter: LoanDeskAdapter
+    private lateinit var tvSelectedRole: TextView
+
+    private var isLegalTeamMode = true // Default to Legal Team mode (matches screenshot!)
 
     // Initial mock list of cards matching the user screenshot
     private var allItems = listOf(
@@ -30,7 +36,8 @@ class LoanDeskFragment : Fragment() {
             location = "OMR Road, Sholinganallur...",
             date = "16 Jun '26",
             status = "Docs Pending",
-            pills = listOf("PAN", "Aadhaar", "+7")
+            pills = listOf("PAN", "Aadhaar", "+7"),
+            rejectionRemarks = null
         ),
         LoanDeskItem(
             id = "2",
@@ -40,7 +47,8 @@ class LoanDeskFragment : Fragment() {
             location = "Anna Nagar, Chennai...",
             date = "16 Jun '26",
             status = "Docs Pending",
-            pills = listOf("PAN", "+6")
+            pills = listOf("PAN", "+6"),
+            rejectionRemarks = null
         ),
         LoanDeskItem(
             id = "3",
@@ -50,7 +58,8 @@ class LoanDeskFragment : Fragment() {
             location = "T. Nagar, Chennai - 6...",
             date = "16 Jun '26",
             status = "App Received",
-            pills = listOf("PAN", "+8")
+            pills = listOf("PAN", "+8"),
+            rejectionRemarks = null
         )
     )
 
@@ -83,14 +92,71 @@ class LoanDeskFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        // Role Selector Setup
+        val btnRoleSelector = view.findViewById<View>(R.id.btnRoleSelector)
+        tvSelectedRole = view.findViewById(R.id.tvSelectedRole)
+
+        // Enforce default role to "Legal Team"
+        tvSelectedRole.text = "Legal Team"
+        isLegalTeamMode = true
+
+        btnRoleSelector.setOnClickListener {
+            val popup = PopupMenu(requireContext(), btnRoleSelector)
+            popup.menu.add("Sales Team")
+            popup.menu.add("Legal Team")
+            popup.setOnMenuItemClickListener { menuItem ->
+                val selected = menuItem.title.toString()
+                tvSelectedRole.text = selected
+                isLegalTeamMode = (selected == "Legal Team")
+                adapter.setLegalTeamMode(isLegalTeamMode)
+                true
+            }
+            popup.show()
+        }
+
         // Recycler Setup
         rvLoanDesk = view.findViewById(R.id.rvLoanDesk)
         rvLoanDesk.layoutManager = LinearLayoutManager(requireContext())
         
-        adapter = LoanDeskAdapter(filteredItems) { clickedItem ->
-            showUploadBottomSheet(clickedItem)
-        }
+        adapter = LoanDeskAdapter(
+            items = filteredItems,
+            onItemClick = { item ->
+                showUploadBottomSheet(item)
+            },
+            onAcceptClick = { item ->
+                item.status = "Approved"
+                item.rejectionRemarks = null
+                filterList(etSearchLoanDesk.text.toString())
+                Toast.makeText(requireContext(), "Documents approved successfully", Toast.LENGTH_SHORT).show()
+            },
+            onRejectClick = { item ->
+                LoanDeskRejectBottomSheet.newInstance(item.id)
+                    .show(parentFragmentManager, "LoanDeskRejectBottomSheet")
+            },
+            onRectifyClick = { item ->
+                showUploadBottomSheet(item)
+            }
+        )
+        adapter.setLegalTeamMode(isLegalTeamMode)
         rvLoanDesk.adapter = adapter
+
+        // Listen for rejection remarks
+        parentFragmentManager.setFragmentResultListener(
+            LoanDeskRejectBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val itemId = bundle.getString("itemId")
+            val remarks = bundle.getString("remarks")
+            if (itemId != null && remarks != null) {
+                val item = allItems.find { it.id == itemId }
+                if (item != null) {
+                    item.status = "Rejected"
+                    item.rejectionRemarks = remarks
+                    filterList(etSearchLoanDesk.text.toString())
+                    Toast.makeText(requireContext(), "Documents rejected with remarks", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun filterList(query: String) {
@@ -109,8 +175,9 @@ class LoanDeskFragment : Fragment() {
 
     private fun showUploadBottomSheet(item: LoanDeskItem) {
         val bottomSheet = LoanDeskUploadBottomSheet.newInstance {
-            // Update item details upon successful documents submission
+            // Update item details upon successful documents submission / rectification
             item.status = "App Received"
+            item.rejectionRemarks = null
             // Update pills to show that multiple files were added
             item.pills = when (item.id) {
                 "1" -> listOf("PAN", "Aadhaar", "+9") // Simulated update (+7 became +9 docs or similar)
@@ -119,7 +186,7 @@ class LoanDeskFragment : Fragment() {
             }
             
             // Refresh the adapter lists
-            adapter.updateList(filteredItems)
+            filterList(etSearchLoanDesk.text.toString())
         }
         bottomSheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }
