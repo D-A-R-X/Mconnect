@@ -7,13 +7,16 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.load
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentPostSalesVerificationBinding
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApproveCollectionRequest
 import com.manjugroups.m_connect.network.CustomerCollectionRow
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -45,11 +48,13 @@ class PostSalesVerificationFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val api = GeoTrackApi.create()
+    private val storage = ApiService.create()
     private lateinit var session: SessionManager
 
     private lateinit var adapter: CollectionsAdapter
     private val masterList = mutableListOf<CollectionItem>()
     private val rowsById = mutableMapOf<String, CustomerCollectionRow>()
+    private val proofUrlCache = mutableMapOf<String, String>()
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
@@ -83,9 +88,35 @@ class PostSalesVerificationFragment : Fragment() {
             }
             onRectifyClick = { /* No rectify on the accountant side */ }
             onImageClick = { item -> showFullscreenImagePreview(item) }
+            proofLoader = { storageId, target -> loadProofThumbnail(storageId, target) }
         }
         binding.rvCollections.layoutManager = LinearLayoutManager(requireContext())
         binding.rvCollections.adapter = adapter
+    }
+
+    private fun loadProofThumbnail(storageId: String, target: ImageView) {
+        // No placeholder/error mocks — adapter cleared the view so a
+        // blank tile is the correct intermediate state until Coil
+        // crossfades the real image in.
+        val cached = proofUrlCache[storageId]
+        if (cached != null) {
+            target.load(cached) { crossfade(true) }
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    storage.getStorageUrl(session.bearerToken, storageId)
+                }
+                val url = resp.url
+                if (resp.success && !url.isNullOrBlank()) {
+                    proofUrlCache[storageId] = url
+                    target.load(url) { crossfade(true) }
+                }
+            } catch (_: Exception) {
+                // Silent; leave the tile blank.
+            }
+        }
     }
 
     private fun setupListeners() {
@@ -211,7 +242,13 @@ class PostSalesVerificationFragment : Fragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
-            setImageResource(R.drawable.ic_cash_proof)
+        }
+        // Same signed-URL resolution as the list thumbnail; Coil shares
+        // its bitmap cache so the warmed entry from the list is reused.
+        // Blank during resolve avoids the cash-mock flash.
+        val storageId = item.proofStorageId?.takeIf { it.isNotBlank() }
+        if (storageId != null) {
+            loadProofThumbnail(storageId, imageView)
         }
         root.addView(imageView)
         val density = resources.displayMetrics.density

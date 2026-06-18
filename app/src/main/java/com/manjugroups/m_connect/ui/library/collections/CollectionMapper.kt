@@ -50,6 +50,7 @@ object CollectionMapper {
             status = mapStatus(row.verificationStatus),
             type = mapType(row.customerPaymentCategory),
             remarks = row.verificationNotes,
+            proofStorageId = row.proofStorageId,
         )
     }
 

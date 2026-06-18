@@ -2,7 +2,6 @@ package com.manjugroups.m_connect.ui.library.collections
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -12,14 +11,12 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
-import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,8 +34,6 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PostSaleCaseSummary
-import com.manjugroups.m_connect.ui.common.SearchableOption
-import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,6 +75,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     private var rectifyItem: CollectionItem? = null
     private var rectifyLocked: Boolean = false
 
+    private var allBookings: List<PostSaleCaseSummary> = emptyList()
     private var selectedCase: PostSaleCaseSummary? = null
     private var selectedCaseId: String? = null
     private var selectedCaseLabel: String? = null
@@ -139,18 +135,21 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Same setup as CollectionPaymentEntryBottomSheet: expand fully
+        // on show + skip the half-state. With a half/collapsed state the
+        // outer drag and the inner NestedScrollView fight for the same
+        // gesture and the form jitters; skipCollapsed=true makes the
+        // sheet behave like a regular scrollable surface.
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
-                it.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                it.setBackgroundColor(Color.TRANSPARENT)
                 androidx.core.view.ViewCompat.setElevation(it, 0f)
                 val behavior = BottomSheetBehavior.from(it)
-                val metrics = resources.displayMetrics
-                val peekH = (metrics.heightPixels * 0.55f).toInt()
-                behavior.peekHeight = peekH
-                behavior.state = BottomSheetBehavior.STATE_COLLAPSED
-                behavior.skipCollapsed = false
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                behavior.isDraggable = true
             }
         }
         return dialog
@@ -214,13 +213,31 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         }
 
         if (!rectifyLocked) {
-            // Wire the Select Booking field to the in-form lookup.
-            // Both click and focus trigger it so the keyboard never
-            // takes over (the field doesn't accept free text).
+            // Non-editable Select Booking field — drops down inline
+            // (AutoCompleteTextView's native dropdown) with the list
+            // of open bookings loaded from /api/postsales/cases/list.
+            // Items map back to PostSaleCaseSummary by index so the
+            // submit still uses the picked caseId.
             etBooking.isFocusable = false
             etBooking.isCursorVisible = false
             etBooking.keyListener = null
-            etBooking.setOnClickListener { promptBookingLookup() }
+            etBooking.setOnClickListener {
+                if (allBookings.isEmpty()) {
+                    toast("Loading bookings…")
+                    loadOpenBookings()
+                } else {
+                    etBooking.showDropDown()
+                }
+            }
+            etBooking.setOnItemClickListener { _, _, position, _ ->
+                allBookings.getOrNull(position)?.let { picked ->
+                    selectedCase = picked
+                    selectedCaseId = picked.id
+                    selectedCaseLabel = bookingDisplayLabel(picked)
+                    etBooking.setText(selectedCaseLabel)
+                }
+            }
+            loadOpenBookings()
         }
 
         // Payment mode dropdown — keep on a static list of the seven
@@ -305,83 +322,60 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         setFragmentResult(RESULT_KEY, bundleOf(KEY_SUBMITTED to false))
     }
 
-    // ── Booking lookup (inside the Select Booking field) ──────────────
+    // ── Booking dropdown ──────────────────────────────────────────────
     //
-    // Field staff taps the Select Booking row → we prompt for the
-    // customer's 10-digit mobile (the only routine identifier on the
-    // exec's side) → /api/postsales/cases/byMobile returns the rows →
-    // we render them in a SearchableSelectionDialog so the staff can
-    // pick the right booking among the customer's multiple plots.
+    // The full list of open bookings is loaded once when the sheet
+    // opens (/api/postsales/cases/list, capped at 200 newest first)
+    // and fed into the Select Booking AutoCompleteTextView so it
+    // drops down inline under the field — matches the designer's
+    // intent. Tap → list shows under the field; pick → field text
+    // updates and selectedCaseId locks in the right caseId.
 
-    private fun promptBookingLookup() {
-        val ctx = requireContext()
-        val input = EditText(ctx).apply {
-            inputType = InputType.TYPE_CLASS_PHONE
-            hint = "Customer mobile (10 digits)"
-            setPadding(48, 24, 48, 24)
-        }
-        AlertDialog.Builder(ctx)
-            .setTitle("Find booking")
-            .setMessage("Enter the customer's mobile number to load their bookings.")
-            .setView(input)
-            .setPositiveButton("Search") { dialog, _ ->
-                val mobile = input.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-                if (mobile == null) {
-                    toast("Mobile number is required")
-                } else {
-                    fetchAndPickBooking(mobile)
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
-            .show()
-    }
-
-    private fun fetchAndPickBooking(mobile: String) {
+    private fun loadOpenBookings() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
-                    api.getPostSaleCasesByMobile(session.bearerToken, mobile)
+                    api.listOpenBookings(session.bearerToken)
                 }
-                if (!resp.success || resp.cases.isEmpty()) {
-                    toast(resp.error ?: "No bookings found for $mobile")
+                if (!resp.success) {
+                    toast(resp.error ?: "Could not load bookings")
                     return@launch
                 }
-                showBookingPicker(resp.cases)
+                allBookings = resp.cases
+                applyBookingsToDropdown()
             } catch (e: Exception) {
-                toast(e.message ?: "Lookup failed")
+                toast(e.message ?: "Could not load bookings")
             }
         }
     }
 
-    private fun showBookingPicker(cases: List<PostSaleCaseSummary>) {
-        SearchableSelectionDialog.show(
-            context = requireContext(),
-            title = "Select Booking",
-            options = cases.map { c ->
-                SearchableOption(
-                    item = c,
-                    title = "${c.clientName} · ${c.bookingRefNo}",
-                    subtitle = buildBookingSubtitle(c),
-                    keywords = "${c.clientName} ${c.bookingRefNo} ${c.projectName.orEmpty()} ${c.plotNo.orEmpty()}",
-                )
-            },
-            emptyMessage = "No bookings",
-        ) { picked ->
-            selectedCase = picked
-            selectedCaseId = picked.id
-            selectedCaseLabel = "${picked.clientName} · ${picked.bookingRefNo}"
-            etBooking.setText(selectedCaseLabel)
-        }
+    private fun applyBookingsToDropdown() {
+        val labels = allBookings.map { bookingDisplayLabel(it) }
+        etBooking.setAdapter(
+            ArrayAdapter(
+                requireContext(),
+                android.R.layout.simple_list_item_1,
+                labels,
+            ),
+        )
+        // After the adapter swaps in, the dropdown's measured width
+        // can stay at zero (the field hasn't been laid out with the
+        // new data yet) so the first showDropDown() call comes out
+        // blank. Forcing the width keeps the panel anchored to the
+        // field width across rebuilds.
+        etBooking.setDropDownWidth(android.view.ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
-    private fun buildBookingSubtitle(c: PostSaleCaseSummary): String {
-        val location = listOfNotNull(
-            c.projectName?.takeIf { it.isNotBlank() },
-            c.plotNo?.takeIf { it.isNotBlank() }?.let { "Plot $it" },
-        ).joinToString(" · ")
-        val balance = "Balance ₹${"%,.0f".format(c.balanceAmount)}"
-        return if (location.isNotBlank()) "$location · $balance" else balance
+    private fun bookingDisplayLabel(c: PostSaleCaseSummary): String {
+        val project = c.projectName.orEmpty().trim()
+        val plot = c.plotNo.orEmpty().trim()
+        return when {
+            project.isNotBlank() && plot.isNotBlank() -> "$project - Plot $plot"
+            project.isNotBlank() -> project
+            plot.isNotBlank() -> "Plot $plot"
+            c.clientName.isNotBlank() -> c.clientName
+            else -> c.bookingRefNo
+        }
     }
 
     private fun showImageAttached(fileName: String) {

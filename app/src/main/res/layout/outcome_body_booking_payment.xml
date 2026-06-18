@@ -108,6 +108,28 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
+    <!-- Loan Amount Required — visible only when "B - Loan Customer"
+         is picked above. Mirrors the same conditional field on the
+         web Booking · Customer Payment Category form. Both the label
+         and the input row toggle visibility together. -->
+    <TextView
+        android:id="@+id/lblPayLoanAmount"
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="14dp"
+        android:text="Loan Amount Required"
+        android:visibility="gone" />
+    <LinearLayout
+        android:id="@+id/rowPayLoanAmount"
+        style="@style/OutcomeFieldPill"
+        android:visibility="gone">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText
+            android:id="@+id/etPayLoanAmount"
+            style="@style/OutcomeFieldEdit"
+            android:hint="Amount customer wants as loan"
+            android:inputType="numberDecimal" />
+    </LinearLayout>
+
     <!-- Flexi Payment (Yes radio) -->
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Flexi Payment" />
     <LinearLayout

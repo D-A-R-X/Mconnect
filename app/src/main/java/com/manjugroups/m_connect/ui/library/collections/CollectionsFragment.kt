@@ -7,10 +7,12 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.load
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentCollectionsBinding
@@ -55,6 +57,10 @@ class CollectionsFragment : Fragment() {
     private lateinit var adapter: CollectionsAdapter
     private val masterList = mutableListOf<CollectionItem>()
     private val rowsById = mutableMapOf<String, CustomerCollectionRow>()
+    // Storage-id → signed URL cache. /api/storage/get-url issues signed
+    // URLs with TTLs comfortably longer than a screen session, so a
+    // single fetch per id covers all scroll rebinds.
+    private val proofUrlCache = mutableMapOf<String, String>()
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
@@ -85,9 +91,37 @@ class CollectionsFragment : Fragment() {
             onRejectClick = { /* executive can't reject */ }
             onRectifyClick = { item -> startRectifyFlow(item) }
             onImageClick = { item -> showFullscreenImagePreview(item) }
+            proofLoader = { storageId, target -> loadProofThumbnail(storageId, target) }
         }
         binding.rvCollections.layoutManager = LinearLayoutManager(requireContext())
         binding.rvCollections.adapter = adapter
+    }
+
+    private fun loadProofThumbnail(storageId: String, target: ImageView) {
+        // No `placeholder`/`error` drawables here — the adapter cleared
+        // the ImageView before calling us so a blank tile is the right
+        // intermediate state. Painting a cash-mock placeholder would
+        // re-introduce the flash the adapter just suppressed.
+        val cached = proofUrlCache[storageId]
+        if (cached != null) {
+            target.load(cached) { crossfade(true) }
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    storage.getStorageUrl(session.bearerToken, storageId)
+                }
+                val url = resp.url
+                if (resp.success && !url.isNullOrBlank()) {
+                    proofUrlCache[storageId] = url
+                    target.load(url) { crossfade(true) }
+                }
+            } catch (_: Exception) {
+                // Leave the tile blank; one row's failure shouldn't
+                // toast on every scroll.
+            }
+        }
     }
 
     private fun setupListeners() {
@@ -299,9 +333,15 @@ class CollectionsFragment : Fragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
-            // Photos live in Convex storage; we don't yet stream them
-            // back to mobile, so render a placeholder.
-            setImageResource(R.drawable.ic_cash_proof)
+        }
+        // Resolve the proof's signed URL via the same code path the
+        // list thumbnail uses — Coil shares its bitmap cache across
+        // ImageView targets, so the URL the list pre-warmed is reused
+        // here without a second network round-trip. Leaving the view
+        // blank during the brief resolve avoids flashing the cash mock.
+        val storageId = item.proofStorageId?.takeIf { it.isNotBlank() }
+        if (storageId != null) {
+            loadProofThumbnail(storageId, imageView)
         }
         root.addView(imageView)
         val density = resources.displayMetrics.density

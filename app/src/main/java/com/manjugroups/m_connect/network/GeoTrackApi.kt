@@ -245,6 +245,14 @@ interface GeoTrackApi {
         @Query("mobile") mobile: String,
     ): PostSaleCasesByMobileResponse
 
+    // Powers the Collection Creations sheet's Select Booking
+    // dropdown. Returns the same trimmed PostSaleCaseSummary shape so
+    // the mobile DTO is reused.
+    @GET("api/postsales/cases/list")
+    suspend fun listOpenBookings(
+        @Header("Authorization") token: String,
+    ): PostSaleCasesByMobileResponse
+
     @POST("api/postsales/collections/submit")
     suspend fun submitCustomerCollection(
         @Header("Authorization") token: String,
@@ -395,8 +403,11 @@ interface GeoTrackApi {
             // visit call goes through this client, and a stale token
             // would silently fail tracking + outcome flows otherwise.
             val authWatchdog = okhttp3.Interceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.code == 401) {
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // Skip auto-logout when the outgoing request used the dev
+                // bypass token (see ApiService.isBypassAuth for context).
+                if (response.code == 401 && !isBypassAuth(request)) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -414,6 +425,12 @@ interface GeoTrackApi {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(GeoTrackApi::class.java)
+        }
+
+        private fun isBypassAuth(request: okhttp3.Request): Boolean {
+            val header = request.header("Authorization") ?: return false
+            val token = header.removePrefix("Bearer ").trim()
+            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
         }
     }
 }
