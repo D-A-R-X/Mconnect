@@ -95,9 +95,7 @@ class PostSalesVerificationFragment : Fragment() {
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
-        // No placeholder/error mocks — adapter cleared the view so a
-        // blank tile is the correct intermediate state until Coil
-        // crossfades the real image in.
+        // No placeholder/error mocks — adapter pre-cleared the tile.
         val cached = proofUrlCache[storageId]
         if (cached != null) {
             target.load(cached) { crossfade(true) }
@@ -114,7 +112,7 @@ class PostSalesVerificationFragment : Fragment() {
                     target.load(url) { crossfade(true) }
                 }
             } catch (_: Exception) {
-                // Silent; leave the tile blank.
+                // Silent.
             }
         }
     }

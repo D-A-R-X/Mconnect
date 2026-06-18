@@ -11,7 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 
 data class LoanDeskItem(
-    val id: String,
+    val id: String, // postSaleLoanCases._id — what /accept, /reject, /assign address
     val name: String,
     val phone: String,
     val amount: String,
@@ -24,7 +24,14 @@ data class LoanDeskItem(
     var doc2Name: String? = null,
     var doc3Name: String? = null,
     var doc4Name: String? = null,
-    var assignedTo: String? = null
+    var assignedTo: String? = null,
+    // Post-sale case id — needed by /api/postsales/loans/submit when
+    // Sales rectifies a rejected row or files docs for a fresh case.
+    val caseId: String? = null,
+    // business / salaried / pension — drives the document-checklist
+    // labels on the server. Defaulted to "salaried" when missing so the
+    // mobile submit path always has a value to send.
+    val applicantType: String? = null,
 )
 
 class LoanDeskAdapter(
