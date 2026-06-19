@@ -24,11 +24,10 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
-import com.manjugroups.m_connect.notifications.PushTokenManager
 import java.util.Locale
 
 /**
- * Non-dismissible gate Bottom Sheet — premium mockup UI with Switches.
+ * Non-dismissible gate Bottom Sheet — premium mockup UI with Custom Switches.
  * Auto-dismisses when all mandatory permissions are granted.
  */
 class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
@@ -37,7 +36,6 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         private const val TAG = "BackgroundPermissionsGateDialog"
         private const val REQUEST_BG_LOCATION = 1001
         private const val REQUEST_FG_LOCATION = 1002
-        private const val REQUEST_NOTIF_PERMISSION = 1003
 
         fun hasBackgroundLocation(ctx: Context): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
@@ -119,24 +117,25 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         // Click row elements to trigger relevant permission logic
         view.findViewById<View>(R.id.rowLocation).setOnClickListener {
             val ctx = requireContext()
-            val locOk = isDeviceLocationEnabled(ctx) && hasForegroundLocation(ctx) && hasBackgroundLocation(ctx)
-            if (!locOk) {
+            val deviceLocationOk = isDeviceLocationEnabled(ctx)
+            val fgOk = hasForegroundLocation(ctx)
+            if (!deviceLocationOk || !fgOk) {
                 openDeviceLocationSettings()
             } else {
                 showRevokeToast()
             }
         }
 
-        view.findViewById<View>(R.id.rowNotifications).setOnClickListener {
+        view.findViewById<View>(R.id.rowBgLocation).setOnClickListener {
             val ctx = requireContext()
-            if (!PushTokenManager.hasNotificationPermission(ctx)) {
-                openNotificationsSettings()
+            if (!hasBackgroundLocation(ctx)) {
+                openBackgroundLocationSettings()
             } else {
                 showRevokeToast()
             }
         }
 
-        view.findViewById<View>(R.id.rowOffers).setOnClickListener {
+        view.findViewById<View>(R.id.rowBatteryOpt).setOnClickListener {
             val ctx = requireContext()
             if (!hasBatteryOptIgnored(ctx)) {
                 openBatteryOptimizationSettings()
@@ -145,10 +144,10 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             }
         }
 
-        view.findViewById<View>(R.id.rowSpamFilter).setOnClickListener {
+        view.findViewById<View>(R.id.rowAutostart).setOnClickListener {
             val ctx = requireContext()
-            val current = isSpamFilterEnabled(ctx)
-            setSpamFilterEnabled(ctx, !current)
+            val current = isAutostartEnabled(ctx)
+            setAutostartEnabled(ctx, !current)
             if (!current && isAutostartManaged()) {
                 openOemAutostartSettings()
             }
@@ -187,9 +186,6 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             REQUEST_BG_LOCATION -> {
                 recheckAndMaybeDismiss()
             }
-            REQUEST_NOTIF_PERMISSION -> {
-                recheckAndMaybeDismiss()
-            }
         }
     }
 
@@ -220,13 +216,19 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
-        val notifOk = PushTokenManager.hasNotificationPermission(ctx)
-        val spamFilterOk = isSpamFilterEnabled(ctx)
+        val autostartOk = isAutostartEnabled(ctx)
 
-        root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk && bgOk
-        root.findViewById<SwitchCompat>(R.id.switchNotifications).isChecked = notifOk
-        root.findViewById<SwitchCompat>(R.id.switchOffers).isChecked = batOk
-        root.findViewById<SwitchCompat>(R.id.switchSpamFilter).isChecked = spamFilterOk
+        root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk
+        root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
+        root.findViewById<SwitchCompat>(R.id.switchBatteryOpt).isChecked = batOk
+        
+        val autoRow = root.findViewById<View>(R.id.rowAutostart)
+        if (isAutostartManaged()) {
+            autoRow.visibility = View.VISIBLE
+        } else {
+            autoRow.visibility = View.GONE
+        }
+        root.findViewById<SwitchCompat>(R.id.switchAutostart).isChecked = autostartOk
     }
 
     // ── Settings launchers ──────────────────────────────────────
@@ -239,8 +241,6 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
                 REQUEST_FG_LOCATION,
             )
-        } else if (!hasBackgroundLocation(ctx)) {
-            openBackgroundLocationSettings()
         } else if (!isDeviceLocationEnabled(ctx)) {
             runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
                 .onFailure { openAppDetailsSettings() }
@@ -258,18 +258,6 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             requestPermissions(
                 arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
                 REQUEST_BG_LOCATION,
-            )
-        } else {
-            openAppDetailsSettings()
-        }
-    }
-
-    private fun openNotificationsSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            @Suppress("DEPRECATION")
-            requestPermissions(
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                REQUEST_NOTIF_PERMISSION,
             )
         } else {
             openAppDetailsSettings()
@@ -353,15 +341,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             brand.contains("oneplus")
     }
 
-    private fun isSpamFilterEnabled(ctx: Context): Boolean {
+    private fun isAutostartEnabled(ctx: Context): Boolean {
         return ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
-            .getBoolean("spam_filter_enabled", false)
+            .edit() // wait, getBoolean doesn't need edit. Just use getBoolean:
+            .let { ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE).getBoolean("autostart_enabled", false) }
     }
 
-    private fun setSpamFilterEnabled(ctx: Context, enabled: Boolean) {
+    private fun setAutostartEnabled(ctx: Context, enabled: Boolean) {
         ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
             .edit()
-            .putBoolean("spam_filter_enabled", enabled)
+            .putBoolean("autostart_enabled", enabled)
             .apply()
     }
 }

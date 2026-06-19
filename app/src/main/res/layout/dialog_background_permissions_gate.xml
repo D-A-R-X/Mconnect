@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Premium permissions gate Bottom Sheet — pixel-perfect match to the new mockup:
+  Premium permissions gate Bottom Sheet — pixel-perfect match to the mockup:
     • Rounded top corners (32dp) bottom sheet card
     • Drag handle at the top
-    • Large 3D hero checkmark shield illustration
+    • Large 3D hero checkmark shield illustration (upsized to 300x190dp)
     • "Before we get started" — bold title
     • "We need a few permissions to give you the best experience." — subtitle
     • 4 flat permission rows with 48dp colored circular icon bases, bold title, description,
-      and custom right-aligned Toggle Switches (no borders, no chevrons)
+      and custom right-aligned Toggle Switches (with custom track and white circular thumb)
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -30,8 +30,8 @@
     <!-- ── 3D Hero illustration — large, prominent ────────────── -->
     <ImageView
         android:id="@+id/ivGateShield"
-        android:layout_width="240dp"
-        android:layout_height="160dp"
+        android:layout_width="300dp"
+        android:layout_height="190dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="20dp"
         android:adjustViewBounds="true"
@@ -62,7 +62,7 @@
         android:textSize="14sp"
         android:lineSpacingExtra="3dp" />
 
-    <!-- ── Row 1: Location ─────────────────────────────────────── -->
+    <!-- ── Row 1: Location Access ──────────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowLocation"
         android:layout_width="match_parent"
@@ -98,7 +98,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Location"
+                android:text="Location Access"
                 android:textColor="#101828"
                 android:textSize="16sp" />
             <TextView
@@ -106,7 +106,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="To find nearby stores and exclusive local deals"
+                android:text="Allow app to access your device location"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -115,14 +115,18 @@
             android:id="@+id/switchLocation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
             android:clickable="false"
             android:focusable="false"
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
-    <!-- ── Row 2: Notifications ────────────────────────────────── -->
+    <!-- ── Row 2: Background Location ──────────────────────────── -->
     <LinearLayout
-        android:id="@+id/rowNotifications"
+        android:id="@+id/rowBgLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
@@ -156,7 +160,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Notifications"
+                android:text="Background Location"
                 android:textColor="#101828"
                 android:textSize="16sp" />
             <TextView
@@ -164,23 +168,27 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Get instant alerts for limited-time offers"
+                android:text="Allow app to access location in the background"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>
 
         <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switchNotifications"
+            android:id="@+id/switchBgLocation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
             android:clickable="false"
             android:focusable="false"
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
-    <!-- ── Row 3: Offers ───────────────────────────────────────── -->
+    <!-- ── Row 3: Battery Optimization ─────────────────────────── -->
     <LinearLayout
-        android:id="@+id/rowOffers"
+        android:id="@+id/rowBatteryOpt"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
@@ -200,7 +208,7 @@
                 android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_gate_vector_ticket" />
+                android:src="@drawable/ic_gate_vector_battery" />
         </FrameLayout>
 
         <LinearLayout
@@ -214,7 +222,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Offers"
+                android:text="Battery Optimization"
                 android:textColor="#101828"
                 android:textSize="16sp" />
             <TextView
@@ -222,23 +230,27 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Personalized coupons sent directly to you"
+                android:text="Disable battery optimization for reliable performance"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>
 
         <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switchOffers"
+            android:id="@+id/switchBatteryOpt"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
             android:clickable="false"
             android:focusable="false"
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
-    <!-- ── Row 4: Spam Filter ──────────────────────────────────── -->
+    <!-- ── Row 4: Auto Start ───────────────────────────────────── -->
     <LinearLayout
-        android:id="@+id/rowSpamFilter"
+        android:id="@+id/rowAutostart"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
@@ -272,23 +284,28 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Spam Filter"
+                android:text="Auto Start"
                 android:textColor="#101828"
                 android:textSize="16sp" />
             <TextView
+                android:id="@+id/tvAutostartHint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Keeps your inbox clean from junk mail"
+                android:text="Allow app to start automatically on device boot"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>
 
         <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switchSpamFilter"
+            android:id="@+id/switchAutostart"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
             android:clickable="false"
             android:focusable="false"
             android:focusableInTouchMode="false" />
