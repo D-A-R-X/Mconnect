@@ -560,9 +560,7 @@ class AppLibraryFragment : Fragment() {
             label.setTextColor(Color.parseColor("#0B61CA"))
             indicator.visibility = View.VISIBLE
         } else {
-            // No circle background for inactive tabs — just the icon
-            // on the panel surface, the way the reference shows it.
-            icon.background = null
+            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_inactive)
             icon.imageTintList = android.content.res.ColorStateList.valueOf(
                 Color.parseColor("#6A6D78")
             )
