@@ -6,6 +6,7 @@ import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ItemCollectionBinding
@@ -22,6 +23,12 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     var onRejectClick: ((CollectionItem) -> Unit)? = null
     var onRectifyClick: ((CollectionItem) -> Unit)? = null
     var onImageClick: ((CollectionItem) -> Unit)? = null
+    // Fragment-provided hook: takes the server-side _storage id, resolves
+    // it to a signed URL (/api/storage/get-url), and loads the result
+    // into the row's thumbnail ImageView via Coil. The fragment owns the
+    // coroutine scope + bearer token + a URL cache so we don't refetch
+    // the same id on every scroll bind.
+    var proofLoader: ((storageId: String, target: ImageView) -> Unit)? = null
 
     fun submit(list: List<CollectionItem>) {
         items.clear()
@@ -71,20 +78,27 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 }
             }
 
-            // Proof thumbnail
-            val photoPath = item.photoPath
-            if (photoPath != null) {
-                val file = File(photoPath)
-                if (file.exists()) {
+            // Proof thumbnail. No placeholder mock — hide the tile
+            // entirely when there's nothing to show; render the real
+            // image when we have one. The slot stays empty rather
+            // than painting a cash icon for rows that were submitted
+            // without a proof attachment.
+            val storageId = item.proofStorageId?.takeIf { it.isNotBlank() }
+            val localPath = item.photoPath?.takeIf { it.isNotBlank() }
+            when {
+                storageId != null && proofLoader != null -> {
                     b.cardThumbnail.visibility = View.VISIBLE
-                    b.ivThumbnail.setImageURI(Uri.fromFile(file))
-                } else {
-                    b.cardThumbnail.visibility = View.VISIBLE
-                    b.ivThumbnail.setImageResource(R.drawable.ic_cash_proof)
+                    b.ivThumbnail.setImageDrawable(null)
+                    proofLoader?.invoke(storageId, b.ivThumbnail)
                 }
-            } else {
-                b.cardThumbnail.visibility = View.VISIBLE
-                b.ivThumbnail.setImageResource(R.drawable.ic_cash_proof)
+                localPath != null && File(localPath).exists() -> {
+                    b.cardThumbnail.visibility = View.VISIBLE
+                    b.ivThumbnail.setImageURI(Uri.fromFile(File(localPath)))
+                }
+                else -> {
+                    b.cardThumbnail.visibility = View.GONE
+                    b.ivThumbnail.setImageDrawable(null)
+                }
             }
 
             // Role and Status visibility configuration

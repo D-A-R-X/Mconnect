@@ -245,11 +245,100 @@ interface GeoTrackApi {
         @Query("mobile") mobile: String,
     ): PostSaleCasesByMobileResponse
 
+    // Powers the Collection Creations sheet's Select Booking
+    // dropdown. Returns the same trimmed PostSaleCaseSummary shape so
+    // the mobile DTO is reused.
+    @GET("api/postsales/cases/list")
+    suspend fun listOpenBookings(
+        @Header("Authorization") token: String,
+    ): PostSaleCasesByMobileResponse
+
     @POST("api/postsales/collections/submit")
     suspend fun submitCustomerCollection(
         @Header("Authorization") token: String,
         @Body body: SubmitCollectionRequest,
     ): SubmitCollectionResponse
+
+    // ── Collections: Library list + Accounts verification queue ─────
+    // Wraps customerCollections.listByStaff / listForAccounts so the
+    // two new Library screens (Sales-Executive Collections + Accounts
+    // Post-Sales Verification) can populate without going through the
+    // Convex JS client. Approve / reject hit updateVerification with
+    // the bearer-auth caller stamped as verifiedByStaffId.
+
+    @GET("api/postsales/collections/my")
+    suspend fun listMyCustomerCollections(
+        @Header("Authorization") token: String,
+        @Query("verificationStatus") verificationStatus: String? = null,
+    ): CustomerCollectionsListResponse
+
+    @GET("api/postsales/collections/for-accounts")
+    suspend fun listCustomerCollectionsForAccounts(
+        @Header("Authorization") token: String,
+    ): CustomerCollectionsListResponse
+
+    @POST("api/postsales/collections/approve")
+    suspend fun approveCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: ApproveCollectionRequest,
+    ): VerifyCollectionResponse
+
+    @POST("api/postsales/collections/reject")
+    suspend fun rejectCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: RejectCollectionRequest,
+    ): VerifyCollectionResponse
+
+    // ── Loan Desk: 3-role workflow ──────────────────────────────────
+    // Sales Team submits with 4 documents; Legal Manager assigns the
+    // case to a Legal Team staffer (server-side guard ensures only the
+    // assignee can act); Legal Team accepts or rejects with required
+    // remarks. See convex/postSales.ts for the state machine.
+
+    @GET("api/postsales/loans/forSales")
+    suspend fun listLoanDeskForSales(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null,
+    ): LoanDeskCasesResponse
+
+    @GET("api/postsales/loans/forLegalManager")
+    suspend fun listLoanDeskForLegalManager(
+        @Header("Authorization") token: String,
+    ): LoanDeskCasesResponse
+
+    @GET("api/postsales/loans/forLegalTeam")
+    suspend fun listLoanDeskForLegalTeam(
+        @Header("Authorization") token: String,
+    ): LoanDeskCasesResponse
+
+    @GET("api/postsales/loans/legalStaff")
+    suspend fun listLegalStaffForLoanDesk(
+        @Header("Authorization") token: String,
+    ): LegalStaffListResponse
+
+    @POST("api/postsales/loans/submit")
+    suspend fun submitLoanRequest(
+        @Header("Authorization") token: String,
+        @Body body: SubmitLoanRequest,
+    ): LoanCaseEnvelope
+
+    @POST("api/postsales/loans/assign")
+    suspend fun assignLoanToLegalStaff(
+        @Header("Authorization") token: String,
+        @Body body: AssignLoanRequest,
+    ): LoanCaseEnvelope
+
+    @POST("api/postsales/loans/accept")
+    suspend fun legalAcceptLoan(
+        @Header("Authorization") token: String,
+        @Body body: LoanCaseIdBody,
+    ): LoanCaseEnvelope
+
+    @POST("api/postsales/loans/reject")
+    suspend fun legalRejectLoan(
+        @Header("Authorization") token: String,
+        @Body body: LegalRejectLoanRequest,
+    ): LoanCaseEnvelope
 
     // ── Site Visits (mobile outcome sheet) ──────────────────────────
     // The CompleteCpVisitBottomSheet drives the same outcome capture
@@ -365,8 +454,11 @@ interface GeoTrackApi {
             // visit call goes through this client, and a stale token
             // would silently fail tracking + outcome flows otherwise.
             val authWatchdog = okhttp3.Interceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.code == 401) {
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // Skip auto-logout when the outgoing request used the dev
+                // bypass token (see ApiService.isBypassAuth for context).
+                if (response.code == 401 && !isBypassAuth(request)) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -384,6 +476,12 @@ interface GeoTrackApi {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(GeoTrackApi::class.java)
+        }
+
+        private fun isBypassAuth(request: okhttp3.Request): Boolean {
+            val header = request.header("Authorization") ?: return false
+            val token = header.removePrefix("Bearer ").trim()
+            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
         }
     }
 }
@@ -898,7 +996,7 @@ data class PostSaleCaseSummary(
     val balanceAmount: Double = 0.0,
     val tenPercentAmount: Double = 0.0,
     val currentStage: String? = null,
-)
+) : java.io.Serializable
 
 data class PostSaleCasesByMobileResponse(
     val success: Boolean = false,
@@ -928,6 +1026,174 @@ data class SubmitCollectionResponse(
     val success: Boolean = false,
     val collectionId: String? = null,
     val collectionRefNo: String? = null,
+    val error: String? = null,
+)
+
+/**
+ * One customerCollections row enriched with the case/booking caption
+ * strings the two Library screens need. The "my" feed and the
+ * "for-accounts" feed both return this shape — only `receipt` is
+ * accounts-only and stays null on the executive's list.
+ *
+ * `customerPaymentCategory` is what the executive's UI uses to bucket
+ * a row as SELF_FINANCE (`cash_in_hand`) vs BANK_LOAN (`loan`). It
+ * comes from the booking's payment category, not from any field on
+ * the collection itself, so it can be null if the underlying case is
+ * deleted.
+ */
+data class CustomerCollectionRow(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val collectionRefNo: String,
+    val caseId: String,
+    val bookingId: String,
+    val amount: Double = 0.0,
+    val collectionDate: String? = null,
+    val paymentMode: String,
+    val transactionReference: String? = null,
+    val bankName: String? = null,
+    val notes: String? = null,
+    val collectedByName: String? = null,
+    val collectedByStaffId: String? = null,
+    val proofStorageId: String? = null,
+    val proofFileName: String? = null,
+    val verificationStatus: String,
+    val verificationNotes: String? = null,
+    val verifiedByName: String? = null,
+    val verifiedAt: String? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+    val customerName: String? = null,
+    val bookingRefNo: String? = null,
+    val projectName: String? = null,
+    val plotNo: String? = null,
+    val customerPaymentCategory: String? = null,
+)
+
+data class CustomerCollectionsListResponse(
+    val success: Boolean = false,
+    val collections: List<CustomerCollectionRow> = emptyList(),
+    val error: String? = null,
+)
+
+/** Accountant taps Approve. `notes` is optional remarks attached to
+ *  the approval — most flows leave it empty. */
+data class ApproveCollectionRequest(
+    val collectionId: String,
+    val notes: String? = null,
+)
+
+/** Accountant taps Reject. `remarks` is required — server returns 400
+ *  if missing. Drives the rejected-row's "Rectify" prefill on the
+ *  executive's side. */
+data class RejectCollectionRequest(
+    val collectionId: String,
+    val remarks: String,
+)
+
+data class VerifyCollectionResponse(
+    val success: Boolean = false,
+    val collection: CustomerCollectionRow? = null,
+    val error: String? = null,
+)
+
+// ── Loan Desk DTOs ──────────────────────────────────────────────────
+//
+// Mirrors `enrichLoanCaseForMobile` on the server: the same row shape
+// is returned by all three list endpoints (Sales / Legal Manager /
+// Legal Team). The mobile UI only renders a subset of these fields,
+// but keeping the full payload lets later screens (case detail,
+// audit log) reuse the same DTO without a second fetch.
+
+data class LoanCaseDocument(
+    val label: String = "",
+    val storageId: String? = null,
+    val fileName: String? = null,
+    val approved: Boolean? = null,
+)
+
+data class LoanCaseRow(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val caseId: String,
+    val bookingId: String,
+    val name: String = "",
+    val phone: String = "",
+    val amount: Double = 0.0,
+    val location: String = "",
+    val date: String? = null,
+    val statusLabel: String = "",
+    val status: String = "",
+    val applicantType: String? = null,
+    val requestedAmount: Double? = null,
+    val sanctionedAmount: Double? = null,
+    val documentsChecklist: List<LoanCaseDocument> = emptyList(),
+    val documentLabels: List<String> = emptyList(),
+    val documentCount: Int = 0,
+    val legalAssignedStaffId: String? = null,
+    val legalAssignedName: String? = null,
+    val legalAssignedAt: String? = null,
+    val legalRejectionRemarks: String? = null,
+    val legalClearedAt: String? = null,
+    val legalClearedByName: String? = null,
+    val submittedByStaffId: String? = null,
+    val submittedByName: String? = null,
+    val bookingRefNo: String? = null,
+    val projectName: String? = null,
+    val plotNo: String? = null,
+)
+
+data class LoanDeskCasesResponse(
+    val success: Boolean = false,
+    val cases: List<LoanCaseRow> = emptyList(),
+    val error: String? = null,
+)
+
+data class LegalStaffRow(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val name: String = "",
+    val designation: String? = null,
+    val department: String? = null,
+    val employeeId: String? = null,
+)
+
+data class LegalStaffListResponse(
+    val success: Boolean = false,
+    val staff: List<LegalStaffRow> = emptyList(),
+    val error: String? = null,
+)
+
+/** One document slot — paired storageId + fileName. The server fills
+ *  the checklist labels from the loan applicant type, matching on
+ *  label name (case-insensitive) so the mobile picker only has to
+ *  send the four files it actually has. */
+data class SubmitLoanDocument(
+    val label: String,
+    val storageId: String,
+    val fileName: String? = null,
+)
+
+data class SubmitLoanRequest(
+    val caseId: String,
+    val applicantType: String, // business | salaried | pension
+    val requestedAmount: Double? = null,
+    val documents: List<SubmitLoanDocument>,
+)
+
+data class AssignLoanRequest(
+    val loanCaseId: String,
+    val legalStaffId: String,
+    val legalStaffName: String,
+)
+
+data class LoanCaseIdBody(val loanCaseId: String)
+
+data class LegalRejectLoanRequest(
+    val loanCaseId: String,
+    val remarks: String,
+)
+
+data class LoanCaseEnvelope(
+    val success: Boolean = false,
+    val loanCase: LoanCaseRow? = null,
     val error: String? = null,
 )
 

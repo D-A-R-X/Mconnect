@@ -13,7 +13,12 @@ data class CollectionItem(
     var dateString: String,
     var status: CollectionStatus,
     var type: CollectionType,
-    var remarks: String? = null
+    var remarks: String? = null,
+    // Convex `_storage` id from the server. Resolved to a signed URL
+    // at list-render time via /api/storage/get-url and loaded into
+    // the thumbnail with Coil. Null when the executive submitted the
+    // collection without a proof attachment.
+    var proofStorageId: String? = null,
 ) : Serializable
 
 enum class CollectionStatus {
