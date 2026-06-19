@@ -22,7 +22,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.DialogFragment
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
 import java.util.Locale
@@ -34,7 +36,7 @@ import java.util.Locale
  * Auto-dismisses the moment all checks pass (via onResume + delayed
  * re-checks for OEM skins that propagate state asynchronously).
  */
-class BackgroundPermissionsGateDialog : DialogFragment() {
+class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     companion object {
         private const val TAG = "BackgroundPermissionsGateDialog"
@@ -90,17 +92,23 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
 
     // ── Lifecycle ──────────────────────────────────────────────────
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setStyle(STYLE_NO_TITLE, R.style.ChatMessageActionsDialogTheme)
-    }
-
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = super.onCreateDialog(savedInstanceState)
+        val dialog = BottomSheetDialog(requireContext(), theme)
         dialog.setCanceledOnTouchOutside(false)
         dialog.setCancelable(false)
         isCancelable = false
         dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog)
+                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundResource(android.R.color.transparent)
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                behavior.isDraggable = false
+            }
+        }
         return dialog
     }
 
@@ -109,14 +117,6 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View = inflater.inflate(R.layout.dialog_background_permissions_gate, container, false)
-
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        val width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
-        dialog?.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
-        dialog?.window?.setGravity(Gravity.CENTER)
-    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
