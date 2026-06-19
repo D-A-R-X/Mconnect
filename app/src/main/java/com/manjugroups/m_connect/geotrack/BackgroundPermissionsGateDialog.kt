@@ -107,7 +107,7 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     override fun onStart() {
         super.onStart()
         dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        val width = (resources.displayMetrics.widthPixels * 0.90f).toInt()
+        val width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
         dialog?.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
         dialog?.window?.setGravity(Gravity.CENTER)
     }

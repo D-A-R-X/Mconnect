@@ -1,28 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Premium permissions gate dialog — matches the exact mockup:
-    • 3D hero shield illustration at top
-    • "Let's get you set up!" title + subtitle
-    • 4 permission rows with 3D icons, "Enable" / "✓ Enabled" badges, chevrons
-    • Clean white card, no Continue button, auto-dismisses
+  Premium permissions gate dialog — pixel-perfect match to the mockup:
+    • Large 3D hero shield illustration (overflows top slightly)
+    • "Let's get you set up!" — 24sp bold title
+    • "Enable key permissions for a smooth experience." — 14sp subtitle
+    • 4 rows with 60dp 3D icons, 16sp bold title, 13sp description,
+      "✓ Enabled" / "Enable" pill badge, chevron
+    • 92% screen width, centered, 28dp corners
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_gate_dialog"
+    android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="20dp">
+    android:paddingStart="18dp"
+    android:paddingEnd="18dp"
+    android:paddingBottom="22dp">
 
-    <!-- ── 3D Hero illustration ─────────────────────────────────── -->
+    <!-- ── 3D Hero illustration — large, prominent ──────────────── -->
     <ImageView
         android:id="@+id/ivGateShield"
-        android:layout_width="180dp"
-        android:layout_height="140dp"
+        android:layout_width="240dp"
+        android:layout_height="160dp"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="-8dp"
         android:adjustViewBounds="true"
         android:contentDescription="@null"
         android:scaleType="fitCenter"
@@ -32,42 +35,42 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Let's get you set up!"
         android:textColor="#101828"
-        android:textSize="20sp" />
+        android:textSize="24sp" />
 
     <!-- ── Subtitle ─────────────────────────────────────────────── -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:fontFamily="@font/inter_regular"
         android:gravity="center"
         android:text="Enable key permissions for\na smooth experience."
         android:textColor="#6B7280"
-        android:textSize="13sp"
-        android:lineSpacingExtra="2dp" />
+        android:textSize="14sp"
+        android:lineSpacingExtra="3dp" />
 
     <!-- ── Row 1: Location Access ───────────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowDeviceLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="18dp"
         android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingTop="10dp"
+        android:paddingTop="12dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="12dp">
 
         <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:adjustViewBounds="true"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
@@ -76,7 +79,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
             <TextView
@@ -85,15 +88,15 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Location Access"
                 android:textColor="#101828"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
                 android:text="Verify your location"
                 android:textColor="#6B7280"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- Enable / Enabled badge -->
@@ -105,13 +108,13 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="8dp"
-            android:paddingTop="5dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="5dp">
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp">
             <ImageView
                 android:id="@+id/iconDeviceLocationCheck"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_gate_check_circle" />
             <TextView
@@ -124,13 +127,13 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Enabled"
                 android:textColor="#10B981"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
@@ -140,18 +143,18 @@
         android:id="@+id/rowBgLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingTop="10dp"
+        android:paddingTop="12dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="12dp">
 
         <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:adjustViewBounds="true"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
@@ -160,7 +163,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
             <TextView
@@ -169,15 +172,15 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Background Location"
                 android:textColor="#101828"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
                 android:text="Keep tracking in background"
                 android:textColor="#6B7280"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -188,13 +191,13 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="8dp"
-            android:paddingTop="5dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="5dp">
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp">
             <ImageView
                 android:id="@+id/iconBgLocationCheck"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_gate_check_circle" />
             <TextView
@@ -207,13 +210,13 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Enabled"
                 android:textColor="#10B981"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
@@ -223,18 +226,18 @@
         android:id="@+id/rowBatteryOpt"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingTop="10dp"
+        android:paddingTop="12dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="12dp">
 
         <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:adjustViewBounds="true"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
@@ -243,7 +246,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
             <TextView
@@ -252,15 +255,15 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Battery Optimization"
                 android:textColor="#101828"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
                 android:text="Prevent interruptions"
                 android:textColor="#6B7280"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -271,13 +274,13 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="8dp"
-            android:paddingTop="5dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="5dp">
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp">
             <ImageView
                 android:id="@+id/iconBatteryOptCheck"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_gate_check_circle" />
             <TextView
@@ -290,13 +293,13 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Enabled"
                 android:textColor="#10B981"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
@@ -306,19 +309,19 @@
         android:id="@+id/rowAutostart"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:background="@drawable/bg_gate_row"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingTop="10dp"
+        android:paddingTop="12dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="10dp"
+        android:paddingBottom="12dp"
         android:visibility="gone">
 
         <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:adjustViewBounds="true"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
@@ -327,7 +330,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
             <TextView
@@ -336,16 +339,16 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Auto Start"
                 android:textColor="#101828"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
             <TextView
                 android:id="@+id/tvAutostartHint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
                 android:text="Launch automatically"
                 android:textColor="#6B7280"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -356,13 +359,13 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="8dp"
-            android:paddingTop="5dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="5dp">
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp">
             <ImageView
                 android:id="@+id/iconAutostartCheck"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_gate_check_circle" />
             <TextView
@@ -375,13 +378,13 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="Enabled"
                 android:textColor="#10B981"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_apps_chevron" />
     </LinearLayout>
