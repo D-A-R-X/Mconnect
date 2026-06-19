@@ -39,6 +39,7 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     companion object {
         private const val TAG = "BackgroundPermissionsGateDialog"
         private const val REQUEST_BG_LOCATION = 1001
+        private const val REQUEST_FG_LOCATION = 1002
 
         fun hasBackgroundLocation(ctx: android.content.Context): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
@@ -88,6 +89,11 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setStyle(STYLE_NO_TITLE, R.style.ChatMessageActionsDialogTheme)
+    }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState)
@@ -173,13 +179,19 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_BG_LOCATION) {
-            if (grantResults.isNotEmpty() &&
-                grantResults[0] != PackageManager.PERMISSION_GRANTED
-            ) {
-                openAppDetailsSettings()
+        when (requestCode) {
+            REQUEST_FG_LOCATION -> {
+                if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    if (!shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                        Toast.makeText(context, "Location permission is required. Please enable it in Settings.", Toast.LENGTH_LONG).show()
+                        openAppDetailsSettings()
+                    }
+                }
+                recheckAndMaybeDismiss()
             }
-            recheckAndMaybeDismiss()
+            REQUEST_BG_LOCATION -> {
+                recheckAndMaybeDismiss()
+            }
         }
     }
 
@@ -282,8 +294,17 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
     // ── Settings launchers ──────────────────────────────────────
 
     private fun openDeviceLocationSettings() {
-        runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-            .onFailure { openAppDetailsSettings() }
+        val ctx = context ?: return
+        if (!hasForegroundLocation(ctx)) {
+            @Suppress("DEPRECATION")
+            requestPermissions(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                REQUEST_FG_LOCATION,
+            )
+        } else if (!isDeviceLocationEnabled(ctx)) {
+            runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+                .onFailure { openAppDetailsSettings() }
+        }
     }
 
     /**
@@ -292,6 +313,11 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
      * permission screen with "Allow all the time". On Q, shows a dialog.
      */
     private fun openBackgroundLocationSettings() {
+        val ctx = context ?: return
+        if (!hasForegroundLocation(ctx)) {
+            Toast.makeText(ctx, "Please enable Location Access first.", Toast.LENGTH_LONG).show()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
             requestPermissions(
