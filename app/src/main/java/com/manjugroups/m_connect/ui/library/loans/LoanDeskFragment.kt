@@ -143,7 +143,7 @@ class LoanDeskFragment : Fragment() {
         tvSelectedRole = view.findViewById(R.id.tvSelectedRole)
         btnRoleSelector.visibility = View.GONE
 
-        val resolved = resolveRoleFromDesignation(session.designation)
+        val resolved = resolveRoleFromDesignation(session.designation, session.userName)
         if (resolved != null) {
             currentRole = resolved
             hasAccess = true
@@ -318,37 +318,59 @@ class LoanDeskFragment : Fragment() {
     }
 
     private fun openUploadSheet(item: LoanDeskItem, isViewMode: Boolean) {
-        val sheet = LoanDeskUploadBottomSheet.newInstance(item, isViewMode) { d1, d2, d3, d4 ->
-            // Sales-side submit: locate the 4 cached files emitted by
-            // the sheet, upload each through /api/storage/upload, then
-            // POST the submission. View-mode opens never invoke this
-            // callback so Legal Team / Legal Manager taps stay read-only.
+        // Pull the real per-case checklist from the cached server row.
+        // Each `documentsChecklist` entry carries:
+        //   - label   (the slot title — comes from Post-sales Settings)
+        //   - storageId / fileName (set when the doc has been uploaded)
+        // Render one row per checklist entry; pre-existing uploads pre-
+        // fill the row so the staff doesn't re-upload an approved doc.
+        val row = rowsByLoanCaseId[item.id]
+        val checklist = row?.documentsChecklist.orEmpty()
+        val labels = checklist.map { it.label }
+        val preExistingNames = checklist.map { it.fileName }
+        val preExistingStorageIds = checklist.map { it.storageId }
+
+        val sheet = LoanDeskUploadBottomSheet.newInstance(
+            requiredLabels = labels,
+            preExistingFileNames = preExistingNames,
+            preExistingStorageIds = preExistingStorageIds,
+            isViewMode = isViewMode,
+        ) { uploads ->
+            // Sales-side submit only — view-mode opens never invoke
+            // this callback so Legal Team / Legal Manager taps stay
+            // read-only.
             if (currentRole != RoleMode.SALES) return@newInstance
-            submitLoanFromSales(item, listOf(d1, d2, d3, d4))
+            submitLoanFromSales(item, uploads)
         }
         sheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }
 
-    private fun submitLoanFromSales(item: LoanDeskItem, fileNames: List<String>) {
+    private fun submitLoanFromSales(item: LoanDeskItem, uploads: Map<String, String>) {
         val caseId = item.caseId
         if (caseId.isNullOrBlank()) {
             toast("This row has no booking case linked")
             return
         }
+        if (uploads.isEmpty()) {
+            toast("Pick at least one document to upload")
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Upload each cached file in sequence — sequential keeps
-                // memory bounded on low-end devices (parallel uploads
-                // would peak at 4x the file size in heap at once).
+                // Upload each cached file in sequence — sequential
+                // keeps memory bounded on low-end devices (parallel
+                // uploads would peak at N× the file size in heap).
+                // The map preserves the real labels from Post-sales
+                // Settings, so the server matches them by name when
+                // updating documentsChecklist on the loan case.
                 val uploaded = mutableListOf<SubmitLoanDocument>()
-                val labels = listOf("PAN Card", "Aadhaar Card", "Bank Statement", "Pay Slip")
-                fileNames.forEachIndexed { index, name ->
+                for ((label, name) in uploads) {
                     val storageId = uploadCachedFile(name) ?: run {
                         toast("Could not upload $name")
                         return@launch
                     }
                     uploaded += SubmitLoanDocument(
-                        label = labels.getOrNull(index) ?: "Document ${index + 1}",
+                        label = label,
                         storageId = storageId,
                         fileName = name,
                     )
@@ -674,17 +696,24 @@ class LoanDeskFragment : Fragment() {
      * "contains Legal" Team bucket. Returns null when none of the
      * three known roles applies.
      */
-    private fun resolveRoleFromDesignation(designation: String?): RoleMode? {
-        val d = designation?.trim()?.lowercase(Locale.US) ?: return null
-        if (d.isBlank()) return null
-        if (d.contains("legal manager") || d.contains("legal head")) return RoleMode.LEGAL_MANAGER
-        if (d.contains("legal")) return RoleMode.LEGAL_TEAM
+    private fun resolveRoleFromDesignation(designation: String?, userName: String? = null): RoleMode? {
+        val d = designation?.trim()?.lowercase(Locale.US).orEmpty()
+        val n = userName?.trim()?.lowercase(Locale.US).orEmpty()
+        // Composite haystack: many real staff records carry the
+        // Loan-Desk role signal in the *name* rather than the
+        // designation (e.g. name="Legal Manager" but designation just
+        // "Manager"). Falling back to the name field keeps those rows
+        // out of the no-access bucket without needing a server change.
+        val h = (d + " " + n).trim()
+        if (h.isBlank()) return null
+        if (h.contains("legal manager") || h.contains("legal head")) return RoleMode.LEGAL_MANAGER
+        if (h.contains("legal")) return RoleMode.LEGAL_TEAM
         // Sales bucket — explicit BDO / Sales / Marketing executive
         // titles all funnel to the Sales submission queue. Anyone else
         // (Driver, HR, Accountant, …) falls through to null, which the
         // fragment treats as "no access" so unrelated roles can't see
         // the queue.
-        if (d.contains("sales") || d.contains("bdo") || d.contains("marketing")) return RoleMode.SALES
+        if (h.contains("sales") || h.contains("bdo") || h.contains("marketing")) return RoleMode.SALES
         return null
     }
 

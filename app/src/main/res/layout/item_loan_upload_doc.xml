@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One row of the Loan Desk upload sheet. Inflated once per required
+  document in the case's documentsChecklist by LoanDeskUploadBottomSheet,
+  so the slot count matches what's configured in Post-sales Settings
+  for the customer's applicantType (Business / Salaried / Pension)
+  instead of being hardcoded to 4.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp">
+
+        <TextView
+            android:id="@+id/tvDocTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:fontFamily="@font/inter_semibold"
+            android:textColor="#344054"
+            android:textSize="12sp"
+            tools:text="PAN Card *" />
+
+        <LinearLayout
+            android:id="@+id/btnCamera"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:paddingVertical="4dp"
+            android:paddingStart="8dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_header_camera_outline"
+                app:tint="#0B61CA"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Camera"
+                android:textColor="#0B61CA"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </RelativeLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="16dp">
+
+        <!-- Unuploaded — dashed drop zone -->
+        <LinearLayout
+            android:id="@+id/layoutUnuploaded"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_dash_upload"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingVertical="18dp"
+            android:paddingHorizontal="16dp">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_upload_cloud" />
+
+            <TextView
+                android:id="@+id/tvUnuploadedTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#344054"
+                android:textSize="14sp"
+                tools:text="Upload PAN Card" />
+
+            <TextView
+                android:id="@+id/tvUnuploadedSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:textColor="#98A2B3"
+                android:textSize="11sp"
+                tools:text="Max 2MB · JPG, PNG, PDF" />
+        </LinearLayout>
+
+        <!-- Uploaded — solid pill with file name + check -->
+        <RelativeLayout
+            android:id="@+id/layoutUploaded"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_loan_input_box"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:paddingHorizontal="12dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivDocIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_loan_document"
+                app:tint="#667085"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/tvUploadedName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@id/ivDocIcon"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="28dp"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp"
+                android:singleLine="true"
+                android:ellipsize="middle"
+                tools:text="pan_card_doc.pdf" />
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_leave_action_check"
+                app:tint="#1BCA0B"
+                android:importantForAccessibility="no" />
+        </RelativeLayout>
+    </FrameLayout>
+</LinearLayout>
