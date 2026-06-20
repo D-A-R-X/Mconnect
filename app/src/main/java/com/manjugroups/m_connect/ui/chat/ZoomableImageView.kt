@@ -77,6 +77,20 @@ class ZoomableImageView @JvmOverloads constructor(
         post { resetToFit() }
     }
 
+    /**
+     * Re-run the fit-center matrix now. Useful when the drawable's
+     * intrinsic dimensions weren't known at the moment
+     * [setImageDrawable] was first called — e.g. Coil's
+     * `CrossfadeDrawable` starts as a 0×0 placeholder and only
+     * resolves to the real bitmap size mid-animation, so the host can
+     * call this from a Coil `onSuccess` listener to re-center landscape
+     * images that otherwise stick at identity matrix (small image at
+     * top of the preview).
+     */
+    fun requestRecenter() {
+        post { resetToFit() }
+    }
+
     private fun resetToFit() {
         scale = 1f
         translateX = 0f

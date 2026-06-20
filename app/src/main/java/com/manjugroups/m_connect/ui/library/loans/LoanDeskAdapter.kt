@@ -208,8 +208,13 @@ class LoanDeskAdapter(
                     btnRectify.visibility = View.GONE
                     layoutRemarks.visibility = View.GONE
                     layoutLegalActions.visibility = View.GONE
-                    
-                    if (item.status == "App Received") {
+
+                    // Manager only needs the Assign button until a Legal
+                    // Officer has been picked. Once `assignedTo` is set
+                    // the row has done its job — keeping the button up
+                    // suggests the Manager can re-assign on top, which
+                    // would just churn the queue.
+                    if (item.status == "App Received" && item.assignedTo.isNullOrBlank()) {
                         btnAssign.visibility = View.VISIBLE
                         btnAssign.setOnClickListener { onAssignClick(item) }
                     } else {

@@ -7,7 +7,6 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -16,56 +15,73 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import coil.load
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import java.io.File
 
+/**
+ * Loan Desk document upload sheet — renders one row per required
+ * document, dynamically driven by the case's documentsChecklist on
+ * the server. The previous hardcoded 4-slot grid only worked for
+ * Salaried applicants and silently ignored Business / Pension docs
+ * configured under Post-sales Settings; this sheet matches whatever
+ * the BDO checklist on the web shows for the same case.
+ *
+ * In view-mode (Legal Manager / Legal Team / Sales-rejected review)
+ * each already-uploaded doc renders as a clickable file pill; the
+ * camera + dashed drop-zone are hidden so the sheet can't accept new
+ * uploads.
+ *
+ * The submit callback receives a map of `label → cached fileName`
+ * (only labels that have a freshly picked file land in the map). The
+ * parent fragment iterates that map to upload + post, so the server
+ * sees real labels like "Business Proof / GST Certificate" instead
+ * of the generic "Document 3".
+ */
 class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
-    private var onSubmitted: ((doc1: String, doc2: String, doc3: String, doc4: String) -> Unit)? = null
+    private data class DocSlotState(
+        val label: String,
+        val row: View,
+        val btnCamera: View,
+        val layoutUnuploaded: View,
+        val layoutUploaded: View,
+        val tvUploadedName: TextView,
+        var fileName: String? = null,
+        // Already approved/pending review on the server side. Renders
+        // as locked-uploaded; uploads still allowed (re-submit path)
+        // but the slot pre-populates with the existing fileName.
+        val preExistingFileName: String? = null,
+        // Convex `_storage` id for the pre-existing upload. Lets the
+        // preview fall through to /api/storage/get-url + Coil instead
+        // of looking for a local file the device never had.
+        val preExistingStorageId: String? = null,
+    )
 
-    // Track upload states for the 4 documents
-    private var isDoc1Uploaded = false
-    private var isDoc2Uploaded = false
-    private var isDoc3Uploaded = false
-    private var isDoc4Uploaded = false
-
-    private var doc1Name: String? = null
-    private var doc2Name: String? = null
-    private var doc3Name: String? = null
-    private var doc4Name: String? = null
-
-    private var activeSlot = 0
+    private val slots = mutableListOf<DocSlotState>()
+    private var activeSlotIndex = -1
     private var cameraFile: File? = null
     private var cameraUri: Uri? = null
-
-    private lateinit var layoutUnuploaded1: View
-    private lateinit var layoutUploaded1: View
-    private lateinit var tvUploadedName1: TextView
-
-    private lateinit var layoutUnuploaded2: View
-    private lateinit var layoutUploaded2: View
-    private lateinit var tvUploadedName2: TextView
-
-    private lateinit var layoutUnuploaded3: View
-    private lateinit var layoutUploaded3: View
-    private lateinit var tvUploadedName3: TextView
-
-    private lateinit var layoutUnuploaded4: View
-    private lateinit var layoutUploaded4: View
-    private lateinit var tvUploadedName4: TextView
+    private var isViewMode = false
 
     private lateinit var btnSubmit: TextView
 
-    // Launchers
+    private var onSubmitted: ((uploads: Map<String, String>) -> Unit)? = null
+
+    // ── File picker / camera launchers (shared across all slots) ──
+
     private val filePickerLauncher = registerForActivityResult(
         object : ActivityResultContracts.GetContent() {
             override fun createIntent(context: android.content.Context, input: String): Intent {
@@ -73,22 +89,17 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 intent.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf"))
                 return intent
             }
-        }
+        },
     ) { uri ->
         if (uri != null) {
-            val copiedFile = copyUriToCache(uri)
-            val name = copiedFile?.name ?: getFileName(uri) ?: when (activeSlot) {
-                1 -> "pan_card_doc.pdf"
-                2 -> "aadhaar_card_doc.pdf"
-                3 -> "bank_statement.pdf"
-                else -> "pay_slip.pdf"
-            }
-            onFileUploaded(activeSlot, name)
+            val copied = copyUriToCache(uri)
+            val name = copied?.name ?: getFileName(uri) ?: "document_${activeSlotIndex + 1}.pdf"
+            onFileUploaded(activeSlotIndex, name)
         }
     }
 
     private val cameraLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
+        ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         cameraUri?.let { uri ->
             runCatching {
@@ -101,22 +112,19 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             val f = cameraFile
             if (f != null && f.exists() && f.length() > 0) {
-                onFileUploaded(activeSlot, f.name)
+                onFileUploaded(activeSlotIndex, f.name)
             }
         }
     }
 
     private val cameraPermLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
-            launchCamera()
-        } else {
-            Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
-        }
+        if (granted) launchCamera()
+        else Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
     }
 
-    fun setOnSubmittedListener(listener: (doc1: String, doc2: String, doc3: String, doc4: String) -> Unit) {
+    fun setOnSubmittedListener(listener: (uploads: Map<String, String>) -> Unit) {
         this.onSubmitted = listener
     }
 
@@ -139,163 +147,166 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.bottom_sheet_loan_desk_upload, container, false)
-    }
+        savedInstanceState: Bundle?,
+    ): View? = inflater.inflate(R.layout.bottom_sheet_loan_desk_upload, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Bind Doc 1 Views (PAN Card)
-        val btnCamera1 = view.findViewById<View>(R.id.btnCamera1)
-        layoutUnuploaded1 = view.findViewById(R.id.layoutUnuploaded1)
-        layoutUploaded1 = view.findViewById(R.id.layoutUploaded1)
-        tvUploadedName1 = view.findViewById(R.id.tvUploadedName1)
-
-        // Bind Doc 2 Views (Aadhaar Card)
-        val btnCamera2 = view.findViewById<View>(R.id.btnCamera2)
-        layoutUnuploaded2 = view.findViewById(R.id.layoutUnuploaded2)
-        layoutUploaded2 = view.findViewById(R.id.layoutUploaded2)
-        tvUploadedName2 = view.findViewById(R.id.tvUploadedName2)
-
-        // Bind Doc 3 Views (Bank Statement)
-        val btnCamera3 = view.findViewById<View>(R.id.btnCamera3)
-        layoutUnuploaded3 = view.findViewById(R.id.layoutUnuploaded3)
-        layoutUploaded3 = view.findViewById(R.id.layoutUploaded3)
-        tvUploadedName3 = view.findViewById(R.id.tvUploadedName3)
-
-        // Bind Doc 4 Views (IT / Pay Slip)
-        val btnCamera4 = view.findViewById<View>(R.id.btnCamera4)
-        layoutUnuploaded4 = view.findViewById(R.id.layoutUnuploaded4)
-        layoutUploaded4 = view.findViewById(R.id.layoutUploaded4)
-        tvUploadedName4 = view.findViewById(R.id.tvUploadedName4)
+        isViewMode = arguments?.getBoolean("isViewMode", false) ?: false
+        val requiredLabels = arguments?.getStringArrayList(ARG_REQUIRED_LABELS).orEmpty()
+        val preExistingNames = arguments?.getStringArrayList(ARG_PRE_NAMES).orEmpty()
+        val preExistingStorageIds = arguments?.getStringArrayList(ARG_PRE_STORAGE_IDS).orEmpty()
 
         btnSubmit = view.findViewById(R.id.btnSubmitUploads)
+        val docsContainer = view.findViewById<LinearLayout>(R.id.docsContainer)
 
-        val isViewMode = arguments?.getBoolean("isViewMode", false) ?: false
-        if (isViewMode) {
-            view.findViewById<TextView>(R.id.tvUploadSheetTitle)?.text = "Review Documents"
-            view.findViewById<TextView>(R.id.tvUploadSheetSubtitle)?.text = "Click on any file to view it"
-
-            btnCamera1.visibility = View.GONE
-            btnCamera2.visibility = View.GONE
-            btnCamera3.visibility = View.GONE
-            btnCamera4.visibility = View.GONE
-
-            val d1 = arguments?.getString("doc1Name") ?: "pan_card.jpg"
-            val d2 = arguments?.getString("doc2Name") ?: "aadhaar_card.jpg"
-            val d3 = arguments?.getString("doc3Name") ?: "bank_statement.pdf"
-            val d4 = arguments?.getString("doc4Name") ?: "pay_slip.jpg"
-
-            tvUploadedName1.text = d1
-            tvUploadedName2.text = d2
-            tvUploadedName3.text = d3
-            tvUploadedName4.text = d4
-
-            layoutUnuploaded1.visibility = View.GONE
-            layoutUploaded1.visibility = View.VISIBLE
-            layoutUnuploaded2.visibility = View.GONE
-            layoutUploaded2.visibility = View.VISIBLE
-            layoutUnuploaded3.visibility = View.GONE
-            layoutUploaded3.visibility = View.VISIBLE
-            layoutUnuploaded4.visibility = View.GONE
-            layoutUploaded4.visibility = View.VISIBLE
-
-            layoutUploaded1.setOnClickListener { showFullscreenImagePreview(d1) }
-            layoutUploaded2.setOnClickListener { showFullscreenImagePreview(d2) }
-            layoutUploaded3.setOnClickListener { showFullscreenImagePreview(d3) }
-            layoutUploaded4.setOnClickListener { showFullscreenImagePreview(d4) }
-
-            btnSubmit.text = "Close"
-            btnSubmit.isEnabled = true
-            btnSubmit.alpha = 1.0f
-            btnSubmit.setOnClickListener {
-                dismiss()
-            }
+        if (requiredLabels.isEmpty()) {
+            // Fail-soft: show a placeholder row + lock the submit button
+            // so the operator knows the case has no configured docs
+            // (probably an applicantType mismatch on the server).
+            view.findViewById<TextView>(R.id.tvUploadSheetSubtitle)?.text =
+                "No documents are configured for this loan case."
+            btnSubmit.isEnabled = false
+            btnSubmit.alpha = 0.5f
             return
         }
 
-        // --- Doc 1 Action Listeners ---
-        layoutUnuploaded1.setOnClickListener {
-            activeSlot = 1
-            filePickerLauncher.launch("*/*")
-        }
-        btnCamera1.setOnClickListener {
-            activeSlot = 1
-            checkCameraPermissionAndLaunch()
-        }
-        layoutUploaded1.setOnClickListener {
-            isDoc1Uploaded = false
-            layoutUploaded1.visibility = View.GONE
-            layoutUnuploaded1.visibility = View.VISIBLE
-            updateSubmitButtonState()
+        val title = view.findViewById<TextView>(R.id.tvUploadSheetTitle)
+        val subtitle = view.findViewById<TextView>(R.id.tvUploadSheetSubtitle)
+        if (isViewMode) {
+            title?.text = "Review Documents"
+            subtitle?.text = "Tap a row to view the uploaded file"
+            btnSubmit.text = "Close"
+            btnSubmit.isEnabled = true
+            btnSubmit.alpha = 1.0f
+        } else {
+            title?.text = "Submit Documents"
+            subtitle?.text = "Upload the ${requiredLabels.size} required files below to proceed"
         }
 
-        // --- Doc 2 Action Listeners ---
-        layoutUnuploaded2.setOnClickListener {
-            activeSlot = 2
-            filePickerLauncher.launch("*/*")
-        }
-        btnCamera2.setOnClickListener {
-            activeSlot = 2
-            checkCameraPermissionAndLaunch()
-        }
-        layoutUploaded2.setOnClickListener {
-            isDoc2Uploaded = false
-            layoutUploaded2.visibility = View.GONE
-            layoutUnuploaded2.visibility = View.VISIBLE
-            updateSubmitButtonState()
-        }
+        // Inflate one row per required label.
+        val inflater = LayoutInflater.from(requireContext())
+        requiredLabels.forEachIndexed { index, label ->
+            val row = inflater.inflate(R.layout.item_loan_upload_doc, docsContainer, false)
+            val tvDocTitle = row.findViewById<TextView>(R.id.tvDocTitle)
+            val tvUnuploadedTitle = row.findViewById<TextView>(R.id.tvUnuploadedTitle)
+            val tvUnuploadedSubtitle = row.findViewById<TextView>(R.id.tvUnuploadedSubtitle)
+            val btnCamera = row.findViewById<View>(R.id.btnCamera)
+            val layoutUnuploaded = row.findViewById<View>(R.id.layoutUnuploaded)
+            val layoutUploaded = row.findViewById<View>(R.id.layoutUploaded)
+            val tvUploadedName = row.findViewById<TextView>(R.id.tvUploadedName)
 
-        // --- Doc 3 Action Listeners ---
-        layoutUnuploaded3.setOnClickListener {
-            activeSlot = 3
-            filePickerLauncher.launch("*/*")
-        }
-        btnCamera3.setOnClickListener {
-            activeSlot = 3
-            checkCameraPermissionAndLaunch()
-        }
-        layoutUploaded3.setOnClickListener {
-            isDoc3Uploaded = false
-            layoutUploaded3.visibility = View.GONE
-            layoutUnuploaded3.visibility = View.VISIBLE
-            updateSubmitButtonState()
-        }
+            tvDocTitle.text = "$label *"
+            tvUnuploadedTitle.text = "Upload $label"
+            tvUnuploadedSubtitle.text = "Max 2MB · JPG, PNG, PDF"
 
-        // --- Doc 4 Action Listeners ---
-        layoutUnuploaded4.setOnClickListener {
-            activeSlot = 4
-            filePickerLauncher.launch("*/*")
-        }
-        btnCamera4.setOnClickListener {
-            activeSlot = 4
-            checkCameraPermissionAndLaunch()
-        }
-        layoutUploaded4.setOnClickListener {
-            isDoc4Uploaded = false
-            layoutUploaded4.visibility = View.GONE
-            layoutUnuploaded4.visibility = View.VISIBLE
-            updateSubmitButtonState()
-        }
+            val preExisting = preExistingNames.getOrNull(index)?.takeIf { it.isNotBlank() }
+            val preExistingStorageId =
+                preExistingStorageIds.getOrNull(index)?.takeIf { it.isNotBlank() }
 
-        btnSubmit.setOnClickListener {
-            Toast.makeText(requireContext(), "Documents submitted successfully", Toast.LENGTH_SHORT).show()
-            onSubmitted?.invoke(
-                doc1Name ?: "pan_card.jpg",
-                doc2Name ?: "aadhaar_card.jpg",
-                doc3Name ?: "bank_statement.pdf",
-                doc4Name ?: "pay_slip.jpg"
+            val slot = DocSlotState(
+                label = label,
+                row = row,
+                btnCamera = btnCamera,
+                layoutUnuploaded = layoutUnuploaded,
+                layoutUploaded = layoutUploaded,
+                tvUploadedName = tvUploadedName,
+                preExistingFileName = preExisting,
+                preExistingStorageId = preExistingStorageId,
             )
-            dismiss()
+            slots += slot
+
+            // Reflect any pre-existing upload immediately so the row
+            // doesn't look empty for docs already approved by BDO /
+            // pending review on the server.
+            if (preExisting != null) {
+                tvUploadedName.text = preExisting
+                layoutUnuploaded.visibility = View.GONE
+                layoutUploaded.visibility = View.VISIBLE
+            }
+
+            // Tap on the uploaded row = preview the file (whether the
+            // file lives in the local cache from a fresh upload OR
+            // came from Convex storage via the case's storageId).
+            // Re-picking is done through the Camera button, or by
+            // long-pressing the row to clear back to the dashed
+            // dropzone — this way the default tap is non-destructive.
+            layoutUploaded.setOnClickListener {
+                previewSlot(slot)
+            }
+            if (isViewMode) {
+                btnCamera.visibility = View.GONE
+            } else {
+                layoutUnuploaded.setOnClickListener {
+                    activeSlotIndex = index
+                    filePickerLauncher.launch("*/*")
+                }
+                btnCamera.setOnClickListener {
+                    activeSlotIndex = index
+                    checkCameraPermissionAndLaunch()
+                }
+                layoutUploaded.setOnLongClickListener {
+                    // Long-press to clear + re-pick. Pre-existing
+                    // server-side files clear back to the dashed
+                    // state too — server already has them, but the
+                    // user wants to replace.
+                    slot.fileName = null
+                    layoutUploaded.visibility = View.GONE
+                    layoutUnuploaded.visibility = View.VISIBLE
+                    updateSubmitButtonState()
+                    true
+                }
+            }
+
+            docsContainer.addView(row)
+        }
+
+        if (!isViewMode) {
+            updateSubmitButtonState()
+            btnSubmit.setOnClickListener {
+                val uploads = slots.mapNotNull { s ->
+                    s.fileName?.let { s.label to it }
+                }.toMap()
+                if (uploads.isEmpty()) return@setOnClickListener
+                Toast.makeText(requireContext(), "Documents submitted", Toast.LENGTH_SHORT).show()
+                onSubmitted?.invoke(uploads)
+                dismiss()
+            }
+        } else {
+            btnSubmit.setOnClickListener { dismiss() }
         }
     }
+
+    // ── Upload state plumbing ──
+
+    private fun onFileUploaded(slotIndex: Int, name: String) {
+        val slot = slots.getOrNull(slotIndex) ?: return
+        slot.fileName = name
+        slot.tvUploadedName.text = name
+        slot.layoutUnuploaded.visibility = View.GONE
+        slot.layoutUploaded.visibility = View.VISIBLE
+        updateSubmitButtonState()
+    }
+
+    private fun updateSubmitButtonState() {
+        if (isViewMode) return
+        // Submit is enabled when every required slot has EITHER a new
+        // file or a pre-existing server-side file. Pre-existing
+        // entries cover the rectify path — when Legal rejects, only
+        // the flagged docs need re-uploading; the still-approved ones
+        // can be re-sent unchanged.
+        val allCovered = slots.all { it.fileName != null || it.preExistingFileName != null }
+        btnSubmit.isEnabled = allCovered
+        btnSubmit.alpha = if (allCovered) 1.0f else 0.5f
+    }
+
+    // ── Camera ──
 
     private fun checkCameraPermissionAndLaunch() {
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
-                Manifest.permission.CAMERA
+                Manifest.permission.CAMERA,
             ) == PackageManager.PERMISSION_GRANTED
         ) {
             launchCamera()
@@ -340,21 +351,17 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         null
     }
 
-    private fun copyUriToCache(uri: Uri): File? {
-        return try {
-            val contentResolver = requireContext().contentResolver
-            val inputStream = contentResolver.openInputStream(uri) ?: return null
-            val displayName = getFileName(uri) ?: "temp_file_${System.currentTimeMillis()}"
-            val folder = File(requireContext().cacheDir, "loandesk").apply { if (!exists()) mkdirs() }
-            val cacheFile = File(folder, displayName)
-            cacheFile.outputStream().use { outputStream ->
-                inputStream.copyTo(outputStream)
-            }
-            cacheFile
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+    private fun copyUriToCache(uri: Uri): File? = try {
+        val cr = requireContext().contentResolver
+        val input = cr.openInputStream(uri) ?: return null
+        val displayName = getFileName(uri) ?: "temp_file_${System.currentTimeMillis()}"
+        val folder = File(requireContext().cacheDir, "loandesk").apply { if (!exists()) mkdirs() }
+        val cacheFile = File(folder, displayName)
+        cacheFile.outputStream().use { out -> input.copyTo(out) }
+        cacheFile
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
     }
 
     private fun getFileName(uri: Uri): String? {
@@ -363,96 +370,164 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         cursor?.use {
             if (it.moveToFirst()) {
                 val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index != -1) {
-                    name = it.getString(index)
-                }
+                if (index != -1) name = it.getString(index)
             }
         }
         return name
     }
 
-    private fun onFileUploaded(slot: Int, name: String) {
-        when (slot) {
-            1 -> {
-                isDoc1Uploaded = true
-                doc1Name = name
-                tvUploadedName1.text = name
-                layoutUnuploaded1.visibility = View.GONE
-                layoutUploaded1.visibility = View.VISIBLE
-            }
-            2 -> {
-                isDoc2Uploaded = true
-                doc2Name = name
-                tvUploadedName2.text = name
-                layoutUnuploaded2.visibility = View.GONE
-                layoutUploaded2.visibility = View.VISIBLE
-            }
-            3 -> {
-                isDoc3Uploaded = true
-                doc3Name = name
-                tvUploadedName3.text = name
-                layoutUnuploaded3.visibility = View.GONE
-                layoutUploaded3.visibility = View.VISIBLE
-            }
-            4 -> {
-                isDoc4Uploaded = true
-                doc4Name = name
-                tvUploadedName4.text = name
-                layoutUnuploaded4.visibility = View.GONE
-                layoutUploaded4.visibility = View.VISIBLE
+    /**
+     * Three-way preview source:
+     *   1. Freshly picked file from this session → live in the local
+     *      `cacheDir/loandesk/` folder, Coil-load straight from disk.
+     *   2. Pre-existing upload on the server with `storageId` →
+     *      resolve to a signed URL via /api/storage/get-url and Coil
+     *      streams the image / PDF page from Convex.
+     *   3. Neither → placeholder so the dialog doesn't appear empty.
+     */
+    private fun previewSlot(slot: DocSlotState) {
+        // Prefer the local cache hit (a fresh upload always wins over
+        // its pre-existing predecessor — the user just picked it).
+        val freshName = slot.fileName
+        if (freshName != null) {
+            val folder = File(requireContext().cacheDir, "loandesk")
+            val file = File(folder, freshName)
+            if (file.exists() && file.length() > 0) {
+                showPreviewDialog { imageView ->
+                    imageView.load(file) {
+                        crossfade(true)
+                        listener(
+                            onSuccess = { _, _ ->
+                                (imageView as? com.manjugroups.m_connect.ui.chat.ZoomableImageView)
+                                    ?.requestRecenter()
+                            },
+                        )
+                    }
+                }
+                return
             }
         }
-        updateSubmitButtonState()
+        val storageId = slot.preExistingStorageId
+        if (storageId.isNullOrBlank()) {
+            // Nothing to preview — neither a local file from this
+            // session nor a server-side storageId. Toast instead of
+            // opening an empty dialog so the operator gets a clear
+            // signal (rather than the previous cash-receipt drawable,
+            // which looked like a generic mock placeholder).
+            Toast.makeText(
+                requireContext(),
+                "Preview unavailable",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        // Async URL fetch. Open the dialog with a neutral loading
+        // state (no drawable — the fullscreen black theme is the
+        // backdrop). Coil's crossfade brings the image in cleanly when
+        // the signed URL resolves.
+        showPreviewDialog { imageView ->
+            imageView.setImageDrawable(null)
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val token = com.manjugroups.m_connect.auth.SessionManager(
+                        requireContext(),
+                    ).bearerToken
+                    val resp = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.manjugroups.m_connect.network.ApiService
+                            .create()
+                            .getStorageUrl(token, storageId)
+                    }
+                    val url = resp.url
+                    if (resp.success && !url.isNullOrBlank()) {
+                        imageView.load(url) {
+                            crossfade(true)
+                            listener(
+                                onSuccess = { _, _ ->
+                                    // Coil's CrossfadeDrawable starts
+                                    // at 0×0 so the ZoomableImageView
+                                    // matrix initially treats this as
+                                    // "drawable not ready" and the
+                                    // image sticks at identity matrix
+                                    // (small + top-left for landscape
+                                    // sources). Force a recenter now
+                                    // that the real bitmap size is
+                                    // available.
+                                    (imageView as? com.manjugroups.m_connect.ui.chat.ZoomableImageView)
+                                        ?.requestRecenter()
+                                },
+                            )
+                        }
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            "Couldn't load preview",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                } catch (_: Exception) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Couldn't load preview",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }
     }
 
-    private fun updateSubmitButtonState() {
-        val allUploaded = isDoc1Uploaded && isDoc2Uploaded && isDoc3Uploaded && isDoc4Uploaded
-        btnSubmit.isEnabled = allUploaded
-        btnSubmit.alpha = if (allUploaded) 1.0f else 0.5f
-    }
-
-    private fun showFullscreenImagePreview(fileName: String) {
+    private fun showPreviewDialog(bind: (ImageView) -> Unit) {
         val builder = AlertDialog.Builder(requireContext(), android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_preview, null)
         val imageView = view.findViewById<ImageView>(R.id.ivPreview)
         val closeBtn = view.findViewById<View>(R.id.btnPreviewClose)
         val btnBack = view.findViewById<View>(R.id.btnBack)
-
-        val folder = File(requireContext().cacheDir, "loandesk")
-        val file = File(folder, fileName)
-        if (file.exists() && file.length() > 0) {
-            imageView.load(file)
-        } else {
-            imageView.setImageResource(R.drawable.ic_cash_proof)
-        }
-
+        bind(imageView)
         val dialog = builder.setView(view).create()
-        closeBtn?.setOnClickListener {
-            dialog.dismiss()
-        }
-        btnBack?.setOnClickListener {
-            dialog.dismiss()
-        }
+        closeBtn?.setOnClickListener { dialog.dismiss() }
+        btnBack?.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
     companion object {
+        private const val ARG_REQUIRED_LABELS = "requiredLabels"
+        private const val ARG_PRE_NAMES = "preExistingNames"
+        private const val ARG_PRE_STORAGE_IDS = "preExistingStorageIds"
+
+        /**
+         * @param requiredLabels The doc labels to render (one row per
+         *   entry). Drive this from the case's documentsChecklist so
+         *   the slot count matches Post-sales Settings.
+         * @param preExistingFileNames Aligned with `requiredLabels`
+         *   (same length, "" / null for rows without a pre-existing
+         *   upload). When non-null, the slot starts in the uploaded
+         *   state so the operator sees what the server already has.
+         * @param preExistingStorageIds Aligned with `requiredLabels`,
+         *   same convention as `preExistingFileNames`. Carries the
+         *   Convex `_storage` id so the preview can resolve it to a
+         *   signed URL via /api/storage/get-url + Coil — without it,
+         *   previewing a server-stored doc that was never on this
+         *   device falls back to the placeholder.
+         */
         fun newInstance(
-            item: LoanDeskItem,
+            requiredLabels: List<String>,
+            preExistingFileNames: List<String?> = emptyList(),
+            preExistingStorageIds: List<String?> = emptyList(),
             isViewMode: Boolean,
-            onSubmitted: (doc1: String, doc2: String, doc3: String, doc4: String) -> Unit
-        ): LoanDeskUploadBottomSheet {
-            return LoanDeskUploadBottomSheet().apply {
-                arguments = Bundle().apply {
-                    putBoolean("isViewMode", isViewMode)
-                    putString("itemId", item.id)
-                    putString("doc1Name", item.doc1Name)
-                    putString("doc2Name", item.doc2Name)
-                    putString("doc3Name", item.doc3Name)
-                    putString("doc4Name", item.doc4Name)
-                }
-                setOnSubmittedListener(onSubmitted)
+            onSubmitted: (uploads: Map<String, String>) -> Unit,
+        ): LoanDeskUploadBottomSheet = LoanDeskUploadBottomSheet().apply {
+            arguments = Bundle().apply {
+                putBoolean("isViewMode", isViewMode)
+                putStringArrayList(ARG_REQUIRED_LABELS, ArrayList(requiredLabels))
+                putStringArrayList(
+                    ARG_PRE_NAMES,
+                    ArrayList(requiredLabels.indices.map { preExistingFileNames.getOrNull(it).orEmpty() }),
+                )
+                putStringArrayList(
+                    ARG_PRE_STORAGE_IDS,
+                    ArrayList(requiredLabels.indices.map { preExistingStorageIds.getOrNull(it).orEmpty() }),
+                )
             }
+            setOnSubmittedListener(onSubmitted)
         }
     }
 }
