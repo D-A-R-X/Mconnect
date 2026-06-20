@@ -23,6 +23,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_auth_sheet_otp"
         android:clipToPadding="false"
+        android:clipChildren="false"
         android:fillViewport="false"
         android:overScrollMode="ifContentScrolls"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -36,10 +37,13 @@
         android:paddingStart="32dp"
         android:paddingTop="85dp"
         android:paddingEnd="32dp"
-        android:paddingBottom="32dp">
+        android:paddingBottom="32dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <!-- Title — Figma 45:5014 — Inter SemiBold 20sp #101828 centered -->
         <TextView
+            android:id="@+id/tvOtpTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_semibold"
@@ -60,73 +64,124 @@
             android:textColor="#475467"
             android:textSize="13sp" />
 
-        <!-- OTP boxes — Figma 45:5017 — 6 boxes, 50dp tall, space-between within 326dp -->
-        <LinearLayout
+        <!-- OTP boxes FrameLayout wrapper for animation Convergence and Pop -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="13dp"
-            android:gravity="center"
-            android:orientation="horizontal">
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
-            <EditText
-                android:id="@+id/otpBox1"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
+            <LinearLayout
+                android:id="@+id/otpBoxesContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/otpBox2"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginStart="5dp"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
+                <EditText
+                    android:id="@+id/otpBox1"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
 
-            <EditText
-                android:id="@+id/otpBox3"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginStart="5dp"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
+                <EditText
+                    android:id="@+id/otpBox2"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
 
-            <EditText
-                android:id="@+id/otpBox4"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginStart="5dp"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
+                <EditText
+                    android:id="@+id/otpBox3"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
 
-            <EditText
-                android:id="@+id/otpBox5"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginStart="5dp"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
+                <EditText
+                    android:id="@+id/otpBox4"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
 
-            <EditText
-                android:id="@+id/otpBox6"
-                style="@style/OtpBoxAuth"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginStart="5dp"
-                android:hint="0"
-                android:textColorHint="#EAECF0" />
-        </LinearLayout>
+                <EditText
+                    android:id="@+id/otpBox5"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
+
+                <EditText
+                    android:id="@+id/otpBox6"
+                    style="@style/OtpBoxAuth"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:hint="0"
+                    android:textColorHint="#EAECF0" />
+            </LinearLayout>
+
+            <!-- Outward Light Ripples -->
+            <View
+                android:id="@+id/rippleRing1"
+                android:layout_width="90dp"
+                android:layout_height="90dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_verify_ripple_ring"
+                android:scaleX="1"
+                android:scaleY="1"
+                android:alpha="0"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/rippleRing2"
+                android:layout_width="90dp"
+                android:layout_height="90dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_verify_ripple_ring"
+                android:scaleX="1"
+                android:scaleY="1"
+                android:alpha="0"
+                android:visibility="gone" />
+
+            <!-- Verification Success Circle and Tick -->
+            <FrameLayout
+                android:id="@+id/verifySuccessContainer"
+                android:layout_width="90dp"
+                android:layout_height="90dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_verify_success_circle"
+                android:scaleX="0"
+                android:scaleY="0"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivSuccessCheckmark"
+                    android:layout_width="46dp"
+                    android:layout_height="46dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_check_white"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+        </FrameLayout>
 
         <TextView
             android:id="@+id/tvOtpError"
@@ -204,18 +259,18 @@
 
     <FrameLayout
         android:id="@+id/phoneBadge"
-        android:layout_width="62dp"
-        android:layout_height="62dp"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:background="@drawable/bg_auth_phone_badge"
         android:elevation="6dp"
-        android:translationY="-31dp"
+        android:translationY="-40dp"
         app:layout_constraintEnd_toEndOf="@id/otpSheet"
         app:layout_constraintStart_toStartOf="@id/otpSheet"
         app:layout_constraintTop_toTopOf="@id/otpSheet">
 
         <ImageView
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_auth_secure"
             android:contentDescription="@null" />
