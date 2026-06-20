@@ -3,27 +3,27 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:clipChildren="false"
-    android:clipToPadding="false">
+    android:clipChildren="true"
+    android:clipToPadding="true">
 
-    <!-- Working Period 1: x=34 y=102 w=286 h=305 -->
+    <!-- Sales line chart card -->
     <ImageView
         android:id="@+id/imgSalesLine"
-        android:layout_width="286dp"
-        android:layout_height="305dp"
-        android:layout_marginStart="34dp"
-        android:layout_marginTop="102dp"
+        android:layout_width="230dp"
+        android:layout_height="245dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="65dp"
         android:src="@drawable/onboard_sales_line"
         android:scaleType="fitCenter"
         android:adjustViewBounds="true" />
 
-    <!-- Group 392 1: x=69 y=188 w=286 h=306 -->
+    <!-- Sales bar chart card -->
     <ImageView
         android:id="@+id/imgSalesBar"
-        android:layout_width="286dp"
-        android:layout_height="306dp"
-        android:layout_marginStart="69dp"
-        android:layout_marginTop="188dp"
+        android:layout_width="230dp"
+        android:layout_height="246dp"
+        android:layout_marginStart="56dp"
+        android:layout_marginTop="165dp"
         android:src="@drawable/onboard_sales_bar"
         android:scaleType="fitCenter"
         android:adjustViewBounds="true" />
