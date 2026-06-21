@@ -217,11 +217,7 @@ class HrDashboardFragment : Fragment() {
 
         binding.btnOnDuty.setOnClickListener {
             if (session.isOnDuty) {
-                session.clearOnDutyDetails()
-                Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
-                updateOnDutyButtonUi()
-                val isClockedIn = flowViewModel.uiState.value.isClockedIn
-                updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+                completeOnDutyTrip()
             } else {
                 OnDutyFormBottomSheet.newInstance().show(parentFragmentManager, "on_duty_form")
             }
@@ -897,21 +893,31 @@ class HrDashboardFragment : Fragment() {
         // Static cardHistory1 is retired; today lives inline in the list.
         binding.cardHistory1.visibility = View.GONE
 
-        // Build the list: Today first (tagged "Today" with live clock-in +
-        // live hours), then yesterday, day-before, etc — all in the same card
-        // style so the user sees one consistent log strip.
-        binding.historyListContainer.removeAllViews()
+        val container = binding.historyListContainer
+        val childCount = container.childCount
+        val targetCount = sorted.size
+
+        if (childCount > targetCount) {
+            container.removeViews(targetCount, childCount - targetCount)
+        }
+
         todayCardHoursView = null
         val liveState = flowViewModel.uiState.value
         val liveInIso = liveState.firstPunchInIso
         val liveInMs = liveInIso?.let { parseIsoMillisOrNull(it) }
 
         sorted.forEachIndexed { index, record ->
-            val card = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_attendance_history_card,
-                binding.historyListContainer,
-                false
-            )
+            val card = if (index < childCount) {
+                container.getChildAt(index)
+            } else {
+                val newCard = LayoutInflater.from(requireContext()).inflate(
+                    R.layout.item_attendance_history_card,
+                    container,
+                    false
+                )
+                container.addView(newCard)
+                newCard
+            }
             val dateView = card.findViewById<TextView>(R.id.tvHistoryItemDate)
             val hoursView = card.findViewById<TextView>(R.id.tvHistoryItemHours)
             val rangeView = card.findViewById<TextView>(R.id.tvHistoryItemRange)
@@ -948,7 +954,17 @@ class HrDashboardFragment : Fragment() {
             // live ONLY inside the dedicated "My Attendance" history screen.
             card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
                 .visibility = View.GONE
-            binding.historyListContainer.addView(card)
+
+            // Present / Absent pill on every past-day card. Today's row
+            // (index 0) is skipped — the day is still running so a verdict
+            // would be premature; the helper also short-circuits on
+            // today's date as a second guard.
+            if (index > 0) {
+                AttendanceStatusBadge.bind(
+                    card.findViewById(R.id.tvHistoryItemStatus),
+                    record,
+                )
+            }
         }
     }
 
@@ -1028,6 +1044,41 @@ class HrDashboardFragment : Fragment() {
                 ?: client.lastLocation.await()
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * Close the active OnDuty trip on the server, then clear the local
+     * session flags + refresh UI. Local state is cleared regardless of
+     * server outcome so the user can't get stuck with a stale "On Duty"
+     * pill if the network is down — the nightly trip-finalize cron will
+     * close any orphaned active trip.
+     */
+    private fun completeOnDutyTrip() {
+        val tripId = session.onDutyTripId
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val loc = fetchLocationOrNull()
+                api.completeOnDutyTrip(
+                    token,
+                    com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
+                        tripId = tripId,
+                        lat = loc?.latitude,
+                        lng = loc?.longitude,
+                        address = null,
+                    ),
+                )
+            } catch (_: Exception) {
+                // Silent — the local state still clears. The cron-based
+                // trip finalizer closes any orphaned active row.
+            }
+            if (_binding == null) return@launch
+            session.clearOnDutyDetails()
+            Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+            updateOnDutyButtonUi()
+            val isClockedIn = flowViewModel.uiState.value.isClockedIn
+            updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
         }
     }
 

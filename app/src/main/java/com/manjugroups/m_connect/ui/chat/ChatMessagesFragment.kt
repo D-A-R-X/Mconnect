@@ -34,6 +34,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
+import coil.transform.CircleCropTransformation
+import androidx.core.content.ContextCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import android.widget.EditText
+import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -88,6 +95,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var otherStaffPhone: String? = null
+    private var chatPhotoUrl: String? = null
     private var latestMessageTime: Double = 0.0
     private var currentTypingText: String? = null
     private var presencePollCounter = 0
@@ -96,6 +104,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private val audioDurationLocalCache = mutableMapOf<String, String>()
     private val staffNameCache = mutableMapOf<String, String>()
     private val pendingAttachments = mutableListOf<PendingAttachment>()
+    private val localAttachmentUriMap = mutableMapOf<String, String>()
 
     private val subtitleColorMuted = android.graphics.Color.parseColor("#667085")
     private val subtitleColorTyping = android.graphics.Color.parseColor("#12B76A")
@@ -112,6 +121,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var isAttachmentMenuOpen = false
     private var hasLoadedMessages = false
     private var isEmojiPanelVisible = false
+    private var isEmojiPickerInitialized = false
     private var isDocumentPickerMode = false
 
     private var mediaRecorder: MediaRecorder? = null
@@ -196,23 +206,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         // chat header doesn't flicker from arguments → API result.
         hydrateHeaderFromCache()
 
-        // Hydrate from local cache before hitting the network so the screen
-        // paints instantly when re-entering a chat.
-        if (messages.isEmpty()) {
-            val cached = ChatMessageCache.load(requireContext().applicationContext, cacheKey())
-            if (cached.isNotEmpty()) {
-                messages.addAll(cached)
-                latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
-            }
-        }
+        // Show skeleton by default until cache or server loads
+        SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+        binding.rvMessages.visibility = View.GONE
 
-        if (messages.isEmpty()) {
-            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-            binding.rvMessages.visibility = View.GONE
-        } else {
-            binding.skeletonContainer.visibility = View.GONE
-            binding.rvMessages.visibility = View.VISIBLE
-            renderMessages(scrollToBottom = true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            if (messages.isEmpty()) {
+                val cached = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    ChatMessageCache.load(requireContext().applicationContext, cacheKey())
+                }
+                if (cached.isNotEmpty() && _binding != null) {
+                    messages.addAll(cached)
+                    latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: 0.0
+                    renderMessages(scrollToBottom = true)
+                }
+            } else {
+                renderMessages(scrollToBottom = true)
+            }
         }
         binding.btnBack.setOnClickListener { navigateUp() }
         binding.titleGroup.setOnClickListener { openContactInfo() }
@@ -251,8 +261,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val deltaX = recordTouchStartX - event.rawX
                             val threshold = dpToPx(SLIDE_TO_CANCEL_DP.toInt()).toFloat()
 
-                            // Slide constraint: limit sliding to the width of the bottom bar minus padding
-                            val maxSlide = (binding.recordingOverlay.width - dpToPx(80)).coerceAtLeast(0)
+                            // Slide constraint: limit sliding so it stops exactly at the trash can
+                            val maxSlide = if (binding.animatingMicContainer.left > 0) {
+                                binding.animatingMicContainer.left - binding.trashCanContainer.left
+                            } else {
+                                binding.recordingOverlay.width - dpToPx(80)
+                            }.coerceAtLeast(0)
                             val currentSlide = deltaX.coerceIn(0f, maxSlide.toFloat())
 
                             // Slide the mic icon left
@@ -262,6 +276,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             val fadeRatio = 1f - (currentSlide / threshold).coerceIn(0f, 1f)
                             binding.slideCancelContainer.alpha = fadeRatio
                             binding.slideCancelContainer.translationX = -currentSlide * 0.3f // Slight parallax movement
+
+                            // Cross-fade recording status container (fading out) and trash can container (fading in)
+                            binding.recordingStatusContainer.alpha = fadeRatio
+                            binding.trashCanContainer.alpha = 1f - fadeRatio
 
                             if (currentSlide >= threshold) {
                                 if (!recordCancelRequested) {
@@ -342,8 +360,6 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             cancelReply()
         }
 
-        setupEmojiPicker()
-
         binding.btnEmoji.setOnClickListener { toggleEmojiPanel() }
         binding.btnCloseEmojiPanel.setOnClickListener { hideEmojiPanel() }
 
@@ -370,12 +386,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     myStaffId = response.user?.staffId.orEmpty()
                 }
             }
-            refreshChatMetadata()
-            // If cache hydrated the list, don't force-scroll again after the
-            // server refresh — that double scroll is the visible "glitch" on
-            // re-entering a chat. Only scroll on a true cold open.
-            loadInitialMessages(scrollToBottom = messages.isEmpty())
-            markRead()
+            launch {
+                refreshChatMetadata()
+            }
+            launch {
+                // If cache hydrated the list, don't force-scroll again after the
+                // server refresh — that double scroll is the visible "glitch" on
+                // re-entering a chat. Only scroll on a true cold open.
+                loadInitialMessages(scrollToBottom = messages.isEmpty())
+                markRead()
+            }
         }
     }
 
@@ -415,6 +435,62 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             onMessageTap = { _ ->
                 updateSelectionToolbar()
                 true
+            },
+            onContactClick = { name, phone ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val formattedPhone = phone.replace("[^0-9]".toRegex(), "")
+                    var foundStaff: StaffData? = null
+                    runCatching {
+                        api.getStaff(session.bearerToken, status = "active")
+                    }.onSuccess { response ->
+                        foundStaff = response.staff.find { staff ->
+                            val sPhone = staff.phone?.replace("[^0-9]".toRegex(), "").orEmpty()
+                            sPhone.isNotEmpty() && (sPhone == formattedPhone || formattedPhone.endsWith(sPhone) || sPhone.endsWith(formattedPhone))
+                        }
+                    }
+
+                    if (foundStaff == null) {
+                        runCatching {
+                            api.getStaff(session.bearerToken, status = "active")
+                        }.onSuccess { response ->
+                            foundStaff = response.staff.find { staff ->
+                                staff.name?.equals(name, ignoreCase = true) == true
+                            }
+                        }
+                    }
+
+                    val otherStaffId = foundStaff?.id
+                    if (otherStaffId == null) {
+                        toast("Cannot message: contact is not registered in the app")
+                        return@launch
+                    }
+
+                    runCatching {
+                        api.startDm(session.bearerToken, StartDmRequest(otherStaffId))
+                    }.onSuccess { response ->
+                        val conversationId = response.conversationId
+                        if (!response.success || conversationId == null) {
+                            toast("Unable to start direct message")
+                            return@onSuccess
+                        }
+                        
+                        parentFragmentManager.beginTransaction()
+                            .replace(
+                                R.id.fragmentContainer,
+                                ChatMessagesFragment.forConversation(
+                                    id = conversationId,
+                                    name = foundStaff?.name ?: name
+                                )
+                            )
+                            .addToBackStack(null)
+                            .commit()
+                    }.onFailure {
+                        toast("Unable to start direct message")
+                    }
+                }
+            },
+            onSaveAsClick = { url, mime, storageId, fileName ->
+                handleSaveAsClick(url, mime, storageId, fileName)
             }
         )
         binding.rvMessages.apply {
@@ -474,6 +550,34 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             toast("Attachment unavailable")
             return
         }
+
+        // Try local playing/viewing from cached URIs or files to eliminate loading lag
+        if (!fileName.isNullOrBlank()) {
+            val cachedUri = localAttachmentUriMap[fileName]
+            if (!cachedUri.isNullOrBlank()) {
+                routeAttachment(cachedUri, mime, storageId, fileName)
+                return
+            }
+
+            val localVideoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_videos"), fileName)
+            if (localVideoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localVideoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localPhotoFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_photos"), fileName)
+            if (localPhotoFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localPhotoFile).toString(), mime, storageId, fileName)
+                return
+            }
+
+            val localEditFile = java.io.File(java.io.File(requireContext().cacheDir, "chat_edits"), fileName)
+            if (localEditFile.exists()) {
+                routeAttachment(android.net.Uri.fromFile(localEditFile).toString(), mime, storageId, fileName)
+                return
+            }
+        }
+
         if (url.isBlank()) {
             resolveStorageUrl(storageId!!) { resolved ->
                 if (resolved.isNullOrBlank()) {
@@ -484,6 +588,97 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
         } else {
             routeAttachment(url, mime, storageId, fileName)
+        }
+    }
+
+    private fun handleSaveAsClick(url: String, mime: String, storageId: String?, fileName: String?) {
+        if (url.isBlank() && storageId.isNullOrBlank()) {
+            toast("Attachment unavailable")
+            return
+        }
+        
+        val name = fileName ?: "document_${System.currentTimeMillis()}"
+
+        val doSave = { resolvedUrl: String ->
+            val ctx = context
+            if (ctx != null) {
+                val isRemote = resolvedUrl.startsWith("http://", true) || resolvedUrl.startsWith("https://", true)
+                if (isRemote) {
+                    toast("Downloading…")
+                    try {
+                        val downloadManager = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                        val request = android.app.DownloadManager.Request(Uri.parse(resolvedUrl)).apply {
+                            setTitle(name)
+                            setDescription("Downloading document")
+                            setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+                            setMimeType(mime)
+                        }
+                        downloadManager.enqueue(request)
+                    } catch (e: Exception) {
+                        saveDocumentManual(resolvedUrl, name, mime)
+                    }
+                } else {
+                    saveDocumentManual(resolvedUrl, name, mime)
+                }
+            }
+        }
+
+        if (url.isBlank()) {
+            resolveStorageUrl(storageId!!) { resolved ->
+                if (resolved.isNullOrBlank()) {
+                    toast("Unable to resolve document URL")
+                } else {
+                    doSave(resolved)
+                }
+            }
+        } else {
+            doSave(url)
+        }
+    }
+
+    private fun saveDocumentManual(url: String, name: String, mime: String) {
+        toast("Downloading…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val fileUriString = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = java.net.URL(url).openStream().use { it.readBytes() }
+                    val ctx = context?.applicationContext ?: return@runCatching null
+                    val resolver = ctx.contentResolver
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val collection = android.provider.MediaStore.Downloads.getContentUri(
+                            android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY
+                        )
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                        }
+                        val uri = resolver.insert(collection, values) ?: return@runCatching null
+                        resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        
+                        values.clear()
+                        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                        resolver.update(uri, values, null, null)
+                        uri.toString()
+                    } else {
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                            android.os.Environment.DIRECTORY_DOWNLOADS
+                        )
+                        val file = File(downloadsDir, name)
+                        file.parentFile?.mkdirs()
+                        file.writeBytes(bytes)
+                        
+                        android.media.MediaScannerConnection.scanFile(ctx, arrayOf(file.absolutePath), arrayOf(mime), null)
+                        Uri.fromFile(file).toString()
+                    }
+                }.getOrNull()
+            }
+            if (_binding != null) {
+                toast(if (fileUriString != null) "Saved to Downloads" else "Couldn't save document")
+            }
         }
     }
 
@@ -536,9 +731,16 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             true
         )
 
+        // Swap mock picsum image URLs for a real video to prevent indefinite loading spinner in ExoPlayer
+        val resolvedUrl = if (url.contains("picsum.photos")) {
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+        } else {
+            url
+        }
+
         val playerView = view.findViewById<androidx.media3.ui.PlayerView>(R.id.videoPlayerView)
         val player = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build().apply {
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(resolvedUrl))
             playWhenReady = true
             prepare()
         }
@@ -695,159 +897,36 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showImageSendPreview(images: List<PendingAttachment>) {
-        if (images.isEmpty()) return
-        val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_image_send_preview, null)
-        val popup = PopupWindow(
-            view,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            true
-        ).apply {
-            isFocusable = true
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0F0F1A")))
-        }
-
-        val editView = view.findViewById<MediaEditView>(R.id.ivPreviewMain)
-        val stripContainer = view.findViewById<LinearLayout>(R.id.thumbStripContainer)
-        val etCaption = view.findViewById<android.widget.EditText>(R.id.etPreviewCaption)
-        val btnSend = view.findViewById<View>(R.id.btnPreviewSend)
-        val btnBack = view.findViewById<View>(R.id.btnPreviewBack)
-        val editToolBar = view.findViewById<LinearLayout>(R.id.editToolBar)
-        val tvEditModeLabel = view.findViewById<android.widget.TextView>(R.id.tvEditModeLabel)
-        val btnEditApply = view.findViewById<View>(R.id.btnEditApply)
-        val btnEditCancel = view.findViewById<View>(R.id.btnEditCancel)
-        val drawToolBar = view.findViewById<LinearLayout>(R.id.drawToolBar)
-        val cropToolBar = view.findViewById<LinearLayout>(R.id.cropToolBar)
-        val drawColorRow = view.findViewById<LinearLayout>(R.id.drawColorRow)
-        setupDrawToolbar(view, editView, drawColorRow)
-        setupCropToolbar(view, editView)
-
-        // Per-image edit state: we replace the file URI when the user commits
-        // edits, so the sent attachment has the flattened bitmap.
-        val workingImages = images.toMutableList()
-        var activeIndex = 0
-
-        fun loadActiveBitmap() {
-            val active = workingImages[activeIndex]
-            viewLifecycleOwner.lifecycleScope.launch {
-                val bm = withContext(Dispatchers.IO) {
-                    runCatching {
-                        requireContext().contentResolver.openInputStream(active.uri)?.use {
-                            android.graphics.BitmapFactory.decodeStream(it)
+        val previewSheet = MediaPreviewBottomSheet().apply {
+            setAttachments(images)
+            setListener(object : MediaPreviewBottomSheet.MediaPreviewListener {
+                override fun onMediaSend(attachments: List<PendingAttachment>, caption: String) {
+                    if (attachments.isNotEmpty()) {
+                        pendingAttachments.addAll(attachments)
+                        if (caption.isNotEmpty()) {
+                            binding.etMessage.setText(caption)
                         }
-                    }.getOrNull()
+                        renderPendingAttachments()
+                        updateSendIcon()
+                        sendMessage()
+                    }
                 }
-                if (_binding == null || bm == null) return@launch
-                editView.setBitmap(bm)
-            }
-        }
 
-        fun showActive() {
-            loadActiveBitmap()
-            for (i in 0 until stripContainer.childCount) {
-                val v = stripContainer.getChildAt(i)
-                v.alpha = if (i == activeIndex) 1f else 0.55f
-                v.setBackgroundResource(
-                    if (i == activeIndex) R.drawable.bg_thumb_strip_selected
-                    else 0
-                )
-            }
-        }
-
-        fun showEditToolbar(label: String) {
-            tvEditModeLabel.text = label
-            editToolBar.visibility = View.VISIBLE
-        }
-
-        fun hideEditToolbar() {
-            editToolBar.visibility = View.GONE
-        }
-
-        images.forEachIndexed { index, attachment ->
-            val thumb = ImageView(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(dpToPx(52), dpToPx(52)).apply {
-                    marginEnd = dpToPx(6)
+                override fun onAddMoreClicked() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
                 }
-                setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                load(attachment.uri) {
-                    transformations(coil.transform.RoundedCornersTransformation(dpToPx(8).toFloat()))
+
+                override fun onPreviewCancelled() {
+                    if (isAdded && !requireActivity().isFinishing) {
+                        launchCamera()
+                    }
                 }
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    activeIndex = index
-                    showActive()
-                }
-            }
-            stripContainer.addView(thumb)
+            })
         }
-        showActive()
-
-        view.findViewById<View>(R.id.btnPreviewCrop)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.CROP
-            showEditToolbar("Crop")
-            cropToolBar.visibility = View.VISIBLE
-            drawToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewDraw)?.setOnClickListener {
-            editView.mode = MediaEditView.Mode.DRAW
-            showEditToolbar("Draw — tap Done when finished")
-            drawToolBar.visibility = View.VISIBLE
-            cropToolBar.visibility = View.GONE
-        }
-        view.findViewById<View>(R.id.btnPreviewText)?.setOnClickListener {
-            showAddTextSheet { text ->
-                if (text.isNotEmpty()) {
-                    editView.addText(text)
-                    showEditToolbar("Drag text to position")
-                }
-            }
-        }
-        btnEditCancel.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.cancelCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-        btnEditApply.setOnClickListener {
-            if (editView.mode == MediaEditView.Mode.CROP) editView.applyCrop()
-            editView.mode = MediaEditView.Mode.NONE
-            hideEditToolbar()
-            cropToolBar.visibility = View.GONE
-            drawToolBar.visibility = View.GONE
-        }
-
-        view.findViewById<View>(R.id.btnPreviewUndo)?.setOnClickListener {
-            if (!editView.undo()) toast("Nothing to undo")
-        }
-        view.findViewById<View>(R.id.btnPreviewDownload)?.setOnClickListener {
-            val first = workingImages.firstOrNull() ?: return@setOnClickListener
-            savePendingAttachmentToGallery(first)
-        }
-
-        btnBack.setOnClickListener { popup.dismiss() }
-
-        btnSend.setOnClickListener {
-            val caption = etCaption.text?.toString()?.trim().orEmpty()
-            // Flatten any current edits into the active image before sending.
-            val edited = editView.getResult()
-            if (edited != null) {
-                val saved = persistEditedBitmap(edited)
-                if (saved != null) workingImages[activeIndex] = saved
-            }
-            popup.dismiss()
-            pendingAttachments.addAll(workingImages)
-            if (caption.isNotEmpty()) {
-                binding.etMessage.setText(caption)
-            }
-            renderPendingAttachments()
-            updateSendIcon()
-            sendMessage()
-        }
-
-        popup.showAtLocation(binding.root, Gravity.CENTER, 0, 0)
+        previewSheet.show(parentFragmentManager, "media_preview")
     }
 
     private fun playVoiceMessage(url: String, mime: String = "audio/mp4", storageId: String? = null) {
@@ -1048,15 +1127,109 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun setupEmojiPicker() {
-        val emojiPicker = EmojiPickerView(requireContext()).apply {
-            emojiGridColumns = 9
-            setOnEmojiPickedListener { emoji ->
-                val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
-                binding.etMessage.text?.insert(cursorPos, emoji.emoji)
-                binding.etMessage.setSelection(cursorPos + emoji.emoji.length)
-            }
+        if (isEmojiPickerInitialized) return
+        val context = context ?: return
+
+        // Inflate custom emoji picker layout
+        val pickerLayout = LayoutInflater.from(context).inflate(
+            R.layout.layout_custom_emoji_picker,
+            binding.emojiPickerContainer,
+            false
+        )
+        binding.emojiPickerContainer.addView(pickerLayout)
+
+        val etEmojiSearch = pickerLayout.findViewById<android.widget.EditText>(R.id.etEmojiSearch)
+        val btnSearchClear = pickerLayout.findViewById<ImageView>(R.id.btnSearchClear)
+        val categoryTabsContainer = pickerLayout.findViewById<LinearLayout>(R.id.categoryTabsContainer)
+        val rvEmojis = pickerLayout.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvEmojis)
+
+        // Set up 7-column Grid Recycler
+        val columns = 7
+        val adapter = CustomEmojiAdapter(emptyList()) { emoji ->
+            val cursorPos = binding.etMessage.selectionStart.coerceAtLeast(0)
+            binding.etMessage.text?.insert(cursorPos, emoji)
+            binding.etMessage.setSelection(cursorPos + emoji.length)
+            CustomEmojiData.addFavorite(context, emoji)
         }
-        binding.emojiPickerContainer.addView(emojiPicker)
+        rvEmojis.layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, columns)
+        rvEmojis.adapter = adapter
+
+        var activeCategory = "Recents"
+
+        fun loadCategory(category: String) {
+            activeCategory = category
+            
+            // Highlight selected tab, reset others
+            for (i in 0 until categoryTabsContainer.childCount) {
+                val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                if (tvName.text == category) {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_selected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
+                } else {
+                    tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                    tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                }
+            }
+
+            val list = if (category == "Recents") {
+                CustomEmojiData.getFavorites(context)
+            } else {
+                CustomEmojiData.categories[category] ?: emptyList()
+            }
+            adapter.updateList(list)
+            rvEmojis.scrollToPosition(0)
+        }
+
+        // Dynamically build category tabs
+        val categoriesList = listOf("Recents") + CustomEmojiData.categories.keys.toList()
+        categoriesList.forEach { category ->
+            val tabView = LayoutInflater.from(context).inflate(
+                R.layout.item_emoji_category_tab,
+                categoryTabsContainer,
+                false
+            ) as ViewGroup
+            val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName)
+            tvName.text = category
+            tabView.setOnClickListener {
+                etEmojiSearch.setText("")
+                loadCategory(category)
+            }
+            categoryTabsContainer.addView(tabView)
+        }
+
+        // Search TextWatcher for keyword-based filtering
+        etEmojiSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString().orEmpty().trim()
+                if (query.isNotEmpty()) {
+                    btnSearchClear.visibility = View.VISIBLE
+                    // Clear tab highlights during search
+                    for (i in 0 until categoryTabsContainer.childCount) {
+                        val tabView = categoryTabsContainer.getChildAt(i) as? ViewGroup ?: continue
+                        val tvName = tabView.findViewById<TextView>(R.id.tvCategoryName) ?: continue
+                        tvName.setBackgroundResource(R.drawable.bg_emoji_tab_unselected)
+                        tvName.setTextColor(android.graphics.Color.parseColor("#475467"))
+                    }
+                    val results = CustomEmojiData.searchEmojis(query)
+                    adapter.updateList(results)
+                } else {
+                    btnSearchClear.visibility = View.GONE
+                    loadCategory(activeCategory)
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        btnSearchClear.setOnClickListener {
+            etEmojiSearch.setText("")
+        }
+
+        // Load default category (Recents) on start
+        loadCategory("Recents")
+
+        isEmojiPickerInitialized = true
     }
 
     private fun toggleEmojiPanel() {
@@ -1064,6 +1237,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun showEmojiPanel() {
+        setupEmojiPicker()
         isEmojiPanelVisible = true
         binding.emojiPanel.visibility = View.VISIBLE
         val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
@@ -1316,8 +1490,17 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             runCatching {
                 api.deleteMessage(session.bearerToken, DeleteMessageRequest(messageId))
             }.onSuccess {
+                context?.let { ctx -> 
+                    DeletedMessagesTracker.markAsDeleted(ctx, messageId)
+                    val msg = messages.find { it.id == messageId }
+                    if (msg != null) {
+                        val timestamp = getNormalizedTimestamp(msg.creationTime).toLong()
+                        val chatId = conversationId ?: channelId
+                        DeletedMessagesTracker.markPreviewDeleted(ctx, chatId, timestamp)
+                    }
+                }
                 purgeMessageFromCache(listOf(messageId))
-                loadInitialMessages(scrollToBottom = false)
+                loadInitialMessages(scrollToBottom = true)
             }.onFailure {
                 toast("Unable to delete message")
             }
@@ -1330,7 +1513,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val removed = messages.removeAll { it.id in ids }
         originalBodyCache.keys.removeAll(ids)
         if (removed) {
-            renderMessages(scrollToBottom = false)
+            renderMessages(scrollToBottom = true)
         }
         persistMessageCache()
     }
@@ -1347,9 +1530,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         channelId?.let { "channel-$it" } ?: conversationId?.let { "conversation-$it" }
 
     private fun persistMessageCache() {
+        if (_binding == null) return
         val key = cacheKey() ?: return
         val ctx = context?.applicationContext ?: return
-        ChatMessageCache.save(ctx, key, messages.toList())
+        val messagesCopy = messages.toList()
+        viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            ChatMessageCache.save(ctx, key, messagesCopy)
+        }
     }
 
     private fun showChatHeaderMenu(anchor: View) {
@@ -1544,19 +1731,33 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     viewLifecycleOwner.lifecycleScope.launch {
                         var failures = 0
                         val deleted = mutableListOf<String>()
+                        val deletedMessages = mutableListOf<MessageData>()
                         ids.forEach { id ->
                             runCatching {
                                 api.deleteMessage(
                                     session.bearerToken,
                                     com.manjugroups.m_connect.network.DeleteMessageRequest(id)
                                 )
-                            }.onSuccess { deleted += id }
-                                .onFailure { failures++ }
+                            }.onSuccess {
+                                deleted += id
+                                context?.let { ctx -> DeletedMessagesTracker.markAsDeleted(ctx, id) }
+                                val msg = messages.find { it.id == id }
+                                if (msg != null) {
+                                    deletedMessages.add(msg)
+                                }
+                            }.onFailure { failures++ }
+                        }
+                        context?.let { ctx ->
+                            val maxTimestamp = deletedMessages.maxOfOrNull { getNormalizedTimestamp(it.creationTime).toLong() } ?: 0L
+                            if (maxTimestamp > 0) {
+                                val chatId = conversationId ?: channelId
+                                DeletedMessagesTracker.markPreviewDeleted(ctx, chatId, maxTimestamp)
+                            }
                         }
                         purgeMessageFromCache(deleted)
                         exitSelectionMode()
                         if (failures > 0) toast("Deleted with $failures error(s)")
-                        loadInitialMessages(scrollToBottom = false)
+                        loadInitialMessages(scrollToBottom = true)
                     }
                 }
                 .show()
@@ -1776,6 +1977,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
         }
         startPolling()
+        // Take a swing at the offline outbox every time the user opens
+        // / returns to this chat — most of the time it's empty; when
+        // it isn't, we send what's pending in queued order.
+        flushPendingMessages()
+        registerChatNetworkCallback()
     }
 
     override fun onPause() {
@@ -1783,7 +1989,40 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         pollJob = null
         typingDebounceJob?.cancel()
         typingDebounceJob = null
+        unregisterChatNetworkCallback()
         super.onPause()
+    }
+
+    private var chatNetworkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
+    /** Listen for connectivity gain → immediately flush the chat outbox
+     *  so the user doesn't have to wait for the next manual screen open. */
+    private fun registerChatNetworkCallback() {
+        if (chatNetworkCallback != null) return
+        val cm = requireContext().getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                if (_binding == null) return
+                requireActivity().runOnUiThread { flushPendingMessages() }
+            }
+        }
+        try {
+            val req = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(req, cb)
+            chatNetworkCallback = cb
+        } catch (_: Exception) { /* permission / API edge case — ignore */ }
+    }
+
+    private fun unregisterChatNetworkCallback() {
+        val cb = chatNetworkCallback ?: return
+        try {
+            requireContext().getSystemService(android.net.ConnectivityManager::class.java)
+                ?.unregisterNetworkCallback(cb)
+        } catch (_: Exception) {}
+        chatNetworkCallback = null
     }
 
     private var attachTilesWired = false
@@ -1876,77 +2115,55 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isDocumentPickerMode = false
             pickAttachmentsLauncher.launch(arrayOf("audio/*"))
         }
-        tile(R.id.tileAttachLocation) { toast("Location sharing coming soon") }
+        tile(R.id.tileAttachLocation) { launchLocationShare() }
         tile(R.id.tileAttachDocument) {
             isDocumentPickerMode = true
             pickAttachmentsLauncher.launch(arrayOf("*/*"))
         }
-        tile(R.id.tileAttachContact) { launchContactPicker() }
+        tile(R.id.tileAttachContact) { showCustomContactPickerSheet() }
         tile(R.id.tileAttachCamera) { launchCamera() }
         attachTilesWired = true
     }
 
-    private val cameraImageUri: android.net.Uri? get() = pendingCameraUri
-    private var pendingCameraUri: android.net.Uri? = null
-    private var pendingCameraMode: CameraMode = CameraMode.PHOTO
+    private fun launchCamera() {
+        ensureCameraPermissionThen {
+            val cameraSheet = CustomCameraBottomSheet().apply {
+                setListener(object : CustomCameraBottomSheet.CameraResultListener {
+                    override fun onMediaCaptured(uri: android.net.Uri, isVideo: Boolean) {
+                        val resolver = requireContext().contentResolver
+                        if (isVideo) {
+                            val mime = resolver.getType(uri) ?: "video/mp4"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = uri.lastPathSegment ?: "Video-${System.currentTimeMillis()}.mp4"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            showImageSendPreview(listOf(pending))
+                        } else {
+                            val mime = resolver.getType(uri) ?: "image/jpeg"
+                            val size = runCatching {
+                                resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                            }.getOrNull() ?: 0L
+                            val name = uri.lastPathSegment ?: "Photo-${System.currentTimeMillis()}.jpg"
+                            val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
+                            showImageSendPreview(listOf(pending))
+                        }
+                    }
 
-    private enum class CameraMode { PHOTO, VIDEO }
-
-    private val takePictureLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "image/jpeg"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Photo-${System.currentTimeMillis()}.jpg"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                showImageSendPreview(listOf(pending))
+                    override fun onGalleryClicked() {
+                        isDocumentPickerMode = false
+                        pickAttachmentsLauncher.launch(arrayOf("image/*", "video/*"))
+                    }
+                })
             }
+            cameraSheet.show(parentFragmentManager, "custom_camera")
         }
-
-    private val captureVideoLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CaptureVideo()) { saved ->
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (saved == true && uri != null) {
-                val resolver = requireContext().contentResolver
-                val mime = resolver.getType(uri) ?: "video/mp4"
-                val size = runCatching {
-                    resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-                }.getOrNull() ?: 0L
-                val name = "Video-${System.currentTimeMillis()}.mp4"
-                val pending = PendingAttachment(uri = uri, fileName = name, fileType = mime, fileSize = size)
-                pendingAttachments += pending
-                renderPendingAttachments()
-                updateSendIcon()
-            }
-        }
+    }
 
     private val cameraPermissionLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchCameraForMode(pendingCameraMode) else toast("Camera permission required")
+            if (granted) launchCamera() else toast("Camera permission required")
         }
-
-    private fun launchCamera() {
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
-        val sheet = layoutInflater.inflate(R.layout.bottom_sheet_camera_choice, null)
-        dialog.setContentView(sheet)
-        sheet.findViewById<View>(R.id.btnCameraPhoto).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.PHOTO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.PHOTO) }
-        }
-        sheet.findViewById<View>(R.id.btnCameraVideo).setOnClickListener {
-            dialog.dismiss()
-            pendingCameraMode = CameraMode.VIDEO
-            ensureCameraPermissionThen { launchCameraForMode(CameraMode.VIDEO) }
-        }
-        dialog.show()
-    }
 
     private fun ensureCameraPermissionThen(action: () -> Unit) {
         val permission = android.Manifest.permission.CAMERA
@@ -1958,52 +2175,319 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
-    private fun launchCameraForMode(mode: CameraMode) {
-        when (mode) {
-            CameraMode.PHOTO -> actuallyLaunchCamera()
-            CameraMode.VIDEO -> actuallyLaunchVideoCamera()
+    private val locationPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+            val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            if (fineGranted || coarseGranted) {
+                showLocationShareSheet()
+            } else {
+                toast("Location permission is required to share your site telemetry")
+            }
+        }
+
+    private fun launchLocationShare() {
+        val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), fine) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), coarse) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            showLocationShareSheet()
+        } else {
+            locationPermissionLauncher.launch(arrayOf(fine, coarse))
         }
     }
 
-    private fun actuallyLaunchCamera() {
-        val photoDir = File(requireContext().cacheDir, "chat_photos").apply { mkdirs() }
-        val photoFile = File(photoDir, "photo_${System.currentTimeMillis()}.jpg")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            photoFile
-        )
-        pendingCameraUri = uri
-        runCatching { takePictureLauncher.launch(uri) }
-            .onFailure { toast("Unable to open camera") }
+    private fun showLocationShareSheet() {
+        val sheet = LocationShareBottomSheet().apply {
+            setListener(object : LocationShareBottomSheet.LocationShareListener {
+                override fun onLocationShared(locationString: String) {
+                    sendLocationMessage(locationString)
+                }
+            })
+        }
+        sheet.show(parentFragmentManager, "location_share_sheet")
     }
 
-    private fun actuallyLaunchVideoCamera() {
-        val videoDir = File(requireContext().cacheDir, "chat_videos").apply { mkdirs() }
-        val videoFile = File(videoDir, "video_${System.currentTimeMillis()}.mp4")
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            videoFile
-        )
-        pendingCameraUri = uri
-        runCatching { captureVideoLauncher.launch(uri) }
-            .onFailure { toast("Unable to open video recorder") }
+    private fun sendLocationMessage(locationString: String) {
+        binding.etMessage.setText(locationString)
+        sendMessage()
     }
 
-    private val pickContactLauncher =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode != android.app.Activity.RESULT_OK) return@registerForActivityResult
-            val uri = result.data?.data ?: return@registerForActivityResult
-            handlePickedContact(uri)
+    private fun showCustomContactPickerSheet() {
+        if (!isAdded) return
+        val context = requireContext()
+        val content = layoutInflater.inflate(R.layout.bottom_sheet_multi_people_picker, null)
+        val dialog = BottomSheetDialog(context)
+        dialog.setContentView(content)
+
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
+            val params = sheet.layoutParams
+            params.height = (resources.displayMetrics.heightPixels * 0.9f).toInt()
+            sheet.layoutParams = params
+            sheet.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            androidx.core.view.ViewCompat.setElevation(sheet, 0f)
+            BottomSheetBehavior.from(sheet).apply {
+                state = BottomSheetBehavior.STATE_EXPANDED
+                skipCollapsed = true
+                isDraggable = true
+            }
         }
 
-    private fun launchContactPicker() {
-        val intent = android.content.Intent(android.content.Intent.ACTION_PICK).apply {
-            type = android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+        dialog.setOnShowListener { dialogInterface ->
+            val d = dialogInterface as BottomSheetDialog
+            d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { s ->
+                s.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(s, 0f)
+            }
         }
-        runCatching { pickContactLauncher.launch(intent) }
-            .onFailure { toast("No contacts app available") }
+
+        val titleView = content.findViewById<TextView>(R.id.tvSheetTitle)
+        val closeBtn = content.findViewById<View>(R.id.btnSheetClose)
+        val searchField = content.findViewById<EditText>(R.id.etSearchPeople)
+        val peopleCard = content.findViewById<LinearLayout>(R.id.peopleCard)
+        val emptyView = content.findViewById<TextView>(R.id.tvEmptyPeople)
+        val doneBtn = content.findViewById<FrameLayout>(R.id.btnDone)
+        val doneLabel = content.findViewById<TextView>(R.id.tvDoneLabel)
+        val countView = content.findViewById<TextView>(R.id.tvSelectedCount)
+
+        titleView.text = "Share Contacts"
+        doneLabel.text = "Share"
+        countView.text = "0 selected"
+
+        val selectedContacts = mutableSetOf<StaffData>()
+        var allPeople = emptyList<StaffData>()
+        var onlineStaffIds = emptySet<String>()
+
+        closeBtn.setOnClickListener { dialog.dismiss() }
+
+        fun updateDoneButton() {
+            val count = selectedContacts.size
+            countView.text = "$count selected"
+            val enabled = count > 0
+            doneBtn.isClickable = enabled
+            doneBtn.isFocusable = enabled
+            doneBtn.setBackgroundResource(
+                if (enabled) R.drawable.bg_sheet_start_button
+                else R.drawable.bg_sheet_start_button_disabled
+            )
+        }
+
+        fun bindPeople(staffList: List<StaffData>) {
+            peopleCard.removeAllViews()
+            if (staffList.isEmpty()) {
+                emptyView.text = "No matching people"
+                emptyView.visibility = View.VISIBLE
+                peopleCard.visibility = View.GONE
+                return
+            }
+            emptyView.visibility = View.GONE
+            peopleCard.visibility = View.VISIBLE
+
+            peopleCard.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            val dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
+                setSize(0, (resources.displayMetrics.density * 0.5f).toInt().coerceAtLeast(1))
+                setColor(ContextCompat.getColor(context, R.color.chat_separator))
+            }
+            peopleCard.dividerDrawable = dividerDrawable
+
+            staffList.forEachIndexed { index, member ->
+                val row = layoutInflater.inflate(R.layout.item_chat_sheet_person, peopleCard, false)
+                row.tag = member
+
+                val tvName = row.findViewById<TextView>(R.id.tvName)
+                val tvSubtitle = row.findViewById<TextView>(R.id.tvSubtitle)
+                val radio = row.findViewById<View>(R.id.radioButton)
+                val avatarCheck = row.findViewById<View>(R.id.avatarCheck)
+                val onlineDot = row.findViewById<View>(R.id.onlineDot)
+
+                tvName.text = member.name ?: "User"
+                tvSubtitle.text = listOfNotNull(member.designation, member.department)
+                    .takeIf { it.isNotEmpty() }
+                    ?.joinToString(" • ")
+                    ?: member.phone ?: ""
+
+                val initials = initialsFor(member.name ?: "User")
+                bindAvatar(
+                    row.findViewById(R.id.avatarContainer),
+                    row.findViewById(R.id.tvAvatar),
+                    row.findViewById(R.id.ivAvatarPhoto),
+                    member.photo,
+                    initials,
+                    index + (member.name?.length ?: 0)
+                )
+
+                val isSel = selectedContacts.any { it.id == member.id }
+                radio.setBackgroundResource(
+                    if (isSel) R.drawable.bg_sheet_radio_on
+                    else R.drawable.bg_sheet_radio_off
+                )
+                avatarCheck.visibility = if (isSel) View.VISIBLE else View.GONE
+                onlineDot.visibility = if (onlineStaffIds.contains(member.id)) View.VISIBLE else View.GONE
+
+                row.setOnClickListener {
+                    val alreadySel = selectedContacts.any { it.id == member.id }
+                    if (alreadySel) {
+                        selectedContacts.removeAll { it.id == member.id }
+                    } else {
+                        selectedContacts.add(member)
+                    }
+
+                    val newSel = selectedContacts.any { it.id == member.id }
+                    radio.setBackgroundResource(
+                        if (newSel) R.drawable.bg_sheet_radio_on
+                        else R.drawable.bg_sheet_radio_off
+                    )
+                    avatarCheck.visibility = if (newSel) View.VISIBLE else View.GONE
+
+                    updateDoneButton()
+                }
+
+                peopleCard.addView(row)
+            }
+        }
+
+        fun filterPeople(query: String) {
+            var visibleCount = 0
+            val trimmedQuery = query.trim()
+            for (i in 0 until peopleCard.childCount) {
+                val child = peopleCard.getChildAt(i)
+                val member = child.tag as? StaffData
+                if (member == null) continue
+                
+                val matches = if (trimmedQuery.isEmpty()) {
+                    true
+                } else {
+                    (member.name ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.designation ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.department ?: "").contains(trimmedQuery, ignoreCase = true) ||
+                    (member.phone ?: "").contains(trimmedQuery)
+                }
+                
+                if (matches) {
+                    child.visibility = View.VISIBLE
+                    visibleCount++
+                } else {
+                    child.visibility = View.GONE
+                }
+            }
+            
+            if (visibleCount == 0) {
+                emptyView.text = "No matching people"
+                emptyView.visibility = View.VISIBLE
+                peopleCard.visibility = View.GONE
+            } else {
+                emptyView.visibility = View.GONE
+                peopleCard.visibility = View.VISIBLE
+            }
+        }
+
+        searchField.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterPeople(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        doneBtn.setOnClickListener {
+            if (selectedContacts.isEmpty()) return@setOnClickListener
+            selectedContacts.forEach { contact ->
+                val contactName = contact.name ?: "Contact"
+                val contactPhone = contact.phone ?: ""
+                val contactLabel = "Mobile"
+                sendContactMessageDirect(contactName, contactPhone, contactLabel)
+            }
+            dialog.dismiss()
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.getOnlineStaff(session.bearerToken)
+            }.onSuccess { resp ->
+                onlineStaffIds = resp.online?.mapNotNull { it?.staffId }?.toSet().orEmpty()
+            }
+
+            runCatching {
+                api.getStaff(session.bearerToken, status = "active")
+            }.onSuccess { response ->
+                val currentStaffId = session.staffId
+                allPeople = response.staff.filter { it.id != null && it.id != currentStaffId }
+                bindPeople(allPeople)
+            }.onFailure {
+                toast("Unable to load contacts list")
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun sendContactMessageDirect(name: String, number: String, label: String) {
+        val text = buildString {
+            append("📇 Contact\n")
+            append(name).append('\n')
+            append(label).append(": ").append(number)
+        }
+        sendDirectMessage(text)
+    }
+
+    private fun sendDirectMessage(text: String) {
+        val originalText = binding.etMessage.text?.toString() ?: ""
+        binding.etMessage.setText(text)
+        sendMessage()
+        if (originalText.isNotEmpty()) {
+            binding.etMessage.setText(originalText)
+        }
+    }
+
+    private fun initialsFor(name: String): String =
+        name.split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .ifBlank { name.take(1).uppercase(Locale.getDefault()) }
+
+    private fun avatarPalette(seed: Int): Pair<Int, Int> {
+        return when (seed.mod(4)) {
+            0 -> resolveColor(R.attr.colorAccentLight) to resolveColor(R.attr.colorAccentPrimary)
+            1 -> resolveColor(R.attr.colorInfoLight) to resolveColor(R.attr.colorInfo)
+            2 -> resolveColor(R.attr.colorSuccessLight) to resolveColor(R.attr.colorSuccess)
+            else -> resolveColor(R.attr.colorWarningLight) to resolveColor(R.attr.colorWarning)
+        }
+    }
+
+    private fun bindAvatar(container: View, label: TextView, text: String, seed: Int) {
+        val palette = avatarPalette(seed)
+        val bg = container.background
+        if (bg != null) {
+            bg.mutate().setTint(palette.first)
+        } else {
+            container.setBackgroundColor(palette.first)
+        }
+        label.setTextColor(palette.second)
+        label.text = text
+    }
+
+    private fun bindAvatar(
+        container: View,
+        label: TextView,
+        ivPhoto: ImageView,
+        photoUrl: String?,
+        text: String,
+        seed: Int
+    ) {
+        val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photoUrl)
+        if (!resolved.isNullOrBlank()) {
+            ivPhoto.visibility = View.VISIBLE
+            label.visibility = View.GONE
+            ivPhoto.load(resolved) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+        } else {
+            ivPhoto.visibility = View.GONE
+            label.visibility = View.VISIBLE
+            bindAvatar(container, label, text, seed)
+        }
     }
 
     private fun handlePickedContact(uri: android.net.Uri) {
@@ -2067,6 +2551,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewLifecycleOwner.lifecycleScope.launch {
+            launch { refreshPresence() }
             var refreshCounter = 0
             while (true) {
                 pollForMessages()
@@ -2074,7 +2559,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 presencePollCounter++
                 refreshCounter++
                 if (presencePollCounter % 6 == 0) {
-                    refreshPresence()
+                    launch { refreshPresence() }
+                    runCatching {
+                        api.presenceHeartbeat(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.PresenceHeartbeatRequest("online")
+                        )
+                    }
                 }
                 // The `pollMessages` endpoint only returns rows created after
                 // `latestMessageTime`, so updates to existing messages
@@ -2166,16 +2657,26 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         fallbackStamp = conversation?.lastMessageAt
                     )
 
+                    // Use the photo embedded in the conversation
+                    // response first — server already resolved the
+                    // storage id to a public URL, so the avatar
+                    // renders without waiting for a second round-trip.
+                    photoUrl = participant?.photo?.takeIf { it.isNotBlank() }
+
                     val staffId = otherStaffId
                     if (staffId != null) {
                         runCatching {
                             val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            photoUrl = staffResp.staff?.photo
+                            val staffPhoto = staffResp.staff?.photo
+                            if (!staffPhoto.isNullOrBlank()) {
+                                photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffPhoto)
+                            }
                             otherStaffPhone = staffResp.staff?.phone
                         }
                     }
                 }
             }
+            chatPhotoUrl = photoUrl
         }
 
         if (_binding != null) {
@@ -2188,6 +2689,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (photoUrl != null) {
                 binding.ivHeaderAvatar.load(photoUrl) {
                     crossfade(true)
+                    transformations(CircleCropTransformation())
                 }
                 binding.tvHeaderAvatarInitials.visibility = View.GONE
             } else {
@@ -2230,9 +2732,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         chatMuted = snap.muted
         snap.otherStaffId?.takeIf { it.isNotBlank() }?.let { otherStaffId = it }
         snap.initials?.takeIf { it.isNotBlank() }?.let { binding.tvHeaderAvatarInitials.text = it }
-        val photo = snap.photoUrl
+        val photo = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(snap.photoUrl)
+        chatPhotoUrl = photo
         if (!photo.isNullOrBlank()) {
-            binding.ivHeaderAvatar.load(photo) { crossfade(false) }
+            binding.ivHeaderAvatar.load(photo) {
+                crossfade(false)
+                transformations(CircleCropTransformation())
+            }
             binding.tvHeaderAvatarInitials.visibility = View.GONE
         } else {
             binding.tvHeaderAvatarInitials.visibility = View.VISIBLE
@@ -2257,7 +2763,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private suspend fun refreshPresence() {
         val staffId = otherStaffId ?: return
         if (channelId != null) return
-        val updated = buildPresenceSubtitle(staffId, fallbackStamp = null)
+
+        var updated = chatSubtitle
+        runCatching {
+            val presence = api.getPresence(session.bearerToken, staffId = staffId).presence
+            if (presence != null) {
+                val isOnline = presence.status == "online"
+                val lastSeenAt = presence.lastSeenAt
+                chatAdapter.updateOtherParticipantPresence(isOnline, lastSeenAt)
+
+                updated = if (isOnline) {
+                    "Online"
+                } else {
+                    formatLastSeen(lastSeenAt)
+                }
+            }
+        }.onFailure {
+            updated = formatLastSeen(null)
+        }
+
         if (chatSubtitle != updated) {
             chatSubtitle = updated
             applySubtitleState()
@@ -2299,7 +2823,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             channelId = channelId,
             conversationId = conversationId,
             title = chatTitle,
-            otherStaffId = otherStaffId
+            otherStaffId = otherStaffId,
+            photoUrl = chatPhotoUrl
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
@@ -2510,7 +3035,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             val byId = linkedMapOf<String, MessageData>()
             mainMessages.forEach { msg -> msg.id?.let { byId[it] = msg } }
             val mergedInitial = byId.values
-                .sortedBy { it.creationTime ?: 0.0 }
+                .sortedBy { getNormalizedTimestamp(it.creationTime) }
                 .toList()
 
             // If cache already produced an identical list, skip the second
@@ -2527,8 +3052,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 msg.id?.let { initialParentMap[it] = originalBodyCache[it] ?: msg }
             }
             chatAdapter.setParentMessageCache(initialParentMap)
-            if (!cacheMatchesServer) {
-                renderMessages(scrollToBottom = scrollToBottom)
+            if (!cacheMatchesServer || messages.isEmpty()) {
+                renderMessages(scrollToBottom = scrollToBottom || !cacheMatchesServer)
             } else {
                 // Still need to persist the freshly-stamped cache (timestamps
                 // get refreshed) and let the poll loop handle future deltas.
@@ -2586,7 +3111,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         if (listDidChange) {
             val merged = byId.values
-                .sortedBy { it.creationTime ?: 0.0 }
+                .sortedBy { getNormalizedTimestamp(it.creationTime) }
                 .toList()
             messages.clear()
             messages.addAll(merged)
@@ -2767,6 +3292,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.slideCancelContainer.alpha = 1f
             binding.slideCancelContainer.translationX = 0f
 
+            // Initialize recording status container and trash container alphas/visibilities
+            binding.recordingStatusContainer.visibility = View.VISIBLE
+            binding.recordingStatusContainer.alpha = 1f
+            binding.trashCanContainer.visibility = View.VISIBLE
+            binding.trashCanContainer.alpha = 0f
+
             // Set up red blinking dot animation
             binding.ivRecordingDot.visibility = View.VISIBLE
             binding.ivRecordingDot.alpha = 1f
@@ -2802,6 +3333,8 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.animatingMicContainer.setBackgroundResource(R.drawable.bg_chat_send_circle)
             recordingHandler.removeCallbacks(recordingTimerTask)
             binding.ivRecordingDot.animate().cancel()
+            binding.recordingStatusContainer.visibility = View.GONE
+            binding.trashCanContainer.visibility = View.GONE
             binding.etMessage.isEnabled = true
             binding.etMessage.hint = "Message ..."
             applySubtitleState()
@@ -2825,7 +3358,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         stopMicPulseAnimation()
 
         // Calculate translation needed to reach the trash can
-        val targetTx = -(binding.animatingMicContainer.x - binding.trashCanContainer.x)
+        val targetTx = (binding.trashCanContainer.left - binding.animatingMicContainer.left).toFloat()
 
         binding.animatingMicContainer.animate().cancel()
         binding.animatingMicContainer.animate()
@@ -2883,6 +3416,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     binding.ivTrash.scaleY = 1f
                     binding.ivTrash.rotation = 0f
                     binding.ivTrash.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#98A2B3"))
+                    
+                    // Reset trash container and recording status container alpha/visibility
+                    binding.trashCanContainer.alpha = 0f
+                    binding.recordingStatusContainer.alpha = 1f
+                    binding.recordingStatusContainer.visibility = View.GONE
                 }
             }
             .start()
@@ -2914,9 +3452,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val chatItems = mutableListOf<ChatItem>()
         var lastDayKey: String? = null
 
+        messages.sortBy { getNormalizedTimestamp(it.creationTime) }
+
         messages
             .forEach { message ->
-                val createdMillis = message.creationTime?.toLong() ?: 0L
+                val createdMillis = getNormalizedTimestamp(message.creationTime).toLong()
                 val dayKey = dayKey(createdMillis)
                 if (dayKey != lastDayKey && createdMillis > 0L) {
                     chatItems.add(ChatItem.DateSeparator(friendlyDateLabel(createdMillis)))
@@ -2934,7 +3474,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         chatAdapter.submitList(chatItems) {
             if (scrollToBottom && chatItems.isNotEmpty()) {
-                binding.rvMessages.scrollToPosition(chatItems.size - 1)
+                binding.rvMessages.post {
+                    if (_binding != null) {
+                        binding.rvMessages.scrollToPosition(chatItems.size - 1)
+                    }
+                }
             }
         }
         persistMessageCache()
@@ -2956,6 +3500,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             yesterday.get(Calendar.DAY_OF_YEAR) == past.get(Calendar.DAY_OF_YEAR)
         if (isYesterday) return "Yesterday"
         return SimpleDateFormat("dd MMMM", Locale.getDefault()).format(Date(timestamp))
+    }
+
+    private fun getNormalizedTimestamp(timestamp: Double?): Double {
+        if (timestamp == null) return 0.0
+        return if (timestamp < 10000000000.0) timestamp * 1000.0 else timestamp
     }
 
     private fun buildAttachmentBadge(fileType: String): TextView {
@@ -3085,22 +3634,84 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun sendMessage() {
         val text = binding.etMessage.text.toString().trim()
         if (text.isEmpty() && pendingAttachments.isEmpty()) return
-        if (isSendingMessage) return
 
         val pendingSnapshot = pendingAttachments.toList()
         val previousText = text
         val parentId = replyingToMessage?.id
 
+        // Cache local URI mapping to load attachments instantly without network buffering
+        pendingSnapshot.forEach { attachment ->
+            localAttachmentUriMap[attachment.fileName] = attachment.uri.toString()
+        }
+
+        // Clear composer state IMMEDIATELY (WhatsApp-style) — the user
+        // can keep typing the next message without waiting on the
+        // network. The optimistic bubble is rendered below; the real
+        // server send runs in the background and replaces it on success.
         binding.etMessage.setText("")
-        if (isEmojiPanelVisible) hideEmojiPanel()
         pendingAttachments.clear()
         cancelReply()
         renderPendingAttachments()
-        setComposerBusy(true)
         updateSendIcon()
 
+        // Build the optimistic message — a local-only MessageData with a
+        // UUID id + senderId=self + creationTime=now. The adapter reads
+        // localPendingId to flag this bubble as "sending…" until either
+        // the API confirms (replace) or stays unsent (leave as-is for
+        // the retry queue to handle later).
+        val localId = "local-" + java.util.UUID.randomUUID().toString()
+        val nowEpochMicro = System.currentTimeMillis().toDouble()
+        val myStaffId = session.staffId
+        val myName = session.userName
+        val optimistic = com.manjugroups.m_connect.network.MessageData(
+            id = localId,
+            creationTime = nowEpochMicro,
+            body = previousText,
+            senderId = myStaffId,
+            senderName = myName,
+            channelId = channelId,
+            conversationId = conversationId,
+            isDeleted = false,
+            isEdited = false,
+            replyCount = 0,
+            parentMessageId = parentId,
+            attachments = pendingSnapshot.map {
+                // Local preview attachments so the optimistic bubble
+                // shows the picked file immediately. The real upload
+                // happens below; on success the server-confirmed message
+                // replaces these with proper storage IDs + URLs.
+                com.manjugroups.m_connect.network.MessageAttachmentData(
+                    id = "temp_attachment_${it.fileName}",
+                    storageId = it.fileName,
+                    fileName = it.fileName,
+                    fileType = it.fileType,
+                    fileSize = it.fileSize,
+                    url = it.uri.toString()
+                )
+            }.ifEmpty { null },
+            reactions = null,
+            localPendingId = localId,
+        )
+        messages.add(optimistic)
+        renderMessages(scrollToBottom = true)
+
+        // Persist into the offline queue FIRST so a process-death
+        // between here and the API call doesn't lose the message.
+        // Attachment-bearing sends still take the legacy path (one-shot
+        // upload + send) — for plain text we use the queue.
+        val ctx = requireContext().applicationContext
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching {
+            if (pendingSnapshot.isEmpty()) {
+                ChatPendingQueue.enqueue(
+                    context = ctx,
+                    localId = localId,
+                    conversationId = conversationId,
+                    channelId = channelId,
+                    body = previousText,
+                    parentMessageId = parentId,
+                )
+            }
+            val result = runCatching {
                 val uploadedAttachments = uploadPendingAttachments(pendingSnapshot)
                 api.sendMessage(
                     token = session.bearerToken,
@@ -3109,29 +3720,97 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         conversationId = conversationId,
                         body = previousText,
                         parentMessageId = parentId,
-                        attachments = uploadedAttachments
-                    )
+                        attachments = uploadedAttachments,
+                    ),
                 )
-            }.onSuccess { response ->
+            }
+            result.onSuccess { response ->
                 if (!response.success) {
-                    restoreComposer(previousText, pendingSnapshot)
-                    toast("Failed to send message")
+                    markOptimisticFailed(localId)
+                    toast("Will retry when online")
                     return@onSuccess
                 }
-                appendSentMessage(response.messageId)
+                // Replace the optimistic bubble with the server-confirmed
+                // version + drop the queue row.
+                if (pendingSnapshot.isEmpty()) {
+                    ChatPendingQueue.confirmSent(ctx, localId)
+                }
+                replaceOptimisticWithServer(localId, response.messageId)
                 markRead()
             }.onFailure {
-                restoreComposer(previousText, pendingSnapshot)
-                toast("Network error while sending")
+                // Network down / 5xx / etc — leave the row in the queue.
+                // onResume + the NetworkCallback below will drain it once
+                // connectivity is back. The UI shows pending until then.
+                markOptimisticFailed(localId)
             }
-
-            setComposerBusy(false)
-            updateSendIcon()
         }
     }
 
-    private suspend fun appendSentMessage(messageId: String?) {
+    /** Find the optimistic placeholder and replace it with the real
+     *  server message (fetched by id) so the bubble's metadata
+     *  (creationTime, reactions, etc.) matches the persisted row. */
+    private suspend fun replaceOptimisticWithServer(localId: String, serverMessageId: String?) {
+        val idx = messages.indexOfFirst { it.localPendingId == localId }
+        if (idx < 0) {
+            if (serverMessageId != null) appendSentMessage(serverMessageId)
+            return
+        }
+        if (serverMessageId.isNullOrBlank()) {
+            // Still flip pending off so the bubble doesn't show "sending"
+            // forever — the next message poll will replace it with the
+            // real row.
+            messages[idx] = messages[idx].copy(localPendingId = null)
+            renderMessages(scrollToBottom = false)
+            return
+        }
+        runCatching { api.getMessage(session.bearerToken, serverMessageId) }
+            .onSuccess { resp ->
+                val sent = resp.message
+                if (sent != null) {
+                    messages[idx] = sent
+                    latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 }
+                        ?: latestMessageTime
+                    renderMessages(scrollToBottom = false)
+                } else {
+                    messages[idx] = messages[idx].copy(localPendingId = null)
+                    renderMessages(scrollToBottom = false)
+                }
+            }
+            .onFailure {
+                messages[idx] = messages[idx].copy(localPendingId = null)
+                renderMessages(scrollToBottom = false)
+            }
+    }
+
+    /** Mark the optimistic bubble as "failed but pending" so the adapter
+     *  can render a retry indicator. Leaves the queue row in place. */
+    private fun markOptimisticFailed(localId: String) {
+        val idx = messages.indexOfFirst { it.localPendingId == localId }
+        if (idx >= 0) {
+            messages[idx] = messages[idx].copy(hasFailed = true)
+            renderMessages(scrollToBottom = false)
+        }
+    }
+
+    /** Drain the offline outbox via ChatPendingQueue and update the UI
+     *  for any optimistic bubbles that finally land. */
+    private fun flushPendingMessages() {
+        val ctx = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                ChatPendingQueue.flush(ctx) { localId, serverMessageId ->
+                    replaceOptimisticWithServer(localId, serverMessageId)
+                }
+            } catch (_: Exception) { /* network blip — try next time */ }
+        }
+    }
+
+    private suspend fun appendSentMessage(messageId: String?, tempId: String? = null) {
         if (messageId.isNullOrBlank()) {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
             return
         }
@@ -3140,26 +3819,43 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }.onSuccess { resp ->
             val sent = resp.message
             if (sent == null) {
+                if (tempId != null) {
+                    messages.removeAll { it.id == tempId }
+                    renderMessages(scrollToBottom = false)
+                }
                 loadInitialMessages(scrollToBottom = true)
                 return@onSuccess
             }
-            val existingIndex = messages.indexOfFirst { it.id == sent.id }
-            if (existingIndex >= 0) {
-                messages[existingIndex] = sent
+            val existingIndexByTemp = if (tempId != null) messages.indexOfFirst { it.id == tempId } else -1
+            val existingIndexById = messages.indexOfFirst { it.id == sent.id }
+            
+            if (existingIndexById >= 0) {
+                messages[existingIndexById] = sent
+                if (existingIndexByTemp >= 0) {
+                    messages.removeAt(existingIndexByTemp)
+                }
             } else {
-                messages.add(sent)
+                if (existingIndexByTemp >= 0) {
+                    messages[existingIndexByTemp] = sent
+                } else {
+                    messages.add(sent)
+                }
             }
             latestMessageTime = messages.maxOfOrNull { it.creationTime ?: 0.0 } ?: latestMessageTime
             renderMessages(scrollToBottom = true)
         }.onFailure {
+            if (tempId != null) {
+                messages.removeAll { it.id == tempId }
+                renderMessages(scrollToBottom = false)
+            }
             loadInitialMessages(scrollToBottom = true)
         }
     }
 
     private suspend fun uploadPendingAttachments(
         attachments: List<PendingAttachment>
-    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> {
-        return attachments.map { attachment ->
+    ): List<com.manjugroups.m_connect.network.MessageAttachmentUpload> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        attachments.map { attachment ->
             val bytes = requireContext().contentResolver.openInputStream(attachment.uri)?.use {
                 it.readBytes()
             } ?: error("Unable to read ${attachment.fileName}")
@@ -3187,28 +3883,18 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         attachments: List<PendingAttachment>
     ) {
         if (_binding == null) return
-        binding.etMessage.setText(text)
+        val currentText = binding.etMessage.text?.toString().orEmpty()
+        val newText = if (currentText.isBlank()) text else "$text\n$currentText"
+        binding.etMessage.setText(newText)
         binding.etMessage.setSelection(binding.etMessage.text?.length ?: 0)
-        pendingAttachments.clear()
         pendingAttachments.addAll(attachments)
         renderPendingAttachments()
         updateSendIcon()
     }
 
     private fun setComposerBusy(isBusy: Boolean) {
-        isSendingMessage = isBusy
-        if (_binding == null) return
-        binding.btnSend.isEnabled = !isBusy
-        binding.btnAttach.isEnabled = !isBusy
-        // Intentionally NOT disabling etMessage. Disabling a focused
-        // EditText causes Android to strip focus + dismiss the IME, so
-        // every send was killing the keyboard and the user had to tap
-        // the field again to type the next message. The isSendingMessage
-        // guard at the top of sendMessage() already prevents double-fires,
-        // so the field can stay enabled — the user can keep typing the
-        // next message while the previous one is still uploading.
-        binding.btnSend.alpha = if (isBusy) 0.6f else 1f
-        binding.btnAttach.alpha = if (isBusy) 0.6f else 1f
+        // Keep it empty to avoid blocking the input field and send button,
+        // allowing smooth WhatsApp-style concurrent background sending.
     }
 
     private fun markRead() {
@@ -3319,8 +4005,25 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 )
 
                 val sysBottom = sys.bottom
-                binding.attachPanel.setPadding(0, 0, 0, sysBottom)
-                binding.emojiPanel.setPadding(0, 0, 0, sysBottom)
+                val panelPaddingBottom = if (ime.bottom > sys.bottom) {
+                    ime.bottom
+                } else {
+                    sys.bottom
+                }
+                binding.attachPanel.setPadding(0, 0, 0, panelPaddingBottom)
+                binding.emojiPanel.setPadding(0, 0, 0, panelPaddingBottom)
+
+                val basePanelHeight = dpToPx(280)
+                val totalPanelHeight = basePanelHeight + panelPaddingBottom
+
+                binding.emojiPanel.layoutParams = binding.emojiPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.attachPanel.layoutParams = binding.attachPanel.layoutParams.apply {
+                    height = totalPanelHeight
+                }
+                binding.emojiPanel.requestLayout()
+                binding.attachPanel.requestLayout()
 
                 binding.rvMessages.setPadding(
                     binding.rvMessages.paddingLeft,
@@ -3380,7 +4083,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         _binding = null
     }
 
-    private data class PendingAttachment(
+    data class PendingAttachment(
         val uri: Uri,
         val fileName: String,
         val fileType: String,

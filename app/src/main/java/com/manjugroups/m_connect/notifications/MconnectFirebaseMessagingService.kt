@@ -16,6 +16,8 @@ import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.util.Log
+
 
 class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -33,6 +35,7 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        Log.d("MconnectFCM", "onMessageReceived: from=${message.from}, data=${message.data}, notificationTitle=${message.notification?.title}, notificationBody=${message.notification?.body}")
 
         if (message.data["type"] == "geotrack_sync") {
             CoroutineScope(Dispatchers.IO).launch {
@@ -43,8 +46,25 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             if (message.data["silent"] == "true") return
         }
 
-        val title = message.data["title"] ?: message.notification?.title ?: getString(R.string.app_name)
-        val body = message.data["body"] ?: message.notification?.body ?: return
+        val title = message.data["title"]
+            ?: message.data["subject"]
+            ?: message.data["chatTitle"]
+            ?: message.data["targetTitle"]
+            ?: message.notification?.title
+            ?: getString(R.string.app_name)
+
+        val body = message.data["body"]
+            ?: message.data["message"]
+            ?: message.data["text"]
+            ?: message.data["content"]
+            ?: message.data["desc"]
+            ?: message.data["description"]
+            ?: message.notification?.body
+
+        if (body.isNullOrBlank()) {
+            Log.w("MconnectFCM", "onMessageReceived: empty/null body, returning early")
+            return
+        }
         val inferredTab = when {
             message.data["targetTab"] != null -> message.data["targetTab"]
             message.data["channelId"] != null || message.data["conversationId"] != null -> WorkflowNotificationRoute.TAB_CHAT
@@ -101,33 +121,56 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
 
+        // Notification ID strategy — pick the most distinctive field
+        // available so two messages don't collide and clobber each other:
+        //   1. messageId / conversationId — per-chat unique, so each
+        //      DM lands as a separate heads-up.
+        //   2. eventId — for HR/workflow notifications.
+        //   3. body + sentTime hash — fallback that still varies per
+        //      arrival, so two identical-bodied messages a minute apart
+        //      get two notifications instead of one.
+        val notifKey = message.data["messageId"]
+            ?: message.data["eventId"]
+            ?: ((body) + ":" + message.sentTime)
+        val notifId = notifKey.hashCode()
+
         val pendingIntent = PendingIntent.getActivity(
             this,
-            (message.data["eventId"] ?: body).hashCode(),
+            notifId,
             routeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, PushTokenManager.CHANNEL_ID)
+        // Route to the right per-type channel so the user can mute /
+        // customise each category in system settings. Unknown types fall
+        // back to the general channel so a new server-side notification
+        // type still surfaces instead of silently dropping.
+        val type = message.data["type"]
+        val channelId = PushTokenManager.channelForType(type)
+
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            // Heads-up for chat / approvals / alerts; the channel
+            // importance already governs sound + heads-up on API 26+.
+            // DEFAULT_ALL adds the default sound + vibration + lights so
+            // the legacy general channel (API < 26 fallback) still feels
+            // alive without per-channel config.
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        showNotification((message.data["eventId"] ?: body).hashCode(), notification)
+        showNotification(notifId, notification)
     }
 
     @SuppressLint("MissingPermission")
     private fun showNotification(id: Int, notification: android.app.Notification) {
-        // Respect the in-app "Manage Notification" toggle. The backend
-        // also stops targeting this device once it unregisters the push
-        // token, but a push can still arrive in the gap between the user
-        // toggling off and the unregister landing — suppress it here so
-        // the toggle is honoured immediately.
-        if (!com.manjugroups.m_connect.auth.SessionManager(this).isNotificationEnabled) {
+        val session = com.manjugroups.m_connect.auth.SessionManager(this)
+        if (!session.isNotificationEnabled) {
+            Log.w("MconnectFCM", "showNotification: skipped because notifications are toggled off in settings")
             return
         }
         if (
@@ -135,9 +178,11 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            Log.w("MconnectFCM", "showNotification: skipped because POST_NOTIFICATIONS permission is not granted")
             return
         }
 
+        Log.d("MconnectFCM", "showNotification: calling notify for notification id=$id")
         NotificationManagerCompat.from(this).notify(id, notification)
     }
 }

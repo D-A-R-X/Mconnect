@@ -285,6 +285,7 @@ class DialerFragment : Fragment() {
         private const val PREFS = "mconnect_prefs"
         private const val KEY_STATION = "dialer.station"
         private const val DEFAULT_STATION = "6369487527"
-        private const val DOOCTI_URL = "https://mms.aivida.in/api/doocti-call"
+        private val DOOCTI_URL: String
+            get() = com.manjugroups.m_connect.BuildConfig.APP_URL.trimEnd('/') + "/api/doocti-call"
     }
 }

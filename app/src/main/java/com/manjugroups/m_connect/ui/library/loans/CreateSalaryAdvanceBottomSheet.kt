@@ -109,16 +109,15 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                     binding.btnSubmitAdvance.alpha = 1f
                 }
             } catch (e: retrofit2.HttpException) {
-                val errorStr = try {
-                    e.response()?.errorBody()?.string()?.take(200) ?: e.message()
-                } catch (ex: Exception) {
-                    e.message()
-                }
-                android.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Server Error")
-                    .setMessage(errorStr)
-                    .setPositiveButton("OK", null)
-                    .show()
+                // Surface a clean human-readable message instead of the
+                // raw JSON + convex stack trace that used to land in an
+                // AlertDialog (`{"success":false,"error":"Uncaught
+                // Error: ...\n    at assertNoBlocking"}`).
+                Toast.makeText(
+                    requireContext(),
+                    LoanErrorParser.friendlyMessage(e),
+                    Toast.LENGTH_LONG,
+                ).show()
                 binding.btnSubmitAdvance.isEnabled = true
                 binding.btnSubmitAdvance.alpha = 1f
             } catch (e: Exception) {

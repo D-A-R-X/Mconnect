@@ -22,6 +22,19 @@ class MconnectApp : Application(), ImageLoaderFactory {
                     add(GifDecoder.Factory())
                 }
             }
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.20) // Limit memory cache to 20% of available heap
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(this.cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(512 * 1024 * 1024) // 512 MB disk cache
+                    .build()
+            }
+            .allowRgb565(true) // Save 50% memory per bitmap on low-end devices
+            .crossfade(true)   // Smooth image transition animations
             .build()
     }
 
@@ -29,24 +42,98 @@ class MconnectApp : Application(), ImageLoaderFactory {
         super.onCreate()
         // Force a single visual mode for now: app always runs in light mode.
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        // Drop any session that was minted against a different backend URL so
-        // switching BuildConfig.BASE_URL doesn't leak old-account data through
-        // EncryptedSharedPreferences.
-        SessionManager(this).purgeIfBaseUrlChanged()
+        
+        // Preheat EncryptedSharedPreferences and purge session if BASE_URL changed on a background
+        // thread to prevent heavy Keystore operations from blocking the main thread during startup.
+        java.lang.Thread {
+            try {
+                SessionManager(this@MconnectApp).purgeIfBaseUrlChanged()
+            } catch (e: Exception) {
+                android.util.Log.e("MconnectApp", "Failed to preheat/purge SessionManager", e)
+            }
+        }.start()
+
         PushTokenManager.ensureFirebaseInitialized(this)
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createNotificationChannel() {
+    /**
+     * Create one [NotificationChannel] per notification category so the
+     * staff can mute / customise each in system settings (Settings →
+     * Apps → Mconnect → Notifications) and so chat / alerts get a
+     * heads-up while background pings stay quiet.
+     *
+     * createNotificationChannel is idempotent — re-creating an existing
+     * channel updates its label/description but keeps user-controlled
+     * sound/vibration preferences. Safe to call on every cold start.
+     */
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        val channel = NotificationChannel(
-            PushTokenManager.CHANNEL_ID,
-            "Mconnect Notifications",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "HR approvals, chat messages, and app updates"
-        }
-        manager.createNotificationChannel(channel)
+
+        // Legacy / general — preserves behaviour for any old payloads
+        // still floating around without a `type` tag. Lights + vibration
+        // are enabled here so the catch-all channel feels alive on
+        // pre-API-26 devices where per-channel settings don't apply.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_ID,
+                "Mconnect Notifications",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "App updates and uncategorised alerts"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(100, 200, 300, 400, 500, 400, 300, 200, 400)
+            }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_CHAT,
+                "Chat Messages",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Direct messages, channel messages and mentions" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_TASKS,
+                "Tasks",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "Tasks assigned to you and daily task updates" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_VISITS,
+                "CP / Site Visits",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "CP visits and site visits assigned to you" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_APPROVALS,
+                "Approvals & Requests",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Leave, permission, WFH and attendance requests" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_LOANS,
+                "Loans & Advance",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Loan and salary advance approvals" }
+        )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_ALERTS,
+                "Real-time Alerts",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Tamper alerts, on-duty status, planned visit reminders" }
+        )
     }
 }

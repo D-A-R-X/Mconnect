@@ -34,11 +34,15 @@ class LoansFragment : Fragment() {
     // Raw lists loaded from API
     private val allActive = mutableListOf<Loan>()
     private val allPrevious = mutableListOf<Loan>()
-    
+    // Raw pending-approvals list (loans + advances both, exactly as
+    // returned by the backend). The visible adapter gets a per-tab
+    // slice in render(); this is the source of truth.
+    private val allPending = mutableListOf<com.manjugroups.m_connect.network.LoanData>()
+
     // Filtered lists for the active tab
     private val active = mutableListOf<Loan>()
     private val previous = mutableListOf<Loan>()
-    
+
     private var loaded = false
 
     private val TAB_LOANS = 0
@@ -220,6 +224,11 @@ class LoansFragment : Fragment() {
             binding.tvHeroNextEmiLabel.text = "Next Due Date"
             binding.tvPreviousLoansLabel.text = "Previous Advances"
         }
+        // Rename the Requested Loans section so a salary-advance request
+        // doesn't show under a "Requested Loans" header on the Advance
+        // tab — matches the iOS UX and the rest of this screen's labels.
+        binding.tvRequestedLoansTitle.text =
+            if (selectedTab == TAB_LOANS) "Requested Loans" else "Requested Advances"
     }
 
     private fun render() {
@@ -252,18 +261,32 @@ class LoansFragment : Fragment() {
         binding.loansEmptyState.visibility = View.GONE
         binding.loansContent.visibility = View.VISIBLE
 
-        val bothEmpty = active.isEmpty() && previous.isEmpty()
+        // Re-slice pending approvals against the new tab so a loan
+        // request never lingers on the Advance tab (and vice versa).
+        renderPendingApprovals()
+
+        // Empty state shows ONLY when there's truly nothing on this
+        // tab — neither user-owned loans NOR a pending-approval card
+        // belonging to this tab. Showing the empty graphic below an
+        // already-visible request card was misleading.
+        val pendingOnThisTab = allPending.any {
+            val isAdv = it.requestType?.lowercase()?.trim() == "salary_advance"
+            if (selectedTab == TAB_LOANS) !isAdv else isAdv
+        }
+        val bothEmpty = active.isEmpty() && previous.isEmpty() && !pendingOnThisTab
         if (bothEmpty) {
             binding.inlineLoansEmptyState.visibility = View.VISIBLE
             binding.inlineLoansEmptyState.setTitle(
                 if (selectedTab == TAB_LOANS) "No Loans Yet" else "No Advances Yet"
             )
+            // Subtitle copy mirrors the iOS empty-state design the user
+            // pinned as canonical — same wording on both tabs so the
+            // visual feels consistent when the staff toggles between
+            // Loans and Advance without records on either side.
             binding.inlineLoansEmptyState.setDescription(
-                if (selectedTab == TAB_LOANS) {
-                    "When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history."
-                } else {
-                    "When your finance team disburses a salary advance, you'll see it grouped here with due dates."
-                },
+                "Stay organized by creating or joining teams. " +
+                    "Groups help you manage tasks, track progress, " +
+                    "and collaborate with your team in one place.",
             )
             binding.heroActiveCard.visibility = View.GONE
             binding.heroActiveCard.setOnClickListener(null)
@@ -308,12 +331,6 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
-                
-                binding.btnCancelLoan.visibility = View.VISIBLE
-                binding.btnCancelLoan.setOnClickListener {
-                    cancelLoan(loan.id)
-                }
-                
                 updateTrackerState(loan)
             }
             else -> {
@@ -322,9 +339,17 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
                 binding.heroActiveDetails.visibility = View.VISIBLE
                 binding.heroPendingTracker.visibility = View.GONE
-                
-                binding.btnCancelLoan.visibility = View.GONE
             }
+        }
+
+        // Delete affordance — same UI + confirm pattern as My
+        // Permissions. Surfaced on every status (pending + active)
+        // so the staff can withdraw a request OR retract a record
+        // they no longer want shown. Backend enforces what's actually
+        // deletable; UI just exposes the entry point.
+        binding.btnCancelLoan.visibility = View.VISIBLE
+        binding.btnCancelLoan.setOnClickListener {
+            showCancelLoanDialog(loan.id, loan.isAdvance)
         }
 
         binding.tvHeroOutstanding.text = LoansAdapter.formatRupees(loan.outstandingBalance)
@@ -348,15 +373,6 @@ class LoansFragment : Fragment() {
         // the other. Salary advances start at hr_pending (they skip the
         // nominee/GM/AVP chain), so those earlier dots read as done —
         // matching "it's already past those" semantics.
-        // Advances run ONLY HR → Accounts (no nominee/GM/AVP chain), so
-        // hide those four steps for an advance — the tracker then shows
-        // just the two relevant stages.
-        val loanStepVis = if (loan.isAdvance) View.GONE else View.VISIBLE
-        binding.trackStepNominee1.visibility = loanStepVis
-        binding.trackStepNominee2.visibility = loanStepVis
-        binding.trackStepGm.visibility = loanStepVis
-        binding.trackStepAvp.visibility = loanStepVis
-
         val stage = loan.currentStage?.lowercase()?.trim().orEmpty()
         // Numeric rank of the current stage; -1 for unknown/blank so an
         // un-stamped legacy row lights nothing rather than everything.
@@ -369,48 +385,103 @@ class LoansFragment : Fragment() {
             "disbursed", "completed", "active", "approved" -> 5
             else -> if (loan.status == LoanStatus.ACTIVE) 5 else -1
         }
-        val nominee1Signed = loan.nominee1Status.equals("approved", ignoreCase = true)
-        val nominee2Signed = loan.nominee2Status.equals("approved", ignoreCase = true)
-
-        // A nominee dot lights when the chain has moved past nominees
-        // (rank >= 1, i.e. gm_pending or later) OR that specific nominee
-        // has individually signed while still in nominee_pending.
-        val n1Done = rank >= 1 || nominee1Signed
-        val n2Done = rank >= 1 || nominee2Signed
-        val gmDone = rank >= 2
-        val avpDone = rank >= 3
         val hrDone = rank >= 4
 
-        fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
-            frame.setBackgroundResource(R.drawable.bg_loan_track_active)
-            icon.setImageResource(R.drawable.ic_loan_track_check)
-            text.setTextColor(Color.parseColor("#0B61CA"))
-            text.setTypeface(null, Typeface.BOLD)
-        }
-        fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
-            frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
-            icon.setImageResource(defaultIcon)
-            text.setTextColor(Color.parseColor("#98A2B3"))
-            text.setTypeface(null, Typeface.NORMAL)
-        }
+        if (loan.isAdvance) {
+            binding.loanTrackerLine.visibility = View.GONE
+            binding.layoutLoanTracker.visibility = View.GONE
+            binding.advanceTrackerLine.visibility = View.VISIBLE
+            binding.layoutAdvanceTracker.visibility = View.VISIBLE
 
-        if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
-        else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
-        
-        if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
-        else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
-        
-        if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
-        else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
-        
-        if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
-        else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
-        
-        if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
-        else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
-        
-        // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
-        setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+            // HR is always green (active) for advances
+            binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
+            binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
+            binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
+            binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
+
+            if (hrDone) {
+                binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_green)
+                binding.advanceIconAccs.setColorFilter(Color.parseColor("#1BCA0B"))
+                binding.advanceTextAccs.setTextColor(Color.parseColor("#1BCA0B"))
+                binding.advanceTextAccs.setTypeface(null, Typeface.BOLD)
+            } else {
+                binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_pending)
+                binding.advanceIconAccs.setColorFilter(Color.parseColor("#98A2B3"))
+                binding.advanceTextAccs.setTextColor(Color.parseColor("#98A2B3"))
+                binding.advanceTextAccs.setTypeface(null, Typeface.NORMAL)
+            }
+        } else {
+            binding.loanTrackerLine.visibility = View.VISIBLE
+            binding.layoutLoanTracker.visibility = View.VISIBLE
+            binding.advanceTrackerLine.visibility = View.GONE
+            binding.layoutAdvanceTracker.visibility = View.GONE
+
+            val nominee1Signed = loan.nominee1Status.equals("approved", ignoreCase = true)
+            val nominee2Signed = loan.nominee2Status.equals("approved", ignoreCase = true)
+
+            // A nominee dot lights when the chain has moved past nominees
+            // (rank >= 1, i.e. gm_pending or later) OR that specific nominee
+            // has individually signed while still in nominee_pending.
+            val n1Done = rank >= 1 || nominee1Signed
+            val n2Done = rank >= 1 || nominee2Signed
+            val gmDone = rank >= 2
+            val avpDone = rank >= 3
+
+            fun setDone(frame: View, icon: android.widget.ImageView, text: TextView) {
+                frame.setBackgroundResource(R.drawable.bg_loan_track_active)
+                icon.setImageResource(R.drawable.ic_loan_track_check)
+                text.setTextColor(Color.parseColor("#0B61CA"))
+                text.setTypeface(null, Typeface.BOLD)
+            }
+            fun setPending(frame: View, icon: android.widget.ImageView, text: TextView, defaultIcon: Int) {
+                frame.setBackgroundResource(R.drawable.bg_loan_icon_tile)
+                icon.setImageResource(defaultIcon)
+                text.setTextColor(Color.parseColor("#98A2B3"))
+                text.setTypeface(null, Typeface.NORMAL)
+            }
+
+            if (n1Done) setDone(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1)
+            else setPending(binding.trackFrameNominee1, binding.trackIconNominee1, binding.trackTextNominee1, R.drawable.ic_track_shield)
+
+            if (n2Done) setDone(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2)
+            else setPending(binding.trackFrameNominee2, binding.trackIconNominee2, binding.trackTextNominee2, R.drawable.ic_track_shield)
+
+            if (gmDone) setDone(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm)
+            else setPending(binding.trackFrameGm, binding.trackIconGm, binding.trackTextGm, R.drawable.ic_track_gm)
+
+            if (avpDone) setDone(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp)
+            else setPending(binding.trackFrameAvp, binding.trackIconAvp, binding.trackTextAvp, R.drawable.ic_track_avp)
+
+            if (hrDone) setDone(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr)
+            else setPending(binding.trackFrameHr, binding.trackIconHr, binding.trackTextHr, R.drawable.ic_track_hr)
+
+            // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
+            setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+        }
+    }
+
+    /** Mirrors the My Permissions cancel flow: reuses
+     *  dialog_cancel_leave for the confirmation, then routes to
+     *  cancelLoan() which calls the backend. */
+    private fun showCancelLoanDialog(loanId: String, isAdvance: Boolean) {
+        val dialog = android.app.Dialog(requireContext())
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_cancel_leave, null)
+        dialog.setContentView(dialogView)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogView.findViewById<TextView?>(R.id.tvDialogTitle)?.text =
+            if (isAdvance) "Delete this advance?" else "Delete this loan?"
+
+        dialogView.findViewById<View>(R.id.btnDialogCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+        dialogView.findViewById<View>(R.id.btnDialogConfirm).setOnClickListener {
+            dialog.dismiss()
+            cancelLoan(loanId)
+        }
+        dialog.show()
     }
 
     private fun cancelLoan(loanId: String) {
@@ -435,22 +506,35 @@ class LoansFragment : Fragment() {
             runCatching { api.getPendingLoanApprovals(token) }
                 .onSuccess { response ->
                     if (_binding == null) return@onSuccess
-                    val pending = response.pending
-                    requestedLoansAdapter.submitList(pending)
-                    // The Pending Approvals section only appears when this
-                    // user actually has loans to act on (the backend decided
-                    // that by their role + each loan's stage).
-                    binding.layoutRequestedLoans.visibility =
-                        if (pending.isEmpty()) View.GONE else View.VISIBLE
+                    allPending.clear()
+                    allPending.addAll(response.pending)
+                    renderPendingApprovals()
                 }
                 .onFailure {
                     if (_binding == null) return@onFailure
                     // No approvals to show (or a transient error) — hide the
                     // section silently; most staff never approve loans.
-                    requestedLoansAdapter.submitList(emptyList())
-                    binding.layoutRequestedLoans.visibility = View.GONE
+                    allPending.clear()
+                    renderPendingApprovals()
                 }
         }
+    }
+
+    /** Push the per-tab slice of pending approvals into the adapter.
+     *  A loan request goes on the Loans tab, a salary-advance request
+     *  on the Advance tab — driven by LoanData.requestType the same
+     *  way the user's own active/previous lists are split. Section
+     *  hides when the slice is empty so the tab doesn't show a
+     *  request that belongs to the other tab. */
+    private fun renderPendingApprovals() {
+        if (_binding == null) return
+        val slice = allPending.filter { isAdvance ->
+            val isAdv = isAdvance.requestType?.lowercase()?.trim() == "salary_advance"
+            if (selectedTab == TAB_LOANS) !isAdv else isAdv
+        }
+        requestedLoansAdapter.submitList(slice)
+        binding.layoutRequestedLoans.visibility =
+            if (slice.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {

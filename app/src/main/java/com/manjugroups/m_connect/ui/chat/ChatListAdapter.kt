@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.manjugroups.m_connect.databinding.ItemChatBinding
 import com.manjugroups.m_connect.R
 
@@ -22,7 +23,8 @@ data class ChatListItem(
     val isMuted: Boolean,
     val isOnline: Boolean = false,
     val isFavourite: Boolean = false,
-    val previewIconRes: Int? = null
+    val previewIconRes: Int? = null,
+    val photoUrl: String? = null
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }
@@ -30,7 +32,7 @@ data class ChatListItem(
 class ChatListAdapter(
     private val onItemClick: (ChatListItem) -> Unit,
     private val onItemLongClick: (View, ChatListItem) -> Unit,
-    private val avatarBinder: (View, TextView, String, Int) -> Unit,
+    private val avatarBinder: (View, TextView, android.widget.ImageView, String, Int, String?) -> Unit,
     private val timestampBinder: (TextView, Long?) -> Unit,
     private val isSelectedProvider: (ChatListItem) -> Boolean = { false }
 ) : ListAdapter<ChatListItem, ChatListAdapter.ViewHolder>(ChatListItemDiffCallback()) {
@@ -55,15 +57,42 @@ class ChatListAdapter(
                 binding.ivPreviewIcon.setColorFilter(
                     androidx.core.content.ContextCompat.getColor(binding.root.context, R.color.chat_text_secondary)
                 )
+                if (item.previewIconRes == R.drawable.ic_chat_msg_deleted) {
+                    binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.ITALIC)
+                } else {
+                    binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.NORMAL)
+                }
             } else {
                 binding.ivPreviewIcon.visibility = View.GONE
+                binding.tvChatLastMsg.setTypeface(binding.tvChatLastMsg.typeface, android.graphics.Typeface.NORMAL)
             }
 
             // Find the inner FrameLayout that has the background in item_chat.xml
             val avatarContainer = binding.avatarContainer as ViewGroup
             if (avatarContainer.childCount > 0) {
                 val avatarFrame = avatarContainer.getChildAt(0)
-                avatarBinder(avatarFrame, binding.tvChatAvatar, item.avatarText, item.avatarSeed)
+                avatarBinder(
+                    avatarFrame,
+                    binding.tvChatAvatar,
+                    binding.ivChatAvatarImage,
+                    item.avatarText,
+                    item.avatarSeed,
+                    item.photoUrl
+                )
+            }
+            // Photo overlay — when the server gave us a participant
+            // photo URL, load it on top of the initial circle. Coil
+            // crossfades it in so the initial briefly shows then fades
+            // into the actual picture. When there's no photo (channels,
+            // staff with no upload), the ImageView stays gone and the
+            // initial does its existing job.
+            val photo = item.photoUrl
+            if (!photo.isNullOrBlank()) {
+                binding.ivChatAvatarPhoto.visibility = View.VISIBLE
+                binding.ivChatAvatarPhoto.load(photo) { crossfade(true) }
+            } else {
+                binding.ivChatAvatarPhoto.visibility = View.GONE
+                binding.ivChatAvatarPhoto.setImageDrawable(null)
             }
             timestampBinder(binding.tvChatTime, item.timestamp)
 

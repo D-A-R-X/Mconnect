@@ -40,6 +40,7 @@ class OtpActivity : AppCompatActivity() {
     private lateinit var otpBoxes: List<EditText>
     private var countDownTimer: CountDownTimer? = null
     private var canResend = false
+    private var bootstrapJob: kotlinx.coroutines.Job? = null
 
     companion object {
         const val EXTRA_PHONE = "extra_phone"
@@ -185,8 +186,15 @@ class OtpActivity : AppCompatActivity() {
                             viewModel.resetState()
                         }
                         is AuthUiState.Verified -> {
-                            resetButton()
-                            bootstrapSession(state.response)
+                            bootstrapJob = lifecycleScope.launch {
+                                bootstrapSession(state.response)
+                            }
+                            playSuccessAnimation {
+                                lifecycleScope.launch {
+                                    bootstrapJob?.join()
+                                    requestNotificationAccessThenContinue()
+                                }
+                            }
                             viewModel.resetState()
                         }
                         is AuthUiState.Error -> {
@@ -244,60 +252,43 @@ class OtpActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun bootstrapSession(response: com.manjugroups.m_connect.network.VerifyOtpResponse) {
-        lifecycleScope.launch {
-            session.saveSession(
-                token = response.token!!,
-                name = response.user?.name,
-                phone = response.user?.phone ?: phone
-            )
-            session.staffId = response.user?.staffId
-            session.employeeId = response.user?.employeeId
-            session.mustChangePassword = false
-            session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
-            session.geoConsentGiven = false
-            session.geoConsentDeclined = false
-            session.shouldTrackNow = false
-            session.activeTrackingSessionId = null
+    private suspend fun bootstrapSession(response: com.manjugroups.m_connect.network.VerifyOtpResponse) = kotlinx.coroutines.coroutineScope {
+        session.saveSession(
+            token = response.token!!,
+            name = response.user?.name,
+            phone = response.user?.phone ?: phone
+        )
+        session.staffId = response.user?.staffId
+        session.employeeId = response.user?.employeeId
+        session.mustChangePassword = false
+        session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
+        session.geoConsentGiven = false
+        session.geoConsentDeclined = false
+        session.shouldTrackNow = false
+        session.activeTrackingSessionId = null
 
-            // Cache designation immediately from the verify-otp payload.
-            // The OTP response already carries every field UserInfo
-            // exposes — including designation — so leaning on this is
-            // both faster and far more reliable than the old approach
-            // of waiting for the secondary getStaffDetail() round-trip,
-            // which was wrapped in runCatching{} and SILENTLY dropped
-            // the designation whenever the fetch failed (driver roles
-            // sometimes lack /api/hr/staff/get visibility). With this
-            // null is now an unambiguous "backend didn't supply it",
-            // not "we couldn't fetch it". getStaffDetail below still
-            // runs for reportingTo and can refresh designation if the
-            // OTP payload was empty.
-            response.user?.designation?.takeIf { it.isNotBlank() }?.let {
-                session.designation = it
-            }
+        // Cache designation immediately from the verify-otp payload.
+        response.user?.designation?.takeIf { it.isNotBlank() }?.let {
+            session.designation = it
+        }
 
-            // Probe the backend's fleet-driver gate so the app's
-            // isDriverMode also flips on for staff whose designation
-            // isn't literally "Driver" but who the backend treats as a
-            // driver because of a fleetDrivers row tied to their phone.
-            // The endpoint returns success=true for valid drivers and
-            // success=false ("Driver access only") otherwise — both
-            // are non-fatal here; we just record the answer.
+        // Run network requests in parallel
+        val jobFleet = launch {
             session.fleetDriverByBackend = runCatching {
                 geoApi.getMmsFleetDriverTrips(session.bearerToken)
             }.map { it.success }.getOrDefault(false)
+        }
 
+        val jobIam = launch {
             runCatching {
                 api.getMyIamPermissions(session.bearerToken)
             }.onSuccess { iam ->
                 session.iamPermissions = iam.permissions.toSet()
                 session.isAdmin = iam.isAdmin
             }
+        }
 
-            // Cache the reporting officer so the very first leave/permission
-            // apply (before the user opens Profile) can route to the right
-            // approver. Best-effort — if it fails, ApplyLeaveFragment will
-            // refetch on demand.
+        val jobStaff = launch {
             session.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->
                 runCatching {
                     api.getStaffDetail(session.bearerToken, staffId)
@@ -305,20 +296,18 @@ class OtpActivity : AppCompatActivity() {
                     resp.staff?.let { staff ->
                         session.reportingToId = staff.reportingTo
                         session.reportingToName = staff.reportingToName
-                        // Refresh designation if the staff-detail call
-                        // succeeded. We only overwrite when the value
-                        // is non-blank so a 500 returning a partial row
-                        // can't wipe the good value we already cached
-                        // from the OTP payload.
                         staff.designation?.takeIf { it.isNotBlank() }?.let {
                             session.designation = it
                         }
                     }
                 }
             }
-
-            requestNotificationAccessThenContinue()
         }
+
+        // Wait for all fetches to complete
+        jobFleet.join()
+        jobIam.join()
+        jobStaff.join()
     }
 
     private fun requestNotificationAccessThenContinue() {
@@ -344,6 +333,269 @@ class OtpActivity : AppCompatActivity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         })
         finish()
+    }
+
+    private fun playSuccessAnimation(onComplete: () -> Unit) {
+        // Hide soft keyboard immediately
+        WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
+
+        // Disable interaction on all inputs and resend
+        otpBoxes.forEach { box ->
+            box.isEnabled = false
+            box.clearFocus()
+        }
+        binding.btnVerify.isEnabled = false
+        binding.tvResend.isEnabled = false
+
+        val containerCenterX = binding.otpBoxesContainer.width / 2f
+        val animators = otpBoxes.mapIndexed { index, box ->
+            val boxCenterX = box.left + box.width / 2f
+            val targetTranslationX = containerCenterX - boxCenterX
+            
+            // Symmetrical pairs jump delay: outer-most (0 & 5) jump first, inner-most (2 & 3) last
+            val pairIndex = if (index < 3) index else 5 - index
+            val startDelayMs = pairIndex * 220L
+            
+            android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 650
+                startDelay = startDelayMs
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                addUpdateListener { anim ->
+                    val fraction = anim.animatedValue as Float
+                    
+                    // 1. Parabolic hop path (y = 4 * height * x * (1 - x))
+                    val jumpHeight = 200f // height in pixels
+                    box.translationX = fraction * targetTranslationX
+                    box.translationY = -4f * jumpHeight * fraction * (1f - fraction)
+                    
+                    // 2. Squash and stretch dynamics
+                    if (fraction < 0.35f) {
+                        // Takeoff: stretch vertically
+                        val localT = fraction / 0.35f
+                        box.scaleY = 1f + 0.35f * localT
+                        box.scaleX = 1f - 0.3f * localT
+                        box.alpha = 1f
+                    } else if (fraction < 0.7f) {
+                        // Mid-air flight: recover back to normal
+                        val localT = (fraction - 0.35f) / 0.35f
+                        box.scaleY = 1.35f - 0.35f * localT
+                        box.scaleX = 0.7f + 0.3f * localT
+                        box.alpha = 1f
+                    } else {
+                        // Landing: squash down and fade away to center
+                        val localT = (fraction - 0.7f) / 0.3f
+                        box.scaleY = 1.0f - 1.0f * localT
+                        box.scaleX = 1.0f - 1.0f * localT
+                        box.alpha = 1f - localT
+                    }
+                }
+            }
+        }
+
+        // Fade out surrounding elements
+        val fadeTitle = android.animation.ObjectAnimator.ofFloat(binding.tvOtpTitle, "alpha", 1f, 0f)
+        val fadeSubtitle = android.animation.ObjectAnimator.ofFloat(binding.tvOtpSubtitle, "alpha", 1f, 0f)
+        val fadeVerifyBtn = android.animation.AnimatorSet().apply {
+            playTogether(
+                android.animation.ObjectAnimator.ofFloat(binding.btnVerify, "alpha", 1f, 0f),
+                android.animation.ObjectAnimator.ofFloat(binding.btnVerify, "scaleX", 1f, 0.9f),
+                android.animation.ObjectAnimator.ofFloat(binding.btnVerify, "scaleY", 1f, 0.9f)
+            )
+            duration = 300
+        }
+        val fadeTimer = android.animation.ObjectAnimator.ofFloat(binding.tvTimer, "alpha", 1f, 0f)
+        val fadeResend = android.animation.ObjectAnimator.ofFloat(binding.tvResend, "alpha", 1f, 0f)
+        val fadeError = android.animation.ObjectAnimator.ofFloat(binding.tvOtpError, "alpha", 1f, 0f)
+
+        android.animation.AnimatorSet().apply {
+            playTogether(animators + fadeTitle + fadeSubtitle + fadeVerifyBtn + fadeTimer + fadeResend + fadeError)
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    binding.otpBoxesContainer.visibility = View.GONE
+                    binding.btnVerify.visibility = View.GONE
+                    binding.tvOtpTitle.visibility = View.GONE
+                    binding.tvOtpSubtitle.visibility = View.GONE
+                    binding.tvTimer.visibility = View.GONE
+                    binding.tvResend.visibility = View.GONE
+                    binding.tvOtpError.visibility = View.GONE
+
+                    // 1. Initial State for Pixar Bouncing Green Circle
+                    binding.verifySuccessContainer.visibility = View.VISIBLE
+                    binding.verifySuccessContainer.scaleX = 0.6f
+                    binding.verifySuccessContainer.scaleY = 1.4f // Stretched vertically as it falls
+                    binding.verifySuccessContainer.translationY = -400f // Start falling from above
+                    binding.verifySuccessContainer.alpha = 1f
+                    
+                    binding.ivSuccessCheckmark.scaleX = 0f
+                    binding.ivSuccessCheckmark.scaleY = 0f
+                    binding.ivSuccessCheckmark.alpha = 0f
+
+                    // Animator A: The Fall (translates containerY from -400f to 0f)
+                    val fallAnim = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "translationY", -400f, 0f
+                    ).apply {
+                        duration = 320
+                        interpolator = android.view.animation.AccelerateInterpolator(1.5f)
+                    }
+
+                    // Animator B: The First Ground Impact Squash (squashes flat, then recovers)
+                    val squashY = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleY", 1.4f, 0.45f, 1.1f, 1.0f
+                    ).apply {
+                        duration = 200
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+                    val squashX = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleX", 0.6f, 1.55f, 0.9f, 1.0f
+                    ).apply {
+                        duration = 200
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+
+                    // Outward Shockwave Ripples (triggered on impact)
+                    val ripple1 = android.animation.AnimatorSet().apply {
+                        binding.rippleRing1.visibility = View.VISIBLE
+                        binding.rippleRing1.scaleX = 1f
+                        binding.rippleRing1.scaleY = 1f
+                        binding.rippleRing1.alpha = 0.8f
+                        playTogether(
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing1, "scaleX", 1f, 2.6f),
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing1, "scaleY", 1f, 2.6f),
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing1, "alpha", 0.8f, 0f)
+                        )
+                        duration = 600
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+                    val ripple2 = android.animation.AnimatorSet().apply {
+                        binding.rippleRing2.visibility = View.VISIBLE
+                        binding.rippleRing2.scaleX = 1f
+                        binding.rippleRing2.scaleY = 1f
+                        binding.rippleRing2.alpha = 0.8f
+                        playTogether(
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing2, "scaleX", 1f, 2.6f),
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing2, "scaleY", 1f, 2.6f),
+                            android.animation.ObjectAnimator.ofFloat(binding.rippleRing2, "alpha", 0.8f, 0f)
+                        )
+                        startDelay = 120
+                        duration = 600
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+
+                    // Animator C: Rebound Jump Up (rebound to -140f, stretching vertically)
+                    val jumpUp = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "translationY", 0f, -140f
+                    ).apply {
+                        duration = 220
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+                    val jumpStretchY = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleY", 1.0f, 1.25f
+                    ).apply {
+                        duration = 220
+                    }
+                    val jumpStretchX = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleX", 1.0f, 0.75f
+                    ).apply {
+                        duration = 220
+                    }
+
+                    // Animator D: Fall Back Down to Ground
+                    val fallDown = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "translationY", -140f, 0f
+                    ).apply {
+                        duration = 220
+                        interpolator = android.view.animation.AccelerateInterpolator()
+                    }
+                    val jumpSettleY = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleY", 1.25f, 1.0f
+                    ).apply {
+                        duration = 220
+                    }
+                    val jumpSettleX = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleX", 0.75f, 1.0f
+                    ).apply {
+                        duration = 220
+                    }
+
+                    // Animator E: Checkmark Pop (starts at apex of rebound / fall down start)
+                    val popCheckmark = android.animation.AnimatorSet().apply {
+                        playTogether(
+                            android.animation.ObjectAnimator.ofFloat(binding.ivSuccessCheckmark, "scaleX", 0f, 1.3f, 1.0f),
+                            android.animation.ObjectAnimator.ofFloat(binding.ivSuccessCheckmark, "scaleY", 0f, 1.3f, 1.0f),
+                            android.animation.ObjectAnimator.ofFloat(binding.ivSuccessCheckmark, "alpha", 0f, 1f)
+                        )
+                        duration = 350
+                        interpolator = android.view.animation.OvershootInterpolator(1.8f)
+                    }
+
+                    // Animator F: Second smaller ground impact squash
+                    val smallSquashY = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleY", 1.0f, 0.85f, 1.0f
+                    ).apply {
+                        duration = 160
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+                    val smallSquashX = android.animation.ObjectAnimator.ofFloat(
+                        binding.verifySuccessContainer, "scaleX", 1.0f, 1.15f, 1.0f
+                    ).apply {
+                        duration = 160
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                    }
+
+                    // Sequential Orchestration of the Pixar Animation
+                    val sequence = android.animation.AnimatorSet()
+                    sequence.play(fallAnim)
+                    
+                    val squashSet = android.animation.AnimatorSet().apply {
+                        playTogether(squashY, squashX, ripple1, ripple2)
+                    }
+                    sequence.play(squashSet).after(fallAnim)
+
+                    val reboundSet = android.animation.AnimatorSet().apply {
+                        playTogether(jumpUp, jumpStretchY, jumpStretchX)
+                    }
+                    sequence.play(reboundSet).after(squashSet)
+
+                    val fallBackSet = android.animation.AnimatorSet().apply {
+                        playTogether(fallDown, jumpSettleY, jumpSettleX)
+                    }
+                    sequence.play(fallBackSet).after(reboundSet)
+                    sequence.play(popCheckmark).with(fallDown)
+
+                    val finalSquashSet = android.animation.AnimatorSet().apply {
+                        playTogether(smallSquashY, smallSquashX)
+                    }
+                    sequence.play(finalSquashSet).after(fallBackSet)
+
+                    // Post-animation settles: Start Breathing idle cycle and delay session transition
+                    sequence.addListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            // Infinite Breathing Loop (scales gently between 1.0f and 1.07f)
+                            val breathAnim = android.animation.ValueAnimator.ofFloat(1.0f, 1.07f).apply {
+                                duration = 1200
+                                repeatCount = android.animation.ValueAnimator.INFINITE
+                                repeatMode = android.animation.ValueAnimator.REVERSE
+                                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                                addUpdateListener { anim ->
+                                    val scale = anim.animatedValue as Float
+                                    binding.verifySuccessContainer.scaleX = scale
+                                    binding.verifySuccessContainer.scaleY = scale
+                                }
+                            }
+                            breathAnim.start()
+
+                            // Proceed to session bootstrapping after 300 milliseconds of breathing
+                            binding.verifySuccessContainer.postDelayed({
+                                breathAnim.cancel()
+                                onComplete()
+                            }, 300)
+                        }
+                    })
+                    sequence.start()
+                }
+            })
+            start()
+        }
     }
 
     override fun onDestroy() {

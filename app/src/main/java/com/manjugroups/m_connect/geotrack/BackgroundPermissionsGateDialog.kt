@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.geotrack
 
 import android.Manifest
 import android.app.Dialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -15,47 +16,106 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.DialogFragment
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
 import java.util.Locale
 
 /**
- * Non-dismissible gate that blocks the app until the two background
- * permissions GeoTrack absolutely needs are in place:
- *
- *   1. ACCESS_BACKGROUND_LOCATION granted (Q+; on older Android this
- *      always reads true).
- *   2. Battery optimization ignored for our package — without this the
- *      OS suspends our foreground service inside doze, GPS pings dry up,
- *      and the day's attendance is full of holes.
- *
- * Behaviour:
- *  • Back button + outside touches do nothing.
- *  • Each row shows an "Open" button that launches the system settings
- *    page for that specific toggle. Returning from settings triggers
- *    onResume → re-check → auto-dismiss if both are now satisfied.
- *  • Owner must invoke [show] every onResume so the dialog re-asserts
- *    itself when the user toggles a setting OFF and comes back.
- *
- * Call sites should only invoke this for staff who actually need
- * background tracking (e.g. `session.geoTrackingEnabled`). Office
- * staff who never get tracked shouldn't be force-prompted.
+ * Non-dismissible gate Bottom Sheet — premium mockup UI with Custom Switches.
+ * Auto-dismisses when all mandatory permissions are granted.
  */
-class BackgroundPermissionsGateDialog : DialogFragment() {
+class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
+
+    companion object {
+        private const val TAG = "BackgroundPermissionsGateDialog"
+        private const val REQUEST_BG_LOCATION = 1001
+        private const val REQUEST_FG_LOCATION = 1002
+
+        fun hasBackgroundLocation(ctx: Context): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+            return ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        fun hasForegroundLocation(ctx: Context): Boolean {
+            val fine = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+            return fine || coarse
+        }
+
+        fun hasBatteryOptIgnored(ctx: Context): Boolean {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            return pm.isIgnoringBatteryOptimizations(ctx.packageName)
+        }
+
+        fun isDeviceLocationEnabled(ctx: Context): Boolean {
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                lm.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }
+        }
+
+        fun allGranted(ctx: Context): Boolean =
+            isDeviceLocationEnabled(ctx) &&
+                hasForegroundLocation(ctx) &&
+                hasBackgroundLocation(ctx) &&
+                hasBatteryOptIgnored(ctx)
+
+        fun showIfNeeded(fm: FragmentManager, ctx: Context) {
+            if (allGranted(ctx)) return
+            if (fm.findFragmentByTag(TAG) != null) return
+            BackgroundPermissionsGateDialog().show(fm, TAG)
+        }
+    }
+
+    // ── Lifecycle ──────────────────────────────────────────────────
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = super.onCreateDialog(savedInstanceState)
+        val dialog = BottomSheetDialog(requireContext(), theme)
         dialog.setCanceledOnTouchOutside(false)
         dialog.setCancelable(false)
         isCancelable = false
-        // Soft keyboard isn't relevant here — keep it suppressed so the
-        // dialog never shifts when something incidentally focuses.
         dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
+        dialog.setOnShowListener { di ->
+            val sheet = (di as BottomSheetDialog)
+                .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            sheet?.let {
+                it.setBackgroundResource(android.R.color.transparent)
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                behavior.isDraggable = false
+                
+                // Force wrap_content on sheet container to prevent stretching to full height
+                val lp = it.layoutParams
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                it.layoutParams = lp
+            }
+        }
         return dialog
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     override fun onCreateView(
@@ -64,67 +124,85 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         savedInstanceState: Bundle?,
     ): View = inflater.inflate(R.layout.dialog_background_permissions_gate, container, false)
 
-    override fun onStart() {
-        super.onStart()
-        // A DialogFragment window defaults to WRAP_CONTENT width, which lets
-        // our wrapping body text collapse the dialog to the width of its
-        // longest word (the "narrow strip" bug where buttons render as blank
-        // pills). Pin the window to most of the screen width so match_parent
-        // children lay out correctly.
-        val width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
-        dialog?.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
-    }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        view.findViewById<View>(R.id.btnFixBgLocation).setOnClickListener {
-            openBackgroundLocationSettings()
-        }
-        view.findViewById<View>(R.id.btnFixDeviceLocation).setOnClickListener {
-            openDeviceLocationSettings()
-        }
-        view.findViewById<View>(R.id.btnFixBatteryOpt).setOnClickListener {
-            openBatteryOptimizationSettings()
-        }
-        view.findViewById<View>(R.id.btnFixAutostart).setOnClickListener {
-            openOemAutostartSettings()
-        }
-        // Manual Continue button — re-runs the gate check on demand. On
-        // some OEM skins (Samsung One UI, Xiaomi MIUI, etc.) the
-        // PowerManager.isIgnoringBatteryOptimizations flag updates
-        // asynchronously after the user enables "Unrestricted", and
-        // onResume can fire before the propagation lands. Giving the
-        // user an explicit "Continue" gives them a recovery path
-        // instead of being trapped behind a dialog that never closes.
-        view.findViewById<View>(R.id.btnGateContinue).setOnClickListener {
+        // Click row elements to trigger relevant permission logic
+        view.findViewById<View>(R.id.rowLocation).setOnClickListener {
             val ctx = requireContext()
-            if (allGranted(ctx)) {
-                dismissAllowingStateLoss()
+            val deviceLocationOk = isDeviceLocationEnabled(ctx)
+            val fgOk = hasForegroundLocation(ctx)
+            if (!deviceLocationOk || !fgOk) {
+                openDeviceLocationSettings()
             } else {
-                val msg = missingReasonMessage(ctx)
-                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
-                view.let { refreshStatus(it) }
+                showRevokeToast()
             }
         }
+
+        view.findViewById<View>(R.id.rowBgLocation).setOnClickListener {
+            val ctx = requireContext()
+            if (!hasBackgroundLocation(ctx)) {
+                openBackgroundLocationSettings()
+            } else {
+                showRevokeToast()
+            }
+        }
+
+        view.findViewById<View>(R.id.rowBatteryOpt).setOnClickListener {
+            val ctx = requireContext()
+            if (!hasBatteryOptIgnored(ctx)) {
+                openBatteryOptimizationSettings()
+            } else {
+                showRevokeToast()
+            }
+        }
+
+        view.findViewById<View>(R.id.rowAutostart).setOnClickListener {
+            val ctx = requireContext()
+            val current = isAutostartEnabled(ctx)
+            setAutostartEnabled(ctx, !current)
+            if (!current && isAutostartManaged()) {
+                openOemAutostartSettings()
+            }
+            refreshStatus(view)
+        }
+
         refreshStatus(view)
     }
 
     override fun onResume() {
         super.onResume()
-        // Re-evaluate each time the dialog comes back to the foreground.
-        // If both checks pass (user toggled them ON in Settings and
-        // returned), auto-close so they don't have to hunt for a Done
-        // button that doesn't exist.
         recheckAndMaybeDismiss()
-        // OEM skins sometimes propagate the battery-optimization flag a
-        // few hundred ms after the Settings activity is dismissed. Schedule
-        // two additional re-checks so the dialog still self-closes even
-        // when the system state lags behind the user.
         val handler = Handler(Looper.getMainLooper())
         handler.postDelayed({ recheckAndMaybeDismiss() }, 500)
         handler.postDelayed({ recheckAndMaybeDismiss() }, 1500)
     }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            REQUEST_FG_LOCATION -> {
+                if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    if (!shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                        Toast.makeText(context, "Location permission is required. Please enable it in Settings.", Toast.LENGTH_LONG).show()
+                        openAppDetailsSettings()
+                    }
+                }
+                recheckAndMaybeDismiss()
+            }
+            REQUEST_BG_LOCATION -> {
+                recheckAndMaybeDismiss()
+            }
+        }
+    }
+
+    // ── Internal ──────────────────────────────────────────────────
 
     private fun recheckAndMaybeDismiss() {
         if (!isAdded || isDetached) return
@@ -137,24 +215,12 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         }
     }
 
-    private fun missingReasonMessage(ctx: android.content.Context): String {
-        val deviceLocationOk = isDeviceLocationEnabled(ctx)
-        val fgOk = hasForegroundLocation(ctx)
-        val bgOk = hasBackgroundLocation(ctx)
-        val batOk = hasBatteryOptIgnored(ctx)
-        return when {
-            !deviceLocationOk ->
-                "Turn on Location/GPS in phone settings to continue."
-            !fgOk ->
-                "Open the location toggle and select \"Allow all the time\" for Mconnect."
-            !bgOk && !batOk ->
-                "Enable background location (Allow all the time) and unrestricted battery use to continue."
-            !bgOk ->
-                "Set Location to Allow all the time, then tap Continue."
-            !batOk ->
-                "Set Battery to Unrestricted, then tap Continue. If you already did, force-close Settings and try again."
-            else -> "All set — closing."
-        }
+    private fun showRevokeToast() {
+        Toast.makeText(
+            context,
+            "To revoke this permission, please go to system App Settings.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun refreshStatus(root: View) {
@@ -163,88 +229,52 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
-        val needsAutostart = isAutostartManaged()
+        val autostartOk = isAutostartEnabled(ctx)
 
-        val deviceLocBtn = root.findViewById<TextView>(R.id.btnFixDeviceLocation)
-        val locBtn = root.findViewById<TextView>(R.id.btnFixBgLocation)
-        val batBtn = root.findViewById<TextView>(R.id.btnFixBatteryOpt)
+        root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk
+        root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
+        root.findViewById<SwitchCompat>(R.id.switchBatteryOpt).isChecked = batOk
+        
         val autoRow = root.findViewById<View>(R.id.rowAutostart)
-        val autoBtn = root.findViewById<TextView>(R.id.btnFixAutostart)
-        val autoHint = root.findViewById<TextView>(R.id.tvAutostartHint)
-        val status = root.findViewById<TextView>(R.id.tvGateStatus)
-
-        deviceLocBtn.text = if (deviceLocationOk) "Enabled" else "Open"
-        deviceLocBtn.alpha = if (deviceLocationOk) 0.5f else 1f
-        deviceLocBtn.isEnabled = !deviceLocationOk
-
-        // Foreground location is the prerequisite for "Allow all the
-        // time" being available at all — when the user denied at the
-        // initial OS prompt, no amount of Settings poking surfaces the
-        // background-location toggle. Surface the issue here.
-        if (!fgOk) {
-            locBtn.text = "Open"
-            locBtn.alpha = 1f
-            locBtn.isEnabled = true
-        } else {
-            locBtn.text = if (bgOk) "Enabled" else "Open"
-            locBtn.alpha = if (bgOk) 0.5f else 1f
-            locBtn.isEnabled = !bgOk
-        }
-
-        batBtn.text = if (batOk) "Enabled" else "Open"
-        batBtn.alpha = if (batOk) 0.5f else 1f
-        batBtn.isEnabled = !batOk
-
-        // OEM autostart row — only show on Xiaomi / Vivo / Oppo /
-        // Realme / Honor where the OS kills background services
-        // regardless of the standard "ignore battery optimisation"
-        // grant. We can't programmatically check whether autostart is
-        // ON for our package (no public API), so the row stays as a
-        // permanent "Open Autostart settings" CTA the user can tap.
-        if (needsAutostart) {
+        if (isAutostartManaged()) {
             autoRow.visibility = View.VISIBLE
-            autoHint.text = autostartHintForOem()
-            autoBtn.text = "Open"
-            autoBtn.alpha = 1f
-            autoBtn.isEnabled = true
         } else {
             autoRow.visibility = View.GONE
         }
-
-        status.text = when {
-            !deviceLocationOk -> "Phone Location/GPS is off. Turn it on to continue."
-            !fgOk -> "Tap Open and select \"Allow all the time\" under Location for Mconnect."
-            !bgOk && !batOk -> "Background location + battery optimisation both need attention."
-            !bgOk -> "Background location still needs \"Allow all the time\"."
-            !batOk -> "Battery optimisation still needs to be off."
-            needsAutostart -> "On your phone brand, also enable Autostart — tap Open above."
-            else -> "All set — closing…"
-        }
+        root.findViewById<SwitchCompat>(R.id.switchAutostart).isChecked = autostartOk
     }
 
-    /**
-     * Send the user to our app's location-permission detail page so
-     * they can pick "Allow all the time" without having to navigate
-     * through Android's nested Settings tree.
-     */
-    private fun openBackgroundLocationSettings() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", requireContext().packageName, null)
-        }
-        runCatching { startActivity(intent) }
-    }
+    // ── Settings launchers ──────────────────────────────────────
 
     private fun openDeviceLocationSettings() {
-        runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-            .onFailure {
-                runCatching {
-                    startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", requireContext().packageName, null)
-                        },
-                    )
-                }
-            }
+        val ctx = context ?: return
+        if (!hasForegroundLocation(ctx)) {
+            @Suppress("DEPRECATION")
+            requestPermissions(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                REQUEST_FG_LOCATION,
+            )
+        } else if (!isDeviceLocationEnabled(ctx)) {
+            runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+                .onFailure { openAppDetailsSettings() }
+        }
+    }
+
+    private fun openBackgroundLocationSettings() {
+        val ctx = context ?: return
+        if (!hasForegroundLocation(ctx)) {
+            Toast.makeText(ctx, "Please enable Location Access first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
+            requestPermissions(
+                arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                REQUEST_BG_LOCATION,
+            )
+        } else {
+            openAppDetailsSettings()
+        }
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -253,22 +283,12 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
         }
         runCatching { startActivity(intent) }
             .onFailure {
-                // A handful of OEMs reject the per-app request intent.
-                // Fall back to the system battery-optimization list so
-                // the user can find our app manually.
                 runCatching {
                     startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                 }
             }
     }
 
-    /**
-     * Best-effort launch of the OEM-specific autostart-permission
-     * screen. Tries the known component name for each manufacturer's
-     * Security / Permissions app; falls through to the app details
-     * page if every direct target fails. Public hint dialog explains
-     * what to look for so the user doesn't get lost.
-     */
     private fun openOemAutostartSettings() {
         val ctx = requireContext()
         val brand = Build.MANUFACTURER.lowercase(Locale.US)
@@ -306,15 +326,16 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             try {
                 ctx.startActivity(intent)
                 return
-            } catch (_: Exception) {
-                // Try the next candidate.
-            }
+            } catch (_: Exception) { /* next */ }
         }
-        // Final fallback: app details page. Better than a dead button.
+        openAppDetailsSettings()
+    }
+
+    private fun openAppDetailsSettings() {
         runCatching {
             startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", ctx.packageName, null)
+                    data = Uri.fromParts("package", requireContext().packageName, null)
                 },
             )
         }
@@ -333,83 +354,16 @@ class BackgroundPermissionsGateDialog : DialogFragment() {
             brand.contains("oneplus")
     }
 
-    private fun autostartHintForOem(): String {
-        val brand = Build.MANUFACTURER.lowercase(Locale.US)
-        return when {
-            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") ->
-                "MIUI Security → Autostart → enable Mconnect."
-            brand.contains("vivo") ->
-                "iManager → Whitelisted apps → add Mconnect."
-            brand.contains("oppo") || brand.contains("realme") ->
-                "Phone Manager → Privacy permissions → Startup manager → enable Mconnect."
-            brand.contains("huawei") || brand.contains("honor") ->
-                "Phone Manager → App launch → set Mconnect to Manage manually with all three switches ON."
-            brand.contains("oneplus") ->
-                "Settings → Battery → Battery optimization → choose Don't optimize for Mconnect."
-            brand.contains("samsung") ->
-                "Settings → Apps → Mconnect → Battery → set to Unrestricted."
-            else -> "Enable Autostart so tracking survives a phone restart."
-        }
+    private fun isAutostartEnabled(ctx: Context): Boolean {
+        return ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
+            .edit() // wait, getBoolean doesn't need edit. Just use getBoolean:
+            .let { ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE).getBoolean("autostart_enabled", false) }
     }
 
-    companion object {
-        private const val TAG = "BackgroundPermissionsGateDialog"
-
-        fun hasBackgroundLocation(ctx: android.content.Context): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
-            return ContextCompat.checkSelfPermission(
-                ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
-        }
-
-        /**
-         * Foreground (fine OR coarse) location. If the user denied this
-         * at the initial OS prompt, the Settings page won't even show
-         * an "Allow all the time" option, so it's the first thing the
-         * gate has to surface.
-         */
-        fun hasForegroundLocation(ctx: android.content.Context): Boolean {
-            val fine = ContextCompat.checkSelfPermission(
-                ctx, Manifest.permission.ACCESS_FINE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
-            val coarse = ContextCompat.checkSelfPermission(
-                ctx, Manifest.permission.ACCESS_COARSE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
-            return fine || coarse
-        }
-
-        fun hasBatteryOptIgnored(ctx: android.content.Context): Boolean {
-            val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE)
-                as android.os.PowerManager
-            return pm.isIgnoringBatteryOptimizations(ctx.packageName)
-        }
-
-        fun isDeviceLocationEnabled(ctx: android.content.Context): Boolean {
-            val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as LocationManager
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                lm.isLocationEnabled
-            } else {
-                @Suppress("DEPRECATION")
-                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                    lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-            }
-        }
-
-        fun allGranted(ctx: android.content.Context): Boolean =
-            isDeviceLocationEnabled(ctx) &&
-                hasForegroundLocation(ctx) &&
-                hasBackgroundLocation(ctx) &&
-                hasBatteryOptIgnored(ctx)
-
-        /**
-         * Show the gate if anything is missing, no-op otherwise. Safe to
-         * call from every onResume — DialogFragment de-duplicates the
-         * shown instance via its tag.
-         */
-        fun showIfNeeded(fm: FragmentManager, ctx: android.content.Context) {
-            if (allGranted(ctx)) return
-            if (fm.findFragmentByTag(TAG) != null) return
-            BackgroundPermissionsGateDialog().show(fm, TAG)
-        }
+    private fun setAutostartEnabled(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("autostart_enabled", enabled)
+            .apply()
     }
 }

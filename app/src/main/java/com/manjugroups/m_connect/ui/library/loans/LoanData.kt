@@ -62,12 +62,30 @@ object LoanMapper {
             "completed", "repaid", "closed" -> LoanStatus.REPAID
             else -> mappedStatus
         }
-        val title = remote.purpose?.takeIf { it.isNotBlank() }
-            ?: when (type) {
-                LoanType.HOME -> "Home Loan"
-                LoanType.EDUCATION -> "Education Loan"
-                LoanType.OTHER -> "Loan"
-            }
+        // requestType is the authoritative backend flag — no legacy
+        // heuristics. A row only counts as an advance when the server
+        // explicitly stamps it; everything else (including legacy
+        // pre-requestType rows) defaults to LOAN so the Advance tab
+        // never gets polluted by ambiguous data, which was the symptom
+        // the user reported ("Loan" titled rows appearing inside the
+        // Advance tab as 'Active Advance').
+        val isAdvance =
+            remote.requestType.equals("salary_advance", ignoreCase = true)
+
+        // Title — advances ignore whatever the user typed as the
+        // purpose ("Loan", "demo", etc.) and display a stable
+        // "Salary Advance" label so the hero card on the Advance tab
+        // can't say "Loan" anymore. Regular loans still surface the
+        // purpose for the title.
+        val title = when {
+            isAdvance -> "Salary Advance"
+            else -> remote.purpose?.takeIf { it.isNotBlank() }
+                ?: when (type) {
+                    LoanType.HOME -> "Home Loan"
+                    LoanType.EDUCATION -> "Education Loan"
+                    LoanType.OTHER -> "Loan"
+                }
+        }
 
         val paidEntries = remote.repayments
             .orEmpty()
@@ -90,18 +108,6 @@ object LoanMapper {
         val outstanding = when {
             mappedStatusReal == LoanStatus.PENDING -> (remote.loanAmount ?: remote.principalAmount ?: 0.0)
             else -> (remote.remainingBalance ?: 0.0)
-        }
-
-        // requestType is the authoritative backend flag ("loan" vs
-        // "salary_advance"); fall back to the older interestType/purpose
-        // heuristics only when the backend didn't stamp it (legacy rows).
-        val isAdvance = when {
-            remote.requestType.equals("salary_advance", ignoreCase = true) -> true
-            remote.requestType.equals("loan", ignoreCase = true) -> false
-            else ->
-                remote.interestType.equals("Salary Advance", ignoreCase = true)
-                    || remote.interestType.equals("salary_advance", ignoreCase = true)
-                    || remote.purpose?.contains("advance", ignoreCase = true) == true
         }
 
         return Loan(

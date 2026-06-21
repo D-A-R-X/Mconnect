@@ -455,15 +455,15 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
     // a single thumbnail. Loads on a worker, hands back to the UI.
     private fun ImageView.load(url: String) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val bytes = withContext(Dispatchers.IO) {
-                runCatching {
+            val bmp = withContext(Dispatchers.IO) {
+                val bytes = runCatching {
                     java.net.URL(url).openStream().use { it.readBytes() }
+                }.getOrNull() ?: return@withContext null
+                runCatching {
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 }.getOrNull()
             }
-            if (bytes != null) {
-                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (bmp != null) setImageBitmap(bmp)
-            }
+            if (bmp != null) setImageBitmap(bmp)
         }
     }
 

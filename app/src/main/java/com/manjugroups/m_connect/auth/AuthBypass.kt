@@ -9,8 +9,13 @@ import com.manjugroups.m_connect.network.VerifyOtpResponse
 // OTP delivery path. The fake [TOKEN] will not authenticate against the real
 // backend, so any screen that hits an authed endpoint will see 401s — this
 // shortcut is only for UI/navigation exploration.
+//
+// IMPORTANT: [PHONE] MUST NOT collide with a real staff phone, otherwise the
+// real owner of that number can never log in as themselves on mobile — the
+// bypass intercepts the OTP request before it reaches the server. Use the
+// reserved 90000000xx range (not assigned to any real customer / employee).
 object AuthBypass {
-    const val PHONE = "8807588547"
+    const val PHONE = "9000000001"
     const val OTP = "000000"
     const val TOKEN = "dev-super-admin-bypass"
     const val NAME = "Super Admin"
@@ -23,14 +28,14 @@ object AuthBypass {
 
     fun isBypassToken(token: String?): Boolean = token == TOKEN
 
-    fun syntheticVerifyResponse(): VerifyOtpResponse = VerifyOtpResponse(
+    fun syntheticVerifyResponse(matchedPhone: String = PHONE): VerifyOtpResponse = VerifyOtpResponse(
         success = true,
         token = TOKEN,
         user = UserInfo(
             staffId = STAFF_ID,
             name = NAME,
             role = ROLE,
-            phone = PHONE,
+            phone = matchedPhone,
             geoTrackingEnabled = false
         ),
         error = null

@@ -11,6 +11,21 @@
         android:layout_height="match_parent"
         android:contentDescription="Image Preview" />
 
+    <!-- Centered loading spinner shown by callers that need an async
+         fetch step (e.g. loan-desk previews resolve a Convex signed
+         URL before Coil can start). Default GONE so callers that load
+         from already-decoded sources (chat, driver trip) don't see an
+         unnecessary flash; the loan-desk preview path explicitly
+         toggles this VISIBLE → GONE around its load. -->
+    <ProgressBar
+        android:id="@+id/pbPreviewLoading"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="#FFFFFF"
+        android:visibility="gone" />
+
     <FrameLayout
         android:id="@+id/previewControls"
         android:layout_width="match_parent"

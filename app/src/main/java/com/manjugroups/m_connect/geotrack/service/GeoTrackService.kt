@@ -48,7 +48,18 @@ class GeoTrackService : Service() {
         private const val HEARTBEAT_INTERVAL_MS = 120_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
         private const val MAX_POINT_AGE_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
+        // Unsent points hang around for 30 days so a multi-day offline
+        // period (field staff with no signal) still flushes when the
+        // device reconnects, instead of silently losing the journey to
+        // the 7-day cleanup.
+        private const val MAX_UNSENT_POINT_AGE_MS = 30L * 24 * 60 * 60 * 1000
         private const val MAX_SYNC_RETRIES = 5
+        // Batch sizing: drain the queue in chunks of 200 but flush up
+        // to 25 chunks per sync cycle (5000 points = ~14 hours at 10s
+        // intervals). That's enough to recover almost any realistic
+        // offline period in a single cycle when the network returns.
+        private const val BATCH_SIZE = 200
+        private const val MAX_BATCHES_PER_SYNC = 25
 
         @Volatile
         var isRunning = false
@@ -105,6 +116,7 @@ class GeoTrackService : Service() {
     private var heartbeatJob: Job? = null
     private var notifJob: Job? = null
     private var cleanupJob: Job? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     // Thread-safe state
     @Volatile private var lastActivity = "STILL"
@@ -215,6 +227,7 @@ class GeoTrackService : Service() {
         startHeartbeatLoop()
         startNotifLoop()
         startCleanupLoop()
+        registerNetworkCallback()
 
         try { getLastLocationAndNotifyServer() } catch (e: Exception) { Log.e(TAG, "Server notify failed: ${e.message}") }
 
@@ -256,6 +269,7 @@ class GeoTrackService : Service() {
         locationThread?.quitSafely()
         locationThread = null
         unregisterReceivers()
+        unregisterNetworkCallback()
         releaseWakeLock()
 
         // Final sync
@@ -522,6 +536,55 @@ class GeoTrackService : Service() {
 
     // ── Sync Loop ──
 
+    /**
+     * Listen for connectivity changes so we sync the moment network
+     * returns instead of waiting up to 30 s for the next tick. Critical
+     * for short outages (a tunnel, a building's dead zone) where the
+     * staff doesn't want a visible gap on the Journey Timeline. Also
+     * resets the failure backoff so a successful reconnect doesn't get
+     * delayed by a previous string of failures.
+     */
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        try {
+            val cm = getSystemService(ConnectivityManager::class.java) ?: return
+            val request = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    Log.i(TAG, "Network available — kicking immediate sync")
+                    consecutiveSyncFailures = 0
+                    serviceScope.launch {
+                        try { markNetworkOnlineIfNeeded() } catch (_: Exception) {}
+                        try { syncPoints() } catch (e: Exception) {
+                            Log.w(TAG, "Immediate sync on reconnect failed: ${e.message}")
+                        }
+                        try { syncEvents() } catch (_: Exception) {}
+                    }
+                }
+                override fun onLost(network: android.net.Network) {
+                    Log.d(TAG, "Network lost — points will buffer locally")
+                    serviceScope.launch {
+                        try { markNetworkOfflineIfNeeded() } catch (_: Exception) {}
+                    }
+                }
+            }
+            cm.registerNetworkCallback(request, cb)
+            networkCallback = cb
+        } catch (e: Exception) {
+            Log.w(TAG, "registerNetworkCallback failed: ${e.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val cb = networkCallback ?: return
+        try {
+            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb)
+        } catch (_: Exception) {}
+        networkCallback = null
+    }
+
     private fun startSyncLoop() {
         syncJob = serviceScope.launch {
             delay(SYNC_INTERVAL_MS)
@@ -562,49 +625,78 @@ class GeoTrackService : Service() {
                 return
             }
             val dao = db.locationPointDao()
-            val unsent = dao.getUnsent(200)
-            if (unsent.isEmpty()) {
-                Log.d(TAG, "Sync: no pending points")
-                return
-            }
+            // Drain the entire backlog in batches of 200, not just the
+            // first 200. After a long offline period (a 6-hour outage
+            // at 10s intervals = 2160 points) the old single-batch
+            // sync would leave 90% of the journey stuck on-device for
+            // hours until enough 30s ticks fired.
+            var batchesFlushed = 0
+            var pointsThisCycle = 0
+            // Bounded loop: exits on empty queue or MAX_BATCHES_PER_SYNC
+            // cap. No cancellation check needed — the surrounding
+            // coroutine's own cancellation will short-circuit the next
+            // suspending dao/api call.
+            while (true) {
+                val unsent = dao.getUnsent(BATCH_SIZE)
+                if (unsent.isEmpty()) {
+                    if (batchesFlushed == 0) Log.d(TAG, "Sync: no pending points")
+                    break
+                }
 
-            Log.d(TAG, "Sync: pushing ${unsent.size} points...")
+                Log.d(TAG, "Sync: pushing ${unsent.size} points (batch ${batchesFlushed + 1})...")
 
-            val points = unsent.map { e ->
-                LocationPoint(
-                    lat = e.lat, lng = e.lng, accuracy = e.accuracy,
-                    speed = e.speed, bearing = e.bearing, altitude = e.altitude,
-                    activity = e.activity, activityConfidence = e.activityConfidence,
-                    isMock = e.isMock, batteryPct = e.batteryPct,
-                    networkType = e.networkType, gpsEnabled = e.gpsEnabled,
-                    airplaneMode = e.airplaneMode, recordedAt = e.recordedAt
+                val points = unsent.map { e ->
+                    LocationPoint(
+                        lat = e.lat, lng = e.lng, accuracy = e.accuracy,
+                        speed = e.speed, bearing = e.bearing, altitude = e.altitude,
+                        activity = e.activity, activityConfidence = e.activityConfidence,
+                        isMock = e.isMock, batteryPct = e.batteryPct,
+                        networkType = e.networkType, gpsEnabled = e.gpsEnabled,
+                        airplaneMode = e.airplaneMode, recordedAt = e.recordedAt
+                    )
+                }
+
+                val resp = api.pushBatch(
+                    session.bearerToken,
+                    PushBatchRequest(
+                        sessionId = activeSessionId,
+                        deviceId = session.trackingDeviceId,
+                        points = points
+                    )
                 )
-            }
 
-            val resp = api.pushBatch(
-                session.bearerToken,
-                PushBatchRequest(
-                    sessionId = activeSessionId,
-                    deviceId = session.trackingDeviceId,
-                    points = points
-                )
-            )
-
-            if (resp.success) {
-                dao.deleteByIds(unsent.map { it.id })
-                val inserted = resp.inserted ?: unsent.size
-                pointsSynced.addAndGet(inserted)
-                consecutiveSyncFailures = 0
-                Log.i(TAG, "Sync OK: $inserted/${unsent.size} saved (total saved: ${pointsSynced.get()})")
-            } else {
-                consecutiveSyncFailures++
-                Log.e(TAG, "Sync FAILED — server said: ${resp.error} (failures=$consecutiveSyncFailures)")
-                if (resp.error?.contains("Tracking session not active", ignoreCase = true) == true) {
-                    session.shouldTrackNow = false
-                    session.activeTrackingSessionId = null
-                    stopSelf()
+                if (resp.success) {
+                    dao.deleteByIds(unsent.map { it.id })
+                    val inserted = resp.inserted ?: unsent.size
+                    pointsSynced.addAndGet(inserted)
+                    pointsThisCycle += inserted
+                    batchesFlushed++
+                    consecutiveSyncFailures = 0
+                    // Safety cap: bail after this many batches per
+                    // cycle so we don't monopolise the service scope
+                    // when a giant backlog is finally draining.
+                    if (batchesFlushed >= MAX_BATCHES_PER_SYNC) {
+                        Log.i(TAG, "Sync: hit max batches per cycle ($MAX_BATCHES_PER_SYNC); resuming next tick")
+                        break
+                    }
+                    // If we got fewer points than we asked for, the
+                    // queue is empty — done.
+                    if (unsent.size < BATCH_SIZE) break
+                } else {
+                    consecutiveSyncFailures++
+                    Log.e(TAG, "Sync FAILED — server said: ${resp.error} (failures=$consecutiveSyncFailures)")
+                    if (resp.error?.contains("Tracking session not active", ignoreCase = true) == true) {
+                        session.shouldTrackNow = false
+                        session.activeTrackingSessionId = null
+                        stopSelf()
+                    }
+                    return
                 }
             }
+            if (batchesFlushed > 0) {
+                Log.i(TAG, "Sync OK: $pointsThisCycle points across $batchesFlushed batches (total saved: ${pointsSynced.get()})")
+            }
+            return
         } catch (e: Exception) {
             consecutiveSyncFailures++
             Log.e(TAG, "Sync EXCEPTION: ${e.javaClass.simpleName}: ${e.message} (failures=$consecutiveSyncFailures)", e)
@@ -617,34 +709,39 @@ class GeoTrackService : Service() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
                 delay(HEARTBEAT_INTERVAL_MS)
+                val battery = getBatteryLevel()
+                val sessionId = session.activeTrackingSessionId
+                val deviceId = session.trackingDeviceId
                 try {
                     api.heartbeat(
                         session.bearerToken,
                         HeartbeatRequest(
-                            sessionId = session.activeTrackingSessionId,
-                            deviceId = session.trackingDeviceId,
-                            batteryPct = getBatteryLevel(),
+                            sessionId = sessionId,
+                            deviceId = deviceId,
+                            batteryPct = battery,
                             appVersion = BuildConfig.VERSION_NAME,
                         )
                     )
-                    Log.d(TAG, "Heartbeat OK (battery=${getBatteryLevel()}%)")
+                    Log.d(TAG, "Heartbeat OK (battery=${battery}%)")
                 } catch (e: Exception) {
-                    Log.w(TAG, "Heartbeat failed: ${e.message}")
-                    // Retry once after 10 seconds
-                    delay(10_000)
-                    try {
-                        api.heartbeat(
-                            session.bearerToken,
-                            HeartbeatRequest(
-                                sessionId = session.activeTrackingSessionId,
-                                deviceId = session.trackingDeviceId,
-                                batteryPct = getBatteryLevel(),
-                                appVersion = BuildConfig.VERSION_NAME,
-                            )
+                    Log.w(TAG, "Heartbeat failed: ${e.message} — queueing for replay")
+                    // Persist the heartbeat snapshot so a tunnel /
+                    // building dead-zone doesn't lose battery + uptime
+                    // visibility for that window. The sync loop +
+                    // network-callback replay it via the same flush
+                    // path used for tamper events; the server then has
+                    // a complete heartbeat history with no gaps.
+                    runCatching {
+                        GeoTrackEventQueue.enqueue(
+                            context = this@GeoTrackService,
+                            eventType = GeoTrackEventQueue.HEARTBEAT_EVENT_TYPE,
+                            metadata = buildMap {
+                                if (sessionId != null) put("sessionId", sessionId)
+                                if (deviceId != null) put("deviceId", deviceId)
+                                if (battery != null) put("batteryPct", battery)
+                                put("appVersion", BuildConfig.VERSION_NAME)
+                            },
                         )
-                        Log.d(TAG, "Heartbeat retry OK")
-                    } catch (_: Exception) {
-                        Log.e(TAG, "Heartbeat retry also failed")
                     }
                 }
             }
@@ -658,11 +755,19 @@ class GeoTrackService : Service() {
             delay(60_000) // Wait 1 min after start
             while (isActive) {
                 try {
-                    // Delete points older than 7 days that are still stuck
-                    val cutoff = System.currentTimeMillis() - MAX_POINT_AGE_MS
-                    db.locationPointDao().deleteOlderThan(cutoff)
-                    db.pendingGeoTrackEventDao().deleteOlderThan(cutoff)
-                    Log.d(TAG, "Cleanup: purged points older than 7 days")
+                    val now = System.currentTimeMillis()
+                    // Sent points: standard 7-day retention (the server
+                    // already has these — no point keeping them locally).
+                    db.locationPointDao().deleteSentOlderThan(now - MAX_POINT_AGE_MS)
+                    // Unsent points: keep MUCH longer (30 days) so a
+                    // multi-day offline period — staff on a field trip
+                    // with no signal — doesn't lose the journey before
+                    // the device reconnects. The 30d safety cap stops
+                    // genuinely abandoned local DBs from growing
+                    // unbounded if the device is never recovered.
+                    db.locationPointDao().deleteUnsentOlderThan(now - MAX_UNSENT_POINT_AGE_MS)
+                    db.pendingGeoTrackEventDao().deleteOlderThan(now - MAX_POINT_AGE_MS)
+                    Log.d(TAG, "Cleanup: purged sent>${MAX_POINT_AGE_MS / 86_400_000L}d, unsent>${MAX_UNSENT_POINT_AGE_MS / 86_400_000L}d")
                 } catch (e: Exception) {
                     Log.w(TAG, "Cleanup failed: ${e.message}")
                 }

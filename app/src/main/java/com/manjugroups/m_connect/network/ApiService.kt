@@ -85,6 +85,22 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): VendorsResponse
 
+    // On-Duty trip lifecycle — creates / closes a free-standing geoTrips
+    // row so the HR Attendance modal shows the on-duty session in its
+    // Trips strip alongside site-visit trips (with status, distance and
+    // route polyline derived from the locationPoints stream).
+    @POST("api/geotrack/on-duty/start")
+    suspend fun startOnDutyTrip(
+        @Header("Authorization") token: String,
+        @Body body: StartOnDutyTripRequest,
+    ): StartOnDutyTripResponse
+
+    @POST("api/geotrack/on-duty/complete")
+    suspend fun completeOnDutyTrip(
+        @Header("Authorization") token: String,
+        @Body body: CompleteOnDutyTripRequest,
+    ): CompleteOnDutyTripResponse
+
     @POST("api/hr/attendance/punch-in")
     suspend fun punchIn(
         @Header("Authorization") token: String,
@@ -980,8 +996,15 @@ interface ApiService {
             // unless the token is invalid anyway, so we don't try to
             // distinguish — every 401 is treated as "session is dead."
             val authWatchdog = okhttp3.Interceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.code == 401) {
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // Skip the auto-logout when the outgoing request used the
+                // dev bypass token — the server can't validate a synthetic
+                // token so it will always 401, but the local dev session
+                // is still legitimately "logged in" for UI exploration.
+                // Without this, bypass users get kicked back to login on
+                // the very first authed call after AuthBypass succeeds.
+                if (response.code == 401 && !isBypassAuth(request)) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -999,6 +1022,14 @@ interface ApiService {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(ApiService::class.java)
+        }
+
+        private fun isBypassAuth(request: okhttp3.Request): Boolean {
+            val header = request.header("Authorization") ?: return false
+            // Both "Bearer <token>" and bare "<token>" shapes turn up
+            // in the codebase, so strip the prefix before comparing.
+            val token = header.removePrefix("Bearer ").trim()
+            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
         }
     }
 }
@@ -1063,7 +1094,8 @@ data class StaffData(
     val reportingTo: String? = null,
     val reportingToId: String? = null,
     val geoTrackingEnabled: Boolean = false,
-    val trackingDeviceHealth: TrackingDeviceHealth? = null
+    val trackingDeviceHealth: TrackingDeviceHealth? = null,
+    val photo: String? = null
 )
 
 data class TrackingDeviceHealth(
@@ -1123,6 +1155,44 @@ data class VendorRemote(
     val status: String? = null,
 )
 
+// On-Duty trip lifecycle payloads. The server stamps a geoTrips row with
+// status="active" on start and patches it to "completed" with distance
+// computed from the locationPoints stream on complete.
+data class StartOnDutyTripRequest(
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+    val category: String? = null, // "Projects" | "Vendors" | "Others"
+    val targetId: String? = null,
+    val targetName: String? = null,
+    val targetAddress: String? = null,
+    val vehicleOwnership: String? = null, // "Own Vehicle" | "Office Vehicle"
+    val vehicleType: String? = null,      // "2 Wheeler" | "4 Wheeler"
+)
+
+data class StartOnDutyTripResponse(
+    val success: Boolean = false,
+    val tripId: String? = null,
+    val alreadyActive: Boolean = false,
+    val error: String? = null,
+)
+
+data class CompleteOnDutyTripRequest(
+    val tripId: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+)
+
+data class CompleteOnDutyTripResponse(
+    val success: Boolean = false,
+    val tripId: String? = null,
+    val distanceMeters: Long? = null,
+    val alreadyCompleted: Boolean = false,
+    val reason: String? = null,
+    val error: String? = null,
+)
+
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
 
@@ -1172,6 +1242,17 @@ data class AttendanceRecord(
     val lateMinutes: Int? = null,
     val fineAmount: Double? = null,
     val lateFineDeduction: Double? = null,
+    // HR-logged "other fines" — manual deductions for loss of property,
+    // indiscipline, etc. Server attributes each fine to its createdAt
+    // date so it lands on the right attendance card. Mobile renders one
+    // blue banner row per entry under the late-fine banner.
+    val otherFines: List<OtherFineData>? = null,
+)
+
+data class OtherFineData(
+    val typeName: String? = null,
+    val amount: Double? = null,
+    val notes: String? = null,
 )
 data class AttendanceData(
     val totalMinutes: Int?,
@@ -1375,6 +1456,10 @@ data class MyPermissionsResponse(val success: Boolean, val total: Int?, val perm
 data class PermissionData(
     @SerializedName("_id") val id: String?,
     val permissionId: String? = null,
+    // Authoritative owner of the row. The mobile filters its "My
+    // Permissions" view against this so a misbehaving backend can't
+    // leak other staff's slips into the user's list.
+    val staffId: String? = null,
     val staffName: String? = null,
     val date: String?,
     val fromTime: String?,
@@ -1629,7 +1714,11 @@ data class ConversationData(
     val lastMessageSenderId: String? = null,
     val participants: List<ParticipantData>?
 )
-data class ParticipantData(@SerializedName("_id") val id: String?, val name: String?)
+data class ParticipantData(
+    @SerializedName("_id") val id: String?,
+    val name: String?,
+    val photo: String? = null
+)
 data class MessagesResponse(
     val success: Boolean,
     val page: List<MessageData>? = null,
@@ -1650,7 +1739,13 @@ data class MessageData(
     val isDeleted: Boolean?, val isEdited: Boolean?,
     val replyCount: Int?, val parentMessageId: String?,
     val attachments: List<MessageAttachmentData>? = null,
-    val reactions: List<ReactionData>? = null
+    val reactions: List<ReactionData>? = null,
+    // Local-only optimistic-send fields. Never serialised back to the
+    // server (Gson ignores Transient + nulls). When set, the UI marks
+    // the bubble as pending (clock icon) and the ChatPendingQueue is
+    // the source of truth for retrying delivery.
+    @Transient val localPendingId: String? = null,
+    @Transient val hasFailed: Boolean = false,
 )
 data class MessageAttachmentData(
     @SerializedName("_id") val id: String? = null,
@@ -2289,6 +2384,13 @@ data class ManualProfilePatch(
     val state: String? = null,
     val district: String? = null,
     val alternateMobileNumber: String? = null,
+    // Inbound-only fields — server stores them on telecallerLeads
+    // .manualProfile but they're not yet wired into the Edit-mode
+    // outcome-sheet POST, so they stay null on writes. Adding them
+    // lets the CP create form autofill door / landmark out of an
+    // operator-edited profile when available.
+    val doorNo: String? = null,
+    val landmark: String? = null,
 )
 
 data class TelecallerLeadSearchData(
@@ -2305,6 +2407,35 @@ data class TelecallerLeadSearchData(
     // latestAnalysisProfile — they reflect explicit corrections the
     // operator typed, not the AI's best guess at parsing the call.
     val manualProfile: ManualProfilePatch? = null,
+    // Snapshot of the saved clientPlaces row tied to this lead. Set
+    // after a prior CP visit was created — carries the most reliable
+    // door/pincode/address since it was confirmed by an actual visit.
+    // The CP create form prefers this over both AI analysis and
+    // manual edits.
+    val clientPlaceProfile: LeadClientPlaceProfile? = null,
+    // Best free-text/coord hints surfaced alongside the structured
+    // profiles. Used to pre-populate the lat/lng + maps-link cells
+    // on the CP create form when the lead already has them.
+    val suggestedVisitLat: Double? = null,
+    val suggestedVisitLng: Double? = null,
+    val suggestedGoogleMapsLink: String? = null,
+    val projectId: String? = null,
+    val assignedToStaffId: String? = null,
+    val assignedToStaffName: String? = null,
+)
+
+/** Inbound-only — corresponds to clientPlaces row enrichment from
+ *  telecallerLeads.searchByPhone. doorNo / pincode / city / state /
+ *  landmark are surfaced for the CP create form's autofill. */
+data class LeadClientPlaceProfile(
+    val doorNo: String? = null,
+    val pincode: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val district: String? = null,
+    val landmark: String? = null,
+    val formattedAddress: String? = null,
 )
 
 data class LeadAnalysisProfile(
@@ -2314,6 +2445,9 @@ data class LeadAnalysisProfile(
     val landmark: String? = null,
     val state: String? = null,
     val district: String? = null,
+    // Server-side telecallerLeads.searchByPhone enriches the AI
+    // analysis with doorNo when the analysis itself extracted one.
+    val doorNo: String? = null,
     val alternateMobileNumber: String? = null,
     val propertyType: String? = null,
     val propertyInterest: LeadPropertyInterest? = null,
@@ -2524,6 +2658,14 @@ data class CreateBookingRequest(
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -2662,6 +2804,14 @@ data class Booking(
     val balanceAmount: Double? = null,
     val agreedAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -2815,6 +2965,14 @@ data class UpdateBookingRequest(
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val paymentMode: String? = null,
+    // Mirrors the web Booking · Customer Payment Category dropdown.
+    // Mobile sends just the letter ("A" / "B" / "C") so the server's
+    // bookings.customerPaymentCategory union accepts the value.
+    val customerPaymentCategory: String? = null,
+    // Only populated when customerPaymentCategory == "B" (Loan
+    // Customer); otherwise null. Server uses this to derive the
+    // Cash (Balance) computed value on the booking detail view.
+    val loanAmountRequested: Double? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,

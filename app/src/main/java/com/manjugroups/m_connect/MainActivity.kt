@@ -71,6 +71,18 @@ class MainActivity : AppCompatActivity() {
     private var iamPollJob: kotlinx.coroutines.Job? = null
     private val IAM_POLL_INTERVAL_MS = 20_000L
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            lifecycleScope.launch {
+                runCatching {
+                    PushTokenManager.syncCurrentToken(this@MainActivity, session)
+                }
+            }
+        }
+    }
+
     private data class TabConfig(
         val tab: FrameLayout,
         val icon: ImageView,
@@ -84,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fragmentContainer: FrameLayout
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
+    private lateinit var bottomNavFadeOverlay: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,6 +116,21 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ForcePasswordChangeActivity::class.java))
             finish()
             return
+        }
+
+        // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
+        // the user gets push notifications for chats / tasks / approvals.
+        // Guarded on the persisted `notificationPermissionPrompted` flag
+        // so a user who already declined isn't pestered every cold start
+        // — they can still re-enable from system settings or the in-app
+        // toggle. The launcher's grant callback re-runs token sync so
+        // the device becomes reachable the moment permission is granted.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !PushTokenManager.hasNotificationPermission(this) &&
+            !session.notificationPermissionPrompted
+        ) {
+            session.notificationPermissionPrompted = true
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
 
         // Listen for any API call returning 401 — when that happens
@@ -143,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         statusBarBackground = findViewById(R.id.statusBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
+        bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
 
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -335,6 +364,9 @@ class MainActivity : AppCompatActivity() {
         val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
         if (tabBarContainer.visibility == target) return
         tabBarContainer.visibility = target
+        if (::bottomNavFadeOverlay.isInitialized) {
+            bottomNavFadeOverlay.visibility = target
+        }
         // Re-dispatch insets so fragmentContainer.bottom padding flips between
         // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
         if (::mainRoot.isInitialized) {
@@ -411,10 +443,30 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTopBarForTab(index: Int) {
         when (index) {
-            TAB_HOME -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            TAB_HR -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            TAB_LIBRARY -> setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-            else -> setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+            TAB_HOME -> {
+                setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_grey)
+                }
+            }
+            TAB_HR -> {
+                setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_grey)
+                }
+            }
+            TAB_LIBRARY -> {
+                setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_grey)
+                }
+            }
+            else -> {
+                setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_white)
+                }
+            }
         }
     }
 

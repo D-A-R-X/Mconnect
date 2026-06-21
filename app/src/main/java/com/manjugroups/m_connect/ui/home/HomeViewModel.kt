@@ -103,7 +103,15 @@ class HomeViewModel : ViewModel() {
                 val cal = Calendar.getInstance()
                 val monthStart = String.format("%04d-%02d-01", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
                 val myAttendance = try { api.getMyAttendance(bearerToken, fromDate = monthStart, toDate = today) } catch (_: Exception) { null }
+                // Today's row is provisional — the day still has hours to
+                // run, and once midnight passes it enters the RO Team
+                // Approval → HR Review flow before being final. Counting
+                // today the moment you punch in inflates the tile by a
+                // day that hasn't actually closed yet. The web side
+                // already defers today's verdict to the midnight cron;
+                // this mirrors that on mobile.
                 val daysPresent = myAttendance?.records?.count { r ->
+                    if (r.date == today) return@count false
                     r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
                 } ?: 0
 
@@ -569,6 +577,23 @@ class HomeViewModel : ViewModel() {
             // it lets the Home sort treat legacy and CP-merge rows the
             // same way — newest first.
             creationTime = this.createdAt?.toDouble(),
+            // Mirror the cpVisit sub-object the legacy fieldVisits-
+            // enriched path already populates. Without this the CP-
+            // merge rows show up on Home with cpVisit=null, which
+            // means the Type cell reads "Direct CP" and the trip flow
+            // can't branch into gift_distribution / old_client /
+            // collection_cp on arrival — the booking-outcome sheet
+            // opens for every CP regardless of type. Carrying these
+            // fields aligns the merged shape with what
+            // enrichFieldVisitForMobile already returns server-side.
+            cpVisit = com.manjugroups.m_connect.network.CpVisitState(
+                clientMet = this.clientMet,
+                clientMetAt = this.clientMetAt,
+                clientNoShowReason = this.clientNoShowReason,
+                outcome = this.outcome,
+                postponeReasons = this.postponeReasons,
+                cpType = this.cpType,
+            ),
         )
     }
 

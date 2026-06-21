@@ -73,6 +73,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:paddingBottom="40dp"
         android:fillViewport="true"
         android:overScrollMode="never"
         android:visibility="gone">
@@ -154,12 +155,31 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- Hero active loan card overlapping the header -->
+            <!-- White card that overlaps the blue header by 44dp and
+                 wraps every card below it (hero, tab segment, empty
+                 state, history list). Before this wrapper existed,
+                 hiding the heroActiveCard left the tabs floating on
+                 the gray bg with no rounded-corner shoulder — empty
+                 state read as ungrouped. Now the wrapper carries the
+                 30dp top corners + the -44dp pull-up, and the hero
+                 inside it just contributes its own card visual when
+                 a loan exists. -->
+            <LinearLayout
+                android:id="@+id/loansWhiteWrapper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-44dp"
+                android:background="@drawable/bg_loan_hero_card"
+                android:orientation="vertical"
+                android:paddingBottom="16dp">
+
+            <!-- Hero active loan card — inherits the wrapper's white
+                 floor; its own background keeps it visually distinct
+                 when a loan is present. -->
             <LinearLayout
                 android:id="@+id/heroActiveCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="-44dp"
                 android:background="@drawable/bg_loan_hero_card"
                 android:clickable="true"
                 android:focusable="true"
@@ -250,14 +270,29 @@
                             android:textColor="#0B61CA"
                             android:textSize="12sp" />
 
-                        <ImageView
+                        <!-- Delete affordance — matches the per-row
+                             delete on My Permissions (FrameLayout with
+                             the same rounded-rect bg + trash icon).
+                             Visible on the user's own active and
+                             pending rows; click opens the same
+                             cancel-leave confirm dialog used elsewhere. -->
+                        <FrameLayout
                             android:id="@+id/btnCancelLoan"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:layout_marginTop="8dp"
                             android:layout_marginEnd="4dp"
-                            android:src="@drawable/ic_trash_red"
-                            android:visibility="gone" />
+                            android:background="@drawable/bg_leave_delete_icon"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_leave_trash_red" />
+                        </FrameLayout>
                     </LinearLayout>
                 </LinearLayout>
 
@@ -359,13 +394,25 @@
                     android:visibility="gone">
 
                     <View
+                        android:id="@+id/loanTrackerLine"
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
                         android:layout_marginTop="20dp"
                         android:layout_marginHorizontal="30dp"
                         android:background="#EAECF0" />
 
+                    <View
+                        android:id="@+id/advanceTrackerLine"
+                        android:layout_width="match_parent"
+                        android:layout_height="2dp"
+                        android:layout_marginTop="20dp"
+                        android:layout_marginHorizontal="45dp"
+                        android:background="@drawable/bg_line_dashed_green"
+                        android:layerType="software"
+                        android:visibility="gone" />
+
                     <LinearLayout
+                        android:id="@+id/layoutLoanTracker"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:baselineAligned="false"
@@ -555,6 +602,81 @@
                                 android:textSize="9sp" />
                         </LinearLayout>
                     </LinearLayout>
+
+                    <!-- Advance Salary Tracker -->
+                    <LinearLayout
+                        android:id="@+id/layoutAdvanceTracker"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="32dp"
+                        android:visibility="gone">
+
+                        <!-- Step 1: HR -->
+                        <LinearLayout
+                            android:id="@+id/advanceStepHr"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_advance_step_pending"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp">
+
+                            <ImageView
+                                android:id="@+id/advanceIconHr"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_track_hr" />
+
+                            <TextView
+                                android:id="@+id/advanceTextHr"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="HR"
+                                android:textColor="#98A2B3"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Spacer/Weight to push them apart, since the line is behind them -->
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <!-- Step 2: ACC'S -->
+                        <LinearLayout
+                            android:id="@+id/advanceStepAccs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_advance_step_pending"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp">
+
+                            <ImageView
+                                android:id="@+id/advanceIconAccs"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_track_accs" />
+
+                            <TextView
+                                android:id="@+id/advanceTextAccs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="Acc's"
+                                android:textColor="#98A2B3"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </FrameLayout>
             </LinearLayout>
 
@@ -634,6 +756,7 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/tvRequestedLoansTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingHorizontal="20dp"
@@ -716,11 +839,20 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="48dp"
-                android:paddingBottom="80dp"
+                android:paddingBottom="40dp"
                 android:visibility="gone"
                 app:es_image="@drawable/img_loans_empty"
                 app:es_title="No Loans Yet"
-                app:es_description="When your finance team disburses a loan, you'll see it grouped here with EMI dates and a full repayment history." />
+                app:es_description="Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place." />
+            </LinearLayout> <!-- /loansWhiteWrapper -->
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_bottom_nav_fade_grey"
+        android:clickable="false"
+        android:focusable="false" />
 </FrameLayout>

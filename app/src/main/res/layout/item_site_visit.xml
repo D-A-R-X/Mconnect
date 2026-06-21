@@ -157,7 +157,7 @@
                     android:layout_width="12dp"
                     android:layout_height="12dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_chat_phone"
+                    android:src="@drawable/ic_phone_outline"
                     app:tint="#98A2B3" />
 
                 <TextView

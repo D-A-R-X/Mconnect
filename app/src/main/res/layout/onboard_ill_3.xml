@@ -3,27 +3,27 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:clipChildren="false"
-    android:clipToPadding="false">
+    android:clipChildren="true"
+    android:clipToPadding="true">
 
-    <!-- Milestones (Frame 1000003416): x=52 y=96 w=286 h=205 -->
+    <!-- Milestones card -->
     <ImageView
         android:id="@+id/imgMilestones"
-        android:layout_width="286dp"
-        android:layout_height="205dp"
-        android:layout_marginStart="52dp"
-        android:layout_marginTop="96dp"
+        android:layout_width="250dp"
+        android:layout_height="179dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="60dp"
         android:src="@drawable/onboard_milestones"
         android:scaleType="fitCenter"
         android:adjustViewBounds="true" />
 
-    <!-- Today Task-1 1: x=52 y=242 w=286 h=257 -->
+    <!-- Today's Tasks card -->
     <ImageView
         android:id="@+id/imgTodaysTasks"
-        android:layout_width="286dp"
-        android:layout_height="257dp"
-        android:layout_marginStart="52dp"
-        android:layout_marginTop="242dp"
+        android:layout_width="250dp"
+        android:layout_height="225dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="180dp"
         android:src="@drawable/onboard_todays_tasks"
         android:scaleType="fitCenter"
         android:adjustViewBounds="true" />

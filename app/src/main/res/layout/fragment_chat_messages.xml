@@ -35,7 +35,7 @@
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_arrow_left"
+                    android:src="@drawable/ic_back_chevron"
                     app:tint="#004EEB" />
             </FrameLayout>
 
@@ -175,7 +175,7 @@
                     android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:contentDescription="Close search"
-                    android:src="@drawable/ic_arrow_left"
+                    android:src="@drawable/ic_back_chevron"
                     app:tint="#101828" />
             </FrameLayout>
 
@@ -268,7 +268,7 @@
                     android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:contentDescription="Cancel"
-                    android:src="@drawable/ic_arrow_left"
+                    android:src="@drawable/ic_back_chevron"
                     android:tint="#FFFFFF" />
             </FrameLayout>
 
@@ -542,7 +542,9 @@
             android:id="@+id/bottomContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FFFFFF">
+            android:background="#FFFFFF"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
             <LinearLayout
                 android:id="@+id/bottomBar"
@@ -658,30 +660,40 @@
                 android:paddingBottom="12dp"
                 android:visibility="gone"
                 android:clickable="true"
-                android:focusable="true">
+                android:focusable="true"
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
-                <!-- Red blinking dot / recording indicator -->
-                <ImageView
-                    android:id="@+id/ivRecordingDot"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/bg_loan_track_active"
-                    android:layout_marginStart="8dp"
-                    app:tint="#F04438" />
-
-                <!-- Recording Timer -->
-                <TextView
-                    android:id="@+id/tvRecordingTimer"
+                <!-- Recording Status (Dot + Timer) Container -->
+                <LinearLayout
+                    android:id="@+id/recordingStatusContainer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_toEndOf="@id/ivRecordingDot"
+                    android:layout_alignParentStart="true"
                     android:layout_centerVertical="true"
                     android:layout_marginStart="8dp"
-                    android:textColor="#F04438"
-                    android:textSize="14sp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="00:00" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Red blinking dot / recording indicator -->
+                    <ImageView
+                        android:id="@+id/ivRecordingDot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:src="@drawable/bg_loan_track_active"
+                        app:tint="#F04438" />
+
+                    <!-- Recording Timer -->
+                    <TextView
+                        android:id="@+id/tvRecordingTimer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="#F04438"
+                        android:textSize="14sp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="00:00" />
+                </LinearLayout>
 
                 <!-- Slide to cancel text container -->
                 <LinearLayout
@@ -708,7 +720,8 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true">
+                    android:layout_centerVertical="true"
+                    android:alpha="0">
 
                     <ImageView
                         android:id="@+id/ivTrash"
@@ -726,7 +739,7 @@
                     android:layout_height="44dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:layout_marginEnd="12dp"
+                    android:layout_marginEnd="0dp"
                     android:background="@drawable/bg_chat_send_circle"
                     android:visibility="gone">
 
@@ -778,7 +791,8 @@
                 android:padding="4dp"
                 android:src="@drawable/ic_sheet_close"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                app:tint="#667085" />
+                app:tint="#667085"
+                android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
 

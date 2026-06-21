@@ -470,15 +470,26 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp">
 
-            <!-- Progress connector lines (sit behind the circles) -->
+            <!-- Progress connector lines (sit behind the circles).
+                 4 step circles sit at the 12.5% / 37.5% / 62.5% /
+                 87.5% marks (each circle column has weight=1 in the
+                 row below). The line must start at the FIRST circle's
+                 center and end at the LAST circle's center — not at
+                 the row edges — otherwise stubs poke out past both
+                 ends. Half-weight (0.5) spacers at each end shift the
+                 3 line segments inward to match the circle centers
+                 exactly. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="2dp"
-                android:layout_marginStart="16dp"
                 android:layout_marginTop="15dp"
-                android:layout_marginEnd="16dp"
                 android:baselineAligned="false"
                 android:orientation="horizontal">
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="0.5" />
 
                 <View
                     android:id="@+id/tripLineSegment1"
@@ -500,6 +511,11 @@
                     android:layout_height="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/bg_trip_progress_line_inactive" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="0.5" />
             </LinearLayout>
 
             <LinearLayout

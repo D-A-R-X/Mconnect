@@ -7,6 +7,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingGeoTrackEventEntity
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.HeartbeatRequest
 import com.manjugroups.m_connect.network.TamperReportRequest
 
 object GeoTrackEventQueue {
@@ -14,6 +15,9 @@ object GeoTrackEventQueue {
     private val metadataType = object : TypeToken<Map<String, Any?>>() {}.type
     private const val PREFS = "geotrack_event_queue"
     private const val DUPLICATE_WINDOW_MS = 6 * 60 * 60 * 1000L
+
+    /** Reserved event type for queued heartbeat replays. */
+    const val HEARTBEAT_EVENT_TYPE = "HEARTBEAT"
 
     suspend fun enqueue(
         context: Context,
@@ -68,11 +72,40 @@ object GeoTrackEventQueue {
                 gson.fromJson<Map<String, Any?>>(event.metadataJson, metadataType)
             }.getOrDefault(mapOf("ts" to event.occurredAt))
 
-            val response = api.reportTamper(
-                session.bearerToken,
-                TamperReportRequest(event.eventType, metadata)
-            )
-            if (!response.success) break
+            // Heartbeats reuse this queue (no separate Room table) but
+            // need to hit the heartbeat endpoint, not the tamper one.
+            // The heartbeat row's metadata carries sessionId/deviceId/
+            // batteryPct/appVersion stamped at the time the original
+            // send failed — replaying the same values preserves the
+            // snapshot the device was in during the offline window.
+            val ok = if (event.eventType == HEARTBEAT_EVENT_TYPE) {
+                runCatching {
+                    val resp = api.heartbeat(
+                        session.bearerToken,
+                        HeartbeatRequest(
+                            sessionId = (metadata["sessionId"] as? String)
+                                ?: session.activeTrackingSessionId,
+                            deviceId = (metadata["deviceId"] as? String)
+                                ?: session.trackingDeviceId,
+                            // -1 = "unknown battery at replay time"; the
+                            // server treats negative as missing and just
+                            // records the heartbeat tick. Same idea for
+                            // unknown app version.
+                            batteryPct = (metadata["batteryPct"] as? Number)?.toInt() ?: -1,
+                            appVersion = (metadata["appVersion"] as? String) ?: "unknown",
+                        ),
+                    )
+                    resp.success
+                }.getOrDefault(false)
+            } else {
+                runCatching {
+                    api.reportTamper(
+                        session.bearerToken,
+                        TamperReportRequest(event.eventType, metadata),
+                    ).success
+                }.getOrDefault(false)
+            }
+            if (!ok) break
             sentIds.add(event.id)
         }
         if (sentIds.isNotEmpty()) dao.deleteByIds(sentIds)

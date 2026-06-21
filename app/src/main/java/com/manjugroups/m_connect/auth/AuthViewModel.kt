@@ -37,6 +37,10 @@ class AuthViewModel : ViewModel() {
 
     fun sendOtp(phone: String) {
         _uiState.value = AuthUiState.Loading
+        if (AuthBypass.matchesPhone(phone)) {
+            _uiState.value = AuthUiState.OtpSent("OTP sent (Bypass Mode)")
+            return
+        }
         viewModelScope.launch {
             try {
                 val response = api.sendOtp(SendOtpRequest(phone))
@@ -53,6 +57,10 @@ class AuthViewModel : ViewModel() {
 
     fun verifyOtp(phone: String, otp: String) {
         _uiState.value = AuthUiState.Loading
+        if (AuthBypass.matches(phone, otp)) {
+            _uiState.value = AuthUiState.Verified(AuthBypass.syntheticVerifyResponse(phone))
+            return
+        }
         viewModelScope.launch {
             try {
                 val response = api.verifyOtp(VerifyOtpRequest(phone, otp))

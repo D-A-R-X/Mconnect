@@ -114,6 +114,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpClientMet: Boolean? = null
     private var cpOutcome: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
+    // CP Type from the row's cpType field. When this is
+    // "gift_distribution" the post-arrival flow finalises directly
+    // after photo + OTP (Yes path) or photo only (No path) — the big
+    // CompleteCpVisitBottomSheet booking-outcome flow is skipped.
+    private var cpType: String? = null
+    private val isGiftDistribution: Boolean
+        get() = cpType?.equals("gift_distribution", ignoreCase = true) == true
+    private val isOldClient: Boolean
+        get() = cpType?.equals("old_client", ignoreCase = true) == true
+    // Collection CP — Yes path opens the Payment Entry sheet which
+    // writes a customerCollections row and closes the visit with
+    // outcome="collection_done". No path mirrors the gift / old-client
+    // behaviour (photo only, terminal outcome=collection_done).
+    private val isCollectionCp: Boolean
+        get() = cpType?.equals("collection_cp", ignoreCase = true) == true
+    // Mobile of the CP's client — passed in from the home / CP-list
+    // call sites (which already carry it as `leadPhone`). Used by the
+    // Collection CP Yes path to look up confirmed bookings without
+    // round-tripping back to creation state.
+    private var clientMobile: String? = null
     // True once the reconcile detects this CP visit was opened as part of
     // a telecaller-fixed SV (proposedSiteVisit / lead.sv_fixed / party
     // data). Drives two UI changes:
@@ -135,6 +155,27 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // sheet. We still capture an arrival photo for proof but skip the OTP
     // request and the outcome form, then mark the visit as not-met.
     private var cpNoPathPhotoCapture = false
+
+    // Debounce flag for the "Complete CP details" (and its per-cpType
+    // variants — Submit Payment Entry / Add Visit Remarks / Confirm
+    // Gift Distribution) button. The bottom sheets we open here are
+    // async — show() returns before the dialog actually renders, so
+    // a quick double-tap from a confused user stacks two sheets on top
+    // of each other. Set on first tap, reset after the open completes
+    // OR after a short backstop delay so the user can retry if the
+    // open silently failed.
+    private var isOpeningOutcomeSheet = false
+    private val outcomeSheetGuardResetDelayMs = 1200L
+
+    // Gift Distribution post-OTP photo capture flag — true while we
+    // wait for the user to take a picture of the gift handover AFTER
+    // OTP verify. The pre-OTP photo step is skipped entirely for
+    // gift_distribution; the proof we care about is the gift being
+    // handed over, which only happens once OTP confirms the client.
+    // The camera-result handler branches on this flag to route into
+    // `completeGiftDistributionWithPhoto()` instead of the usual
+    // arrival-photo + OTP path.
+    private var isGiftDistributionPostOtpPhotoCapture = false
 
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
@@ -190,17 +231,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (!ok) {
             arrivalInProgress = false
             cpNoPathPhotoCapture = false
+            isGiftDistributionPostOtpPhotoCapture = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(requireContext(), "Photo capture cancelled", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
         // Photo captured — branch by flow:
+        // - Gift Distribution post-OTP: upload, then close visit
+        //   with outcome=gift_distributed + the photo as proof of
+        //   the handover.
         // - Yes path (default): upload, then ask the client OTP
         // - No path (CP only): upload, then mark not-met + complete
-        if (cpNoPathPhotoCapture) {
-            uploadArrivalPhotoThenCompleteWithoutClient(photoFile!!)
-        } else {
-            uploadArrivalPhotoThenAskOtp(photoFile!!)
+        when {
+            isGiftDistributionPostOtpPhotoCapture ->
+                uploadGiftDistributionPhotoThenComplete(photoFile!!)
+            cpNoPathPhotoCapture ->
+                uploadArrivalPhotoThenCompleteWithoutClient(photoFile!!)
+            else ->
+                uploadArrivalPhotoThenAskOtp(photoFile!!)
         }
     }
 
@@ -208,16 +256,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            if (cpNoPathPhotoCapture) {
-                arrivalInProgress = true
-                launchArrivalCamera()
-            } else {
-                requestArrivalOtpThenOpenCamera()
+            when {
+                isGiftDistributionPostOtpPhotoCapture -> launchArrivalCamera()
+                cpNoPathPhotoCapture -> {
+                    arrivalInProgress = true
+                    launchArrivalCamera()
+                }
+                else -> requestArrivalOtpThenOpenCamera()
             }
         }
         else {
             arrivalInProgress = false
             cpNoPathPhotoCapture = false
+            isGiftDistributionPostOtpPhotoCapture = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(
                 requireContext(),
@@ -287,6 +338,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         cpVisitId = args.getString(ARG_CP_VISIT_ID)
         cpClientMet = if (args.containsKey(ARG_CP_CLIENT_MET)) args.getBoolean(ARG_CP_CLIENT_MET) else null
         cpOutcome = args.getString(ARG_CP_OUTCOME)
+        cpType = args.getString(ARG_CP_TYPE)
+        clientMobile = args.getString(ARG_CLIENT_MOBILE)
         // A CP visit decision is complete only when an outcome exists. Client
         // Met alone can be saved before the staff exits, so reopen the sheet
         // later until outcome/project conversion is captured.
@@ -306,16 +359,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // the bottom of the screen becomes "Complete Outcome" instead
         // of "Start Trip"; tap opens the outcome sheet in SV mode.
         isPureSiteVisit = (visitCategory == "site_visit") && cpVisitIdLocal.isNullOrBlank()
-        tvDestName?.text = when (visitCategory) {
-            "sv_cum_cp" -> "SV confirmation CP"
-            "direct_cp" -> "Direct CP"
-            "site_visit" -> "Site Visit"
-            else -> when {
-                isPlaceOnly -> "Assigned place"
-                !cpVisitIdLocal.isNullOrBlank() -> "CP visit"
-                else -> "Visit"
-            }
-        }
+        tvDestName?.text = com.manjugroups.m_connect.ui.marketing.formatCpVisitTypeLabel(
+            visitCategory = visitCategory,
+            cpType = cpType,
+            isPlaceOnly = isPlaceOnly,
+            hasCpRow = !cpVisitIdLocal.isNullOrBlank(),
+        )
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
         tvOriginName?.text = "Current Location"
         bindTripClientHeader(view, placeName)
@@ -323,7 +372,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         btnBack?.setOnClickListener { navigateUp() }
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
         swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
-        btnCompleteCpDetails?.setOnClickListener { showCpCompletionSheet() }
+        btnCompleteCpDetails?.setOnClickListener { onCompleteCpDetailsClicked() }
 
         // Listen for OTP verify result from the bottom sheet.
         setFragmentResultListener(ArrivalOtpBottomSheet.RESULT_KEY) { _, bundle ->
@@ -334,6 +383,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // KOS-37: CP-visit only — listen for the Client Met / Outcome sheet
         // result and finalize completion afterward.
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
+            isOpeningOutcomeSheet = false
             cpVisitDecisionCaptured = true
             finalizeCompleteVisit()
         }
@@ -526,8 +576,17 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     override fun onPause() {
         mapView?.onPause()
-        // Restore tab bar so the parent (HomeFragment) shows it after pop.
-        (activity as? MainActivity)?.setTabBarVisible(true)
+        // Only restore the tab bar when the fragment is actually being
+        // removed (back navigation, parent pop). When onPause fires
+        // because a BottomSheetDialog is overlaying us (sheet show()
+        // pauses the host fragment), `isRemoving` and
+        // `activity.isFinishing` are both false — in that case we must
+        // KEEP the tab bar hidden, otherwise it briefly pops up
+        // underneath every outcome / remarks / payment-entry sheet we
+        // open from this screen.
+        if (isRemoving || activity?.isFinishing == true) {
+            (activity as? MainActivity)?.setTabBarVisible(true)
+        }
         super.onPause()
     }
 
@@ -1218,6 +1277,27 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingArrivalOtpResendCooldownSeconds = resp.resendCooldownSeconds ?: 60
                 pendingArrivalLat = effLat
                 pendingArrivalLng = effLng
+                // Gift Distribution shortcut: skip the pre-OTP photo
+                // step entirely. The proof we capture for gift_distri-
+                // bution is the gift handover itself, which only
+                // happens AFTER OTP verifies the client is present.
+                // Open the OTP sheet directly without a photo
+                // storage id; the post-OTP "Confirm Gift Distri-
+                // bution" button then handles the camera + upload.
+                if (isGiftDistribution) {
+                    pendingArrivalStorageId = null
+                    swipeArrived?.lockAsBusy("Enter OTP to confirm")
+                    ArrivalOtpBottomSheet.newInstance(
+                        visitId = id,
+                        phoneMasked = pendingArrivalOtpPhoneMasked,
+                        expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
+                        resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
+                        lat = effLat,
+                        lng = effLng,
+                        arrivalPhotoStorageId = null,
+                    ).show(parentFragmentManager, "arrival_otp")
+                    return@launch
+                }
                 swipeArrived?.lockAsBusy("Opening camera…")
                 launchArrivalCamera()
             } catch (e: Exception) {
@@ -1344,12 +1424,519 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (visitId == null) return
 
         val isCpVisit = isCpVisit()
+
+        // Gift Distribution: after OTP verify we DO NOT auto-complete.
+        // The proof photo for gift_distribution is of the gift
+        // handover itself (which only happens after OTP confirms the
+        // right client), so we render the arrival phase with the
+        // "Confirm Gift Distribution" button visible — the user taps
+        // it once the gift is actually handed over, which launches
+        // the camera + uploads the photo + closes the visit.
+        if (isCpVisit && isGiftDistribution && !cpVisitDecisionCaptured) {
+            renderArrivalPhase(alreadyArrived = true)
+            return
+        }
+
+        // Old Client shortcut: photo + OTP, then a remarks popup
+        // captures free-text notes before we close the visit. Skips
+        // the full booking-outcome sheet for the same reason as
+        // Gift Distribution — this is a re-engagement touch, not a
+        // booking funnel step.
+        if (isCpVisit && isOldClient && !cpVisitDecisionCaptured) {
+            renderArrivalPhase(alreadyArrived = true)
+            promptOldClientRemarks()
+            return
+        }
+
+        // Collection CP shortcut: photo + OTP, then the Payment Entry
+        // sheet (Customer / Amount / Mode / Reference / Proof / Notes).
+        // On submit we write a customerCollections row in
+        // pending_accounts and close the visit with
+        // outcome="collection_done". Same booking-outcome-sheet bypass
+        // as gift_distribution / old_client.
+        if (isCpVisit && isCollectionCp && !cpVisitDecisionCaptured) {
+            renderArrivalPhase(alreadyArrived = true)
+            promptCollectionPayment()
+            return
+        }
+
         if (isCpVisit && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
             showCpCompletionSheet()
             return
         }
         finalizeCompleteVisit()
+    }
+
+    /** Yes-path entry for Old Client CPs. Opens the remarks popup and
+     *  listens for the result; on Submit we close the visit with
+     *  outcome="old_client_visited" and the remarks as notes. On
+     *  cancel we reset the swipe so the user can retry without
+     *  losing the trip-arrived state. */
+    private fun promptOldClientRemarks() {
+        val cpId = cpVisitId ?: run {
+            finalizeCompleteVisit()
+            return
+        }
+        setFragmentResultListener(OldClientRemarksBottomSheet.RESULT_KEY) { _, bundle ->
+            isOpeningOutcomeSheet = false
+            val submitted = bundle.getBoolean(OldClientRemarksBottomSheet.KEY_SUBMITTED, false)
+            if (!submitted) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    "Add remarks to close this old-client visit.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return@setFragmentResultListener
+            }
+            val remarks = bundle.getString(OldClientRemarksBottomSheet.KEY_REMARKS).orEmpty()
+            completeOldClientVisit(cpId, remarks)
+        }
+        OldClientRemarksBottomSheet.newInstance()
+            .show(childFragmentManager, "old_client_remarks")
+    }
+
+    /** Finalises an Old Client CP after remarks are captured. Same
+     *  shape as completeGiftDistributionMet(), just with a different
+     *  outcome literal + the remarks as notes. */
+    private fun completeOldClientVisit(cpId: String, remarks: String) {
+        swipeArrived?.lockAsBusy("Completing visit…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "old_client_visited",
+                        notes = remarks,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to set outcome",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "old_client_visited"
+                cpVisitDecisionCaptured = true
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Yes-path entry for Collection CPs. Looks up the client's
+     *  confirmed bookings by mobile, opens the Payment Entry sheet,
+     *  and on Submit writes a customerCollections row + closes the
+     *  visit with outcome="collection_done". Cancel resets the swipe
+     *  so the user can retry. */
+    private fun promptCollectionPayment() {
+        val cpId = cpVisitId ?: run {
+            finalizeCompleteVisit()
+            return
+        }
+        val mobile = clientMobile?.filter { it.isDigit() }?.takeLast(10).orEmpty()
+        if (mobile.length != 10) {
+            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            Toast.makeText(
+                requireContext(),
+                "Client mobile is missing — re-open this visit from the CP list.",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        swipeArrived?.lockAsBusy("Loading bookings…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getPostSaleCasesByMobile(session.bearerToken, mobile)
+                if (!resp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Failed to load bookings",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                if (resp.cases.isEmpty()) {
+                    // No bookings → the visit was created against a
+                    // client who isn't eligible for Collection CP (the
+                    // web gate should have blocked this; legacy /
+                    // pre-gate visits can still slip through). Don't
+                    // reset the swipe to leave the user in limbo where
+                    // they'd fall back into the booking outcome sheet —
+                    // auto-close the visit as "rejected" with a clear
+                    // reason so the trip ends cleanly. Photo + OTP have
+                    // already been captured and stand as proof of the
+                    // attempt.
+                    Toast.makeText(
+                        requireContext(),
+                        "No confirmed bookings for this client — closing visit as not eligible.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    closeCollectionCpAsNotEligible(cpId)
+                    return@launch
+                }
+                setFragmentResultListener(CollectionPaymentEntryBottomSheet.RESULT_KEY) { _, bundle ->
+                    isOpeningOutcomeSheet = false
+                    val submitted = bundle.getBoolean(
+                        CollectionPaymentEntryBottomSheet.KEY_SUBMITTED,
+                        false,
+                    )
+                    if (!submitted) {
+                        swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                        Toast.makeText(
+                            requireContext(),
+                            "Add the collection details to close this visit.",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        return@setFragmentResultListener
+                    }
+                    completeCollectionVisit(cpId, bundle)
+                }
+                CollectionPaymentEntryBottomSheet.newInstance(resp.cases)
+                    .show(childFragmentManager, "collection_payment_entry")
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Auto-closes a Collection CP visit when no confirmed booking
+     *  exists for the client. Marks the client as met (photo + OTP
+     *  were already captured upstream) and stamps outcome="rejected"
+     *  with a clear reason so the trip ends terminally — without
+     *  this, the post-arrival CTA falls back to "Complete CP
+     *  details" → booking-outcome sheet, which is unrelated to
+     *  Collection CP. The web type-pick gate prevents this for new
+     *  visits; this path covers visits created before the gate
+     *  landed or via paths that skip it. */
+    private fun closeCollectionCpAsNotEligible(cpId: String) {
+        swipeArrived?.lockAsBusy("Closing visit…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "rejected",
+                        notes = "Collection CP not eligible — client has no confirmed booking",
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to close visit",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "rejected"
+                cpVisitDecisionCaptured = true
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Finalises a Collection CP after the Payment Entry sheet
+     *  submits. Posts to /api/postsales/collections/submit (writes a
+     *  customerCollections row in pending_accounts), then closes the
+     *  CP visit with outcome="collection_done" and the money summary
+     *  as notes so the web detail page surfaces it next to the badge. */
+    private fun completeCollectionVisit(cpId: String, bundle: Bundle) {
+        val caseId = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_CASE_ID).orEmpty()
+        val bookingRef = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_BOOKING_REF).orEmpty()
+        val amount = bundle.getDouble(CollectionPaymentEntryBottomSheet.KEY_AMOUNT, 0.0)
+        val mode = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PAYMENT_MODE).orEmpty()
+        val modeLabel = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PAYMENT_MODE_LABEL).orEmpty()
+        val reference = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_TRANSACTION_REF).orEmpty()
+        val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
+        val proofStorageId = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_STORAGE_ID).orEmpty()
+        val proofFileName = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_FILE_NAME).orEmpty()
+
+        if (caseId.isBlank() || amount <= 0 || mode.isBlank()) {
+            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            Toast.makeText(requireContext(), "Collection details incomplete", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        swipeArrived?.lockAsBusy("Submitting collection…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val submitResp = geoApi.submitCustomerCollection(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SubmitCollectionRequest(
+                        caseId = caseId,
+                        amount = amount,
+                        paymentMode = mode,
+                        transactionReference = reference.takeIf { it.isNotBlank() },
+                        proofStorageId = proofStorageId.takeIf { it.isNotBlank() },
+                        proofFileName = proofFileName.takeIf { it.isNotBlank() },
+                        notes = notes.takeIf { it.isNotBlank() },
+                    ),
+                )
+                if (!submitResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        submitResp.error ?: "Failed to submit collection",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val summary = buildCollectionSummary(
+                    bookingRef = bookingRef,
+                    amount = amount,
+                    modeLabel = modeLabel.ifBlank { mode.uppercase() },
+                    reference = reference,
+                    refNo = submitResp.collectionRefNo,
+                    notes = notes,
+                )
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "collection_done",
+                        notes = summary,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to set outcome",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "collection_done"
+                cpVisitDecisionCaptured = true
+                Toast.makeText(
+                    requireContext(),
+                    "Collection submitted for Accounts review",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    private fun buildCollectionSummary(
+        bookingRef: String,
+        amount: Double,
+        modeLabel: String,
+        reference: String,
+        refNo: String?,
+        notes: String,
+    ): String {
+        val amountStr = "₹" + "%,.0f".format(amount)
+        val parts = mutableListOf<String>()
+        parts += "$amountStr collected"
+        if (modeLabel.isNotBlank()) parts += "via $modeLabel"
+        if (bookingRef.isNotBlank()) parts += "for $bookingRef"
+        if (reference.isNotBlank()) parts += "ref $reference"
+        if (!refNo.isNullOrBlank()) parts += "($refNo)"
+        val base = parts.joinToString(" · ")
+        return if (notes.isNotBlank()) "$base — $notes" else base
+    }
+
+    /** Yes-path completion for Gift Distribution CPs.
+     *
+     *  Flow after the OTP-only refactor: we DON'T auto-finalise here.
+     *  Instead we launch the camera so the staff can capture proof of
+     *  the gift handover — the photo is of the actual gift being given
+     *  to the (now OTP-verified) client. The camera result handler at
+     *  the top of the file routes the captured file into
+     *  [uploadGiftDistributionPhotoThenComplete], which uploads it,
+     *  attaches the storage id to the visit, stamps the outcome, and
+     *  finalises.
+     *
+     *  If the user cancels the camera, the visit stays in the
+     *  arrival-verified state and the "Confirm Gift Distribution"
+     *  button on the trip nav reopens this same flow so they can
+     *  retry. */
+    private fun completeGiftDistributionMet() {
+        if (cpVisitId == null) {
+            finalizeCompleteVisit()
+            return
+        }
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            isGiftDistributionPostOtpPhotoCapture = true
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+        isGiftDistributionPostOtpPhotoCapture = true
+        swipeArrived?.lockAsBusy("Opening camera…")
+        launchArrivalCamera()
+    }
+
+    /** Camera-result handler for the post-OTP gift handover photo.
+     *  Uploads the photo to convex storage, attaches the storage id
+     *  to the field-visit row (via finalizeCompleteVisit's existing
+     *  pendingArrivalStorageId plumbing), then closes the CP visit
+     *  with outcome="gift_distributed". */
+    private fun uploadGiftDistributionPhotoThenComplete(photoFile: java.io.File) {
+        val cpId = cpVisitId ?: run {
+            isGiftDistributionPostOtpPhotoCapture = false
+            finalizeCompleteVisit()
+            return
+        }
+        swipeArrived?.lockAsBusy("Uploading photo…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val storageId = uploadArrivalPhoto(photoFile)
+                if (storageId == null) {
+                    isGiftDistributionPostOtpPhotoCapture = false
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        "Photo upload failed. Tap Confirm Gift Distribution to retry.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                pendingArrivalStorageId = storageId
+
+                swipeArrived?.lockAsBusy("Completing visit…")
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    isGiftDistributionPostOtpPhotoCapture = false
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "gift_distributed",
+                        notes = "Gift distributed — handover photo attached",
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    isGiftDistributionPostOtpPhotoCapture = false
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to set outcome",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "gift_distributed"
+                cpVisitDecisionCaptured = true
+                isGiftDistributionPostOtpPhotoCapture = false
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                isGiftDistributionPostOtpPhotoCapture = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {
@@ -1405,6 +1992,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             applyStatusPill("Reaching")
             swipeArrived?.visibility = View.GONE
             btnCompleteCpDetails?.visibility = View.VISIBLE
+            // Per-cpType button label — the user has different flows
+            // for each branch (Payment Entry for collection, remarks
+            // popup for old client, no form for gift distribution),
+            // so the button name + click handler should match. Without
+            // this, every CP showed "Complete CP details" and tapping
+            // it opened the default booking-outcome sheet — wrong for
+            // the three special types.
+            btnCompleteCpDetails?.text = when {
+                cpIsSvFixed -> "Complete SV details"
+                isCollectionCp -> "Submit Payment Entry"
+                isOldClient -> "Add Visit Remarks"
+                isGiftDistribution -> "Confirm Gift Distribution"
+                else -> "Complete CP details"
+            }
             return
         }
 
@@ -1421,8 +2022,53 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** Dispatcher for the "Complete CP details" button. Routes each
+     *  cpType to its dedicated flow instead of the default booking
+     *  outcome sheet — without this branching, closing the Payment
+     *  Entry sheet (or any of the special-type sheets) and tapping
+     *  the CTA again opens the wrong form.
+     *
+     *  Debounced via `isOpeningOutcomeSheet`: bottom-sheet show() is
+     *  async on Android, so a confused user can tap the button twice
+     *  before the first sheet visibly renders and stack two copies.
+     *  The flag short-circuits subsequent taps; it auto-resets after
+     *  outcomeSheetGuardResetDelayMs so a silent open-failure doesn't
+     *  permanently brick the button. */
+    private fun onCompleteCpDetailsClicked() {
+        if (isOpeningOutcomeSheet) return
+        isOpeningOutcomeSheet = true
+        btnCompleteCpDetails?.postDelayed(
+            { isOpeningOutcomeSheet = false },
+            outcomeSheetGuardResetDelayMs,
+        )
+        val cpId = cpVisitId
+        when {
+            cpId == null -> showCpCompletionSheet()
+            // SV-fixed CPs still go through the outcome sheet (in
+            // locked SV mode), so leave that path alone.
+            cpIsSvFixed -> showCpCompletionSheet()
+            isCollectionCp -> promptCollectionPayment()
+            isOldClient -> promptOldClientRemarks()
+            isGiftDistribution -> completeGiftDistributionMet()
+            else -> showCpCompletionSheet()
+        }
+    }
+
     private fun showCpCompletionSheet() {
         val cpId = cpVisitId ?: return
+        // Belt-and-braces guard — any caller that bypassed the
+        // onCompleteCpDetailsClicked dispatcher (older code paths,
+        // reconcile races, async result listeners) STILL routes to
+        // the dedicated sheet for our three special CP types. The
+        // booking-outcome sheet (Booking / SV / Postpone / Not
+        // Interested) is wrong UI for these flows.
+        if (!cpIsSvFixed) {
+            when {
+                isCollectionCp -> { promptCollectionPayment(); return }
+                isOldClient -> { promptOldClientRemarks(); return }
+                isGiftDistribution -> { completeGiftDistributionMet(); return }
+            }
+        }
         arrivalConfirmedForProgress = true
         applyStatusPill("Reaching")
         // Treat the row as SV-fix when EITHER signal fires:
@@ -1533,12 +2179,31 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         swipeArrived?.lockAsBusy("Completing visit...")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Gift Distribution + Old Client both close with their
+                // own terminal outcome on the No path so dashboards can
+                // separate "didn't deliver gift" / "didn't find old
+                // client" from the generic "Client not seen — needs HR
+                // review" bucket that everything else falls into. Photo
+                // is the sole proof for either flow — no OTP.
+                val noShowReason = when {
+                    isGiftDistribution -> "Gift distribution — client not present"
+                    isOldClient -> "Old client visit — client not present"
+                    isCollectionCp -> "Collection visit — client not present"
+                    else -> "Client not seen"
+                }
+                val terminalOutcome = when {
+                    isGiftDistribution -> "gift_distributed"
+                    isOldClient -> "old_client_visited"
+                    isCollectionCp -> "collection_done"
+                    else -> "other"
+                }
+
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
                     com.manjugroups.m_connect.network.MarkClientMetRequest(
                         id = cpId,
                         clientMet = false,
-                        clientNoShowReason = "Client not seen"
+                        clientNoShowReason = noShowReason,
                     )
                 )
                 if (!metResp.success) {
@@ -1552,8 +2217,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     session.bearerToken,
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
-                        outcome = "other",
-                        notes = "Client not seen"
+                        outcome = terminalOutcome,
+                        notes = noShowReason,
                     )
                 )
                 if (!outcomeResp.success) {
@@ -1564,7 +2229,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     return@launch
                 }
                 cpClientMet = false
-                cpOutcome = "other"
+                cpOutcome = terminalOutcome
                 cpVisitDecisionCaptured = true
                 showClientNotSeenCompletion = true
                 cpNoPathPhotoCapture = false
@@ -1709,6 +2374,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // vocabulary the Home + CP Visits lists use:
         // "sv_cum_cp" / "direct_cp" / "site_visit" / null (places).
         private const val ARG_VISIT_CATEGORY = "arg_visit_category"
+        // CP Type (sv_cum_cp / follow_up / booking_cp / collection_cp /
+        // old_client / gift_distribution). Drives the post-arrival
+        // branch: gift_distribution finalises straight from photo+OTP
+        // without the booking-outcome sheet.
+        private const val ARG_CP_TYPE = "arg_cp_type"
+        // Mobile of the CP's client (= TodayVisit.leadPhone). Threaded
+        // through so the Collection CP Yes path can look up confirmed
+        // bookings via /api/postsales/cases/byMobile without going
+        // back to a prior creation step.
+        private const val ARG_CLIENT_MOBILE = "arg_client_mobile"
 
         fun forVisit(
             visitId: String,
@@ -1722,6 +2397,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
             visitCategory: String? = null,
+            cpType: String? = null,
+            clientMobile: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -1735,6 +2412,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                 if (cpOutcome != null) putString(ARG_CP_OUTCOME, cpOutcome)
                 if (visitCategory != null) putString(ARG_VISIT_CATEGORY, visitCategory)
+                if (cpType != null) putString(ARG_CP_TYPE, cpType)
+                if (clientMobile != null) putString(ARG_CLIENT_MOBILE, clientMobile)
             }
         }
 

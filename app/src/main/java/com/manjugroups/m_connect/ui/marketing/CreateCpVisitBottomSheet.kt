@@ -1,9 +1,12 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import android.app.AlertDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
 import android.graphics.Color
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.manjugroups.m_connect.network.PostSaleCaseSummary
+import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -42,10 +47,62 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var selectedProject: MarketingProject? = null
     private var selectedDate: String = ""
     private var selectedTime: String = ""
+    // CP Type — visit intent enum (sv_cum_cp / follow_up / booking_cp /
+    // collection_cp / old_client / gift_distribution). Optional; null
+    // means no type was picked and the server stores the row without it.
+    private var selectedCpType: CpTypeOption? = null
+
+    /** CP visit intent enum shared with the web form. The `id` is the
+     *  wire value sent to convex; `label` is what the picker shows. */
+    private data class CpTypeOption(
+        val id: String,
+        val label: String,
+        val sublabel: String,
+    )
+
+    private val cpTypeOptions = listOf(
+        CpTypeOption("sv_cum_cp", "SV cum CP", "Combo site visit + CP"),
+        CpTypeOption("follow_up", "Follow-up", "Continues a postponed client"),
+        CpTypeOption("booking_cp", "Booking CP", "Paperwork run for an active booking"),
+        CpTypeOption("collection_cp", "Collection CP", "Payment chase at client place"),
+        CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
+        CpTypeOption("gift_distribution", "Gift Distribution", "Loyalty drop-off"),
+    )
 
     // Caches for fast display
     private var staffCache: List<StaffData> = emptyList()
     private var projectCache: List<MarketingProject> = emptyList()
+
+    // Collection CP gate — when the user picks "Collection CP" we
+    // pre-fetch the client's confirmed bookings (postSaleCases) and
+    // cache them here keyed by the phone digits that were on the form
+    // at the time. The Yes path of the trip flow re-uses the same
+    // shape from /api/postsales/cases/byMobile so the field staff
+    // doesn't have to re-confirm which booking they're collecting
+    // against. An empty list disables the type and surfaces the
+    // "client has no bookings" popup.
+    private var collectionCasesPhone: String? = null
+    private var collectionCasesCache: List<PostSaleCaseSummary> = emptyList()
+
+    // Lead lookup autofill — remembers which phone we already looked up
+    // so a stray keystroke (e.g. user editing the 11th char then
+    // deleting it back to 10) doesn't re-fire the network call. Mirrors
+    // web's `createLastEnrichedPin` guard but keyed on the phone tail
+    // rather than the pincode.
+    private var lastAutofilledPhone: String? = null
+
+    // Pin-drop state — populated when the user picks a spot from the
+    // (forthcoming) map widget. The web equivalent stores these on
+    // UnifiedAddressValue directly. Left null until the drop-pin
+    // bottom sheet lands; submit sends them as optional fields.
+    private var pinLat: Double? = null
+    private var pinLng: Double? = null
+    private var pinMapsLink: String = ""
+
+    // Address-line-1 OpenAI parse guard — same idea as the web's
+    // lastParsedRef. Stops us re-firing for every keystroke once a
+    // long string has been parsed.
+    private var lastParsedAddressLine1: String = ""
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -76,21 +133,25 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etPhone = view.findViewById<EditText>(R.id.etClientPhone)
         val etStaff = view.findViewById<EditText>(R.id.etFieldStaff)
         val etProj = view.findViewById<EditText>(R.id.etProject)
+        val etCpType = view.findViewById<EditText>(R.id.etCpType)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
 
+        // ── Canonical address fields (7) ───────────────────────────
+        // Match the web UnifiedAddressFields component 1:1 so reads /
+        // writes share the same shape: doorNo · street · addressLine1 ·
+        // addressLine2 · city · state · pincode. Pin-drop will fill
+        // lat/lng/googleMapsLink in a follow-up turn.
         val etDoorNo = view.findViewById<EditText>(R.id.etDoorNo)
-        val etPincode = view.findViewById<EditText>(R.id.etPincode)
-        val etVillage = view.findViewById<EditText>(R.id.etVillage)
-        val etTaluk = view.findViewById<EditText>(R.id.etTaluk)
-        val etDistrict = view.findViewById<EditText>(R.id.etDistrict)
+        val etStreet = view.findViewById<EditText>(R.id.etStreet)
+        val etAddressLine1 = view.findViewById<EditText>(R.id.etAddressLine1)
+        val etAddressLine2 = view.findViewById<EditText>(R.id.etAddressLine2)
         val etCity = view.findViewById<EditText>(R.id.etCity)
-        val etLocality = view.findViewById<EditText>(R.id.etLocality)
         val etState = view.findViewById<EditText>(R.id.etState)
-        val etFullAddress = view.findViewById<EditText>(R.id.etFullAddress)
+        val etPincode = view.findViewById<EditText>(R.id.etPincode)
+        val tvAddressParseStatus = view.findViewById<android.widget.TextView>(R.id.tvAddressParseStatus)
+        val btnDropPin = view.findViewById<View>(R.id.btnDropPin)
+        val tvPinLocation = view.findViewById<android.widget.TextView>(R.id.tvPinLocation)
 
-        val etMaps = view.findViewById<EditText>(R.id.etGoogleMapsLink)
-        val etLat = view.findViewById<EditText>(R.id.etLatitude)
-        val etLng = view.findViewById<EditText>(R.id.etLongitude)
         val etNotes = view.findViewById<EditText>(R.id.etNotes)
 
         val btnCancel = view.findViewById<View>(R.id.btnCancel)
@@ -116,7 +177,94 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
         etProj.setOnClickListener { pickProject(etProj) }
+        etCpType.setOnClickListener { pickCpType(etCpType) }
         etDateTime.setOnClickListener { pickDateTime(etDateTime) }
+
+        // Lead-autofill — when the phone field hits 10 digits we hit
+        // /api/telecaller/leads/search-by-phone and prefill the
+        // structured address + project from the matched lead. Blank-
+        // only patch so we never overwrite anything the user already
+        // typed; user-entered values always win.
+        etPhone.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val digits = s?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
+                if (digits.length == 10 && digits != lastAutofilledPhone) {
+                    lastAutofilledPhone = digits
+                    autofillFromLead(
+                        phone = digits,
+                        view = view,
+                    )
+                }
+            }
+        })
+
+        // Address-Line-1 paste-to-parse — when the user pastes a full
+        // address (>25 chars) into Address Line 1, debounce 700ms then
+        // POST it to /api/address/parse (OpenAI gpt-4o-mini, JSON mode)
+        // and distribute the structured fields back into door/street/
+        // addressLine2/city/state/pincode. Blank-only fill so user
+        // typing always wins. Mirrors the web UnifiedAddressFields
+        // behaviour 1:1 — same endpoint, same debounce, same guard.
+        var pendingParse: kotlinx.coroutines.Job? = null
+        etAddressLine1.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val line1 = s?.toString()?.trim().orEmpty()
+                if (line1.length < 25 || line1 == lastParsedAddressLine1) return
+                pendingParse?.cancel()
+                pendingParse = viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(700)
+                    lastParsedAddressLine1 = line1
+                    tvAddressParseStatus.text = "Splitting address…"
+                    tvAddressParseStatus.visibility = View.VISIBLE
+                    try {
+                        val resp = geoApi.parseAddress(
+                            session.bearerToken,
+                            com.manjugroups.m_connect.network.AddressParseRequest(raw = line1),
+                        )
+                        if (!resp.success || resp.fields == null) {
+                            tvAddressParseStatus.text = resp.error ?: "Could not split address"
+                            return@launch
+                        }
+                        val f = resp.fields
+                        fun fillIfBlank(et: EditText, value: String?) {
+                            if (value.isNullOrBlank()) return
+                            if (et.text?.toString()?.isBlank() != false) et.setText(value)
+                        }
+                        fillIfBlank(etDoorNo, f.doorNo)
+                        fillIfBlank(etStreet, f.street)
+                        // Replace addressLine1 only if the parser came
+                        // back with a different (usually shorter)
+                        // address segment — keeps the user's verbatim
+                        // text if the parser failed to split.
+                        if (!f.addressLine1.isNullOrBlank() && f.addressLine1 != line1) {
+                            etAddressLine1.setText(f.addressLine1)
+                        }
+                        fillIfBlank(etAddressLine2, f.addressLine2)
+                        fillIfBlank(etCity, f.city)
+                        fillIfBlank(etState, f.state)
+                        fillIfBlank(etPincode, f.pincode)
+                        tvAddressParseStatus.text = "Address auto-filled"
+                    } catch (e: Exception) {
+                        tvAddressParseStatus.text = e.message ?: "Parse failed"
+                    }
+                }
+            }
+        })
+
+        btnDropPin.setOnClickListener {
+            // Pin-drop bottom sheet (map + Places search + draggable
+            // marker) is the next deliverable. Surface a toast for now
+            // so the placeholder doesn't read as a broken button.
+            Toast.makeText(
+                requireContext(),
+                "Map pin-drop launching in the next update",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
 
         btnCancel.setOnClickListener { dismissAllowingStateLoss() }
         btnSubmit.setOnClickListener {
@@ -144,56 +292,70 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
-            val village = etVillage.text.toString().trim()
-            val taluk = etTaluk.text.toString().trim()
-            val district = etDistrict.text.toString().trim()
-            val locality = etLocality.text.toString().trim()
-            val fullAddrInput = etFullAddress.text.toString().trim()
-
-            if (village.isBlank()) {
-                toast("Village is required")
-                return@setOnClickListener
-            }
-            if (taluk.isBlank()) {
-                toast("Taluk is required")
-                return@setOnClickListener
-            }
-            if (district.isBlank()) {
-                toast("District is required")
-                return@setOnClickListener
-            }
-            if (locality.isBlank()) {
-                toast("Locality is required")
-                return@setOnClickListener
-            }
-            if (fullAddrInput.isBlank()) {
-                toast("Full Address is required")
-                return@setOnClickListener
-            }
-
             val doorNo = etDoorNo.text.toString().trim()
-            val pincode = etPincode.text.toString().trim()
+            val street = etStreet.text.toString().trim()
+            val addressLine1 = etAddressLine1.text.toString().trim()
+            val addressLine2 = etAddressLine2.text.toString().trim()
             val city = etCity.text.toString().trim()
             val state = etState.text.toString().trim()
+            val pincode = etPincode.text.toString().trim()
 
-            // Compile composite address
+            if (addressLine1.isBlank()) {
+                toast("Address Line 1 is required")
+                return@setOnClickListener
+            }
+            if (city.isBlank()) {
+                toast("City is required")
+                return@setOnClickListener
+            }
+            if (pincode.isBlank() || pincode.length != 6) {
+                toast("Pincode must be 6 digits")
+                return@setOnClickListener
+            }
+
+            // Compile composite address — same key:value comma-joined
+            // shape the web UnifiedAddressFields submit uses, so detail
+            // views that parse visitAddress stay happy. Village/Taluk/
+            // District/Locality/Full Address segments are dropped per
+            // the unified 7-field set.
             val addressParts = listOfNotNull(
                 doorNo.takeIf { it.isNotBlank() }?.let { "Door/Plot No: $it" },
-                locality.takeIf { it.isNotBlank() }?.let { "Locality: $it" },
-                village.takeIf { it.isNotBlank() }?.let { "Village: $it" },
-                taluk.takeIf { it.isNotBlank() }?.let { "Taluk: $it" },
+                street.takeIf { it.isNotBlank() }?.let { "Street: $it" },
+                addressLine1.takeIf { it.isNotBlank() }?.let { "Address: $it" },
+                addressLine2.takeIf { it.isNotBlank() }?.let { "Landmark: $it" },
                 city.takeIf { it.isNotBlank() }?.let { "City: $it" },
-                district.takeIf { it.isNotBlank() }?.let { "District: $it" },
                 state.takeIf { it.isNotBlank() }?.let { "State: $it" },
-                pincode.takeIf { it.isNotBlank() }?.let { "Pincode: $it" },
-                fullAddrInput.takeIf { it.isNotBlank() }?.let { "Full Address: $it" }
+                pincode.takeIf { it.isNotBlank() }?.let { "Pincode: $it" }
             )
             val compiledAddress = addressParts.joinToString(", ")
 
-            val maps = etMaps.text.toString().trim()
-            val latVal = etLat.text.toString().trim().toDoubleOrNull()
-            val lngVal = etLng.text.toString().trim().toDoubleOrNull()
+            // Coordinates + maps link come from the pin-drop UX (still
+            // to be wired). Until then they're left null on submit;
+            // the server already permits both as optional.
+            val latVal: Double? = pinLat
+            val lngVal: Double? = pinLng
+            val maps: String = pinMapsLink
             val notesVal = etNotes.text.toString().trim()
+
+            // Defensive re-check — the user might have changed the
+            // phone number after picking a booking-dependent CP type.
+            // Never let collection_cp / booking_cp ship with a mobile
+            // that has no cached booking-found result.
+            val isBookingDependent = selectedCpType?.id == "collection_cp" ||
+                selectedCpType?.id == "booking_cp"
+            if (isBookingDependent &&
+                (collectionCasesPhone != phone || collectionCasesCache.isEmpty())
+            ) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("The client has no bookings")
+                    .setMessage(
+                        "${selectedCpType?.label ?: "This CP type"} needs a confirmed booking for this mobile. " +
+                            "Re-pick the CP type or use a number that already has a booking."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
+            }
 
             btnSubmit.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
@@ -210,7 +372,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             visitLng = lngVal,
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
-                            projectId = project.id
+                            projectId = project.id,
+                            cpType = selectedCpType?.id,
                         )
                     )
                     btnSubmit.isEnabled = true
@@ -227,6 +390,111 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
+
+    /** Mirrors the web `leadToLocationFields` + project autolink. Fires
+     *  on first 10-digit phone entry, only patches blank fields. */
+    private fun autofillFromLead(phone: String, view: View) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+                if (!resp.success || resp.leads.isEmpty()) return@launch
+                val lead = resp.leads.first()
+                applyLeadAutofill(view, lead)
+            } catch (_: Exception) {
+                // Silent — autofill is opportunistic, never block submit.
+            }
+        }
+    }
+
+    private fun applyLeadAutofill(view: View, lead: TelecallerLeadSearchData) {
+        val cp = lead.clientPlaceProfile
+        val ai = lead.latestAnalysisProfile
+        val mp = lead.manualProfile
+
+        fun pickFirst(vararg candidates: String?): String =
+            candidates.firstOrNull { !it.isNullOrBlank() && it != "Unknown" }?.trim().orEmpty()
+
+        // Six-digit pincode extracted from the comma-joined fallback
+        // text so a lead with only "Salem 636001 - Yercaud Road" in
+        // locationPreferred still surfaces the pincode in the box.
+        val fallback = (lead.suggestedVisitAddress ?: lead.locationPreferred).orEmpty()
+        val sixDigit = Regex("""\b(\d{6})\b""").find(fallback)?.groupValues?.get(1).orEmpty()
+
+        val pincode = pickFirst(cp?.pincode, ai?.pincode, mp?.pincode, sixDigit)
+        val doorNo = pickFirst(cp?.doorNo, ai?.doorNo, mp?.doorNo)
+        val city = pickFirst(cp?.city, lead.clientCity)
+        val state = pickFirst(cp?.state, ai?.state, mp?.state)
+        val addressLine2 = pickFirst(cp?.landmark, ai?.landmark, mp?.landmark)
+        // Address Line 1 takes the best prose address available.
+        val addressLine1 = pickFirst(
+            ai?.address,
+            cp?.address,
+            cp?.formattedAddress,
+            fallback,
+        )
+
+        // Blank-only patcher — never overwrite user-typed text.
+        fun fillIfBlank(id: Int, value: String) {
+            if (value.isBlank()) return
+            val et = view.findViewById<EditText>(id) ?: return
+            if (et.text?.toString()?.isBlank() != false) et.setText(value)
+        }
+
+        fillIfBlank(R.id.etDoorNo, doorNo)
+        fillIfBlank(R.id.etAddressLine1, addressLine1)
+        fillIfBlank(R.id.etAddressLine2, addressLine2)
+        fillIfBlank(R.id.etCity, city)
+        fillIfBlank(R.id.etState, state)
+        fillIfBlank(R.id.etPincode, pincode)
+
+        // Visit lat/lng + Google Maps link — stash in the pin-drop
+        // state so submit can ship them and the (forthcoming) pin
+        // widget can render the existing location on open.
+        if (pinLat == null && lead.suggestedVisitLat != null) pinLat = lead.suggestedVisitLat
+        if (pinLng == null && lead.suggestedVisitLng != null) pinLng = lead.suggestedVisitLng
+        if (pinMapsLink.isBlank() && !lead.suggestedGoogleMapsLink.isNullOrBlank()) {
+            pinMapsLink = lead.suggestedGoogleMapsLink!!
+        }
+
+        // Project — auto-pick if the lead carries one and the user
+        // hasn't picked yet. Falls back gracefully if the project
+        // cache isn't loaded yet (next pickProject() call still works).
+        if (selectedProject == null && !lead.projectId.isNullOrBlank()) {
+            val cached = projectCache.firstOrNull { it.id == lead.projectId }
+            if (cached != null) {
+                selectedProject = cached
+                view.findViewById<EditText>(R.id.etProject)?.setText(cached.name ?: "Selected")
+            } else {
+                // Lazy-load and try again — non-blocking, swallow errors.
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        val r = api.getMarketingProjects(session.bearerToken)
+                        if (r.success) {
+                            projectCache = r.projects
+                            r.projects.firstOrNull { it.id == lead.projectId }?.let { p ->
+                                if (selectedProject == null) {
+                                    selectedProject = p
+                                    view.findViewById<EditText>(R.id.etProject)
+                                        ?.setText(p.name ?: "Selected")
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+
+        // Surface a small confirmation so the user knows where the
+        // values came from. Single-line toast, not a dialog — they
+        // can keep typing immediately.
+        val who = lead.contactName?.takeIf { it.isNotBlank() } ?: "lead"
+        Toast.makeText(
+            requireContext(),
+            "Auto-linked to $who",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun pickStaff(label: EditText) {
@@ -304,6 +572,90 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { project ->
             selectedProject = project
             label.setText(project.name ?: "Selected")
+        }
+    }
+
+    private fun pickCpType(label: EditText) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select CP type",
+            options = cpTypeOptions.map { opt ->
+                SearchableOption(
+                    item = opt,
+                    title = opt.label,
+                    subtitle = opt.sublabel,
+                    keywords = opt.id + " " + opt.label + " " + opt.sublabel,
+                )
+            },
+            emptyMessage = "No CP types available",
+        ) { picked ->
+            // Booking-dependent gate — Collection CP and Booking CP
+            // both need a row in postSaleCases for the entered mobile.
+            // Collection CP would open an empty Payment Entry sheet
+            // mid-trip; Booking CP is by definition a "paperwork run
+            // for an active booking", so without one it's invalid.
+            // Block the pick at this point so the user sees the popup
+            // immediately and can keep going with a different type.
+            if (picked.id == "collection_cp" || picked.id == "booking_cp") {
+                gateBookingDependentCpSelection(picked, label)
+                return@show
+            }
+            selectedCpType = picked
+            label.setText(picked.label)
+        }
+    }
+
+    /** Verifies the entered mobile number has at least one confirmed
+     *  booking (postSaleCase) before committing a booking-dependent
+     *  type ("collection_cp" / "booking_cp"). Empty result → popup
+     *  "The client has no bookings" + leave the cpType cleared so the
+     *  dropdown effectively disables the pick. */
+    private fun gateBookingDependentCpSelection(
+        picked: CpTypeOption,
+        label: EditText,
+    ) {
+        val typeLabel = picked.label
+        val phone = view?.findViewById<EditText>(R.id.etClientPhone)
+            ?.text?.toString().orEmpty()
+            .filter { it.isDigit() }.takeLast(10)
+        if (phone.length != 10) {
+            AlertDialog.Builder(requireContext())
+                .setTitle("Enter client mobile first")
+                .setMessage(
+                    "$typeLabel needs the client's 10-digit mobile to check for a confirmed booking. " +
+                        "Add the mobile number, then pick $typeLabel again."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getPostSaleCasesByMobile(session.bearerToken, phone)
+                if (!resp.success) {
+                    toast(resp.error ?: "Failed to look up bookings")
+                    return@launch
+                }
+                if (resp.cases.isEmpty()) {
+                    collectionCasesPhone = phone
+                    collectionCasesCache = emptyList()
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("The client has no bookings")
+                        .setMessage(
+                            "$typeLabel is only allowed for clients with a confirmed booking. " +
+                                "This mobile number is not on any active booking, so the type is blocked."
+                        )
+                        .setPositiveButton("Got it", null)
+                        .show()
+                    return@launch
+                }
+                collectionCasesPhone = phone
+                collectionCasesCache = resp.cases
+                selectedCpType = picked
+                label.setText(picked.label)
+            } catch (e: Exception) {
+                toast("Network error: ${e.message}")
+            }
         }
     }
 

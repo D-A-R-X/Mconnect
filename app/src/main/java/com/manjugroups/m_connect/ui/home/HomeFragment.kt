@@ -701,12 +701,11 @@ class HomeFragment : Fragment() {
         // glance which lane this row belongs to before tapping in.
         // "sv_cum_cp" rows open into the locked Reject/Confirm sheet on
         // the trip nav; "direct_cp" rows open the full outcome flow.
-        val categoryLabel = when (visit.visitCategory) {
-            "sv_cum_cp" -> "SV confirmation CP"
-            "direct_cp" -> "Direct CP"
-            "site_visit" -> "Site Visit"
-            else -> if (isCpVisit) "CP visit" else "Visit"
-        }
+        val categoryLabel = com.manjugroups.m_connect.ui.marketing.formatCpVisitTypeLabel(
+            visitCategory = visit.visitCategory,
+            cpType = visit.cpVisit?.cpType,
+            hasCpRow = isCpVisit,
+        )
         // Bind category into the body's Type cell. The standalone
         // tvVisitItemLead badge below the grid is no longer needed.
         title.text = categoryLabel
@@ -724,17 +723,21 @@ class HomeFragment : Fragment() {
                 statusText.text = "Reaching"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
                 statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
-                // The trip has reached the client (status == arrived); the
-                // only thing left is to capture the visit outcome. Mirror
-                // the label the trip-detail screen shows for that same
-                // step ("Complete SV details" for SV-cum-CP, "Complete CP
-                // details" otherwise) so the card and the detail screen
-                // agree — and so tapping it opens the outcome form right
-                // here instead of forcing a hop into the detail screen.
-                action.text = if (visit.visitCategory == "sv_cum_cp") {
-                    "Complete SV details"
-                } else {
-                    "Complete CP details"
+                // The trip has reached the client (status == arrived);
+                // the only thing left is to capture the visit outcome.
+                // Per-cpType label mirrors the trip-detail screen's
+                // CTA so the home card and the detail screen agree on
+                // what tapping it does. SV-cum-CP keeps the locked-SV
+                // label; the three special types name their dedicated
+                // form so the user knows what's about to open.
+                val cpTypeLabel = visit.cpVisit?.cpType
+                    ?.lowercase(Locale.getDefault())
+                action.text = when {
+                    visit.visitCategory == "sv_cum_cp" -> "Complete SV details"
+                    cpTypeLabel == "collection_cp" -> "Submit Payment Entry"
+                    cpTypeLabel == "old_client" -> "Add Visit Remarks"
+                    cpTypeLabel == "gift_distribution" -> "Confirm Gift Distribution"
+                    else -> "Complete CP details"
                 }
                 actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
                 action.setTextColor(android.graphics.Color.WHITE)
@@ -931,6 +934,8 @@ class HomeFragment : Fragment() {
             cpClientMet = visit.cpVisit?.clientMet,
             cpOutcome = visit.cpVisit?.outcome,
             visitCategory = visit.visitCategory,
+            cpType = visit.cpVisit?.cpType,
+            clientMobile = visit.leadPhone,
         )
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
@@ -948,18 +953,36 @@ class HomeFragment : Fragment() {
     }
 
     /**
-     * Opens the CP/SV completion-outcome sheet directly from the home
-     * card — same sheet the trip-detail screen's "Complete CP details"
-     * button shows. Only used once the visit is arrival-verified (status
-     * == arrived), so no further OTP/photo step is needed. Mirrors
-     * TripNavigationFragment.showCpCompletionSheet: forwards the CP id,
-     * client-met/outcome hints, and the SV-cum-CP flag so the sheet opens
-     * straight into locked-SV mode where applicable.
+     * Opens the right post-arrival flow directly from the home card.
+     * Branches per cpType so the three special types
+     * (gift_distribution / old_client / collection_cp) go to their
+     * dedicated sheets — opening the default booking-outcome sheet
+     * here is wrong UI for those flows. For special types we hop into
+     * the trip-detail screen where the per-cpType handlers already
+     * live; for sv_cum_cp / follow_up / booking_cp we open the
+     * outcome sheet inline as before.
+     *
+     * Only used once the visit is arrival-verified (status == arrived),
+     * so no further OTP/photo step is needed.
      */
     private fun openCpOutcomeSheetForVisit(visit: TodayVisit) {
         val cpId = visit.clientPlaceVisitId
         if (cpId.isNullOrBlank()) {
             // No CP row behind it — fall back to the trip detail screen.
+            openTripNavigationForVisit(visit)
+            return
+        }
+        val cpType = visit.cpVisit?.cpType?.lowercase(Locale.getDefault())
+        if (cpType == "collection_cp" ||
+            cpType == "old_client" ||
+            cpType == "gift_distribution"
+        ) {
+            // Trip nav screen's onCompleteCpDetailsClicked() + the
+            // belt-and-braces guard in showCpCompletionSheet() will
+            // route to promptCollectionPayment / promptOldClientRemarks
+            // / completeGiftDistributionMet as appropriate. Reusing
+            // that path avoids duplicating the booking-lookup + result-
+            // listener wiring here.
             openTripNavigationForVisit(visit)
             return
         }

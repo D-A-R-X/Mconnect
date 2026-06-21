@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Blue pill background for the "Got It" CTA in the geofence-warning
-     dialog. Matches the M-Connect primary action blue. -->
+<!-- Green pill for the "Got It" CTA on the home-fence warning dialog.
+     Matches bg_attendance_btn_primary so the dialog reads as part of
+     the same Clock-In / Clock-Out language the rest of the app uses. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#1570EF" />
+    <gradient
+        android:angle="270"
+        android:startColor="#1BCA0B"
+        android:endColor="#3D9D02"
+        android:type="linear" />
     <corners android:radius="100dp" />
 </shape>

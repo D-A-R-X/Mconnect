@@ -36,6 +36,26 @@ class ChatForwardPickerFragment : BottomSheetDialogFragment() {
 
     fun setListener(l: Listener) { listener = l }
 
+    override fun onCreateDialog(savedInstanceState: Bundle?): android.app.Dialog {
+        val dialog = super.onCreateDialog(savedInstanceState) as com.google.android.material.bottomsheet.BottomSheetDialog
+        dialog.setOnShowListener { dialogInterface ->
+            val d = dialogInterface as com.google.android.material.bottomsheet.BottomSheetDialog
+            val bottomSheet = d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) as? android.widget.FrameLayout
+            if (bottomSheet != null) {
+                // Keep rounded top corner radius and remove drop shadow
+                bottomSheet.setBackgroundResource(R.drawable.bg_bottom_sheet)
+                androidx.core.view.ViewCompat.setElevation(bottomSheet, 0f)
+
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                val density = resources.displayMetrics.density
+                behavior.peekHeight = (350 * density).toInt()
+                behavior.isFitToContents = false
+                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
+            }
+        }
+        return dialog
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentChatForwardPickerBinding.inflate(inflater, container, false)
         return binding.root
