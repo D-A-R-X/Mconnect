@@ -56,7 +56,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.manjugroups.m_connect"
+        applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
