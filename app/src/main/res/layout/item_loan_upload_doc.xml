@@ -107,6 +107,87 @@
                 tools:text="Max 2MB · JPG, PNG, PDF" />
         </LinearLayout>
 
+        <!-- Uploading — pill with spinner + status text. Shown while
+             the file is being copied to cache + posted to /api/storage/upload.
+             Submit is gated on this state across all slots so the user
+             can't dispatch a half-uploaded payload. -->
+        <RelativeLayout
+            android:id="@+id/layoutUploading"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_loan_input_box"
+            android:paddingHorizontal="12dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/pbUploading"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_centerVertical="true"
+                android:indeterminateTint="#0B61CA" />
+
+            <TextView
+                android:id="@+id/tvUploadingLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@id/pbUploading"
+                android:layout_marginStart="12dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Uploading…"
+                android:textColor="#0B61CA"
+                android:textSize="13sp" />
+        </RelativeLayout>
+
+        <!-- Failed — pill with error text + Retry chip. Visible only
+             when a previous upload attempt errored out. -->
+        <RelativeLayout
+            android:id="@+id/layoutFailed"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_loan_input_box"
+            android:paddingHorizontal="12dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_outcome_close"
+                app:tint="#D92D20"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/tvFailedLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@id/pbUploading"
+                android:layout_marginStart="12dp"
+                android:layout_toStartOf="@+id/btnRetryUpload"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Upload failed"
+                android:textColor="#D92D20"
+                android:textSize="13sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/btnRetryUpload"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackground"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="Retry"
+                android:textColor="#0B61CA"
+                android:textSize="12sp" />
+        </RelativeLayout>
+
         <!-- Uploaded — solid pill with file name + check -->
         <RelativeLayout
             android:id="@+id/layoutUploaded"
