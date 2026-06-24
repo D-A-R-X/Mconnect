@@ -623,11 +623,14 @@ class MyTripsFragment : Fragment() {
                     isUpcoming = isUpcoming,
                 )
 
-                // Upcoming layout has Site/Client, Distance, Time, ETA.
-                // Ready/Completed layout has Site/Client, Distance, Phone Number, Time.
+                // Upcoming layout has Site/Client, Distance, Location, ETA.
+                // Ready/Completed layout has Site/Client, Distance, Phone Number, Location.
+                val locationText = visit.placeAddress?.takeIf { it.isNotBlank() }
+                    ?: visit.placeName?.takeIf { it.isNotBlank() }
+                    ?: "Location not set"
                 if (isUpcoming) {
-                    tvDetail3Label.text = "Time"
-                    tvDetail3Value.text = visit.scheduledStartTime ?: "09:30 AM"
+                    tvDetail3Label.text = "Location"
+                    tvDetail3Value.text = locationText
                     ivDetail3Icon.setImageResource(R.drawable.ic_clock)
 
                     tvDetail4Label.text = "ETA"
@@ -638,8 +641,8 @@ class MyTripsFragment : Fragment() {
                     tvDetail3Value.text = visit.leadPhone ?: "9874827382"
                     ivDetail3Icon.setImageResource(R.drawable.ic_phone_outline)
 
-                    tvDetail4Label.text = "Time"
-                    tvDetail4Value.text = visit.scheduledStartTime ?: "09:30 AM"
+                    tvDetail4Label.text = "Location"
+                    tvDetail4Value.text = locationText
                     ivDetail4Icon.setImageResource(R.drawable.ic_clock)
                 }
 

@@ -35,8 +35,11 @@
         android:textColor="#667085"
         android:textSize="13sp" />
 
-    <!-- Track Progress Row -->
+    <!-- Track Progress Row (fixed nominee/GM/AVP/HR/Accounts chain). Hidden by
+         GmApprovalBottomSheet when the loan is workflow-routed; the dynamic
+         sheetWorkflowScroll below takes over with the configured steps. -->
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/sheetFixedTracker"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="24dp"
@@ -253,6 +256,26 @@
             app:layout_constraintTop_toBottomOf="@id/sheetTrackFrameAccs" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Dynamic approval chain — one step per configured workflow step
+         (Settings → Workflows). Shown by GmApprovalBottomSheet for
+         workflow-routed loans/advances; the fixed tracker above is hidden. -->
+    <HorizontalScrollView
+        android:id="@+id/sheetWorkflowScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="20dp"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/sheetWorkflowContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <!-- Nominees Outer Container Card -->
     <LinearLayout

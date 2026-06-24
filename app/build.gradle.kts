@@ -35,7 +35,7 @@ val googleMapsApiKey = envOrDefault(
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
 // touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://convex-http.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://colorful-grouse-456.convex.site/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
@@ -133,9 +133,10 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.camerax.video)
-    
+    // Google Play In-App Updates
+    implementation(libs.app.update)
+    implementation(libs.app.update.ktx)
 
-    
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

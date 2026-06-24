@@ -42,4 +42,37 @@ object AttendanceTrackingGate {
             dayResp?.hasOpenSession == true
         return isClockedInForToday(firstPunchIn, hasOpenSession)
     }
+
+    /**
+     * Live "is a session open RIGHT NOW?" check, used **only** to bound
+     * GeoTrack location collection to the clock-in → clock-out window.
+     *
+     * This is deliberately stricter than [isClockedInForToday]: that gate
+     * stays true for the rest of the day after the first punch (so trips / CP
+     * cards keep working through a mid-day break), but GeoTrack must capture
+     * a staffer's travel ONLY between punch-in and punch-out. So here we look
+     * at the open-session flag alone — a closed day (clocked out) returns
+     * false even though they punched in earlier.
+     *
+     * Returns:
+     *  - `true`  → an open session exists; keep tracking.
+     *  - `false` → no open session (clocked out, or not punched in yet); stop.
+     *  - `null`  → couldn't determine (network/server error). Callers must NOT
+     *    stop tracking on null — doing so would drop a legitimate in-window
+     *    journey during a transient outage. Buffered points sync later.
+     */
+    suspend fun hasOpenSessionNow(
+        token: String,
+        api: ApiService = ApiService.create(),
+    ): Boolean? {
+        if (token.isBlank()) return null
+        val todayResp = runCatching { api.getMyAttendanceToday(token) }.getOrNull()
+        val dayResp = runCatching { api.getDaySessions(token) }.getOrNull()
+        val todayOk = todayResp?.success == true
+        val dayOk = dayResp?.success == true
+        // Neither endpoint answered authoritatively → unknown, don't act.
+        if (!todayOk && !dayOk) return null
+        return todayResp?.attendance?.hasOpenSession == true ||
+            dayResp?.hasOpenSession == true
+    }
 }

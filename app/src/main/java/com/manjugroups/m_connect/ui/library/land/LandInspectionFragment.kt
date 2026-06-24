@@ -296,6 +296,8 @@ class LandInspectionFragment : Fragment() {
             minDate = minIso,
             maxDate = maxIso,
             resultKey = RESULT_KEY_RESCHEDULE,
+            // Reschedule is a single date — no range selection.
+            singleSelect = true,
         ).show(parentFragmentManager, "reschedule_calendar")
     }
 

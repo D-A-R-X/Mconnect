@@ -260,6 +260,15 @@ interface ApiService {
     @GET("api/hr/loans/pending-approvals")
     suspend fun getPendingLoanApprovals(@Header("Authorization") token: String): MyLoansResponse
 
+    // Configured Approval Workflow (Settings → Workflows) run + resolved steps
+    // for a loan/advance. `workflow` is null when the row is on the legacy
+    // code-stage path (no workflow configured at creation time).
+    @GET("api/hr/loans/workflow")
+    suspend fun getLoanWorkflow(
+        @Header("Authorization") token: String,
+        @Query("loanId") loanId: String
+    ): LoanWorkflowResponse
+
     @POST("api/hr/loans/approve")
     suspend fun approveLoan(
         @Header("Authorization") token: String,
@@ -1202,7 +1211,10 @@ data class AttendanceCancelRequest(val date: String)
  * staffId/staffName from the bearer token, so they're not sent here.
  */
 data class AttendanceRequestBody(
-    val attendanceId: String,
+    // Null for a no-punch ("Absent") day with no attendance row yet — the
+    // backend seeds a row for {staffId, date}. Gson omits null fields, so the
+    // request body simply carries no attendanceId in that case.
+    val attendanceId: String? = null,
     val date: String,
     val type: String,
     val remark: String? = null,
@@ -1543,6 +1555,43 @@ data class LoanRepaymentData(
     val mode: String? = null,
     val notes: String? = null,
     val createdAt: String? = null
+)
+
+// ── Configured Approval Workflow (loans/advances) ──
+// Shape mirrors convex workflows.getRunByEntity → getWorkflowRunDetails:
+// { run, steps }. Used to render the real, configured approval chain on the
+// loan/advance pending tracker instead of the hardcoded nominee/GM/AVP/HR
+// dots. `workflow` is null for legacy code-stage rows.
+data class LoanWorkflowResponse(
+    val success: Boolean = false,
+    val workflow: WorkflowRunDetails? = null,
+)
+
+data class WorkflowRunDetails(
+    val run: WorkflowRunData? = null,
+    val steps: List<WorkflowStepData>? = null,
+)
+
+data class WorkflowRunData(
+    // pending | approved | rejected | cancelled
+    val status: String? = null,
+    val currentStepOrder: Int? = null,
+    val currentAssigneeStaffId: String? = null,
+    val currentAssigneeName: String? = null,
+    val currentAssigneeRole: String? = null,
+)
+
+data class WorkflowStepData(
+    val stepOrder: Int? = null,
+    val name: String? = null,
+    val approverType: String? = null,
+    val approverRole: String? = null,
+    val approverDesignation: String? = null,
+    val resolvedStaffName: String? = null,
+    // pending | approved | rejected | skipped
+    val status: String? = null,
+    val actedByName: String? = null,
+    val actedAt: String? = null,
 )
 
 data class LoansSummary(

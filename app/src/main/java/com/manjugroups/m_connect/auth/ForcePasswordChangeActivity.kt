@@ -100,10 +100,34 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         val confirmPassword = binding.etConfirmPassword.text.toString()
         binding.tvPasswordChangeError.visibility = View.GONE
 
+        val ruleError = validateStrongPassword(newPassword)
         when {
-            newPassword.length < 8 -> showError("New password must be at least 8 characters")
+            ruleError != null -> showError(ruleError)
             newPassword != confirmPassword -> showError("New password and confirmation do not match")
             else -> changePassword(newPassword)
+        }
+    }
+
+    /**
+     * Strong-password rule, kept verbatim in step order with the web policy
+     * (lib/password-policy.ts → validateStrongPassword) so a password that
+     * passes here passes server-side too. Surfaced to the user as the helper
+     * line "Use 8+ characters with uppercase, lowercase, number, and special
+     * character." Returns the first failure message, or null when valid.
+     */
+    private fun validateStrongPassword(password: String): String? {
+        // ASCII alphanumeric, matching the web regex [A-Za-z0-9]; anything
+        // else counts as a "special character" exactly as [^A-Za-z0-9] does.
+        fun isAsciiAlnum(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9'
+        return when {
+            password.length < 8 -> "Password must be at least 8 characters"
+            password.length > 128 -> "Password is too long"
+            password.any { it.isWhitespace() } -> "Password cannot contain spaces"
+            !password.any { it in 'A'..'Z' } -> "Password must include at least one uppercase letter"
+            !password.any { it in 'a'..'z' } -> "Password must include at least one lowercase letter"
+            !password.any { it in '0'..'9' } -> "Password must include at least one number"
+            !password.any { !isAsciiAlnum(it) } -> "Password must include at least one special character"
+            else -> null
         }
     }
 
@@ -127,10 +151,34 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 session.mustChangePassword = false
                 requestNotificationAccessThenContinue()
             }.onFailure {
-                showError(it.message ?: "Network error")
+                // The backend returns HTTP 400 with a {error:"…"} body when it
+                // rejects the new password (e.g. fails the strength policy on an
+                // older app build with no client-side check). Surface that real
+                // reason instead of a bare "HTTP 400".
+                showError(
+                    extractHttpErrorMessage(it)
+                        ?: it.message?.takeIf { m -> !m.startsWith("HTTP ") }
+                        ?: "Couldn't update password. Please try again.",
+                )
                 setLoading(false)
             }
         }
+    }
+
+    /**
+     * Pull the {error:"…"} (or {message}) field out of a Retrofit HttpException
+     * body so the user sees the server's real message ("Password must include
+     * at least one uppercase letter", etc.) instead of "HTTP 400".
+     */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun requestNotificationAccessThenContinue() {

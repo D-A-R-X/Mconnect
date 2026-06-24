@@ -30,6 +30,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.update.InAppUpdateManager
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -59,6 +60,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
+    // Google Play in-app updates. Initialized in onCreate only once we know the
+    // user stays in the shell (past the login / force-password redirects).
+    private var inAppUpdateManager: InAppUpdateManager? = null
     private var currentTab = 0
     private var cachedTopInset = 0
     private var statusBarFullBleed = false
@@ -117,6 +121,13 @@ class MainActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Google Play in-app updates — checked on every cold start. High-priority
+        // releases force an immediate (blocking) update; everything else downloads
+        // flexibly in the background and prompts to restart. Constructed here,
+        // during onCreate (before STARTED), so its activity-result launcher is
+        // registered validly. No-ops on dev/sideload builds.
+        inAppUpdateManager = InAppUpdateManager(this).also { it.start() }
 
         // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
         // the user gets push notifications for chats / tasks / approvals.
@@ -306,6 +317,8 @@ class MainActivity : AppCompatActivity() {
         // toggled the missing one ON. Scoped to staff who actually need
         // background tracking — office staff aren't force-prompted.
         maybeShowBackgroundPermissionsGate()
+        // Finish a downloaded flexible update / resume a stalled immediate one.
+        inAppUpdateManager?.onResume()
         // Kick a periodic IAM poll while the app is in the foreground.
         // Forces a refresh every IAM_POLL_INTERVAL_MS (currently 20s)
         // regardless of throttle, so a permission change on the web
@@ -327,6 +340,14 @@ class MainActivity : AppCompatActivity() {
         // network + battery for UI nobody can see. onResume restarts.
         iamPollJob?.cancel()
         iamPollJob = null
+    }
+
+    override fun onDestroy() {
+        // Release the in-app-update install listener so we don't leak the
+        // activity through Play's callback registry.
+        inAppUpdateManager?.destroy()
+        inAppUpdateManager = null
+        super.onDestroy()
     }
 
     private fun startIamPolling() {

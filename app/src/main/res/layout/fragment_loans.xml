@@ -411,6 +411,27 @@
                         android:layerType="software"
                         android:visibility="gone" />
 
+                    <!-- Dynamic approval chain — one step per configured
+                         workflow step (Settings → Workflows). Populated and
+                         shown by LoansFragment when the loan/advance is
+                         workflow-routed; the fixed nominee/GM/AVP/HR/Accounts
+                         rows below stay hidden in that case. -->
+                    <HorizontalScrollView
+                        android:id="@+id/workflowTrackerScroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/workflowTrackerContainer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="4dp" />
+                    </HorizontalScrollView>
+
                     <LinearLayout
                         android:id="@+id/layoutLoanTracker"
                         android:layout_width="match_parent"

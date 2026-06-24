@@ -58,6 +58,17 @@ class HrDashboardFragment : Fragment() {
     private val flowViewModel: AttendanceFlowViewModel by activityViewModels()
     private val api = ApiService.create()
     private lateinit var session: SessionManager
+
+    // Dates (yyyy-MM-dd) for which the user just submitted a remark/correction
+    // from a day card on this screen. Drives the "Remark Submitted" badge so
+    // the affordance reflects the pending request until the list reloads with
+    // server-side state. Mirrors AttendanceHistoryFragment.
+    private val submittedRemarkDates = mutableSetOf<String>()
+
+    // Calendar.DAY_OF_WEEK values that are the staff's weekly-off, resolved
+    // from their shift schedule. Gap days (no attendance row) that fall on one
+    // of these render "Week Off" instead of defaulting to "Absent".
+    private var weekoffWeekdays: Set<Int> = emptySet()
     private var pendingPunchMode: PunchMode? = null
     private var pendingPunchImageFile: File? = null
     private var pendingPunchImageUri: android.net.Uri? = null
@@ -298,6 +309,7 @@ class HrDashboardFragment : Fragment() {
             viewLifecycleOwner,
         ) { _, bundle ->
             if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
+                bundle.getString("date")?.let { submittedRemarkDates.add(it) }
                 loadRecentHistoryCards()
             }
         }
@@ -823,6 +835,10 @@ class HrDashboardFragment : Fragment() {
         isHistoryLoading = true
         updateAttendanceLoadingUi()
         viewLifecycleOwner.lifecycleScope.launch {
+            // Resolve weekly-off weekdays first so the gap-fill below can flag
+            // off days as "Week Off". Best-effort — failure leaves the set
+            // unchanged and gap days fall back to the punch-derived verdict.
+            refreshWeekoffWeekdays()
             try {
                 // Show the full current calendar month, not just the trailing 31 days.
                 val cal = Calendar.getInstance()
@@ -853,6 +869,29 @@ class HrDashboardFragment : Fragment() {
         }
     }
 
+    /**
+     * Pull the staff's shift schedule and cache which weekdays are weekly-off
+     * (isWorkDay == false). Only an explicit `false` counts — unknown/null
+     * days stay work days so a real absence is never masked as "Week Off".
+     */
+    private suspend fun refreshWeekoffWeekdays() {
+        val staffId = session.staffId
+        val token = session.bearerToken
+        if (staffId.isNullOrBlank() || token.isBlank()) return
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val resp = runCatching { api.getTodayShift(token, staffId, today) }.getOrNull() ?: return
+        val schedule = resp.shift?.schedule ?: return
+        val offDays = mutableSetOf<Int>()
+        if (schedule.sunday?.isWorkDay == false) offDays.add(Calendar.SUNDAY)
+        if (schedule.monday?.isWorkDay == false) offDays.add(Calendar.MONDAY)
+        if (schedule.tuesday?.isWorkDay == false) offDays.add(Calendar.TUESDAY)
+        if (schedule.wednesday?.isWorkDay == false) offDays.add(Calendar.WEDNESDAY)
+        if (schedule.thursday?.isWorkDay == false) offDays.add(Calendar.THURSDAY)
+        if (schedule.friday?.isWorkDay == false) offDays.add(Calendar.FRIDAY)
+        if (schedule.saturday?.isWorkDay == false) offDays.add(Calendar.SATURDAY)
+        weekoffWeekdays = offDays
+    }
+
     private fun bindRecentHistoryCards(records: List<AttendanceRecord>) {
         recentHistoryRecords = records
         // Fill gaps: walk every date from the start of the current
@@ -875,12 +914,17 @@ class HrDashboardFragment : Fragment() {
         while (true) {
             val day = ymd.format(cal.time)
             if (day > today) break
+            // For a missing day, pre-mark it as a week-off when its weekday is
+            // in the staff's weekly-off set so the badge reads "Week Off"
+            // rather than the punch-derived "Absent". Real backend rows are
+            // never overridden.
+            val isWeekoffDay = weekoffWeekdays.contains(cal.get(Calendar.DAY_OF_WEEK))
             filled.add(
                 byDate[day] ?: AttendanceRecord(
                     date = day,
                     status = null,
                     totalMinutes = 0,
-                    approvedAttendance = null,
+                    approvedAttendance = if (isWeekoffDay) "weekoff" else null,
                     punchInTime = null,
                     punchOutTime = null,
                     hasOpenSession = false,
@@ -949,11 +993,36 @@ class HrDashboardFragment : Fragment() {
                 rangeView.text = buildPunchRange(record)
             }
 
-            // The pencil (Remark / Time Correction request) is intentionally
-            // hidden on the dashboard — the user asked for that affordance to
-            // live ONLY inside the dedicated "My Attendance" history screen.
-            card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
-                .visibility = View.GONE
+            // Remark / Time Correction affordance — shown on every PAST day
+            // card (punched or not). Today (index 0) is excluded: the day is
+            // still running, so a remark/correction would be premature. A
+            // no-punch "Absent" past day has no backend id; the backend seeds
+            // an attendance row keyed by {staffId, date} when the request is
+            // raised, so only a date is required here. A just-submitted day
+            // swaps the pencil for the "Remark Submitted" badge until reload.
+            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
+            val remarkBadge = card.findViewById<View>(R.id.badgeRemarkSubmitted)
+            val canRemark = index > 0 && !record.date.isNullOrBlank()
+            val alreadySubmitted =
+                record.date?.let { submittedRemarkDates.contains(it) } == true
+            when {
+                !canRemark -> {
+                    editBtn.visibility = View.GONE
+                    remarkBadge.visibility = View.GONE
+                }
+                alreadySubmitted -> {
+                    editBtn.visibility = View.GONE
+                    remarkBadge.visibility = View.VISIBLE
+                }
+                else -> {
+                    remarkBadge.visibility = View.GONE
+                    editBtn.visibility = View.VISIBLE
+                    editBtn.setOnClickListener {
+                        EditAttendanceBottomSheet.newInstance(record)
+                            .show(parentFragmentManager, "edit_attendance")
+                    }
+                }
+            }
 
             // Present / Absent pill on every past-day card. Today's row
             // (index 0) is skipped — the day is still running so a verdict

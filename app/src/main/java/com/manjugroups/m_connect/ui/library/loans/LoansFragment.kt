@@ -3,10 +3,15 @@ package com.manjugroups.m_connect.ui.library.loans
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import com.manjugroups.m_connect.network.WorkflowStepData
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -331,7 +336,11 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
+                // Fixed nominee/GM/AVP/HR tracker renders immediately as the
+                // default; if this row is workflow-routed, loadWorkflowTracker
+                // swaps in the configured chain once the steps come back.
                 updateTrackerState(loan)
+                loadWorkflowTracker(loan)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
@@ -457,6 +466,131 @@ class LoansFragment : Fragment() {
 
             // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
             setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+        }
+    }
+
+    /**
+     * Fetch the configured Approval Workflow (Settings → Workflows) for this
+     * loan/advance and, when the row is workflow-routed, replace the fixed
+     * nominee/GM/AVP/HR/Accounts tracker with the real configured chain. Rows
+     * still on the legacy code-stage path return no workflow and keep the
+     * fixed tracker that updateTrackerState() already drew.
+     */
+    private fun loadWorkflowTracker(loan: Loan) {
+        binding.workflowTrackerScroll.visibility = View.GONE
+        val loanId = loan.id.takeIf { it.isNotBlank() } ?: return
+        val token = SessionManager(requireContext()).bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            val steps = runCatching { api.getLoanWorkflow(token, loanId) }
+                .getOrNull()
+                ?.workflow
+                ?.steps
+                ?.filter { (it.stepOrder ?: 0) > 0 }
+                ?.sortedBy { it.stepOrder ?: 0 }
+                .orEmpty()
+            if (_binding == null) return@launch
+            // Empty → legacy code-stage row; leave the fixed tracker in place.
+            if (steps.isNotEmpty()) renderWorkflowSteps(steps)
+        }
+    }
+
+    private fun renderWorkflowSteps(steps: List<WorkflowStepData>) {
+        val b = _binding ?: return
+        // Hide the fixed loan/advance trackers + their connector lines.
+        b.layoutLoanTracker.visibility = View.GONE
+        b.layoutAdvanceTracker.visibility = View.GONE
+        b.loanTrackerLine.visibility = View.GONE
+        b.advanceTrackerLine.visibility = View.GONE
+        b.workflowTrackerScroll.visibility = View.VISIBLE
+
+        val container = b.workflowTrackerContainer
+        container.removeAllViews()
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        steps.forEachIndexed { index, step ->
+            val status = step.status?.lowercase()?.trim().orEmpty()
+            val done = status == "approved" || status == "skipped"
+            val rejected = status == "rejected"
+
+            val item = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(78), LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
+            }
+
+            val dotSize = dp(40)
+            val dot = FrameLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(dotSize, dotSize)
+                setBackgroundResource(
+                    if (done) R.drawable.bg_loan_track_active
+                    else R.drawable.bg_loan_icon_tile,
+                )
+            }
+            if (done) {
+                dot.addView(ImageView(requireContext()).apply {
+                    setImageResource(R.drawable.ic_loan_track_check)
+                    layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
+                })
+            } else {
+                dot.addView(TextView(requireContext()).apply {
+                    text = (step.stepOrder ?: (index + 1)).toString()
+                    setTextColor(
+                        if (rejected) Color.parseColor("#D92D20")
+                        else Color.parseColor("#98A2B3"),
+                    )
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER,
+                    )
+                })
+            }
+            item.addView(dot)
+
+            item.addView(TextView(requireContext()).apply {
+                text = step.name?.takeIf { it.isNotBlank() }
+                    ?: step.approverRole?.takeIf { it.isNotBlank() }
+                    ?: step.approverDesignation?.takeIf { it.isNotBlank() }
+                    ?: "Step ${step.stepOrder ?: (index + 1)}"
+                setTextColor(
+                    when {
+                        done -> Color.parseColor("#0B61CA")
+                        rejected -> Color.parseColor("#D92D20")
+                        else -> Color.parseColor("#98A2B3")
+                    },
+                )
+                textSize = 10f
+                gravity = Gravity.CENTER
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTypeface(null, if (done) Typeface.BOLD else Typeface.NORMAL)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(6) }
+            })
+
+            step.resolvedStaffName?.takeIf { it.isNotBlank() }?.let { who ->
+                item.addView(TextView(requireContext()).apply {
+                    text = who
+                    setTextColor(Color.parseColor("#98A2B3"))
+                    textSize = 9f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { topMargin = dp(2) }
+                })
+            }
+
+            container.addView(item)
         }
     }
 

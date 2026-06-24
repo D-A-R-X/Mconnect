@@ -367,6 +367,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         )
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
         tvOriginName?.text = "Current Location"
+        // Summary card "Location" cell — show the destination (address, else
+        // name) rather than the old static "Current Location" placeholder.
+        view.findViewById<TextView>(R.id.tvTripOriginName)?.text =
+            placeAddress?.takeIf { it.isNotBlank() }
+                ?: placeName.takeIf { it.isNotBlank() }
+                ?: "Location not set"
         bindTripClientHeader(view, placeName)
 
         btnBack?.setOnClickListener { navigateUp() }

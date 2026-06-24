@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.LocationPointEntity
@@ -125,6 +126,14 @@ class GeoTrackService : Service() {
     private val pointsSynced = AtomicInteger(0)
     private val firstLocationReceived = AtomicBoolean(false)
     private val lastProcessedTime = AtomicLong(0L)
+    // Live clock-in gate. GeoTrack must capture travel ONLY between punch-in
+    // and punch-out, so we refuse to buffer points (and tear the service down)
+    // the moment the attendance session is no longer open. Defaults to true
+    // because the service is only ever started off a clock-in; the first
+    // enforceClockInGate() pass confirms it and stops if we're actually
+    // clocked out (stale/boot/biometric/before-punch starts).
+    @Volatile private var sessionOpen = true
+    @Volatile private var clockGateStopped = false
     private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
 
@@ -430,6 +439,11 @@ class GeoTrackService : Service() {
     }
 
     private suspend fun processLocation(location: Location) {
+        // Clock-in gate — never buffer a point outside the punch-in → punch-out
+        // window. `sessionOpen` flips false as soon as enforceClockInGate() sees
+        // a closed session, so pre-clock-in and post-clock-out travel is dropped
+        // before it ever reaches the local buffer or the server.
+        if (!sessionOpen || clockGateStopped) return
         // Dedup: skip if less than 3 seconds since last processed point (atomic)
         val now = System.currentTimeMillis()
         val last = lastProcessedTime.get()
@@ -585,12 +599,48 @@ class GeoTrackService : Service() {
         networkCallback = null
     }
 
+    /**
+     * Authoritative clock-in gate for GeoTrack. Confirms an attendance session
+     * is open right now; if it has closed (clock-out) — or was never open (a
+     * stale/boot/before-punch start) — we stop buffering and tear the service
+     * down so no out-of-window travel is ever recorded or uploaded.
+     *
+     * Offline-safe: a null result (network/server error) is treated as
+     * "unknown" and tracking continues, so a transient outage never drops a
+     * legitimate in-window journey. Clock-out itself always happens online, so
+     * a real clock-out is detected on the next successful check.
+     *
+     * @return true to keep running, false if we stopped the service.
+     */
+    private suspend fun enforceClockInGate(): Boolean {
+        if (clockGateStopped) return false
+        val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+            ?: return true // unknown — keep tracking, recheck next cycle
+        sessionOpen = open
+        if (open) return true
+        Log.i(TAG, "Attendance session closed (clocked out) — stopping GeoTrack")
+        clockGateStopped = true
+        // Clear the bootstrap flags so START_STICKY / a later bootstrap sync
+        // doesn't resurrect tracking until the next genuine clock-in.
+        runCatching {
+            session.shouldTrackNow = false
+            session.activeTrackingSessionId = null
+        }
+        stopSelf()
+        return false
+    }
+
     private fun startSyncLoop() {
         syncJob = serviceScope.launch {
+            // Immediate gate check at startup — catches a service that came up
+            // while already clocked out (stale prefs, boot, biometric gate
+            // punch that closed at once, or a pre-clock-in start).
+            if (!enforceClockInGate()) return@launch
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
                 if (hasNetwork()) {
                     markNetworkOnlineIfNeeded()
+                    if (!enforceClockInGate()) break
                     syncPoints()
                     syncEvents()
                 } else {
