@@ -34,7 +34,8 @@ class ChatListAdapter(
     private val onItemLongClick: (View, ChatListItem) -> Unit,
     private val avatarBinder: (View, TextView, android.widget.ImageView, String, Int, String?) -> Unit,
     private val timestampBinder: (TextView, Long?) -> Unit,
-    private val isSelectedProvider: (ChatListItem) -> Boolean = { false }
+    private val isSelectedProvider: (ChatListItem) -> Boolean = { false },
+    private val onAvatarClick: ((ChatListItem) -> Unit)? = null
 ) : ListAdapter<ChatListItem, ChatListAdapter.ViewHolder>(ChatListItemDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -114,6 +115,11 @@ class ChatListAdapter(
             binding.root.setOnLongClickListener {
                 onItemLongClick(it, item)
                 true
+            }
+            if (onAvatarClick != null) {
+                binding.avatarContainer.setOnClickListener { onAvatarClick.invoke(item) }
+            } else {
+                binding.avatarContainer.setOnClickListener(null)
             }
         }
     }

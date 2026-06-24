@@ -31,7 +31,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:sh_title="Leave Summary"
-                app:sh_subtitle="Submit Leave"
+                app:sh_subtitle="Apply Leave"
                 app:sh_banner_image="@drawable/img_leave_3d_banner" />
 
             <LinearLayout
@@ -312,8 +312,8 @@
                     android:paddingBottom="12dp"
                     android:visibility="gone"
                     app:es_image="@drawable/leave_banner_suitcase"
-                    app:es_title="No Leave Submitted!"
-                    app:es_description="Ready to catch some fresh air? Click “Submit Leave” and take that well-deserved break!" />
+                    app:es_title="No Leave Applied!"
+                    app:es_description="Ready to catch some fresh air? Click “Apply Leave” and take that well-deserved break!" />
             </LinearLayout>
 
             <Space
@@ -343,7 +343,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:fontFamily="@font/inter_semibold"
-            android:text="Submit Leave"
+            android:text="Apply Leave"
             android:textColor="@android:color/white"
             android:textSize="13sp" />
     </FrameLayout>

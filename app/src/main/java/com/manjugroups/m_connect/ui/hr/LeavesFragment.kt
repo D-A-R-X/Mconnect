@@ -112,7 +112,7 @@ class LeavesFragment : Fragment() {
             binding.btnApplyLeave.visibility = View.GONE
         } else {
             binding.summaryHeader.setTitle("Leave Summary")
-            binding.summaryHeader.setSubtitle("Submit Leave")
+            binding.summaryHeader.setSubtitle("Apply Leave")
             binding.leavesRefresh.isEnabled = true
             binding.filterRow.visibility = View.VISIBLE
             setupFilterTabs()
@@ -239,9 +239,9 @@ class LeavesFragment : Fragment() {
             binding.emptyState.setDescription("There are no pending leave requests in review right now.")
             return
         }
-        binding.emptyState.setTitle("No Leave Submitted!")
+        binding.emptyState.setTitle("No Leave Applied!")
         binding.emptyState.setDescription(
-            "Ready to catch some fresh air? Click “Submit Leave” and take that well-deserved break!"
+            "Ready to catch some fresh air? Click “Apply Leave” and take that well-deserved break!"
         )
     }
 
@@ -306,24 +306,31 @@ class LeavesFragment : Fragment() {
             val statusDate = decidedDate ?: parseCreationDate(leave.createdAt)
             val statusDateText = statusDate?.let { statusFmt.format(it) }
 
+            val isCancelled = leave.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled"
             val statusNote: String
             val statusColor: Int
             val statusIconRes: Int
-            when (bucket) {
-                StatusBucket.APPROVED -> {
-                    statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
-                    statusIconRes = R.drawable.ic_leave_status_approved
-                }
-                StatusBucket.REJECTED -> {
-                    statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
-                    statusIconRes = R.drawable.ic_leave_status_rejected
-                }
-                StatusBucket.REVIEW -> {
-                    statusNote = "In Review"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
-                    statusIconRes = R.drawable.ic_leave_spinner_blue
+            if (isCancelled) {
+                statusNote = "Cancelled"
+                statusColor = ContextCompat.getColor(requireContext(), R.color.lt_foreground_muted)
+                statusIconRes = R.drawable.ic_leave_status_rejected
+            } else {
+                when (bucket) {
+                    StatusBucket.APPROVED -> {
+                        statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
+                        statusIconRes = R.drawable.ic_leave_status_approved
+                    }
+                    StatusBucket.REJECTED -> {
+                        statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
+                        statusIconRes = R.drawable.ic_leave_status_rejected
+                    }
+                    StatusBucket.REVIEW -> {
+                        statusNote = "In Review"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
+                        statusIconRes = R.drawable.ic_leave_spinner_blue
+                    }
                 }
             }
 
@@ -341,7 +348,13 @@ class LeavesFragment : Fragment() {
             val reasonText = card.findViewById<TextView>(R.id.tvLeaveReason)
             reasonText.text = statusNote
             reasonText.setTextColor(statusColor)
-            card.findViewById<android.widget.ImageView>(R.id.ivLeaveStatusIcon).setImageResource(statusIconRes)
+            val statusIconView = card.findViewById<android.widget.ImageView>(R.id.ivLeaveStatusIcon)
+            statusIconView.setImageResource(statusIconRes)
+            if (isCancelled) {
+                statusIconView.setColorFilter(statusColor)
+            } else {
+                statusIconView.clearColorFilter()
+            }
 
             val staffName = card.findViewById<TextView>(R.id.tvLeaveStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvLeaveStaffInitial)
@@ -431,8 +444,16 @@ class LeavesFragment : Fragment() {
             val deleteBtn = card.findViewById<View>(R.id.btnDeleteLeave)
             if (!approvalMode && leave.id != null) {
                 deleteBtn.visibility = View.VISIBLE
-                deleteBtn.setOnClickListener {
-                    showCancelLeaveDialog(leave.id)
+                if (isCancelled) {
+                    deleteBtn.isEnabled = false
+                    deleteBtn.alpha = 0.5f
+                    deleteBtn.setOnClickListener(null)
+                } else {
+                    deleteBtn.isEnabled = true
+                    deleteBtn.alpha = 1.0f
+                    deleteBtn.setOnClickListener {
+                        showCancelLeaveDialog(leave.id)
+                    }
                 }
             } else {
                 deleteBtn.visibility = View.GONE

@@ -351,6 +351,15 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             fieldText(root, R.id.fieldTelecom) to "Telecom",
         )
         checks.firstOrNull { it.first.isBlank() }?.let { return "${it.second} is required" }
+        
+        val eConnection = fieldText(root, R.id.fieldEConnection)
+        if (eConnection.equals("Yes", ignoreCase = true)) {
+            val phases = fieldText(root, R.id.fieldEConnectionPhases)
+            if (phases.isBlank()) {
+                return "How many phases is required"
+            }
+        }
+        
         if (selectedRoadTypes.isEmpty()) return "Road Type is required"
         return null
     }
@@ -426,6 +435,9 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             electricity = nullIfBlank(fieldText(root, R.id.fieldElectricity)),
             eConnectionToLand = nullIfBlank(fieldText(root, R.id.fieldEConnection))
                 ?.lowercase()?.takeIf { it == "yes" || it == "no" },
+            eConnectionPhases = if (fieldText(root, R.id.fieldEConnection).trim().lowercase() == "yes") {
+                nullIfBlank(fieldText(root, R.id.fieldEConnectionPhases))
+            } else null,
             telecom = nullIfBlank(fieldText(root, R.id.fieldTelecom))
                 ?.lowercase()?.takeIf { it == "yes" || it == "no" },
             railwayStationDistance = nullIfBlank(fieldText(root, R.id.fieldRailway)),
@@ -600,7 +612,17 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         report.accessibilityWidthUnit?.let { setTrailingText(root, R.id.fieldAccessWidth, it) }
         report.electricity?.let { setFieldText(root, R.id.fieldElectricity, it) }
         report.eConnectionToLand?.let {
-            setFieldText(root, R.id.fieldEConnection, it.replaceFirstChar { c -> c.uppercase() })
+            val capitalized = it.replaceFirstChar { c -> c.uppercase() }
+            setFieldText(root, R.id.fieldEConnection, capitalized)
+            val eConnectionPhasesField = root.findViewById<View>(R.id.fieldEConnectionPhases)
+            if (capitalized.equals("Yes", ignoreCase = true)) {
+                eConnectionPhasesField.visibility = View.VISIBLE
+            } else {
+                eConnectionPhasesField.visibility = View.GONE
+            }
+        }
+        report.eConnectionPhases?.let {
+            setFieldText(root, R.id.fieldEConnectionPhases, it)
         }
         report.telecom?.let {
             setFieldText(root, R.id.fieldTelecom, it.replaceFirstChar { c -> c.uppercase() })
@@ -821,13 +843,30 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             iconRes = R.drawable.ic_inspection_field_electricity,
             options = listOf("LT", "HT", "NIL"),
         )
+        val eConnectionPhasesField = root.findViewById<View>(R.id.fieldEConnectionPhases)
+        eConnectionPhasesField.visibility = View.GONE
+        bindDropdownField(
+            eConnectionPhasesField,
+            label = "How many phases",
+            hint = "Select",
+            iconRes = R.drawable.ic_inspection_field_electricity,
+            options = listOf("1 Phase", "3 Phase"),
+        )
+
         bindDropdownField(
             root.findViewById(R.id.fieldEConnection),
             label = "E-Connection to land",
             hint = "Select",
             iconRes = R.drawable.ic_inspection_field_electricity,
             options = listOf("Yes", "No"),
-        )
+        ) { picked ->
+            if (picked.equals("Yes", ignoreCase = true)) {
+                eConnectionPhasesField.visibility = View.VISIBLE
+            } else {
+                eConnectionPhasesField.visibility = View.GONE
+                setFieldText(root, R.id.fieldEConnectionPhases, "")
+            }
+        }
         bindDropdownField(
             root.findViewById(R.id.fieldTelecom),
             label = "Telecom",
@@ -909,6 +948,7 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         iconRes: Int,
         options: List<String>,
         required: Boolean = true,
+        onPicked: ((String) -> Unit)? = null,
     ) {
         fieldRoot.findViewById<TextView>(R.id.fieldLabel).text = label
         fieldRoot.findViewById<TextView>(R.id.fieldRequiredStar).visibility =
@@ -930,7 +970,10 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         container.visibility = View.VISIBLE
 
         val open = View.OnClickListener {
-            showTrailingDropdown(fieldRoot, options) { picked -> input.setText(picked) }
+            showTrailingDropdown(fieldRoot, options) { picked ->
+                input.setText(picked)
+                onPicked?.invoke(picked)
+            }
         }
         input.setOnClickListener(open)
         container.setOnClickListener(open)

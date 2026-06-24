@@ -579,6 +579,9 @@
                 android:id="@+id/fieldEConnection" />
             <include
                 layout="@layout/component_inspection_field"
+                android:id="@+id/fieldEConnectionPhases" />
+            <include
+                layout="@layout/component_inspection_field"
                 android:id="@+id/fieldTelecom" />
             <include
                 layout="@layout/component_inspection_field"
