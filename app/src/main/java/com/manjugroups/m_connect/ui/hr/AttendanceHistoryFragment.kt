@@ -271,16 +271,14 @@ class AttendanceHistoryFragment : Fragment() {
             val tvLateText = card.findViewById<TextView>(R.id.tvLateText)
             val tvFineAmount = card.findViewById<TextView>(R.id.tvFineAmount)
 
-            // Fines banner is driven ENTIRELY by real backend data — the
-            // server-computed lateFineDeduction (preferred) or a seeded
-            // fineAmount, paired with lateMinutes. No mock dates, no
-            // fabricated default amount: if the backend levied no fine the
-            // banner stays hidden.
+            // Fines banner is driven by real backend data or client-side calculation
             val lateMins = record.lateMinutes ?: 0
+            val earlyOutMins = calculateEarlyOutMinutes(record)
+            val totalLateMins = lateMins + earlyOutMins
             val fine = record.lateFineDeduction ?: record.fineAmount
-            if (lateMins > 0 && fine != null && fine > 0) {
+            if (totalLateMins > 0 && fine != null && fine > 0) {
                 llFinesBanner.visibility = View.VISIBLE
-                tvLateText.text = "Late by ${lateMins}mins"
+                tvLateText.text = "Late by ${totalLateMins}mins"
                 tvFineAmount.text = "Fine : ₹${fine.toInt()}"
             } else {
                 llFinesBanner.visibility = View.GONE
@@ -600,6 +598,30 @@ class AttendanceHistoryFragment : Fragment() {
                 textView.invalidate()
             }
         }
+    }
+
+    private fun calculateEarlyOutMinutes(record: AttendanceRecord): Int {
+        val fine = record.lateFineDeduction ?: record.fineAmount ?: 0.0
+        if (fine <= 0) return 0
+
+        val punchOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+        if (punchOut != null) {
+            val millis = parseIsoMillis(punchOut)
+            if (millis != null) {
+                try {
+                    val cal = Calendar.getInstance().apply { timeInMillis = millis }
+                    val expectedEndMinutes = 18 * 60 + 30 // 18:30 (06:30 PM)
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    val minute = cal.get(Calendar.MINUTE)
+                    val punchOutMinutes = hour * 60 + minute
+                    
+                    if (punchOutMinutes < expectedEndMinutes) {
+                        return expectedEndMinutes - punchOutMinutes
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+        return record.earlyOutMinutes ?: record.earlyMinutes ?: record.earlyOut ?: 0
     }
 
     override fun onDestroyView() {
