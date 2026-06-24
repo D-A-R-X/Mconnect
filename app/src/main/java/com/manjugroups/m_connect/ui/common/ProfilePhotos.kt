@@ -12,9 +12,27 @@ import com.manjugroups.m_connect.BuildConfig
  */
 object ProfilePhotos {
     fun resolve(value: String?): String? {
-        val raw = value?.takeIf { it.isNotBlank() } ?: return null
-        if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
+        val raw = value?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" } ?: return null
+        
+        var resolved = raw
         val base = BuildConfig.BASE_URL.removeSuffix("/")
-        return "$base/api/storage/serve?storageId=$raw"
+        
+        // Fix localhost URLs from dev backend
+        if (resolved.startsWith("http://127.0.0.1") || resolved.startsWith("http://localhost")) {
+            val path = resolved.substringAfter("api/storage/")
+            resolved = "$base/api/storage/$path"
+        }
+        
+        // Fix 404 issue on convex-http domain for storage
+        if (resolved.contains("convex-http.aivida.in")) {
+            resolved = resolved.replace("convex-http.aivida.in", "convex-mms.aivida.in")
+        }
+        
+        if (resolved.startsWith("http://") || resolved.startsWith("https://")) return resolved
+        
+        if (resolved.startsWith("/")) {
+            return "$base$resolved"
+        }
+        return "$base/api/storage/serve?storageId=$resolved"
     }
 }

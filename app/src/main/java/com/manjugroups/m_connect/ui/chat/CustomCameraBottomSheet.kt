@@ -55,6 +55,8 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     private var activeZoom = 1.0f // 0.5, 1.0, 2.0
 
     private var camera: Camera? = null
+    
+
 
     private val mediaActionSound = android.media.MediaActionSound()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -90,6 +92,8 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     private lateinit var btnClose: View
     private lateinit var btnGallery: View
     private lateinit var btnSwitch: View
+    
+
 
     private lateinit var tabPhoto: View
     private lateinit var tvTabPhoto: TextView
@@ -166,7 +170,6 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         btnClose = view.findViewById(R.id.btnCameraClose)
         btnGallery = view.findViewById(R.id.btnCameraGallery)
         btnSwitch = view.findViewById(R.id.btnCameraSwitch)
-
         tabPhoto = view.findViewById(R.id.tabPhotoMode)
         tvTabPhoto = view.findViewById(R.id.tvTabPhoto)
         dotTabPhoto = view.findViewById(R.id.dotTabPhoto)
@@ -278,6 +281,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                     .setFlashMode(flashMode)
                     .setTargetRotation(rotation)
                     .build()
+                    
                 camera = cameraProvider.bindToLifecycle(
                     viewLifecycleOwner,
                     cameraSelector,
@@ -502,4 +506,6 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         mainHandler.removeCallbacks(recordingProgressRunnable)
         mediaActionSound.release()
     }
+
+
 }

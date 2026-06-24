@@ -1240,6 +1240,9 @@ data class AttendanceRecord(
     // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
     // is only present on some seeded rows; prefer lateFineDeduction.
     val lateMinutes: Int? = null,
+    val earlyOutMinutes: Int? = null,
+    val earlyMinutes: Int? = null,
+    val earlyOut: Int? = null,
     val fineAmount: Double? = null,
     val lateFineDeduction: Double? = null,
     // HR-logged "other fines" — manual deductions for loss of property,
@@ -3037,6 +3040,7 @@ data class InspectionListItem(
     // date_change_rejected (null on legacy rows). Gates the inspection form:
     // only "accepted" lets the inspector fill it in.
     val inspectionAcceptanceStatus: String? = null,
+    val inspectionDateChangeVpRespondedAt: String? = null,
     val reportId: String? = null,
     // VP final review of the submitted inspection. "approved" → form
     // locks to view-only on mobile (the inspector can still see what was
@@ -3102,6 +3106,8 @@ data class InspectionReportData(
     val accessibilityWidthUnit: String? = null,
     val electricity: String? = null,
     val eConnectionToLand: String? = null,
+    @com.google.gson.annotations.SerializedName(value = "eConnectionPhases", alternate = ["phases", "eConnectionPhase", "howManyPhases"])
+    val eConnectionPhases: String? = null,
     val telecom: String? = null,
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,
@@ -3153,6 +3159,8 @@ data class InspectionSaveRequest(
     val accessibilityWidthUnit: String? = null,
     val electricity: String? = null,
     val eConnectionToLand: String? = null,
+    @com.google.gson.annotations.SerializedName(value = "eConnectionPhases", alternate = ["phases", "eConnectionPhase", "howManyPhases"])
+    val eConnectionPhases: String? = null,
     val telecom: String? = null,
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,

@@ -411,24 +411,31 @@ class PermissionsFragment : Fragment() {
             val statusDate = parseCreationDate(perm.createdAt)
             val statusDateText = statusDate?.let { statusFmt.format(it) }
 
+            val isCancelled = perm.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled"
             val statusNote: String
             val statusColor: Int
             val statusIconRes: Int
-            when (bucket) {
-                StatusBucket.APPROVED -> {
-                    statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
-                    statusIconRes = R.drawable.ic_leave_status_approved
-                }
-                StatusBucket.REJECTED -> {
-                    statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
-                    statusIconRes = R.drawable.ic_leave_status_rejected
-                }
-                StatusBucket.REVIEW -> {
-                    statusNote = if (statusDateText.isNullOrBlank()) "In Review" else "In Review at $statusDateText"
-                    statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
-                    statusIconRes = R.drawable.ic_leave_status_review
+            if (isCancelled) {
+                statusNote = "Cancelled"
+                statusColor = ContextCompat.getColor(requireContext(), R.color.lt_foreground_muted)
+                statusIconRes = R.drawable.ic_leave_status_rejected
+            } else {
+                when (bucket) {
+                    StatusBucket.APPROVED -> {
+                        statusNote = if (statusDateText.isNullOrBlank()) "Approved" else "Approved at $statusDateText"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.lt_success)
+                        statusIconRes = R.drawable.ic_leave_status_approved
+                    }
+                    StatusBucket.REJECTED -> {
+                        statusNote = if (statusDateText.isNullOrBlank()) "Rejected" else "Rejected at $statusDateText"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.lt_error)
+                        statusIconRes = R.drawable.ic_leave_status_rejected
+                    }
+                    StatusBucket.REVIEW -> {
+                        statusNote = if (statusDateText.isNullOrBlank()) "In Review" else "In Review at $statusDateText"
+                        statusColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
+                        statusIconRes = R.drawable.ic_leave_status_review
+                    }
                 }
             }
 
@@ -442,7 +449,13 @@ class PermissionsFragment : Fragment() {
             val statusNoteView = card.findViewById<TextView>(R.id.tvPermStatusNote)
             statusNoteView.text = statusNote
             statusNoteView.setTextColor(statusColor)
-            card.findViewById<ImageView>(R.id.ivPermStatusIcon).setImageResource(statusIconRes)
+            val statusIconView = card.findViewById<ImageView>(R.id.ivPermStatusIcon)
+            statusIconView.setImageResource(statusIconRes)
+            if (isCancelled) {
+                statusIconView.setColorFilter(statusColor)
+            } else {
+                statusIconView.clearColorFilter()
+            }
 
             val staffName = card.findViewById<TextView>(R.id.tvPermStaffName)
             val staffInitial = card.findViewById<TextView>(R.id.tvPermStaffInitial)
@@ -493,9 +506,17 @@ class PermissionsFragment : Fragment() {
                 && perm.id != null
             cancelIcon.visibility = if (canCancel) View.VISIBLE else View.GONE
             if (canCancel) {
-                cancelIcon.setOnClickListener {
-                    val id = perm.id ?: return@setOnClickListener
-                    showCancelPermissionDialog(id)
+                if (isCancelled) {
+                    cancelIcon.isEnabled = false
+                    cancelIcon.alpha = 0.5f
+                    cancelIcon.setOnClickListener(null)
+                } else {
+                    cancelIcon.isEnabled = true
+                    cancelIcon.alpha = 1.0f
+                    cancelIcon.setOnClickListener {
+                        val id = perm.id ?: return@setOnClickListener
+                        showCancelPermissionDialog(id)
+                    }
                 }
             } else {
                 cancelIcon.setOnClickListener(null)
