@@ -85,6 +85,17 @@ class HrDashboardFragment : Fragment() {
     private var isTodayLoading = true
     private var isHistoryLoading = true
     private var wasShowingSkeleton = false
+
+    /**
+     * Becomes true once the *initial* attendance load (today + history) has
+     * fully resolved at least once. After that point the full skeleton is
+     * never shown again: refreshes triggered by tab switches, pull-to-refresh
+     * or post-punch reloads keep the clock-in summary card on screen and just
+     * update its contents in place. Without this gate every `isHistoryLoading`
+     * cycle wiped `cardAttendanceSummary` to skeleton, so the whole clock-in
+     * section vanished and popped back on each refresh / tab return.
+     */
+    private var hasCompletedFirstAttendanceLoad = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
     private var liveTickerJob: Job? = null
     // Reference to the dynamic "Today" history card's hours TextView, so the
@@ -1331,7 +1342,13 @@ class HrDashboardFragment : Fragment() {
 
     private fun updateAttendanceLoadingUi() {
         if (_binding == null) return
-        val showSkeleton = isTodayLoading || isHistoryLoading
+        val stillLoading = isTodayLoading || isHistoryLoading
+        // Mark the first load complete the moment both feeds have resolved.
+        if (!stillLoading) hasCompletedFirstAttendanceLoad = true
+        // The full skeleton is a FIRST-LOAD affordance only. Once we've shown
+        // real content, subsequent refreshes must never hide the clock-in card
+        // back to skeleton — keep it visible and update in place.
+        val showSkeleton = stillLoading && !hasCompletedFirstAttendanceLoad
         if (showSkeleton) {
             com.manjugroups.m_connect.ui.common.SkeletonUtils.startSkeletonPulse(binding.attendanceSkeletonContainer)
             binding.cardAttendanceSummary.visibility = View.GONE

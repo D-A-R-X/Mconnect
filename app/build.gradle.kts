@@ -28,7 +28,7 @@ val googleMapsApiKey = envOrDefault(
                 )
             )
         )
-    )
+        )
 )
 // Point the Android client at the same Convex deployment the web admin uses.
 // Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
