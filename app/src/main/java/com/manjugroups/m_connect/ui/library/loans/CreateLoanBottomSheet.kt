@@ -38,7 +38,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
     private var selectedNominee1: StaffData? = null
     private var selectedNominee2: StaffData? = null
     
-    private var interestType: String? = null
     private var disbursedDateIso: String? = null
     private var repaymentMonthIso: String? = null
     private var originalDocument: String? = null
@@ -119,10 +118,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
             showNomineePicker(2)
         }
 
-        binding.btnSelectInterestType.setOnClickListener {
-            showInterestTypePicker()
-        }
-
         binding.btnSelectDisbursedDate.setOnClickListener {
             showDatePicker { y, m, d ->
                 val cal = Calendar.getInstance().apply { set(y, m, d) }
@@ -180,19 +175,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                     binding.tvNominee2.text = selected.name
                     binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
                 }
-            }
-            .show()
-    }
-
-    private fun showInterestTypePicker() {
-        val types = arrayOf("Flat", "Reducing")
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select Interest Type")
-            .setItems(types) { _, which ->
-                val type = types[which]
-                interestType = type
-                binding.tvInterestType.text = type
-                binding.tvInterestType.setTextColor(android.graphics.Color.parseColor("#101828"))
             }
             .show()
     }
@@ -296,7 +278,8 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                         nominee2Id = n2.id,
                         nominee2Name = n2.name,
                         loanAmount = amount,
-                        interestType = interestType ?: "Flat",
+                        // Interest type is set on the web only; the mobile form
+                        // omits it so the backend applies its default.
                         disbursedDate = disDate,
                         repaymentStartMonth = repMonth,
                         tenureMonths = tenure.toInt(),
@@ -352,7 +335,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
             putString("n2_id", selectedNominee2?.id)
             putString("n2_name", selectedNominee2?.name)
             putString("amount", binding.etLoanAmount.text.toString())
-            putString("interestType", interestType)
             putString("disbursedDateIso", disbursedDateIso)
             putString("disbursedDateText", binding.tvDisbursedDate.text.toString())
             putString("repaymentMonthIso", repaymentMonthIso)
@@ -384,12 +366,6 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
         }
 
         binding.etLoanAmount.setText(prefs.getString("amount", ""))
-        
-        interestType = prefs.getString("interestType", null)
-        if (interestType != null && interestType != "Select Type") {
-            binding.tvInterestType.text = interestType
-            binding.tvInterestType.setTextColor(android.graphics.Color.parseColor("#101828"))
-        }
 
         disbursedDateIso = prefs.getString("disbursedDateIso", null)
         val dDateText = prefs.getString("disbursedDateText", null)

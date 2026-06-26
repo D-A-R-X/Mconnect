@@ -1453,6 +1453,11 @@ data class CpVisitLead(
     val city: String? = null,
     val preferredArea: String? = null,
     val followUpStatus: String? = null,
+    val manualProfile: CpVisitLeadManualProfile? = null,
+)
+
+data class CpVisitLeadManualProfile(
+    val clientName: String? = null,
 )
 
 data class CpVisitClient(

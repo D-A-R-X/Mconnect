@@ -548,12 +548,19 @@ class HomeViewModel : ViewModel() {
         // back to the dialer string ("abi") because clientPlace.name was
         // blank for fresh CPs. Same ordering applied to `leadName` so
         // downstream surfaces that fall back to leadName stay aligned.
-        val canonicalClient = this.client?.clientName?.takeIf { it.isNotBlank() }
-        val typedContact = this.lead?.contactName?.takeIf { it.isNotBlank() }
-        val placeLabel = this.clientPlace?.name?.takeIf { it.isNotBlank() }
-        val displayName = canonicalClient
+        val profileClient = this.lead?.manualProfile?.clientName.asClientNameOrNull()
+        val canonicalClient = this.client?.clientName.asClientNameOrNull()
+        val typedContact = this.lead?.contactName.asClientNameOrNull()
+        val placeLabel = this.clientPlace?.name.asClientNameOrNull()
+        val phoneLabel = this.lead?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: this.client?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: this.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
+        val resolvedClientName = profileClient
+            ?: canonicalClient
             ?: typedContact
             ?: placeLabel
+        val displayName = resolvedClientName
+            ?: phoneLabel
             ?: "CP visit"
         return TodayVisit(
             id = cpId,
@@ -568,8 +575,8 @@ class HomeViewModel : ViewModel() {
             placeLng = this.clientPlace?.lng,
             tripType = "client_place",
             clientPlaceVisitId = cpId,
-            leadName = canonicalClient ?: typedContact,
-            leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
+            leadName = resolvedClientName,
+            leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
             // CpVisitDetail.createdAt is the same monotonic ms value
             // Convex uses for `_creationTime` (the createCpVisitRows
@@ -595,6 +602,14 @@ class HomeViewModel : ViewModel() {
                 cpType = this.cpType,
             ),
         )
+    }
+
+    private fun String?.asClientNameOrNull(): String? {
+        val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val compact = value.filterNot { it.isWhitespace() || it == '+' || it == '-' || it == '(' || it == ')' }
+        val digitCount = value.count { it.isDigit() }
+        val phoneLike = digitCount >= 8 && compact.all { it.isDigit() }
+        return value.takeUnless { phoneLike }
     }
 
     private fun MmsFleetDriverTrip.toTodayVisitOrNull(): TodayVisit? {

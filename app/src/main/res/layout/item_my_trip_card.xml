@@ -315,7 +315,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/inter_regular"
-                        android:text="Time"
+                        android:text="Location"
                         android:textColor="#667085"
                         android:textSize="10sp" />
 

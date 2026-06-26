@@ -480,7 +480,11 @@ class HomeFragment : Fragment() {
         // body's left cell now shows the visit Type ("Direct CP" / "SV
         // confirmation CP" / etc.) instead of repeating the client name.
         bindTripCardHeader(avatar, staffName, staffRole, clientName)
-        time.text = formatVisitTimeOrDate(visit)
+        // "Location" cell — show the visit destination (address, else place name)
+        // instead of a time, per the trip-card design.
+        time.text = visit.placeAddress?.takeIf { it.isNotBlank() }
+            ?: visit.placeName?.takeIf { it.isNotBlank() }
+            ?: "Location not set"
         distance.text = if (visit.placeLat != null && visit.placeLng != null) "Open route" else "Not mapped"
 
         val isCpVisit = visit.clientPlaceVisitId != null
@@ -668,7 +672,10 @@ class HomeFragment : Fragment() {
         // Place name is already shown in the header — body Type cell calls
         // out the row kind ("Assigned place") instead of repeating it.
         title.text = "Assigned place"
-        time.text = "Available Today"
+        // "Location" cell — the assigned place's address (else its name).
+        time.text = place.address?.takeIf { it.isNotBlank() }
+            ?: place.name.takeIf { it.isNotBlank() }
+            ?: "Location not set"
         distance.text = if (place.lat != null && place.lng != null) "Open route" else "Not mapped"
         eta.text = "After start"
         statusText.text = "Ready"

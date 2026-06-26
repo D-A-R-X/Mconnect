@@ -205,54 +205,6 @@
                     android:importantForAutofill="no" />
             </LinearLayout>
 
-            <!-- Interest Type Field -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="Interest Type"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
-            <LinearLayout
-                android:id="@+id/btnSelectInterestType"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_loan_input_box"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="12dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:layout_marginBottom="16dp">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_loan_document"
-                    android:contentDescription="@null" />
-
-                <TextView
-                    android:id="@+id/tvInterestType"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/inter_regular"
-                    android:text="Select Type"
-                    android:textColor="#98A2B3"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_chevron_down"
-                    app:tint="#667085"
-                    android:contentDescription="@null" />
-            </LinearLayout>
-
             <!-- Disbursed Date Field -->
             <TextView
                 android:layout_width="match_parent"

@@ -230,7 +230,7 @@ class LoanDeskAdapter(
                 ROLE_SALES_TEAM -> {
                     layoutLegalActions.visibility = View.GONE
                     btnAssign.visibility = View.GONE
-                    
+
                     if (item.status == "Rejected") {
                         layoutRemarks.visibility = View.VISIBLE
                         tvRemarks.text = item.rejectionRemarks ?: "No remarks specified."
@@ -240,12 +240,13 @@ class LoanDeskAdapter(
                     } else {
                         layoutRemarks.visibility = View.GONE
                         btnRectify.visibility = View.GONE
-                        
-                        if (item.status == "Docs Pending") {
-                            itemView.setOnClickListener { onItemClick(item) }
-                        } else {
-                            itemView.setOnClickListener(null)
-                        }
+                        // Sales can always reopen the sheet — for Docs
+                        // Pending it's the upload flow; for App Received
+                        // it's review / re-upload while the case is
+                        // still in the unassigned pool. The fragment
+                        // decides view-vs-edit based on whether a Legal
+                        // Officer has been assigned.
+                        itemView.setOnClickListener { onItemClick(item) }
                     }
                 }
             }

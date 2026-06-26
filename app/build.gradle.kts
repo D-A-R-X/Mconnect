@@ -28,7 +28,7 @@ val googleMapsApiKey = envOrDefault(
                 )
             )
         )
-    )
+        )
 )
 // Point the Android client at the same Convex deployment the web admin uses.
 // Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
@@ -56,7 +56,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.manjugroups.m_connect"
+        applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -133,9 +133,10 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.camerax.video)
-    
+    // Google Play In-App Updates
+    implementation(libs.app.update)
+    implementation(libs.app.update.ktx)
 
-    
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

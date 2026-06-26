@@ -24,7 +24,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AssignLoanRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.LegalRejectLoanRequest
@@ -37,9 +36,6 @@ import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.File
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,7 +70,6 @@ class LoanDeskFragment : Fragment() {
     private lateinit var session: SessionManager
 
     private val api by lazy { GeoTrackApi.create() }
-    private val storage by lazy { ApiService.create() }
 
     private var currentRole: RoleMode = RoleMode.LEGAL_TEAM
     private var hasAccess: Boolean = true
@@ -157,7 +152,17 @@ class LoanDeskFragment : Fragment() {
 
         adapter = LoanDeskAdapter(
             items = filteredItems,
-            onItemClick = { item -> openUploadSheet(item, isViewMode = currentRole != RoleMode.SALES) },
+            onItemClick = { item ->
+                // Sales keeps edit access (preview + re-upload) until a
+                // Legal Officer is assigned — once `assignedTo` is set
+                // the case is in legal review and the docs are locked
+                // to view-only, both for Sales and for the other roles.
+                val locked = when (currentRole) {
+                    RoleMode.SALES -> !item.assignedTo.isNullOrBlank()
+                    RoleMode.LEGAL_MANAGER, RoleMode.LEGAL_TEAM -> true
+                }
+                openUploadSheet(item, isViewMode = locked)
+            },
             onAcceptClick = { item -> acceptCase(item) },
             onRejectClick = { item ->
                 LoanDeskRejectBottomSheet.newInstance(item.id)
@@ -331,6 +336,7 @@ class LoanDeskFragment : Fragment() {
         val preExistingStorageIds = checklist.map { it.storageId }
 
         val sheet = LoanDeskUploadBottomSheet.newInstance(
+            caseId = item.caseId.orEmpty(),
             requiredLabels = labels,
             preExistingFileNames = preExistingNames,
             preExistingStorageIds = preExistingStorageIds,
@@ -345,7 +351,10 @@ class LoanDeskFragment : Fragment() {
         sheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }
 
-    private fun submitLoanFromSales(item: LoanDeskItem, uploads: Map<String, String>) {
+    private fun submitLoanFromSales(
+        item: LoanDeskItem,
+        uploads: List<LoanDeskUploadBottomSheet.SubmittedDoc>,
+    ) {
         val caseId = item.caseId
         if (caseId.isNullOrBlank()) {
             toast("This row has no booking case linked")
@@ -355,26 +364,14 @@ class LoanDeskFragment : Fragment() {
             toast("Pick at least one document to upload")
             return
         }
+        // The sheet has already finished the cloud uploads — every
+        // entry in `uploads` carries a valid storageId — so submit is
+        // a single round trip.
+        val payload = uploads.map { u ->
+            SubmitLoanDocument(label = u.label, storageId = u.storageId, fileName = u.fileName)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Upload each cached file in sequence — sequential
-                // keeps memory bounded on low-end devices (parallel
-                // uploads would peak at N× the file size in heap).
-                // The map preserves the real labels from Post-sales
-                // Settings, so the server matches them by name when
-                // updating documentsChecklist on the loan case.
-                val uploaded = mutableListOf<SubmitLoanDocument>()
-                for ((label, name) in uploads) {
-                    val storageId = uploadCachedFile(name) ?: run {
-                        toast("Could not upload $name")
-                        return@launch
-                    }
-                    uploaded += SubmitLoanDocument(
-                        label = label,
-                        storageId = storageId,
-                        fileName = name,
-                    )
-                }
                 val resp = withContext(Dispatchers.IO) {
                     api.submitLoanRequest(
                         session.bearerToken,
@@ -382,7 +379,7 @@ class LoanDeskFragment : Fragment() {
                             caseId = caseId,
                             applicantType = item.applicantType ?: "salaried",
                             requestedAmount = null,
-                            documents = uploaded,
+                            documents = payload,
                         ),
                     )
                 }
@@ -394,33 +391,6 @@ class LoanDeskFragment : Fragment() {
                 refreshForRole()
             } catch (e: Exception) {
                 toast(e.message ?: "Submission failed")
-            }
-        }
-    }
-
-    private suspend fun uploadCachedFile(fileName: String): String? {
-        // LoanDeskUploadBottomSheet copies the picked file into
-        // cacheDir/loandesk/<displayName>. Read it back here, post to
-        // /api/storage/upload, return the storageId.
-        val folder = File(requireContext().cacheDir, "loandesk")
-        val file = File(folder, fileName)
-        if (!file.exists() || file.length() <= 0) return null
-        val mime = when (file.extension.lowercase(Locale.US)) {
-            "pdf" -> "application/pdf"
-            "png" -> "image/png"
-            "webp" -> "image/webp"
-            else -> "image/jpeg"
-        }
-        return withContext(Dispatchers.IO) {
-            try {
-                val bytes = file.readBytes()
-                val resp = storage.uploadStorageFile(
-                    token = session.bearerToken,
-                    body = bytes.toRequestBody(mime.toMediaTypeOrNull()),
-                )
-                if (resp.success) resp.storageId else null
-            } catch (_: Exception) {
-                null
             }
         }
     }
