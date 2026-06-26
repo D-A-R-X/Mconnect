@@ -52,10 +52,10 @@ class GeoTrackService : Service() {
         // (not for the whole shift) so an upload can finish even if the device
         // is dozing. The OS auto-releases after this timeout as a safety net.
         private const val SYNC_WAKELOCK_MS = 15_000L
-        // Foreground-notification refresh cadence. Bumped from 10s to 60s and
-        // gated on actual text change to stop waking the CPU + hitting the DB
-        // six times a minute for the entire shift.
-        private const val NOTIF_REFRESH_MS = 60_000L
+        // The persistent foreground notification is mandatory for a location
+        // service, but it shows a single clean, user-facing line — not the
+        // internal capture/sync/battery counters that used to leak to staff.
+        private const val TRACKING_NOTIF_TEXT = "Location tracking is active during your shift."
         private const val MAX_POINT_AGE_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
         // Unsent points hang around for 30 days so a multi-day offline
         // period (field staff with no signal) still flushes when the
@@ -122,7 +122,6 @@ class GeoTrackService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var syncJob: Job? = null
     private var heartbeatJob: Job? = null
-    private var notifJob: Job? = null
     private var cleanupJob: Job? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -243,7 +242,6 @@ class GeoTrackService : Service() {
 
         startSyncLoop()
         startHeartbeatLoop()
-        startNotifLoop()
         startCleanupLoop()
         registerNetworkCallback()
 
@@ -255,7 +253,7 @@ class GeoTrackService : Service() {
 
     private fun startForegroundSafely(): Boolean {
         return runCatching {
-            val notification = buildNotif("Starting tracking...")
+            val notification = buildNotif(TRACKING_NOTIF_TEXT)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
@@ -304,7 +302,6 @@ class GeoTrackService : Service() {
 
         syncJob?.cancel()
         heartbeatJob?.cancel()
-        notifJob?.cancel()
         cleanupJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
@@ -859,26 +856,13 @@ class GeoTrackService : Service() {
         }
     }
 
-    // ── Notification updates ──
-
-    private fun startNotifLoop() {
-        notifJob = serviceScope.launch {
-            var lastText: String? = null
-            while (isActive) {
-                delay(NOTIF_REFRESH_MS)
-                val pending = try { db.locationPointDao().getUnsentCount() } catch (_: Exception) { 0 }
-                val pendingEvents = try { db.pendingGeoTrackEventDao().getPendingCount() } catch (_: Exception) { 0 }
-                val battery = getBatteryLevel()
-                val text = "${pointsCaptured.get()} captured | ${pointsSynced.get()} saved | $pending pending GPS | $pendingEvents pending alerts | ${battery}%"
-                // Skip redundant notification rebuilds — only push when the
-                // text actually changed.
-                if (text != lastText) {
-                    updateNotif(text)
-                    lastText = text
-                }
-            }
-        }
-    }
+    // ── Notification ──
+    //
+    // The foreground notification now shows a single static, user-facing line
+    // (TRACKING_NOTIF_TEXT) set when we enter the foreground state. There is no
+    // periodic update loop: it used to rewrite the notification every minute
+    // with internal capture/sync/battery counters, which both leaked debug
+    // detail to staff and woke the CPU + hit the DB on every tick.
 
     // ── Tamper ──
 
@@ -1030,10 +1014,6 @@ class GeoTrackService : Service() {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
-
-    private fun updateNotif(text: String) {
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, buildNotif(text))
     }
 
     // ── Utils ──
