@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import coil.load
 import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
@@ -68,6 +70,23 @@ class FinesDeductionsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.headerBar.setPadding(
+                binding.headerBar.paddingLeft,
+                sysBars.top,
+                binding.headerBar.paddingRight,
+                binding.headerBar.paddingBottom
+            )
+            binding.btnCreateFineContainer.setPadding(
+                binding.btnCreateFineContainer.paddingLeft,
+                binding.btnCreateFineContainer.paddingTop,
+                binding.btnCreateFineContainer.paddingRight,
+                sysBars.bottom
+            )
+            insets
+        }
 
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()

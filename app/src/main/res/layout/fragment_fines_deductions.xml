@@ -10,7 +10,8 @@
     <LinearLayout
         android:id="@+id/headerBar"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="wrap_content"
+        android:minHeight="56dp"
         android:background="#FFFFFF"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -73,12 +74,11 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:background="@drawable/bg_leave_balance_card"
+                    android:background="@drawable/bg_fines_search_bar"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:elevation="1dp">
+                    android:layout_marginBottom="16dp">
 
                     <EditText
                         android:id="@+id/etSearchEmployee"
