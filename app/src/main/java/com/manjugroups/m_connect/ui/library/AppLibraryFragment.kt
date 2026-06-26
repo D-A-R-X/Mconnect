@@ -356,6 +356,10 @@ class AppLibraryFragment : Fragment() {
             allowed = hasAny(listOf("attendance.view", "attendance.viewAll")),
         ) { openScreen(AttendanceHistoryFragment()) }
         bindIamEntry(
+            row = binding.itemHrFines,
+            allowed = true,
+        ) { openScreen(com.manjugroups.m_connect.ui.hr.FinesDeductionsFragment()) }
+        bindIamEntry(
             row = binding.itemHrLeave,
             allowed = hasAny(listOf("leaves.view", "leaves.viewAll", "leaves.approve")),
         ) { openScreen(LeavesFragment()) }
@@ -606,6 +610,7 @@ class AppLibraryFragment : Fragment() {
                 Filter.HR, binding.cardHr,
                 listOf(
                     R.id.itemHrAttendance,
+                    R.id.itemHrFines,
                     R.id.itemHrLeave,
                     R.id.itemHrPermissions,
                     R.id.itemHrLoans,

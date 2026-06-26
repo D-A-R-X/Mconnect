@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_leave_history_card"
+    android:elevation="1dp"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:gravity="center_vertical">
+
+    <!-- Avatar Image -->
+    <ImageView
+        android:id="@+id/ivEmployeeAvatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:scaleType="centerCrop"
+        android:src="@drawable/bg_attendance_avatar_placeholder" />
+
+    <!-- Details -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvEmployeeName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Mari Muthu.R"
+            android:textColor="#1D2939"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvFineDetails"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Sales Department\nGrooming"
+            android:textColor="#667085"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <!-- Right Side: Amount, Status, and Date -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <!-- Cash Stack & Amount -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_cash_bills" />
+
+            <TextView
+                android:id="@+id/tvFineAmount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:fontFamily="@font/inter_bold"
+                android:text="₹ 500"
+                android:textColor="#1D2939"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <!-- Status Active Badge -->
+        <TextView
+            android:id="@+id/tvFineStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_badge_success"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="2dp"
+            android:text="Active"
+            android:textColor="#22C55E"
+            android:textSize="11sp" />
+
+        <!-- Date -->
+        <TextView
+            android:id="@+id/tvFineDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="22 May 2026"
+            android:textColor="#98A2B3"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+</LinearLayout>

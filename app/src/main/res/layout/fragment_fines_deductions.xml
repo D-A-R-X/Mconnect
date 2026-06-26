@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://tools.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F6FA">
+
+    <!-- Header bar -->
+    <LinearLayout
+        android:id="@+id/headerBar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#FFFFFF"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_circle_blue_light"
+            android:clickable="true"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_left"
+            app:tint="#0B61CA" />
+
+        <TextView
+            android:id="@+id/tvHeaderTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:fontFamily="@font/inter_bold"
+            android:text="Late Attendance"
+            android:textColor="#1D2939"
+            android:textSize="18sp"
+            android:layout_marginEnd="32dp" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/headerDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7EC"
+        app:layout_constraintTop_toBottomOf="@id/headerBar" />
+
+    <!-- Swipe Refresh & List Content -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/finesRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/btnCreateFineContainer"
+        app:layout_constraintTop_toBottomOf="@id/headerDivider">
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Search Employee Bar -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_leave_balance_card"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:layout_marginBottom="16dp"
+                    android:elevation="1dp">
+
+                    <EditText
+                        android:id="@+id/etSearchEmployee"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Search Employee"
+                        android:textColorHint="#98A2B3"
+                        android:textColor="#1D2939"
+                        android:textSize="14sp"
+                        android:maxLines="1"
+                        android:inputType="text" />
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chat_search"
+                        app:tint="#475467" />
+                </LinearLayout>
+
+                <!-- Fines List -->
+                <LinearLayout
+                    android:id="@+id/llFinesList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- Empty State View -->
+                <LinearLayout
+                    android:id="@+id/llEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="64dp"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="32dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:src="@drawable/ic_leave_empty"
+                        app:tint="#98A2B3" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="No Fines Recorded"
+                        android:textColor="#344054"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center"
+                        android:text="Search another name or add a new fine."
+                        android:textColor="#667085"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <!-- Bottom Create Fine button container -->
+    <FrameLayout
+        android:id="@+id/btnCreateFineContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#F5F6FA"
+        android:padding="16dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <android.widget.Button
+            android:id="@+id/btnCreateFine"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_attendance_btn_primary"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Create Fine"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
