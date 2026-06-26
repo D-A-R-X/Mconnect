@@ -326,6 +326,15 @@ class AppLibraryFragment : Fragment() {
             )
         }
         binding.libraryWhitePanel.background = whiteCardBg
+
+        binding.scrollLibrary.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            val dy = scrollY - oldScrollY
+            if (dy > 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
+            } else if (scrollY <= 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+            }
+        })
     }
 
     private fun setupClickActions() {
@@ -476,6 +485,12 @@ class AppLibraryFragment : Fragment() {
         ) {
             openScreen(MyTripsFragment())
         }
+        bindIamEntry(
+            row = binding.itemFleetAdminFleet,
+            allowed = true,
+        ) {
+            openScreen(com.manjugroups.m_connect.ui.library.AdminFleetContainerFragment())
+        }
 
         // ── Post Sales ────────────────────────────────────────────────────
         bindIamEntry(
@@ -618,7 +633,7 @@ class AppLibraryFragment : Fragment() {
             ),
             Triple(
                 Filter.FLEET, binding.cardFleet,
-                listOf(R.id.itemFleetMyTrips),
+                listOf(R.id.itemFleetMyTrips, R.id.itemFleetAdminFleet),
             ),
             Triple(
                 Filter.SALES, binding.cardSales,

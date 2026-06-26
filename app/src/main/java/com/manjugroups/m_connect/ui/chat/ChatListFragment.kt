@@ -85,6 +85,18 @@ class ChatListFragment : Fragment() {
         session = SessionManager(requireContext())
 
         setupRecyclerView()
+
+        binding.rvChatList.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                if (dy > 10) {
+                    (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
+                } else if (!recyclerView.canScrollVertically(-1)) {
+                    (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+                }
+            }
+        })
+
         setupHeader()
         setupActions()
 

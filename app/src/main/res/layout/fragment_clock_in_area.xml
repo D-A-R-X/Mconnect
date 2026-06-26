@@ -363,4 +363,50 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Translucent Loading Overlay -->
+    <FrameLayout
+        android:id="@+id/layoutPunchLoading"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="260dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_attendance_loading_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingVertical="32dp">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="#1BCA0B" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Securing Location"
+                android:textColor="#101828"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:text="Fetching high-accuracy GPS details for clock-in..."
+                android:textColor="#667085"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </FrameLayout>
+
 </FrameLayout>

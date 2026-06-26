@@ -215,6 +215,15 @@ class HrDashboardFragment : Fragment() {
         session = SessionManager(requireContext())
         updateAttendanceLoadingUi()
 
+        binding.hrScroll.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            val dy = scrollY - oldScrollY
+            if (dy > 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
+            } else if (scrollY <= 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+            }
+        })
+
         binding.btnClockInNow.setOnClickListener {
             // Button stays active visually so the user can always reach
             // for it. If they're inside their home fence, refuse the tap

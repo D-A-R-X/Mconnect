@@ -154,9 +154,12 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             return@registerForActivityResult
         }
 
+        binding.layoutPunchLoading.visibility = View.VISIBLE
+
         viewLifecycleOwner.lifecycleScope.launch {
             val location = fetchLocationOrNull()
             if (location == null) {
+                binding.layoutPunchLoading.visibility = View.GONE
                 isLaunchingCamera = false
                 Toast.makeText(
                     requireContext(),
@@ -167,6 +170,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             }
             val address = resolveAddress(location)
             isLaunchingCamera = false
+            binding.layoutPunchLoading.visibility = View.GONE
             navigateToPunchDetail(
                 mode = mode,
                 photoPath = imageFile.absolutePath,

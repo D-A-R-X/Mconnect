@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private var cachedTopInset = 0
     private var statusBarFullBleed = false
     private var lastTrackingResumeSyncMs = 0L
+    private var isBottomNavVisible = true
     // Periodic IAM polling job — runs while the activity is in the
     // foreground so a permission flip on the web reaches gated UI
     // (App Library tiles, HR review buttons, etc.) within ~20s even
@@ -383,15 +384,62 @@ class MainActivity : AppCompatActivity() {
     fun setTabBarVisible(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
         val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
-        if (tabBarContainer.visibility == target) return
+        if (tabBarContainer.visibility == target) {
+            if (visible) {
+                tabBarContainer.translationY = 0f
+                tabBarContainer.alpha = 1f
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.translationY = 0f
+                    bottomNavFadeOverlay.alpha = 1f
+                }
+                isBottomNavVisible = true
+            }
+            return
+        }
         tabBarContainer.visibility = target
         if (::bottomNavFadeOverlay.isInitialized) {
             bottomNavFadeOverlay.visibility = target
+        }
+        if (visible) {
+            tabBarContainer.translationY = 0f
+            tabBarContainer.alpha = 1f
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.translationY = 0f
+                bottomNavFadeOverlay.alpha = 1f
+            }
+            isBottomNavVisible = true
         }
         // Re-dispatch insets so fragmentContainer.bottom padding flips between
         // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
         if (::mainRoot.isInitialized) {
             ViewCompat.requestApplyInsets(mainRoot)
+        }
+    }
+
+    fun setBottomNavScrollState(visible: Boolean) {
+        if (!::tabBarContainer.isInitialized) return
+        if (tabBarContainer.visibility != android.view.View.VISIBLE && visible) return
+        if (isBottomNavVisible == visible) return
+        isBottomNavVisible = visible
+
+        val translationDistance = 150f * resources.displayMetrics.density
+        val translationY = if (visible) 0f else translationDistance
+        val alpha = if (visible) 1f else 0f
+
+        tabBarContainer.animate()
+            .translationY(translationY)
+            .alpha(alpha)
+            .setDuration(400)
+            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+            .start()
+
+        if (::bottomNavFadeOverlay.isInitialized) {
+            bottomNavFadeOverlay.animate()
+                .translationY(translationY)
+                .alpha(alpha)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                .start()
         }
     }
 

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="24dp">
+
+    <!-- Bottom Sheet Drag Handle -->
+    <View
+        android:layout_width="48dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="#D1D5DB" />
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/tvManageRatesTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Manage Rates"
+        android:textColor="#111827"
+        android:textSize="18sp" />
+
+    <!-- Subtitle -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Information about Rates System"
+        android:textColor="#6B7280"
+        android:textSize="13sp" />
+
+    <!-- Per km amount label -->
+    <TextView
+        android:id="@+id/tvLabelPerKm"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_semibold"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <!-- Per km amount input -->
+    <EditText
+        android:id="@+id/etPerKmAmount"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_rate"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Enter amount"
+        android:inputType="numberDecimal"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
+    <!-- Package amount label -->
+    <TextView
+        android:id="@+id/tvLabelPackage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_semibold"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <!-- Package amount input -->
+    <EditText
+        android:id="@+id/etPackageAmount"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_rate"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Enter amount"
+        android:inputType="numberDecimal"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
+    <!-- Save Button -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnSaveRates"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="32dp"
+        android:background="@drawable/bg_allocate_button_green"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Save"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
+
+</LinearLayout>
