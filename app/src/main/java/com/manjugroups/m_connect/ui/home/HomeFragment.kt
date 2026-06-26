@@ -46,7 +46,7 @@ class HomeFragment : Fragment() {
             "This space will be updated as new meetings are added!"
 
     private var pendingEntryAnimation = true
-    private val bannerFloatAnimators = mutableListOf<android.animation.ObjectAnimator>()
+
     // True once today's visits have resolved at least once. Gates the
     // visit skeleton so a refresh / attendance update never blanks the
     // trip card back to a skeleton or the empty state.
@@ -75,9 +75,12 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        applyStatusBarInset()
-        setupHeader()
-        setupActions()
+        binding.homeHeader.setup(this, onDesignationChanged = {
+            setupRoleAdaptiveView()
+            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
+                renderVisitCard(state)
+            }
+        })
         setupPullToRefresh()
         setupHomeScrollAnimation()
         collectState()
@@ -143,7 +146,7 @@ class HomeFragment : Fragment() {
     private fun setupHomeScrollAnimation() {
         val density = binding.root.resources.displayMetrics.density
         val maxCornerRadiusPx = 24f * density
-        val headerBg = binding.homeHeaderContainer
+        val headerBg = binding.homeHeader.getHeaderBinding().homeHeaderContainer
             .applyShrinkableBlueHeaderBackground()
         headerBg.setBottomCornerRadius(maxCornerRadiusPx)
 
@@ -171,26 +174,19 @@ class HomeFragment : Fragment() {
             )
         }
         binding.whiteContentArea.background = whiteCardBg
-    }
 
-    private fun applyStatusBarInset() {
-        val basePaddingTop = binding.homeProfileRow.paddingTop
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeHeaderContainer) { _, insets ->
-            val b = _binding ?: return@setOnApplyWindowInsetsListener insets
-            val topInset = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
-            b.homeProfileRow.setPadding(
-                b.homeProfileRow.paddingStart,
-                basePaddingTop + topInset,
-                b.homeProfileRow.paddingEnd,
-                b.homeProfileRow.paddingBottom
-            )
-            insets
-        }
-        androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
+        binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            val dy = scrollY - oldScrollY
+            if (dy > 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
+            } else if (scrollY <= 10) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+            }
+        })
     }
 
     private fun startBannerAnimation() {
-        val anim = binding.ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable
+        val anim = binding.homeHeader.getHeaderBinding().ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable
         anim?.start()
     }
 
@@ -210,12 +206,16 @@ class HomeFragment : Fragment() {
         // appears here too. ProfilePhotos.resolve rebuilds the serve URL
         // from the current BASE_URL on every render, so cached photos
         // never stick to an old domain.
-        applyAvatarPhoto(session.userPhotoUrl)
-        loadHeaderDesignation()
+        binding.homeHeader.setup(this, onDesignationChanged = {
+            setupRoleAdaptiveView()
+            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
+                renderVisitCard(state)
+            }
+        })
         // Replay the stagger when returning to the Home tab (either from a child
         // fragment via back, or after pop-back from another tab via show/hide).
         if (_binding != null && binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { playHomeEntryAnimation() }
+            binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
         }
         startBannerAnimation()
     }
@@ -223,227 +223,14 @@ class HomeFragment : Fragment() {
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (hidden) {
-            stopBannerFloatingAnimation()
+            binding.homeHeader.stopFloatingAnimation()
         } else if (_binding != null &&
             binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { playHomeEntryAnimation() }
+            binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
         }
     }
 
-    private fun playHomeEntryAnimation() {
-        if (_binding == null) return
 
-        // Cancel any in-flight property animations on banner pieces.
-        val views = listOf(
-            binding.homeProfileRow, binding.whiteContentArea,
-            binding.tvSummaryTitle, binding.tvSummarySubtitle, binding.btnViewSummary,
-            binding.ivBannerMobile, binding.ivBannerProgress, binding.ivBannerSuitcase,
-            binding.ivBannerGlitter
-        )
-        views.forEach { it.animate().cancel() }
-        stopBannerFloatingAnimation()
-
-        // Reset transforms so the entry animation is deterministic on replays.
-        views.forEach {
-            it.translationY = 0f
-            it.translationX = 0f
-            it.alpha = 1f
-            it.scaleX = 1f
-            it.scaleY = 1f
-        }
-
-        val ctx = binding.root.context
-        val density = ctx.resources.displayMetrics.density
-        val slideLeftPx = -30f * density   // text slides in from the left (-30dp)
-
-        val easeOut = android.view.animation.DecelerateInterpolator(2f)
-        val emphasized = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
-
-        // 1. Profile row fade/slide down (Frame 1 → Frame 2)
-        binding.homeProfileRow.alpha = 0f
-        binding.homeProfileRow.translationY = -16f * density
-        binding.homeProfileRow.animate()
-            .alpha(1f).translationY(0f)
-            .setDuration(360L)
-            .setInterpolator(easeOut)
-            .start()
-
-        // 2. White curtain descends to reveal the banner (Frame 1 → Frame 3 reveal)
-        // Starts immediately so the banner is exposed by the time pieces enter their final spots.
-        binding.whiteContentArea.animate().cancel()
-        binding.whiteContentArea.translationY = -150f * density
-        binding.whiteContentArea.animate()
-            .translationY(0f)
-            .setDuration(720L)
-            .setInterpolator(easeOut)
-            .start()
-
-        // 3. Banner text slides in from the left while the curtain is descending
-        animateInFromLeft(binding.tvSummaryTitle, slideLeftPx, 120L, 380L, emphasized)
-        animateInFromLeft(binding.tvSummarySubtitle, slideLeftPx, 200L, 380L, emphasized)
-        animateInFromLeft(binding.btnViewSummary, slideLeftPx, 300L, 380L, emphasized)
-
-        // 4. Right-side illustrations stagger in (start earlier so they're settled by ~720ms when curtain lands)
-        val rightSide = listOf(
-            binding.ivBannerGlitter to 160L,   // back layer first
-            binding.ivBannerMobile to 200L,
-            binding.ivBannerProgress to 280L,
-            binding.ivBannerSuitcase to 360L
-        )
-        var lastDelay = 0L
-        rightSide.forEach { (v, delay) ->
-            v.alpha = 0f
-            v.translationX = 32f * density
-            v.translationY = 12f * density
-            v.scaleX = 0.92f
-            v.scaleY = 0.92f
-            v.animate()
-                .alpha(1f).translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
-                .setStartDelay(delay)
-                .setDuration(420L)
-                .setInterpolator(easeOut)
-                .start()
-            if (delay > lastDelay) lastDelay = delay
-        }
-
-        // Kick off the continuous floating loop once the cluster has landed.
-        binding.root.postDelayed({
-            if (_binding != null) startBannerFloatingAnimation()
-        }, lastDelay + 480L)
-    }
-
-    private fun animateInFromLeft(
-        v: View,
-        startX: Float,
-        delay: Long,
-        duration: Long,
-        interpolator: android.view.animation.Interpolator
-    ) {
-        v.alpha = 0f
-        v.translationX = startX
-        v.animate()
-            .alpha(1f).translationX(0f)
-            .setStartDelay(delay)
-            .setDuration(duration)
-            .setInterpolator(interpolator)
-            .start()
-    }
-
-    private fun startBannerFloatingAnimation() {
-        if (_binding == null) return
-        stopBannerFloatingAnimation()
-        val density = binding.root.context.resources.displayMetrics.density
-        // (view, amplitudeDp, delayMs) — mirrors the reference's y bobbing keyframes
-        // and per-element delays. Mobile, progress, and suitcase each bob with 
-        // a different rhythm.
-        val floats = listOf(
-            Triple(binding.ivBannerMobile, -6f, 750L),
-            Triple(binding.ivBannerProgress, 5f, 500L),
-            Triple(binding.ivBannerSuitcase, -5f, 1500L),
-            Triple(binding.ivBannerGlitter, 4f, 1000L)
-        )
-        floats.forEach { (view, amplitudeDp, startDelay) ->
-            val animator = android.animation.ObjectAnimator.ofFloat(
-                view, View.TRANSLATION_Y, 0f, amplitudeDp * density
-            ).apply {
-                duration = 2800L
-                this.startDelay = startDelay
-                repeatCount = android.animation.ValueAnimator.INFINITE
-                repeatMode = android.animation.ValueAnimator.REVERSE
-                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-            }
-            animator.start()
-            bannerFloatAnimators.add(animator)
-        }
-    }
-
-    private fun stopBannerFloatingAnimation() {
-        bannerFloatAnimators.forEach { it.cancel() }
-        bannerFloatAnimators.clear()
-    }
-
-    private fun setupHeader() {
-        val rawName = (session.userName ?: "User").ifBlank { "User" }
-        val name = rawName.lowercase().split(" ").filter { it.isNotBlank() }
-            .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
-        binding.tvHeaderName.text = name
-        binding.tvAvatarInitial.text = name.first().uppercase()
-        applyAvatarPhoto(session.userPhotoUrl)
-        binding.tvHeaderRole.text =
-            if (session.isAdmin) "Administrator" else "Staff"
-        loadHeaderDesignation()
-    }
-
-    private fun applyAvatarPhoto(url: String?) {
-        val resolved = ProfilePhotos.resolve(url)
-        if (resolved == null) {
-            binding.ivHomeAvatar.setImageDrawable(null)
-            binding.tvAvatarInitial.visibility = View.VISIBLE
-            return
-        }
-        binding.tvAvatarInitial.visibility = View.GONE
-        binding.ivHomeAvatar.load(resolved) {
-            crossfade(true)
-            transformations(CircleCropTransformation())
-        }
-    }
-
-    private fun loadHeaderDesignation() {
-        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.getStaffDetail(session.bearerToken, staffId)
-                val staff = resp.staff ?: return@launch
-                if (_binding == null) return@launch
-                val role = listOfNotNull(
-                    staff.designation?.takeIf { it.isNotBlank() },
-                    staff.department?.takeIf { it.isNotBlank() },
-                ).joinToString(" • ")
-                if (role.isNotBlank()) binding.tvHeaderRole.text = role
-                // Backfill designation for sessions that pre-date the
-                // designation cache (older installs that logged in
-                // before this field existed). SessionManager.isDriverMode
-                // reads this directly, so refreshing on Home open keeps
-                // the driver/executive view aligned with the staff
-                // record without forcing a re-login.
-                staff.designation?.takeIf { it.isNotBlank() }?.let {
-                    val previous = session.isDriverMode
-                    session.designation = it
-                    // If this is the first time we learnt the user is a
-                    // Driver (or stopped being one), re-apply the tab
-                    // visibility right away so the screen reshapes
-                    // without waiting for a tab switch.
-                    if (previous != session.isDriverMode) {
-                        setupRoleAdaptiveView()
-                        (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
-                            renderVisitCard(state)
-                        }
-                    }
-                }
-                staff.photo?.takeIf { it.isNotBlank() }?.let { photo ->
-                    session.userPhotoUrl = photo
-                    applyAvatarPhoto(photo)
-                }
-            } catch (_: Exception) {
-                // Keep the fallback; not worth a toast on a soft header field.
-            }
-        }
-    }
-
-    private fun setupActions() {
-        binding.btnHomeProfile.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, ProfileFragment())
-                .addToBackStack(null)
-                .commit()
-        }
-        binding.btnHomeBell.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, NotificationsFragment())
-                .addToBackStack(null)
-                .commit()
-        }
-    }
 
     private fun collectState() {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -485,7 +272,7 @@ class HomeFragment : Fragment() {
                             }
                             if (pendingEntryAnimation) {
                                 pendingEntryAnimation = false
-                                binding.homeContent.post { playHomeEntryAnimation() }
+                                binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
                             }
                         }
 
@@ -493,7 +280,7 @@ class HomeFragment : Fragment() {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeRefresh.dismissRefresh()
                             binding.homeStickyColumn.visibility = View.VISIBLE
-                            binding.tvSummarySubtitle.text = "Today task & presence activity"
+                            binding.homeHeader.setBannerSubtitle("Today task & presence activity")
                             binding.tvVisitCountBadge.visibility = View.GONE
                             binding.visitListContent.visibility = View.GONE
                             binding.visitEmptyContent.visibility = View.VISIBLE
@@ -1104,8 +891,7 @@ class HomeFragment : Fragment() {
             }.onSuccess { response ->
                 if (_binding == null) return@onSuccess
                 val unreadCount = response.unreadCount
-                binding.tvBellBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
-                binding.tvBellBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+                binding.homeHeader.setBellBadgeCount(unreadCount)
             }
         }
     }
@@ -1172,7 +958,7 @@ class HomeFragment : Fragment() {
     override fun onDestroyView() {
         cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
-        stopBannerFloatingAnimation()
+        binding.homeHeader.stopFloatingAnimation()
         super.onDestroyView()
         _binding = null
     }

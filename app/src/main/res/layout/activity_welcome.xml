@@ -129,7 +129,7 @@
             android:layout_width="match_parent"
             android:layout_height="28dp" />
 
-        <!-- Next button — Figma: gradient #1ACA0B→#3D9D02, 48dp, full radius -->
+        <!-- Next button — Figma: gradient #1BCA0B→#3D9D02, 48dp, full radius -->
         <FrameLayout
             android:id="@+id/btnOnboardNext"
             android:layout_width="match_parent"
@@ -167,7 +167,7 @@
                 android:layout_gravity="center"
                 android:fontFamily="@font/inter_semibold"
                 android:text="Skip"
-                android:textColor="#1ACA0B"
+                android:textColor="#1BCA0B"
                 android:textSize="14sp" />
 
         </FrameLayout>

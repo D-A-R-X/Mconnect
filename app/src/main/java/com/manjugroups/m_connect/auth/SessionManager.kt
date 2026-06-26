@@ -77,6 +77,14 @@ class SessionManager(context: Context) {
         get() = getCachedString(KEY_TOKEN, null)
         set(value) = setCachedString(KEY_TOKEN, value)
 
+    var ratePerKm: String?
+        get() = getCachedString(KEY_RATE_PER_KM, "")
+        set(value) = setCachedString(KEY_RATE_PER_KM, value)
+
+    var ratePackage: String?
+        get() = getCachedString(KEY_RATE_PACKAGE, "")
+        set(value) = setCachedString(KEY_RATE_PACKAGE, value)
+
     var userName: String?
         get() = getCachedString(KEY_USER_NAME, null)
         set(value) = setCachedString(KEY_USER_NAME, value)
@@ -476,5 +484,7 @@ class SessionManager(context: Context) {
         private const val KEY_ON_DUTY_VEHICLE_OWNERSHIP = "on_duty_vehicle_ownership"
         private const val KEY_ON_DUTY_VEHICLE_TYPE = "on_duty_vehicle_type"
         private const val KEY_ON_DUTY_TRIP_ID = "on_duty_trip_id"
+        private const val KEY_RATE_PER_KM = "rate_per_km"
+        private const val KEY_RATE_PACKAGE = "rate_package"
     }
 }

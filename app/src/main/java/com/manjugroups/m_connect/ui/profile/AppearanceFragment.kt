@@ -19,6 +19,20 @@ class AppearanceFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        val header = view.findViewById<View>(R.id.appearanceHeader)
+        if (header != null) {
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(header) { v, insets ->
+                val sys = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                v.setPadding(v.paddingLeft, sys.top, v.paddingRight, v.paddingBottom)
+                val lp = v.layoutParams
+                lp.height = (56 * resources.displayMetrics.density).toInt() + sys.top
+                v.layoutParams = lp
+                insets
+            }
+            androidx.core.view.ViewCompat.requestApplyInsets(header)
+        }
+
         view.findViewById<View>(R.id.btnAppearanceBack).setOnClickListener {
             parentFragmentManager.popBackStackImmediate()
         }
