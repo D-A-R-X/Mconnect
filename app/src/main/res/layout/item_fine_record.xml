@@ -7,7 +7,8 @@
     android:background="@drawable/bg_leave_history_card"
     android:elevation="1dp"
     android:orientation="horizontal"
-    android:padding="16dp"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
     android:gravity="center_vertical">
 
     <!-- Avatar Image -->
@@ -82,7 +83,7 @@
             android:id="@+id/tvFineStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:background="@drawable/bg_badge_success"
             android:fontFamily="@font/inter_semibold"
             android:paddingHorizontal="10dp"
@@ -96,7 +97,7 @@
             android:id="@+id/tvFineDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:fontFamily="@font/inter_regular"
             android:text="22 May 2026"
             android:textColor="#98A2B3"

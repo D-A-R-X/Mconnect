@@ -61,9 +61,9 @@
         android:paddingHorizontal="14dp">
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_sheet_employee" />
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_sheet_employee_outline" />
 
         <TextView
             android:id="@+id/tvSelectedEmployee"
@@ -103,9 +103,9 @@
         android:paddingHorizontal="14dp">
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_apps_fines" />
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_sheet_fines_outline" />
 
         <EditText
             android:id="@+id/etFineType"
@@ -142,9 +142,9 @@
         android:paddingHorizontal="14dp">
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_sheet_amount" />
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_sheet_amount_outline" />
 
         <EditText
             android:id="@+id/etFineAmount"
@@ -222,10 +222,9 @@
 
         <ImageView
             android:id="@+id/ivUploadedPreview"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_image_outline"
-            app:tint="#0B61CA" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_sheet_upload_outline" />
 
         <TextView
             android:id="@+id/tvUploadTitle"

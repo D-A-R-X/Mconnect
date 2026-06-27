@@ -73,12 +73,6 @@ class FinesDeductionsFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            binding.headerBar.setPadding(
-                binding.headerBar.paddingLeft,
-                sysBars.top,
-                binding.headerBar.paddingRight,
-                binding.headerBar.paddingBottom
-            )
             binding.btnCreateFineContainer.setPadding(
                 binding.btnCreateFineContainer.paddingLeft,
                 binding.btnCreateFineContainer.paddingTop,
@@ -197,7 +191,15 @@ class FinesDeductionsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(android.graphics.Color.WHITE, true)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+    }
+
+    override fun onPause() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            android.graphics.Color.parseColor("#FEFEFE"), true
+        )
+        super.onPause()
     }
 
     override fun onDestroyView() {
