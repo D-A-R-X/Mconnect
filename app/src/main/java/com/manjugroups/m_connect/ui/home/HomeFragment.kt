@@ -196,8 +196,10 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Defensive: restore tab bar in case a child fragment hid it.
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        // Defensive: restore tab bar in case a child fragment hid it, unless onboarding or QR panel is visible.
+        val showTabBar = session.hasSeenEdgeQrTooltip && 
+                (_binding == null || binding.edgeQrPanel.visibility != android.view.View.VISIBLE)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(showTabBar)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
             Color.parseColor("#0B61CA"),
             false,
