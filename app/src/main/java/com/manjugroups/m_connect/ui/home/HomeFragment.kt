@@ -113,6 +113,7 @@ class HomeFragment : Fragment() {
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         }
+        setupEdgeDragQr()
     }
 
     private fun setupPullToRefresh() {
@@ -960,6 +961,92 @@ class HomeFragment : Fragment() {
     private fun setupRoleAdaptiveView() {
         binding.layoutDriverTabs.visibility =
             if (session.isDriverMode) View.VISIBLE else View.GONE
+    }
+
+    private fun setupEdgeDragQr() {
+        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        // Initialize the panel content offscreen to the right
+        binding.panelContent.translationX = screenWidth
+
+        var startX = 0f
+        var downTime = 0L
+
+        binding.edgeDragHandle.setOnTouchListener { v, event ->
+            if (_binding == null) return@setOnTouchListener false
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    startX = event.rawX
+                    downTime = System.currentTimeMillis()
+                    binding.edgeQrPanel.visibility = android.view.View.VISIBLE
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - startX
+                    val dragDist = -dx
+                    if (dragDist > 0) {
+                        binding.panelBlurBg.alpha = (dragDist / 300f).coerceIn(0f, 1f)
+                        binding.panelContent.translationX = (screenWidth - dragDist).coerceAtLeast(0f)
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    val dx = event.rawX - startX
+                    val dragDist = -dx
+                    val duration = System.currentTimeMillis() - downTime
+                    
+                    if (dragDist < 15 && duration < 200) {
+                        // Click / Tap detected
+                        animatePanel(true)
+                    } else if (dragDist > 120) {
+                        // Dragged past threshold
+                        animatePanel(true)
+                    } else {
+                        // Cancel / Spring back
+                        animatePanel(false)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        binding.btnOverlayClose.setOnClickListener {
+            animatePanel(false)
+        }
+
+        binding.panelBlurBg.setOnClickListener {
+            animatePanel(false)
+        }
+
+        binding.btnOverlayQr.setOnClickListener {
+            animatePanel(false)
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+    }
+
+    private fun animatePanel(open: Boolean) {
+        if (_binding == null) return
+        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        if (open) {
+            binding.edgeQrPanel.visibility = android.view.View.VISIBLE
+            binding.panelBlurBg.animate().alpha(1f).setDuration(250).start()
+            binding.panelContent.animate().translationX(0f).setDuration(250).start()
+            binding.edgeDragHandle.animate().translationX(binding.edgeDragHandle.width.toFloat()).setDuration(250).start()
+        } else {
+            binding.panelBlurBg.animate().alpha(0f).setDuration(250).start()
+            binding.edgeDragHandle.animate().translationX(0f).setDuration(250).start()
+            binding.panelContent.animate().translationX(screenWidth).setDuration(250)
+                .withEndAction {
+                    if (_binding != null) {
+                        binding.edgeQrPanel.visibility = android.view.View.GONE
+                    }
+                }
+                .start()
+        }
     }
 
     override fun onDestroyView() {
