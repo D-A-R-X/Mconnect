@@ -311,8 +311,21 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     binding.btnSubmitFine.text = "Uploading Photo..."
+                    val compressedFile = withContext(Dispatchers.IO) {
+                        compressImage(file)
+                    }
                     val bytes = withContext(Dispatchers.IO) {
-                        file.readBytes()
+                        if (compressedFile.exists()) compressedFile.readBytes() else null
+                    }
+                    // Clean up temp compressed file
+                    try {
+                        if (compressedFile.exists() && compressedFile != file) compressedFile.delete()
+                    } catch (_: Exception) {}
+
+                    if (bytes == null) {
+                        Toast.makeText(requireContext(), "Failed to read photo", Toast.LENGTH_SHORT).show()
+                        resetSubmitButton()
+                        return@launch
                     }
                     val storageId = uploadBytesToServer(bytes)
                     if (storageId != null) {
@@ -329,9 +342,27 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     binding.btnSubmitFine.text = "Uploading Photo..."
-                    val bytes = withContext(Dispatchers.IO) {
-                        requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    val tempFile = withContext(Dispatchers.IO) {
+                        val file = File(requireContext().cacheDir, "temp_uri_${System.currentTimeMillis()}.jpg")
+                        requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                            file.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        file
                     }
+                    val compressedFile = withContext(Dispatchers.IO) {
+                        compressImage(tempFile)
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        if (compressedFile.exists()) compressedFile.readBytes() else null
+                    }
+                    // Clean up temp files
+                    try {
+                        if (tempFile.exists()) tempFile.delete()
+                        if (compressedFile.exists() && compressedFile != tempFile) compressedFile.delete()
+                    } catch (_: Exception) {}
+
                     if (bytes == null) {
                         Toast.makeText(requireContext(), "Failed to read photo", Toast.LENGTH_SHORT).show()
                         resetSubmitButton()
@@ -351,6 +382,69 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         } else {
             completeCreation(null)
         }
+    }
+
+    private fun compressImage(source: File): File {
+        return try {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(source.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return source
+
+            val maxEdge = 1080
+            var sample = 1
+            var w = bounds.outWidth
+            var h = bounds.outHeight
+            while (w / sample > maxEdge * 2 || h / sample > maxEdge * 2) {
+                sample *= 2
+            }
+
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+            val decoded = android.graphics.BitmapFactory.decodeFile(source.absolutePath, decodeOpts) ?: return source
+
+            val rotated = applyExifRotation(source, decoded)
+
+            val scale = minOf(
+                1f,
+                maxEdge.toFloat() / rotated.width.toFloat(),
+                maxEdge.toFloat() / rotated.height.toFloat()
+            )
+            val finalBitmap = if (scale < 1f) {
+                val scaledW = (rotated.width * scale).toInt().coerceAtLeast(1)
+                val scaledH = (rotated.height * scale).toInt().coerceAtLeast(1)
+                android.graphics.Bitmap.createScaledBitmap(rotated, scaledW, scaledH, true).also {
+                    if (it !== rotated) rotated.recycle()
+                }
+            } else rotated
+
+            val out = java.io.ByteArrayOutputStream()
+            finalBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
+            finalBitmap.recycle()
+
+            val target = File(source.parentFile, "fine_compressed_${System.currentTimeMillis()}.jpg")
+            java.io.FileOutputStream(target).use { it.write(out.toByteArray()) }
+            target
+        } catch (_: Exception) {
+            source
+        }
+    }
+
+    private fun applyExifRotation(source: File, bitmap: android.graphics.Bitmap): android.graphics.Bitmap {
+        val degrees = try {
+            val exif = android.media.ExifInterface(source.absolutePath)
+            when (exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } catch (_: Exception) {
+            0f
+        }
+        if (degrees == 0f) return bitmap
+        val matrix = android.graphics.Matrix().apply { postRotate(degrees) }
+        val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated !== bitmap) bitmap.recycle()
+        return rotated
     }
 
     override fun onDestroyView() {

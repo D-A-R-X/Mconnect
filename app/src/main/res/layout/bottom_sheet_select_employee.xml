@@ -104,10 +104,11 @@
         android:layout_marginTop="16dp"
         android:background="@drawable/bg_sheet_employee_container">
 
-        <ScrollView
+        <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:nestedScrollingEnabled="true">
 
             <LinearLayout
                 android:id="@+id/llEmployeeContainer"
@@ -116,7 +117,7 @@
                 android:orientation="vertical"
                 android:paddingVertical="8dp"
                 android:paddingHorizontal="4dp" />
-        </ScrollView>
+        </androidx.core.widget.NestedScrollView>
 
         <TextView
             android:id="@+id/tvEmptyPeople"

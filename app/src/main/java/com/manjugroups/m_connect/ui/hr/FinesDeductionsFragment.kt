@@ -168,14 +168,16 @@ class FinesDeductionsFragment : Fragment() {
                 itemView.findViewById<TextView>(R.id.tvFineDate).text = record.date
 
                 val avatarView = itemView.findViewById<ImageView>(R.id.ivEmployeeAvatar)
+                val resolvedUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.photoUrl)
                 if (record.photoResId != null) {
                     avatarView.load(record.photoResId) {
                         transformations(CircleCropTransformation())
                     }
-                } else if (!record.photoUrl.isNullOrEmpty()) {
-                    avatarView.load(record.photoUrl) {
+                } else if (!resolvedUrl.isNullOrEmpty()) {
+                    avatarView.load(resolvedUrl) {
                         crossfade(true)
                         placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                        error(R.drawable.bg_attendance_avatar_placeholder)
                         transformations(CircleCropTransformation())
                     }
                 } else {
