@@ -382,7 +382,7 @@
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_medium"
             android:text="Swipe left or tap to open QR Scanner"
-            android:textColor="#FFFFFF"
+            android:textColor="#1E293B"
             android:textSize="12sp" />
 
         <ImageView
@@ -391,7 +391,7 @@
             android:layout_height="16dp"
             android:layout_marginStart="8dp"
             android:src="@drawable/ic_close_pill"
-            app:tint="#A5C6FF"
+            app:tint="#64748B"
             android:clickable="true"
             android:focusable="true" />
     </LinearLayout>
