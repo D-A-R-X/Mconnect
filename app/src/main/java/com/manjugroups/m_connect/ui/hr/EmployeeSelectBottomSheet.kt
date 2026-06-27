@@ -2,23 +2,25 @@ package com.manjugroups.m_connect.ui.hr
 
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
+import androidx.fragment.app.DialogFragment
 import coil.load
 import coil.transform.CircleCropTransformation
-import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.BottomSheetSelectEmployeeBinding
 import com.manjugroups.m_connect.databinding.ItemSheetEmployeeRowBinding
 import com.manjugroups.m_connect.network.StaffData
 
-class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
+class EmployeeSelectBottomSheet : DialogFragment() {
 
     private var _binding: BottomSheetSelectEmployeeBinding? = null
     private val binding get() = _binding!!
@@ -29,26 +31,9 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
 
     private var tempSelectedStaff: StaffData? = null
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = super.onCreateDialog(savedInstanceState)
-        (dialog as? BottomSheetDialog)?.setOnShowListener {
-            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            if (bottomSheet != null) {
-                // Fix background appearing at bottom/corners
-                bottomSheet.setBackgroundResource(android.R.color.transparent)
-                val behavior = BottomSheetBehavior.from(bottomSheet)
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
-                
-                // No drop shadow needed
-                bottomSheet.elevation = 0f
-            }
-        }
-        return dialog
-    }
-
-    override fun getTheme(): Int {
-        return R.style.CustomCameraBottomSheetTheme
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setStyle(STYLE_NO_FRAME, R.style.FullWidthBottomDialogTheme)
     }
 
     override fun onCreateView(
@@ -58,6 +43,19 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
     ): View {
         _binding = BottomSheetSelectEmployeeBinding.inflate(inflater, container, false)
         return binding.root
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.let { window ->
+            window.setLayout(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT
+            )
+            window.setGravity(Gravity.BOTTOM)
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            window.setWindowAnimations(R.style.BottomDialogAnimation)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -125,6 +123,7 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
                 rowBinding.ivAvatar.load(resolvedPhoto) {
                     crossfade(true)
                     placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
                     transformations(CircleCropTransformation())
                 }
             } else {
