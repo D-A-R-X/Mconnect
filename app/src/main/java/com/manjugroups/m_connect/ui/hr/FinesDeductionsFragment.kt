@@ -23,6 +23,8 @@ class FinesDeductionsFragment : Fragment() {
     private var _binding: FragmentFinesDeductionsBinding? = null
     private val binding get() = _binding!!
 
+    private var currentRole = "Admin"
+
     // Local list of fine records initialized with mockup data matching the screenshot
     private val fineRecords = mutableListOf<FineRecord>(
         FineRecord(
@@ -33,6 +35,7 @@ class FinesDeductionsFragment : Fragment() {
             date = "22 May 2026",
             status = "Active",
             photoUrl = null,
+            finePhotoUrl = "https://images.unsplash.com/photo-1544005313-94ddf0286df2", // Mock fine image for User mode
             photoResId = R.drawable.avatar_mari_muthu_1
         ),
         FineRecord(
@@ -43,6 +46,7 @@ class FinesDeductionsFragment : Fragment() {
             date = "22 May 2026",
             status = "Active",
             photoUrl = null,
+            finePhotoUrl = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d", // Mock fine image for User mode
             photoResId = R.drawable.avatar_sudalai_muthu
         ),
         FineRecord(
@@ -53,6 +57,7 @@ class FinesDeductionsFragment : Fragment() {
             date = "22 May 2026",
             status = "Active",
             photoUrl = null,
+            finePhotoUrl = null,
             photoResId = R.drawable.avatar_mari_muthu_2
         )
     )
@@ -100,7 +105,8 @@ class FinesDeductionsFragment : Fragment() {
                     fineType: String,
                     amount: Double,
                     dateStr: String,
-                    photo: String?
+                    employeePhoto: String?,
+                    finePhoto: String?
                 ) {
                     val resolvedResId = when (name) {
                         "Mari Muthu.R" -> R.drawable.avatar_mari_muthu_1
@@ -116,7 +122,8 @@ class FinesDeductionsFragment : Fragment() {
                             amount = amount,
                             date = dateStr,
                             status = "Active",
-                            photoUrl = photo,
+                            photoUrl = employeePhoto,
+                            finePhotoUrl = finePhoto,
                             photoResId = resolvedResId
                         )
                     )
@@ -136,13 +143,33 @@ class FinesDeductionsFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        // Set up Spinner for Role
+        val roles = arrayOf("Admin", "User")
+        val adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, roles)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerRole.adapter = adapter
+        binding.spinnerRole.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                currentRole = roles[position]
+                if (currentRole == "Admin") {
+                    binding.llSearchContainer.visibility = View.VISIBLE
+                    binding.btnCreateFineContainer.visibility = View.VISIBLE
+                } else {
+                    binding.llSearchContainer.visibility = View.GONE
+                    binding.btnCreateFineContainer.visibility = View.GONE
+                }
+                renderList()
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
         renderList()
     }
 
     private fun renderList() {
         binding.llFinesList.removeAllViews()
 
-        val filteredList = if (currentSearchQuery.isEmpty()) {
+        val filteredList = if (currentSearchQuery.isEmpty() || currentRole == "User") {
             fineRecords
         } else {
             fineRecords.filter {
@@ -168,27 +195,70 @@ class FinesDeductionsFragment : Fragment() {
                 itemView.findViewById<TextView>(R.id.tvFineDate).text = record.date
 
                 val avatarView = itemView.findViewById<ImageView>(R.id.ivEmployeeAvatar)
-                val resolvedUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.photoUrl)
-                if (record.photoResId != null) {
-                    avatarView.load(record.photoResId) {
-                        transformations(CircleCropTransformation())
-                    }
-                } else if (!resolvedUrl.isNullOrEmpty()) {
-                    avatarView.load(resolvedUrl) {
-                        crossfade(true)
-                        placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                        error(R.drawable.bg_attendance_avatar_placeholder)
-                        transformations(CircleCropTransformation())
+
+                if (currentRole == "User") {
+                    val resolvedFinePhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.finePhotoUrl)
+                    if (!resolvedFinePhoto.isNullOrEmpty()) {
+                        // Load camera fine picture instead of profile avatar
+                        avatarView.load(resolvedFinePhoto) {
+                            crossfade(true)
+                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                            error(R.drawable.bg_attendance_avatar_placeholder)
+                            transformations(CircleCropTransformation())
+                        }
+                        // Click to preview full size image
+                        avatarView.setOnClickListener {
+                            showImagePreview(resolvedFinePhoto)
+                        }
+                    } else {
+                        // Fallback: show default camera placeholder
+                        avatarView.load(R.drawable.ic_header_camera_outline) {
+                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                            error(R.drawable.bg_attendance_avatar_placeholder)
+                            transformations(CircleCropTransformation())
+                        }
+                        avatarView.setOnClickListener(null)
                     }
                 } else {
-                    avatarView.load(R.drawable.bg_attendance_avatar_placeholder) {
-                        transformations(CircleCropTransformation())
+                    // Admin mode: Load employee profile picture
+                    avatarView.setOnClickListener(null)
+                    val resolvedUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.photoUrl)
+                    if (record.photoResId != null) {
+                        avatarView.load(record.photoResId) {
+                            transformations(CircleCropTransformation())
+                        }
+                    } else if (!resolvedUrl.isNullOrEmpty()) {
+                        avatarView.load(resolvedUrl) {
+                            crossfade(true)
+                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                            error(R.drawable.bg_attendance_avatar_placeholder)
+                            transformations(CircleCropTransformation())
+                        }
+                    } else {
+                        avatarView.load(R.drawable.bg_attendance_avatar_placeholder) {
+                            transformations(CircleCropTransformation())
+                        }
                     }
                 }
 
                 binding.llFinesList.addView(itemView)
             }
         }
+    }
+
+    private fun showImagePreview(imageUrl: String) {
+        val dialog = android.app.Dialog(requireContext(), android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.setContentView(R.layout.dialog_image_preview)
+        val imageView = dialog.findViewById<ImageView>(R.id.ivFullPreview)
+        val btnClose = dialog.findViewById<View>(R.id.btnPreviewClose)
+
+        imageView.load(imageUrl) {
+            crossfade(true)
+        }
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     override fun onResume() {
@@ -217,6 +287,7 @@ class FinesDeductionsFragment : Fragment() {
         val date: String,
         val status: String,
         val photoUrl: String?,
+        val finePhotoUrl: String?,
         val photoResId: Int? = null
     )
 }

@@ -53,7 +53,15 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     private var uploadedPhotoId: String? = null
 
     interface OnFineCreatedListener {
-        fun onFineCreated(name: String, department: String, fineType: String, amount: Double, dateStr: String, photo: String?)
+        fun onFineCreated(
+            name: String,
+            department: String,
+            fineType: String,
+            amount: Double,
+            dateStr: String,
+            employeePhoto: String?,
+            finePhoto: String?
+        )
     }
 
     private var listener: OnFineCreatedListener? = null
@@ -358,7 +366,8 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 fineType = fineType,
                 amount = amount,
                 dateStr = dateStr,
-                photo = selectedStaff?.photo
+                employeePhoto = selectedStaff?.photo,
+                finePhoto = photoId
             )
             dismiss()
         }
