@@ -268,52 +268,16 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         )
         
         val currentList = if (staffList.isNotEmpty()) staffList else fallbackStaff
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_employee_picker, null)
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .create()
-
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val etSearch = dialogView.findViewById<android.widget.EditText>(R.id.etSearch)
-        val llContainer = dialogView.findViewById<android.widget.LinearLayout>(R.id.llEmployeeContainer)
-
-        fun populateList(query: String) {
-            llContainer.removeAllViews()
-            val filtered = if (query.isEmpty()) {
-                currentList
-            } else {
-                currentList.filter { (it.name ?: "").contains(query, ignoreCase = true) }
-            }
-
-            filtered.forEach { staff ->
-                val row = LayoutInflater.from(requireContext()).inflate(R.layout.item_picker_employee, llContainer, false)
-                val tvName = row.findViewById<android.widget.TextView>(R.id.tvName)
-                val rbSelect = row.findViewById<android.widget.RadioButton>(R.id.rbSelect)
-
-                tvName.text = staff.name ?: "Unknown Employee"
-                rbSelect.isChecked = (selectedStaff?.id == staff.id)
-
-                row.setOnClickListener {
-                    selectedStaff = staff
-                    binding.tvSelectedEmployee.text = staff.name
-                    binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
-                    dialog.dismiss()
-                }
-                llContainer.addView(row)
+        val picker = EmployeeSelectBottomSheet().apply {
+            this.staffList = ArrayList(currentList)
+            this.selectedStaff = this@CreateFineBottomSheet.selectedStaff
+            this.onEmployeeSelected = { staff ->
+                this@CreateFineBottomSheet.selectedStaff = staff
+                binding.tvSelectedEmployee.text = staff.name
+                binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
             }
         }
-
-        etSearch.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                populateList(s?.toString()?.trim() ?: "")
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
-        })
-
-        populateList("")
-        dialog.show()
+        picker.show(childFragmentManager, "EmployeeSelect")
     }
 
     private fun submitFine() {
