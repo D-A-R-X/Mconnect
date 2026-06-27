@@ -11,38 +11,65 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Dark transparent overlay with a transparent hole in the middle -->
+    <!-- Scanner frame in center -->
     <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#99000000" />
-
-    <!-- Clear Scan Window frame (transparent box inside mask) -->
-    <LinearLayout
         android:id="@+id/scanWindow"
         android:layout_width="260dp"
         android:layout_height="260dp"
-        android:background="@drawable/bg_dashed_border"
-        android:backgroundTint="#FFFFFF"
+        android:background="@drawable/bg_scanner_border"
         android:elevation="2dp"
-        android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@android:color/transparent" />
-    </LinearLayout>
+    <!-- 4 mask views around scanWindow to build dark transparent layout with a transparent hole -->
+    <!-- Top mask -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#99000000"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/scanWindow"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Bottom mask -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#99000000"
+        app:layout_constraintTop_toBottomOf="@id/scanWindow"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Left mask -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#99000000"
+        app:layout_constraintTop_toTopOf="@id/scanWindow"
+        app:layout_constraintBottom_toBottomOf="@id/scanWindow"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/scanWindow" />
+
+    <!-- Right mask -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#99000000"
+        app:layout_constraintTop_toTopOf="@id/scanWindow"
+        app:layout_constraintBottom_toBottomOf="@id/scanWindow"
+        app:layout_constraintStart_toEndOf="@id/scanWindow"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Scanning Laser Line (Red moving line) -->
     <View
         android:id="@+id/laserLine"
-        android:layout_width="240dp"
-        android:layout_height="2dp"
-        android:background="#FF0000"
+        android:layout_width="244dp"
+        android:layout_height="3dp"
+        android:background="#FF3333"
         android:elevation="3dp"
         app:layout_constraintEnd_toEndOf="@id/scanWindow"
         app:layout_constraintStart_toStartOf="@id/scanWindow"
@@ -52,7 +79,8 @@
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="wrap_content"
+        android:minHeight="56dp"
         android:background="#80000000"
         android:elevation="4dp"
         android:gravity="center_vertical"

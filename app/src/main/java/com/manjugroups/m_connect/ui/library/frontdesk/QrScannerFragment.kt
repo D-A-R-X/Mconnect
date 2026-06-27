@@ -30,6 +30,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+
 
 class QrScannerFragment : Fragment() {
 
@@ -65,6 +68,17 @@ class QrScannerFragment : Fragment() {
                 .replace(R.id.fragmentContainer, QrHistoryFragment())
                 .addToBackStack(null)
                 .commit()
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.topBar.setPadding(
+                binding.topBar.paddingLeft,
+                sysBars.top,
+                binding.topBar.paddingRight,
+                binding.topBar.paddingBottom
+            )
+            insets
         }
 
         startLaserAnimation()

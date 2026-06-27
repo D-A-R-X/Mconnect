@@ -12,6 +12,9 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentQrHistoryBinding
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+
 
 class QrHistoryFragment : Fragment() {
 
@@ -36,6 +39,17 @@ class QrHistoryFragment : Fragment() {
 
         binding.btnClearHistory.setOnClickListener {
             clearHistory()
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.headerBar.setPadding(
+                binding.headerBar.paddingLeft,
+                sysBars.top,
+                binding.headerBar.paddingRight,
+                binding.headerBar.paddingBottom
+            )
+            insets
         }
 
         renderHistory()
