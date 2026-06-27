@@ -370,7 +370,7 @@
         android:background="@drawable/bg_edge_handle"
         android:clickable="true"
         android:focusable="true"
-        android:elevation="8dp">
+        android:elevation="15dp">
 
         <ImageView
             android:layout_width="16dp"
@@ -439,20 +439,6 @@
                     android:textColor="#94A3B8"
                     android:textSize="13sp" />
             </LinearLayout>
-
-            <!-- Close icon on top-right -->
-            <ImageView
-                android:id="@+id/btnOverlayClose"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="top|end"
-                android:layout_margin="24dp"
-                android:padding="12dp"
-                android:background="@drawable/bg_circle_glass"
-                android:src="@drawable/ic_close_pill"
-                app:tint="#FFFFFF"
-                android:clickable="true"
-                android:focusable="true" />
             
         </FrameLayout>
     </FrameLayout>

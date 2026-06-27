@@ -995,7 +995,7 @@ class HomeFragment : Fragment() {
                     val dragDist = -dx
                     val duration = System.currentTimeMillis() - downTime
                     
-                    if (dragDist < 15 && duration < 200) {
+                    if (Math.abs(dragDist) < 15 && duration < 200) {
                         // Click / Tap detected
                         animatePanel(true)
                     } else if (dragDist > 120) {
@@ -1009,10 +1009,6 @@ class HomeFragment : Fragment() {
                 }
                 else -> false
             }
-        }
-
-        binding.btnOverlayClose.setOnClickListener {
-            animatePanel(false)
         }
 
         binding.panelBlurBg.setOnClickListener {
@@ -1032,11 +1028,13 @@ class HomeFragment : Fragment() {
         if (_binding == null) return
         val screenWidth = resources.displayMetrics.widthPixels.toFloat()
         if (open) {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
             binding.edgeQrPanel.visibility = android.view.View.VISIBLE
             binding.panelBlurBg.animate().alpha(1f).setDuration(250).start()
             binding.panelContent.animate().translationX(0f).setDuration(250).start()
             binding.edgeDragHandle.animate().translationX(binding.edgeDragHandle.width.toFloat()).setDuration(250).start()
         } else {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
             binding.panelBlurBg.animate().alpha(0f).setDuration(250).start()
             binding.edgeDragHandle.animate().translationX(0f).setDuration(250).start()
             binding.panelContent.animate().translationX(screenWidth).setDuration(250)
