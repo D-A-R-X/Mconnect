@@ -972,6 +972,7 @@ class HomeFragment : Fragment() {
         binding.panelContent.translationX = screenWidth
 
         if (!session.hasSeenEdgeQrTooltip) {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
             binding.edgeQrTourDimBg.alpha = 0f
             binding.edgeQrTourDimBg.visibility = android.view.View.VISIBLE
             binding.edgeQrTourDimBg.animate().alpha(1f).setDuration(400).setStartDelay(800).start()
@@ -992,6 +993,7 @@ class HomeFragment : Fragment() {
             if (_binding != null && (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE || binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE)) {
                 session.hasSeenEdgeQrTooltip = true
                 stopFloatingAnimations()
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
                 binding.edgeQrTourDimBg.animate().alpha(0f).setDuration(250).withEndAction {
                     if (_binding != null) binding.edgeQrTourDimBg.visibility = android.view.View.GONE
                 }.start()
