@@ -48,7 +48,7 @@ class AppLibraryFragment : Fragment() {
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, SETTINGS }
+    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -553,6 +553,7 @@ class AppLibraryFragment : Fragment() {
         binding.pillFleet.setOnClickListener { applyFilter(Filter.FLEET) }
         binding.pillSales.setOnClickListener { applyFilter(Filter.SALES) }
         binding.pillAccounts.setOnClickListener { applyFilter(Filter.ACCOUNTS) }
+        binding.pillFrontDesk.setOnClickListener { applyFilter(Filter.FRONT_DESK) }
         binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
     }
 
@@ -580,7 +581,7 @@ class AppLibraryFragment : Fragment() {
         binding.cardFleet.visibility = show(binding.cardFleet, filter == Filter.ALL || filter == Filter.FLEET, Filter.FLEET)
         binding.cardSales.visibility = show(binding.cardSales, filter == Filter.ALL || filter == Filter.SALES, Filter.SALES)
         binding.cardAccounts.visibility = show(binding.cardAccounts, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
-        binding.cardFrontDesk.visibility = show(binding.cardFrontDesk, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
+        binding.cardFrontDesk.visibility = show(binding.cardFrontDesk, filter == Filter.ALL || filter == Filter.FRONT_DESK, Filter.FRONT_DESK)
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
@@ -591,6 +592,7 @@ class AppLibraryFragment : Fragment() {
         styleTab(binding.pillFleetIcon, binding.pillFleetText, binding.pillFleetIndicator, filter == Filter.FLEET)
         styleTab(binding.pillSalesIcon, binding.pillSalesText, binding.pillSalesIndicator, filter == Filter.SALES)
         styleTab(binding.pillAccountsIcon, binding.pillAccountsText, binding.pillAccountsIndicator, filter == Filter.ACCOUNTS)
+        styleTab(binding.pillFrontDeskIcon, binding.pillFrontDeskText, binding.pillFrontDeskIndicator, filter == Filter.FRONT_DESK)
         styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
@@ -681,7 +683,7 @@ class AppLibraryFragment : Fragment() {
                 listOf(R.id.itemAccountsPostSalesVerification),
             ),
             Triple(
-                Filter.ACCOUNTS, binding.cardFrontDesk,
+                Filter.FRONT_DESK, binding.cardFrontDesk,
                 listOf(R.id.itemFrontDeskQR),
             ),
             // Settings card: itemSettings is never IAM-gated (every
@@ -788,6 +790,7 @@ class AppLibraryFragment : Fragment() {
         Filter.FLEET -> binding.pillFleet
         Filter.SALES -> binding.pillSales
         Filter.ACCOUNTS -> binding.pillAccounts
+        Filter.FRONT_DESK -> binding.pillFrontDesk
         Filter.SETTINGS -> binding.pillSettings
     }
 
