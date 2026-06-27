@@ -30,8 +30,8 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
     private var tempSelectedStaff: StaffData? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
-        dialog.setOnShowListener {
+        val dialog = super.onCreateDialog(savedInstanceState)
+        (dialog as? BottomSheetDialog)?.setOnShowListener {
             val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             if (bottomSheet != null) {
                 // Fix background appearing at bottom/corners
@@ -114,7 +114,7 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
             // Set Avatar image
             val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staff.photo)
             if (staff.name?.equals("Mari Muthu.R", ignoreCase = true) == true) {
-                rowBinding.ivAvatar.load(R.drawable.avatar_mari_muthu) {
+                rowBinding.ivAvatar.load(R.drawable.avatar_mari_muthu_1) {
                     transformations(CircleCropTransformation())
                 }
             } else if (staff.name?.equals("Sudalai Muthu.R", ignoreCase = true) == true) {

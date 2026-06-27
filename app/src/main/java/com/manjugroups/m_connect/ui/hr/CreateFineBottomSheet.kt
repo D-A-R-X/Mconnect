@@ -249,7 +249,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         
         val currentList = if (staffList.isNotEmpty()) staffList else fallbackStaff
         val picker = EmployeeSelectBottomSheet().apply {
-            this.staffList = ArrayList(currentList)
+            this.staffList = currentList
             this.selectedStaff = this@CreateFineBottomSheet.selectedStaff
             this.onEmployeeSelected = { staff ->
                 this@CreateFineBottomSheet.selectedStaff = staff
