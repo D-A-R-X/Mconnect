@@ -39,7 +39,49 @@
         android:textSize="14sp" />
 
     <!-- Employee Selector -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Employee"
+        android:textColor="#344054"
+        android:textSize="13sp" />
 
+    <LinearLayout
+        android:id="@+id/btnSelectEmployee"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_sheet_employee_outline" />
+
+        <TextView
+            android:id="@+id/tvSelectedEmployee"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_regular"
+            android:text="Select Employee"
+            android:textColor="#667085"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_chevron_down"
+            app:tint="#667085" />
+    </LinearLayout>
 
     <!-- Fine Type -->
     <TextView
