@@ -49,6 +49,8 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     private var selectedStaff: StaffData? = null
 
     private var pendingImageFile: File? = null
+    private var pendingLocalPhotoFile: File? = null
+    private var pendingLocalPhotoUri: android.net.Uri? = null
     private var uploadedPhotoId: String? = null
 
     interface OnFineCreatedListener {
@@ -65,7 +67,14 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            uploadPhotoUri(uri)
+            pendingLocalPhotoUri = uri
+            pendingLocalPhotoFile = null
+            binding.ivUploadedPreview.imageTintList = null // Clear blue tint
+            binding.ivUploadedPreview.load(uri) {
+                crossfade(true)
+                transformations(CircleCropTransformation())
+            }
+            binding.tvUploadTitle.text = "Photo Selected"
         }
     }
 
@@ -75,7 +84,14 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         if (success) {
             val file = pendingImageFile
             if (file != null && file.exists()) {
-                uploadPhotoFile(file)
+                pendingLocalPhotoFile = file
+                pendingLocalPhotoUri = null
+                binding.ivUploadedPreview.imageTintList = null // Clear blue tint
+                binding.ivUploadedPreview.load(file) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+                binding.tvUploadTitle.text = "Photo Captured"
             }
         } else {
             Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
@@ -183,40 +199,12 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun uploadPhotoUri(uri: Uri) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val bytes = withContext(Dispatchers.IO) {
-                    requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }
-                if (bytes == null) {
-                    Toast.makeText(requireContext(), "Failed to read image", Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                performUpload(bytes)
-            } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+    private fun resetSubmitButton() {
+        binding.btnSubmitFine.isEnabled = true
+        binding.btnSubmitFine.text = "Create It"
     }
 
-    private fun uploadPhotoFile(file: File) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val bytes = withContext(Dispatchers.IO) {
-                    file.readBytes()
-                }
-                performUpload(bytes)
-            } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private suspend fun performUpload(bytes: ByteArray) {
-        val toast = Toast.makeText(requireContext(), "Uploading photo...", Toast.LENGTH_SHORT)
-        toast.show()
-        
+    private suspend fun uploadBytesToServer(bytes: ByteArray): String? {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 val mime = "image/jpeg"
@@ -226,25 +214,17 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 )
             }
         }
-        
-        toast.cancel()
+        var storageId: String? = null
         result.onSuccess { resp ->
             if (resp.success && resp.storageId != null) {
-                uploadedPhotoId = resp.storageId
-                val resolvedUrl = ProfilePhotos.resolve(resp.storageId)
-                binding.ivUploadedPreview.imageTintList = null // Clear blue tint
-                binding.ivUploadedPreview.load(resolvedUrl) {
-                    crossfade(true)
-                    transformations(CircleCropTransformation())
-                }
-                binding.tvUploadTitle.text = "Photo Uploaded Successfully"
-                Toast.makeText(requireContext(), "Photo uploaded successfully", Toast.LENGTH_SHORT).show()
+                storageId = resp.storageId
             } else {
                 Toast.makeText(requireContext(), "Upload failed: ${resp.error ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
             }
         }.onFailure { err ->
             Toast.makeText(requireContext(), "Upload failed: ${err.message}", Toast.LENGTH_SHORT).show()
         }
+        return storageId
     }
 
     private fun loadStaffList() {
@@ -308,16 +288,69 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         val department = selectedStaff?.department ?: "Sales Department"
         val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
 
-        listener?.onFineCreated(
-            name = staffName,
-            department = department,
-            fineType = fineType,
-            amount = amount,
-            dateStr = dateStr,
-            photo = uploadedPhotoId ?: selectedStaff?.photo
-        )
+        // Disable views during upload/submit
+        binding.btnSubmitFine.isEnabled = false
+        binding.btnSubmitFine.text = "Submitting..."
 
-        dismiss()
+        fun completeCreation(photoId: String?) {
+            listener?.onFineCreated(
+                name = staffName,
+                department = department,
+                fineType = fineType,
+                amount = amount,
+                dateStr = dateStr,
+                photo = photoId ?: selectedStaff?.photo
+            )
+            dismiss()
+        }
+
+        val file = pendingLocalPhotoFile
+        val uri = pendingLocalPhotoUri
+
+        if (file != null) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    binding.btnSubmitFine.text = "Uploading Photo..."
+                    val bytes = withContext(Dispatchers.IO) {
+                        file.readBytes()
+                    }
+                    val storageId = uploadBytesToServer(bytes)
+                    if (storageId != null) {
+                        completeCreation(storageId)
+                    } else {
+                        resetSubmitButton()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(requireContext(), "Submission failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    resetSubmitButton()
+                }
+            }
+        } else if (uri != null) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    binding.btnSubmitFine.text = "Uploading Photo..."
+                    val bytes = withContext(Dispatchers.IO) {
+                        requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    }
+                    if (bytes == null) {
+                        Toast.makeText(requireContext(), "Failed to read photo", Toast.LENGTH_SHORT).show()
+                        resetSubmitButton()
+                        return@launch
+                    }
+                    val storageId = uploadBytesToServer(bytes)
+                    if (storageId != null) {
+                        completeCreation(storageId)
+                    } else {
+                        resetSubmitButton()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(requireContext(), "Submission failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    resetSubmitButton()
+                }
+            }
+        } else {
+            completeCreation(null)
+        }
     }
 
     override fun onDestroyView() {
