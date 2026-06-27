@@ -48,7 +48,7 @@ class AppLibraryFragment : Fragment() {
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
+    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, SETTINGS }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -553,7 +553,6 @@ class AppLibraryFragment : Fragment() {
         binding.pillFleet.setOnClickListener { applyFilter(Filter.FLEET) }
         binding.pillSales.setOnClickListener { applyFilter(Filter.SALES) }
         binding.pillAccounts.setOnClickListener { applyFilter(Filter.ACCOUNTS) }
-        binding.pillFrontDesk.setOnClickListener { applyFilter(Filter.FRONT_DESK) }
         binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
     }
 
@@ -581,7 +580,7 @@ class AppLibraryFragment : Fragment() {
         binding.cardFleet.visibility = show(binding.cardFleet, filter == Filter.ALL || filter == Filter.FLEET, Filter.FLEET)
         binding.cardSales.visibility = show(binding.cardSales, filter == Filter.ALL || filter == Filter.SALES, Filter.SALES)
         binding.cardAccounts.visibility = show(binding.cardAccounts, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
-        binding.cardFrontDesk.visibility = show(binding.cardFrontDesk, filter == Filter.ALL || filter == Filter.FRONT_DESK, Filter.FRONT_DESK)
+        binding.cardFrontDesk.visibility = show(binding.cardFrontDesk, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
@@ -592,7 +591,6 @@ class AppLibraryFragment : Fragment() {
         styleTab(binding.pillFleetIcon, binding.pillFleetText, binding.pillFleetIndicator, filter == Filter.FLEET)
         styleTab(binding.pillSalesIcon, binding.pillSalesText, binding.pillSalesIndicator, filter == Filter.SALES)
         styleTab(binding.pillAccountsIcon, binding.pillAccountsText, binding.pillAccountsIndicator, filter == Filter.ACCOUNTS)
-        styleTab(binding.pillFrontDeskIcon, binding.pillFrontDeskText, binding.pillFrontDeskIndicator, filter == Filter.FRONT_DESK)
         styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
@@ -683,7 +681,7 @@ class AppLibraryFragment : Fragment() {
                 listOf(R.id.itemAccountsPostSalesVerification),
             ),
             Triple(
-                Filter.FRONT_DESK, binding.cardFrontDesk,
+                Filter.ACCOUNTS, binding.cardFrontDesk,
                 listOf(R.id.itemFrontDeskQR),
             ),
             // Settings card: itemSettings is never IAM-gated (every
@@ -698,18 +696,15 @@ class AppLibraryFragment : Fragment() {
 
     private fun pruneEmptySections() {
         if (_binding == null) return
+        val filterHasVisibleCard = mutableMapOf<Filter, Boolean>()
         for ((filter, card, tileIds) in sectionTileMap) {
             val anyVisible = tileIds.any { id ->
                 binding.root.findViewById<View>(id)?.visibility == View.VISIBLE
             }
             card.visibility = if (anyVisible) View.VISIBLE else View.GONE
-            // Hide the matching filter pill too so a user can't tap a
-            // category that has nothing to show. Mapping pill → filter
-            // is the inverse of styleTab's mapping; we just hide the
-            // pill's parent (each pill is wrapped in its own clickable
-            // LinearLayout).
-            val pillRoot = pillRootFor(filter)
-            pillRoot?.visibility = if (anyVisible) View.VISIBLE else View.GONE
+            if (anyVisible) {
+                filterHasVisibleCard[filter] = true
+            }
 
             // When IAM hides some tiles inside a visible card, the static
             // `<View>` dividers between rows can be left dangling (no row
@@ -724,6 +719,14 @@ class AppLibraryFragment : Fragment() {
                     .firstOrNull { it.visibility == View.VISIBLE }
                     ?: tileIds.firstNotNullOfOrNull { binding.root.findViewById<View>(it) }
                 (firstVisibleTile?.parent as? ViewGroup)?.let { pruneDanglingDividers(it) }
+            }
+        }
+
+        for (filter in Filter.values()) {
+            val pillRoot = pillRootFor(filter)
+            if (pillRoot != null) {
+                val isVisible = filterHasVisibleCard[filter] == true
+                pillRoot.visibility = if (isVisible) View.VISIBLE else View.GONE
             }
         }
     }
@@ -785,7 +788,6 @@ class AppLibraryFragment : Fragment() {
         Filter.FLEET -> binding.pillFleet
         Filter.SALES -> binding.pillSales
         Filter.ACCOUNTS -> binding.pillAccounts
-        Filter.FRONT_DESK -> binding.pillFrontDesk
         Filter.SETTINGS -> binding.pillSettings
     }
 
