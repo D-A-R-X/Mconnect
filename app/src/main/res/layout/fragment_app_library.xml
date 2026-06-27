@@ -1816,7 +1816,7 @@
                                     android:layout_gravity="center"
                                     android:contentDescription="@null"
                                     android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_apps_front_desk"
+                                    android:src="@drawable/ic_apps_qr_scanner"
                                     app:tint="#6D28D9" />
                             </FrameLayout>
 

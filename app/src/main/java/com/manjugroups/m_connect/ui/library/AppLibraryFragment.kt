@@ -237,11 +237,14 @@ class AppLibraryFragment : Fragment() {
         // so its content width can exceed the viewport and trigger
         // scrolling. Move the pill-strip background drawable onto the HSV
         // (it has rounded top corners that should bound the visible
-        // viewport, not the inner over-scrolling content).
+        // viewport, not the inner over-scrolling content). Add 16dp padding
+        // on the left/right edges for a polished look.
         val hsv = android.widget.HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             background = strip.background
+            setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
+            clipToPadding = false
         }
         strip.background = null
         strip.layoutParams = android.widget.LinearLayout.LayoutParams(
@@ -258,10 +261,11 @@ class AppLibraryFragment : Fragment() {
         scrollColumn.addView(hsv, 0, hsvLp)
 
         // After layout, size each pill to exactly 1/5 of the visible HSV
-        // width so 5 fit on screen regardless of device width, and the
-        // 6th tab (currently Settings) becomes reachable by scrolling.
+        // available width so 5 fit on screen regardless of device width.
         val sizePills = { width: Int ->
-            val pillWidth = width / 5
+            val paddingPx = (32 * density).toInt()
+            val availableWidth = width - paddingPx
+            val pillWidth = (availableWidth / 5.0).toInt()
             if (pillWidth > 0) {
                 listOf(
                     binding.pillAllApps,
@@ -272,6 +276,7 @@ class AppLibraryFragment : Fragment() {
                     binding.pillFleet,
                     binding.pillSales,
                     binding.pillAccounts,
+                    binding.pillFrontDesk,
                     binding.pillSettings,
                 ).forEach { pill ->
                     val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
