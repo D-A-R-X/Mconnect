@@ -231,46 +231,57 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
 
 
     private fun loadStaffList() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.getStaff(session.bearerToken, status = "active")
-                if (resp.success && !resp.staff.isNullOrEmpty()) {
-                    staffList.clear()
-                    staffList.addAll(resp.staff)
+        try {
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val resp = api.getStaff(session.bearerToken, status = "active")
+                    if (resp.success && !resp.staff.isNullOrEmpty()) {
+                        staffList.clear()
+                        staffList.addAll(resp.staff)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CreateFine", "loadStaffList API error: ${e.message}", e)
                 }
-            } catch (_: Exception) { }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CreateFine", "loadStaffList launch error: ${e.message}", e)
         }
     }
 
     private fun showEmployeePicker() {
-        val currentList = if (staffList.isNotEmpty()) staffList else emptyList()
-        if (currentList.isEmpty()) {
-            Toast.makeText(requireContext(), "Loading employees...", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val names = currentList.map { it.name ?: "Unknown" }.toTypedArray()
-        val checkedIndex = currentList.indexOfFirst { it.id == selectedStaff?.id }
-
-        var picked = if (checkedIndex >= 0) checkedIndex else -1
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select Employee")
-            .setSingleChoiceItems(names, checkedIndex) { _, which ->
-                picked = which
+        try {
+            val currentList = staffList.toList()
+            if (currentList.isEmpty()) {
+                Toast.makeText(requireActivity(), "Loading employees, please wait...", Toast.LENGTH_SHORT).show()
+                return
             }
-            .setPositiveButton("Add") { dlg, _ ->
-                if (picked in currentList.indices) {
-                    selectedStaff = currentList[picked]
-                    if (_binding != null) {
-                        binding.tvSelectedEmployee.text = selectedStaff?.name
-                        binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
-                    }
+
+            val names = currentList.map { it.name ?: "Unknown" }.toTypedArray()
+            val checkedIndex = currentList.indexOfFirst { it.id == selectedStaff?.id }
+
+            var picked = if (checkedIndex >= 0) checkedIndex else -1
+
+            AlertDialog.Builder(requireActivity())
+                .setTitle("Select Employee")
+                .setSingleChoiceItems(names, checkedIndex) { _, which ->
+                    picked = which
                 }
-                dlg.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+                .setPositiveButton("Add") { dlg, _ ->
+                    if (picked in currentList.indices) {
+                        selectedStaff = currentList[picked]
+                        if (_binding != null) {
+                            binding.tvSelectedEmployee.text = selectedStaff?.name
+                            binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
+                        }
+                    }
+                    dlg.dismiss()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("CreateFine", "showEmployeePicker error: ${e.message}", e)
+            Toast.makeText(requireActivity(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun submitFine() {
