@@ -75,52 +75,65 @@
         app:layout_constraintStart_toStartOf="@id/scanWindow"
         app:layout_constraintTop_toTopOf="@id/scanWindow" />
 
-    <!-- Floating Top Bar -->
+    <!-- Floating Header Container (Vertical) -->
     <LinearLayout
-        android:id="@+id/topBar"
+        android:id="@+id/headerContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="56dp"
         android:background="#80000000"
         android:elevation="4dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:orientation="vertical"
         app:layout_constraintTop_toTopOf="parent">
 
-        <ImageView
-            android:id="@+id/btnBack"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_circle_blue_light"
-            android:backgroundTint="#40FFFFFF"
-            android:clickable="true"
-            android:focusable="true"
-            android:padding="8dp"
-            android:src="@drawable/ic_back_blue"
-            app:tint="#FFFFFF" />
+        <!-- Status bar height placeholder -->
+        <View
+            android:id="@+id/statusBarPlaceholder"
+            android:layout_width="match_parent"
+            android:layout_height="0dp" />
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:fontFamily="@font/inter_bold"
-            android:text="Front Desk Scanner"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp" />
+        <!-- Actual Top Bar toolbar -->
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
 
-        <ImageView
-            android:id="@+id/btnHistory"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_circle_blue_light"
-            android:backgroundTint="#40FFFFFF"
-            android:clickable="true"
-            android:focusable="true"
-            android:padding="6dp"
-            android:src="@drawable/ic_sheet_upload_outline"
-            app:tint="#FFFFFF" />
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_circle_blue_light"
+                android:backgroundTint="#40FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="8dp"
+                android:src="@drawable/ic_back_blue"
+                app:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:fontFamily="@font/inter_bold"
+                android:text="Front Desk Scanner"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp" />
+
+            <ImageView
+                android:id="@+id/btnHistory"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_circle_blue_light"
+                android:backgroundTint="#40FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="6dp"
+                android:src="@drawable/ic_sheet_upload_outline"
+                app:tint="#FFFFFF" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Scan Prompt Subtitle -->

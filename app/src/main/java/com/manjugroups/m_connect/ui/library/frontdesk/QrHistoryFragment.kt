@@ -43,12 +43,9 @@ class QrHistoryFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            binding.headerBar.setPadding(
-                binding.headerBar.paddingLeft,
-                sysBars.top,
-                binding.headerBar.paddingRight,
-                binding.headerBar.paddingBottom
-            )
+            val lp = binding.statusBarPlaceholder.layoutParams
+            lp.height = sysBars.top
+            binding.statusBarPlaceholder.layoutParams = lp
             insets
         }
 
@@ -123,6 +120,14 @@ class QrHistoryFragment : Fragment() {
                 dialog.dismiss()
             }
             .show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, true)
+        }
     }
 
     override fun onDestroyView() {

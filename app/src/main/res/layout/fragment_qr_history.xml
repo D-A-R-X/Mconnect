@@ -5,52 +5,65 @@
     android:layout_height="match_parent"
     android:background="#F5F6FA">
 
-    <!-- Header bar -->
+    <!-- Floating Header Container (Vertical) -->
     <LinearLayout
-        android:id="@+id/headerBar"
+        android:id="@+id/headerContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="56dp"
         android:background="#FFFFFF"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:orientation="vertical"
         app:layout_constraintTop_toTopOf="parent">
 
-        <ImageView
-            android:id="@+id/btnBack"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_circle_blue_light"
-            android:clickable="true"
-            android:contentDescription="Back"
-            android:focusable="true"
-            android:padding="8dp"
-            android:src="@drawable/ic_back_blue"
-            app:tint="#0B61CA" />
+        <!-- Status bar height placeholder -->
+        <View
+            android:id="@+id/statusBarPlaceholder"
+            android:layout_width="match_parent"
+            android:layout_height="0dp" />
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:fontFamily="@font/inter_bold"
-            android:text="Scan History"
-            android:textColor="#1D2939"
-            android:textSize="18sp" />
+        <!-- Actual Header Bar -->
+        <LinearLayout
+            android:id="@+id/headerBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
 
-        <TextView
-            android:id="@+id/btnClearHistory"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Clear"
-            android:textColor="#D92D20"
-            android:textSize="14sp"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="4dp" />
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_circle_blue_light"
+                android:clickable="true"
+                android:contentDescription="Back"
+                android:focusable="true"
+                android:padding="8dp"
+                android:src="@drawable/ic_back_blue"
+                app:tint="#0B61CA" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:fontFamily="@font/inter_bold"
+                android:text="Scan History"
+                android:textColor="#1D2939"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/btnClearHistory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Clear"
+                android:textColor="#D92D20"
+                android:textSize="14sp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp" />
+        </LinearLayout>
     </LinearLayout>
 
     <View
@@ -58,7 +71,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#E4E7EC"
-        app:layout_constraintTop_toBottomOf="@id/headerBar" />
+        app:layout_constraintTop_toBottomOf="@id/headerContainer" />
 
     <!-- History list container -->
     <androidx.core.widget.NestedScrollView
