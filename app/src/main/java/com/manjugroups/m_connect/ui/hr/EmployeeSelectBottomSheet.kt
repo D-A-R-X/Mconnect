@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.hr
 
-import android.app.Dialog
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -10,7 +9,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.view.WindowManager
 import androidx.fragment.app.DialogFragment
 import coil.load
@@ -33,7 +31,7 @@ class EmployeeSelectBottomSheet : DialogFragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setStyle(STYLE_NO_FRAME, R.style.FullWidthBottomDialogTheme)
+        setStyle(STYLE_NO_FRAME, android.R.style.Theme_Translucent_NoTitleBar)
     }
 
     override fun onCreateView(
@@ -47,15 +45,18 @@ class EmployeeSelectBottomSheet : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.let { window ->
-            window.setLayout(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT
-            )
-            window.setGravity(Gravity.BOTTOM)
-            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            window.setWindowAnimations(R.style.BottomDialogAnimation)
-        }
+        try {
+            dialog?.window?.let { window ->
+                window.setLayout(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT
+                )
+                window.setGravity(Gravity.BOTTOM)
+                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                window.setDimAmount(0.5f)
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -64,14 +65,14 @@ class EmployeeSelectBottomSheet : DialogFragment() {
         tempSelectedStaff = selectedStaff
 
         binding.btnSheetClose.setOnClickListener {
-            dismiss()
+            dismissAllowingStateLoss()
         }
 
         binding.btnAdd.setOnClickListener {
             tempSelectedStaff?.let { staff ->
                 onEmployeeSelected?.invoke(staff)
             }
-            dismiss()
+            dismissAllowingStateLoss()
         }
 
         binding.etSearchPeople.addTextChangedListener(object : TextWatcher {
@@ -86,6 +87,7 @@ class EmployeeSelectBottomSheet : DialogFragment() {
     }
 
     private fun populateList(query: String) {
+        if (_binding == null) return
         binding.llEmployeeContainer.removeAllViews()
         val filtered = if (query.isEmpty()) {
             staffList
@@ -111,15 +113,7 @@ class EmployeeSelectBottomSheet : DialogFragment() {
             
             // Set Avatar image
             val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staff.photo)
-            if (staff.name?.equals("Mari Muthu.R", ignoreCase = true) == true) {
-                rowBinding.ivAvatar.load(R.drawable.avatar_mari_muthu_1) {
-                    transformations(CircleCropTransformation())
-                }
-            } else if (staff.name?.equals("Sudalai Muthu.R", ignoreCase = true) == true) {
-                rowBinding.ivAvatar.load(R.drawable.avatar_sudalai_muthu) {
-                    transformations(CircleCropTransformation())
-                }
-            } else if (!resolvedPhoto.isNullOrEmpty()) {
+            if (!resolvedPhoto.isNullOrEmpty()) {
                 rowBinding.ivAvatar.load(resolvedPhoto) {
                     crossfade(true)
                     placeholder(R.drawable.bg_attendance_avatar_placeholder)
@@ -143,7 +137,6 @@ class EmployeeSelectBottomSheet : DialogFragment() {
 
             rowBinding.root.setOnClickListener {
                 tempSelectedStaff = staff
-                // Re-populate list to update RadioButton selection states instantly
                 populateList(binding.etSearchPeople.text.toString().trim())
             }
 

@@ -242,22 +242,33 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showEmployeePicker() {
-        val fallbackStaff = listOf(
-            StaffData(id = "1", name = "Mari Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null),
-            StaffData(id = "2", name = "Sudalai Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null)
-        )
-        
-        val currentList = if (staffList.isNotEmpty()) staffList else fallbackStaff
-        val picker = EmployeeSelectBottomSheet().apply {
-            this.staffList = currentList
-            this.selectedStaff = this@CreateFineBottomSheet.selectedStaff
-            this.onEmployeeSelected = { staff ->
-                this@CreateFineBottomSheet.selectedStaff = staff
-                binding.tvSelectedEmployee.text = staff.name
-                binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
+        try {
+            val fallbackStaff = listOf(
+                StaffData(id = "1", name = "Mari Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null),
+                StaffData(id = "2", name = "Sudalai Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null)
+            )
+            
+            val currentList = if (staffList.isNotEmpty()) staffList else fallbackStaff
+            val picker = EmployeeSelectBottomSheet().apply {
+                this.staffList = currentList
+                this.selectedStaff = this@CreateFineBottomSheet.selectedStaff
+                this.onEmployeeSelected = { staff ->
+                    this@CreateFineBottomSheet.selectedStaff = staff
+                    if (_binding != null) {
+                        binding.tvSelectedEmployee.text = staff.name
+                        binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
+                    }
+                }
             }
+            val fm = requireActivity().supportFragmentManager
+            // Remove any previous instance to prevent IllegalStateException
+            fm.findFragmentByTag("EmployeeSelect")?.let {
+                fm.beginTransaction().remove(it).commitAllowingStateLoss()
+            }
+            picker.show(fm, "EmployeeSelect")
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "Could not open employee picker: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        picker.show(parentFragmentManager, "EmployeeSelect")
     }
 
     private fun submitFine() {
