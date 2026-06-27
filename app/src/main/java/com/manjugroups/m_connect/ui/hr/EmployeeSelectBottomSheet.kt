@@ -112,8 +112,17 @@ class EmployeeSelectBottomSheet : BottomSheetDialogFragment() {
             rowBinding.tvDetails.text = "${staff.department ?: "Sales Department"} • ${staff.role ?: "Staff"}"
             
             // Set Avatar image
-            if (!staff.photo.isNullOrEmpty()) {
-                rowBinding.ivAvatar.load(staff.photo) {
+            val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staff.photo)
+            if (staff.name?.equals("Mari Muthu.R", ignoreCase = true) == true) {
+                rowBinding.ivAvatar.load(R.drawable.avatar_mari_muthu) {
+                    transformations(CircleCropTransformation())
+                }
+            } else if (staff.name?.equals("Sudalai Muthu.R", ignoreCase = true) == true) {
+                rowBinding.ivAvatar.load(R.drawable.avatar_sudalai_muthu) {
+                    transformations(CircleCropTransformation())
+                }
+            } else if (!resolvedPhoto.isNullOrEmpty()) {
+                rowBinding.ivAvatar.load(resolvedPhoto) {
                     crossfade(true)
                     placeholder(R.drawable.bg_attendance_avatar_placeholder)
                     transformations(CircleCropTransformation())
