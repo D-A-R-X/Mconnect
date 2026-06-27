@@ -1671,6 +1671,123 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- ============= FRONT DESK CARD ============= -->
+                <LinearLayout
+                    android:id="@+id/cardFrontDesk"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <FrameLayout
+                            android:layout_width="40dp"
+                            android:layout_height="40dp">
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@drawable/bg_apps_pill_circle_inactive"
+                                android:backgroundTint="#E2E8F0" />
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_header_camera_outline"
+                                app:tint="#1F2937" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Front Desk"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Visitor Entry • Scanning"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/itemFrontDeskQR"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <FrameLayout
+                                android:layout_width="32dp"
+                                android:layout_height="32dp">
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:background="@drawable/bg_apps_pill_circle_inactive"
+                                    android:backgroundTint="#E2E8F0" />
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:scaleType="fitCenter"
+                                    android:src="@drawable/ic_sheet_upload_outline"
+                                    app:tint="#1F2937" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="QR Scanner"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
                 <!-- ============= PROJECT MGMT CARD ============= -->
                 <LinearLayout
                     android:id="@+id/cardProject"

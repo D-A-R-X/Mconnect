@@ -136,6 +136,7 @@ dependencies {
     // Google Play In-App Updates
     implementation(libs.app.update)
     implementation(libs.app.update.ktx)
+    implementation(libs.mlkit.barcode.scanning)
 
     ksp(libs.room.compiler)
     testImplementation(libs.junit)

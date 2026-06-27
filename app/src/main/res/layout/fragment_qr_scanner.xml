@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Camera Preview -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Dark transparent overlay with a transparent hole in the middle -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000" />
+
+    <!-- Clear Scan Window frame (transparent box inside mask) -->
+    <LinearLayout
+        android:id="@+id/scanWindow"
+        android:layout_width="260dp"
+        android:layout_height="260dp"
+        android:background="@drawable/bg_dashed_border"
+        android:backgroundTint="#FFFFFF"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent" />
+    </LinearLayout>
+
+    <!-- Scanning Laser Line (Red moving line) -->
+    <View
+        android:id="@+id/laserLine"
+        android:layout_width="240dp"
+        android:layout_height="2dp"
+        android:background="#FF0000"
+        android:elevation="3dp"
+        app:layout_constraintEnd_toEndOf="@id/scanWindow"
+        app:layout_constraintStart_toStartOf="@id/scanWindow"
+        app:layout_constraintTop_toTopOf="@id/scanWindow" />
+
+    <!-- Floating Top Bar -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#80000000"
+        android:elevation="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_circle_blue_light"
+            android:backgroundTint="#40FFFFFF"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_back_blue"
+            app:tint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:fontFamily="@font/inter_bold"
+            android:text="Front Desk Scanner"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp" />
+
+        <ImageView
+            android:id="@+id/btnHistory"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_circle_blue_light"
+            android:backgroundTint="#40FFFFFF"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="6dp"
+            android:src="@drawable/ic_sheet_upload_outline"
+            app:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- Scan Prompt Subtitle -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Align QR code inside the box to scan"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:elevation="4dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/scanWindow" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
