@@ -69,6 +69,10 @@ class AdminFleetContainerFragment : Fragment() {
         selectTab(previousTabIndex)
     }
 
+    /** Public entry-point so child fragments can request a tab switch
+     *  (e.g. Trips fragment routing the profile-avatar tap to Settings). */
+    fun openTab(index: Int) = selectTab(index)
+
     private fun selectTab(index: Int) {
         if (index != 3) {
             previousTabIndex = index

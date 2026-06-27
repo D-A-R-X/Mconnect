@@ -143,6 +143,7 @@
                         android:textSize="24sp" />
 
                     <TextView
+                        android:id="@+id/tvLoansSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
@@ -739,7 +740,7 @@
                         android:background="@null"
                         android:gravity="center"
                         android:fontFamily="@font/inter_medium"
-                        android:text="Advance"
+                        android:text="Salary"
                         android:textColor="#475467"
                         android:textSize="15sp"
                         android:clickable="true"
@@ -823,6 +824,8 @@
                     android:textColor="#111827"
                     android:textSize="18sp" />
 
+                <!-- View All affordance removed — the Previous Advances list
+                     scrolls all rows top-to-bottom now, no truncation. -->
                 <TextView
                     android:id="@+id/tvPreviousLoansViewAll"
                     android:layout_width="wrap_content"
@@ -833,7 +836,8 @@
                     android:padding="4dp"
                     android:text="View All"
                     android:textColor="#0B61CA"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
                 <androidx.recyclerview.widget.RecyclerView

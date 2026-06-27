@@ -286,6 +286,27 @@ class MainActivity : AppCompatActivity() {
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
 
+        // External-fleet agency principals (designation = "External Fleet")
+        // live in a single-screen portal: the Admin Fleet container, with its
+        // own bottom nav (Trips / Vehicles / Driver / Settings). Skip the
+        // normal MainActivity tab bar entirely so they never see Home / HR /
+        // Chat / Profile, which assume a real staff record they don't have.
+        if (isExternalFleetPrincipal()) {
+            setTabBarVisible(false)
+            if (savedInstanceState == null) {
+                supportFragmentManager.beginTransaction()
+                    .setReorderingAllowed(true)
+                    .replace(
+                        R.id.fragmentContainer,
+                        com.manjugroups.m_connect.ui.library.AdminFleetContainerFragment(),
+                        "external_fleet_root",
+                    )
+                    .commit()
+            }
+            lifecycleScope.launch { refreshSessionContext() }
+            return
+        }
+
         if (savedInstanceState == null) {
             selectTab(TAB_HOME)
             handleWorkflowNotificationIntent(intent)
@@ -581,6 +602,15 @@ class MainActivity : AppCompatActivity() {
         TAB_HOME, TAB_HR, TAB_CHAT, TAB_LIBRARY -> index
         else -> TAB_HOME
     }
+
+    /**
+     * True when the logged-in principal is an external fleet agency, as
+     * surfaced by the auth response (`designation = "External Fleet"`). These
+     * users get the Admin Fleet single-screen portal instead of the normal
+     * staff tab shell.
+     */
+    private fun isExternalFleetPrincipal(): Boolean =
+        session.designation?.trim()?.equals("External Fleet", ignoreCase = true) == true
 
     private suspend fun refreshSessionContext() {
         runCatching {

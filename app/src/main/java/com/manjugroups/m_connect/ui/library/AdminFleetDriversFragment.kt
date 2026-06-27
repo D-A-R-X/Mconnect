@@ -9,11 +9,20 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAdminFleetDriversBinding
 import com.manjugroups.m_connect.databinding.ItemAdminFleetDriverBinding
+import com.manjugroups.m_connect.network.CreateDriverRequest
+import com.manjugroups.m_connect.network.SetDriverStatusRequest
+import com.manjugroups.m_connect.network.TravelDeskApi
+import com.manjugroups.m_connect.network.TravelDeskDriver
+import com.manjugroups.m_connect.network.UpdateDriverRequest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 class AdminFleetDriversFragment : Fragment() {
@@ -21,17 +30,18 @@ class AdminFleetDriversFragment : Fragment() {
     private var _binding: FragmentAdminFleetDriversBinding? = null
     private val binding get() = _binding!!
 
-    // Store the master list of drivers
-    private val allDrivers = mutableListOf(
-        DriverItem("Ramesh Kumar", "+91 98765 43210", "Triplane Mainroad..", "Active"),
-        DriverItem("Suresh Yadav", "+91 98765 43211", "Triplane Mainroad..", "Active"),
-        DriverItem("Mahesh Singh", "+91 98765 43212", "Triplane Mainroad..", "Inactive"),
-        DriverItem("Vikram Rathod", "+91 98765 43213", "DL 04 GH 3456", "Active")
-    )
+    private val api = TravelDeskApi.create()
+    private lateinit var session: SessionManager
 
-    // Current displayed list (filtered by search)
+    // Source of truth (server snapshot) vs. what's currently rendered (after
+    // local client-side search filtering). Server is consulted on refresh and
+    // after any create/update/setStatus call so the list never lies about
+    // post-action state.
+    private val allDrivers = mutableListOf<DriverItem>()
     private val displayedDrivers = mutableListOf<DriverItem>()
     private lateinit var adapter: DriversAdapter
+    private var loadJob: Job? = null
+    private var actionJob: Job? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -44,47 +54,29 @@ class AdminFleetDriversFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
 
-        // Initialize display list
-        displayedDrivers.addAll(allDrivers)
-
-        // Setup RecyclerView
         binding.rvAdminDrivers.layoutManager = LinearLayoutManager(requireContext())
         adapter = DriversAdapter(displayedDrivers) { driver ->
-            // Click card to Edit/Deactivate
             val bottomSheet = CreateDriverBottomSheet.newEditInstance(
                 name = driver.name,
                 phone = driver.phone,
                 address = driver.address,
                 status = driver.status,
                 onSave = { newName, newPhone, newAddress ->
-                    // Update master list
-                    val masterIndex = allDrivers.indexOf(driver)
-                    if (masterIndex != -1) {
-                        allDrivers[masterIndex] = driver.copy(name = newName, phone = newPhone, address = newAddress)
-                    }
-                    // Refresh search/filtered list
-                    filterList(binding.etSearchDrivers.text.toString())
-                    Toast.makeText(requireContext(), "Driver updated successfully", Toast.LENGTH_SHORT).show()
+                    submitUpdate(driver.id, newName, newPhone, newAddress)
                 },
                 onDeactivate = {
-                    // Toggle Active/Inactive status
-                    val masterIndex = allDrivers.indexOf(driver)
-                    if (masterIndex != -1) {
-                        val newStatus = if (allDrivers[masterIndex].status == "Active") "Inactive" else "Active"
-                        allDrivers[masterIndex] = allDrivers[masterIndex].copy(status = newStatus)
-                        val msg = if (newStatus == "Active") "Driver activated" else "Driver deactivated"
-                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
-                    }
-                    filterList(binding.etSearchDrivers.text.toString())
+                    val nextStatus = if (driver.status == "Active") "inactive" else "active"
+                    submitSetStatus(driver.id, nextStatus)
                 }
             )
             bottomSheet.show(parentFragmentManager, "CreateDriverBottomSheet")
         }
         binding.rvAdminDrivers.adapter = adapter
 
-        binding.rvAdminDrivers.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+        binding.rvAdminDrivers.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 if (dy > 10) {
                     (parentFragment as? AdminFleetContainerFragment)?.setBottomNavScrollState(false)
@@ -94,7 +86,6 @@ class AdminFleetDriversFragment : Fragment() {
             }
         })
 
-        // Search text watcher
         binding.etSearchDrivers.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -103,17 +94,151 @@ class AdminFleetDriversFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Plus button click
         binding.btnCreateDriver.setOnClickListener {
             val bottomSheet = CreateDriverBottomSheet.newInstance { name, phone, address ->
-                // Add new active driver to the top of master list
-                allDrivers.add(0, DriverItem(name, phone, address, "Active"))
-                filterList(binding.etSearchDrivers.text.toString())
-                binding.rvAdminDrivers.scrollToPosition(0)
-                Toast.makeText(requireContext(), "Driver created successfully", Toast.LENGTH_SHORT).show()
+                submitCreate(name, phone, address)
             }
             bottomSheet.show(parentFragmentManager, "CreateDriverBottomSheet")
         }
+
+        refresh()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refresh()
+    }
+
+    private fun refresh() {
+        if (_binding == null) return
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listDrivers(token)
+                if (_binding == null) return@launch
+                allDrivers.clear()
+                allDrivers.addAll(resp.rows.map { mapDriver(it) })
+                filterList(binding.etSearchDrivers.text.toString())
+                binding.tvDriversEmpty.visibility =
+                    if (allDrivers.isEmpty()) View.VISIBLE else View.GONE
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Couldn't load drivers: ${e.message ?: "network error"}",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    private fun submitCreate(name: String, phone: String, address: String) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        actionJob?.cancel()
+        actionJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.createDriver(
+                    token,
+                    CreateDriverRequest(
+                        name = name.trim(),
+                        phone = phone.trim(),
+                        address = address.trim().takeIf { it.isNotBlank() },
+                    ),
+                )
+                if (_binding == null) return@launch
+                if (!resp.success) {
+                    Toast.makeText(requireContext(), resp.error ?: "Couldn't create driver.", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                Toast.makeText(requireContext(), "Driver created successfully", Toast.LENGTH_SHORT).show()
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(requireContext(), "Couldn't create driver: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun submitUpdate(id: String, name: String, phone: String, address: String) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        actionJob?.cancel()
+        actionJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.updateDriver(
+                    token,
+                    UpdateDriverRequest(
+                        id = id,
+                        name = name.trim().takeIf { it.isNotBlank() },
+                        phone = phone.trim().takeIf { it.isNotBlank() },
+                        address = address.trim().takeIf { it.isNotBlank() },
+                    ),
+                )
+                if (_binding == null) return@launch
+                if (!resp.success) {
+                    Toast.makeText(requireContext(), resp.error ?: "Couldn't update driver.", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                Toast.makeText(requireContext(), "Driver updated successfully", Toast.LENGTH_SHORT).show()
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(requireContext(), "Couldn't update driver: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun submitSetStatus(id: String, status: String) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        actionJob?.cancel()
+        actionJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.setDriverStatus(token, SetDriverStatusRequest(id = id, status = status))
+                if (_binding == null) return@launch
+                if (!resp.success) {
+                    Toast.makeText(requireContext(), resp.error ?: "Couldn't change status.", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                val msg = if (status.equals("active", ignoreCase = true)) "Driver activated" else "Driver deactivated"
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(requireContext(), "Couldn't change status: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun mapDriver(d: TravelDeskDriver): DriverItem {
+        val statusLabel = if (d.status.equals("active", ignoreCase = true)) "Active" else "Inactive"
+        return DriverItem(
+            id = d.id,
+            name = d.name,
+            phone = d.phone,
+            address = d.address ?: "",
+            status = statusLabel,
+        )
     }
 
     private fun filterList(query: String) {
@@ -132,11 +257,14 @@ class AdminFleetDriversFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        loadJob?.cancel()
+        actionJob?.cancel()
         super.onDestroyView()
         _binding = null
     }
 
     data class DriverItem(
+        val id: String,
         val name: String,
         val phone: String,
         val address: String,
@@ -165,16 +293,13 @@ class AdminFleetDriversFragment : Fragment() {
             RecyclerView.ViewHolder(binding.root) {
 
             fun bind(item: DriverItem) {
-                binding.root.setOnClickListener {
-                    onItemClick(item)
-                }
+                binding.root.setOnClickListener { onItemClick(item) }
 
                 binding.tvDriverName.text = item.name
                 binding.tvDriverPhone.text = item.phone
-                binding.tvDriverAddress.text = item.address
+                binding.tvDriverAddress.text = item.address.ifBlank { "—" }
                 binding.tvDriverStatus.text = item.status
 
-                // Dynamically change spec/address icon to matches Vikram's plate vs others
                 if (item.address.startsWith("DL", ignoreCase = true) ||
                     item.address.startsWith("KA", ignoreCase = true) ||
                     item.address.startsWith("TN", ignoreCase = true)
@@ -185,14 +310,12 @@ class AdminFleetDriversFragment : Fragment() {
                 }
 
                 if (item.status == "Active") {
-                    binding.tvDriverStatus.text = "Active"
                     binding.tvDriverStatus.setBackgroundResource(R.drawable.bg_badge_success)
                     binding.tvDriverStatus.setTextColor(Color.parseColor("#065F46"))
                     binding.vStatusDot.setBackgroundResource(R.drawable.bg_status_dot_active)
                 } else {
-                    binding.tvDriverStatus.text = "Inactive"
                     binding.tvDriverStatus.setBackgroundResource(R.drawable.bg_badge_error)
-                    binding.tvDriverStatus.setTextColor(Color.parseColor("#991B1B")) // Dark Red text
+                    binding.tvDriverStatus.setTextColor(Color.parseColor("#991B1B"))
                     binding.vStatusDot.setBackgroundResource(R.drawable.bg_status_dot_inactive)
                 }
             }

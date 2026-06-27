@@ -35,10 +35,29 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_NAME = "arg_name"
         private const val ARG_PHONE = "arg_phone"
         private const val ARG_AGENCY = "arg_agency"
+        // Set when the caller wants the Agency field locked to a specific
+        // value (used by the mobile portal: the logged-in agency creates a
+        // vehicle for themselves, so the field is auto-filled + read-only).
+        private const val ARG_FIXED_AGENCY = "arg_fixed_agency"
 
         fun newInstance(onCreate: (String, String, String, String, String, String) -> Unit): CreateVehicleBottomSheet {
             val sheet = CreateVehicleBottomSheet()
             sheet.onCreateCallback = onCreate
+            return sheet
+        }
+
+        /** Variant for the mobile portal: the Agency field is pre-filled with
+         *  the caller's own agency name and made read-only. The web caller
+         *  keeps the editable form via [newInstance]. */
+        fun newInstanceLockedToAgency(
+            agencyName: String,
+            onCreate: (String, String, String, String, String, String) -> Unit,
+        ): CreateVehicleBottomSheet {
+            val sheet = CreateVehicleBottomSheet()
+            sheet.onCreateCallback = onCreate
+            sheet.arguments = Bundle().apply {
+                putString(ARG_FIXED_AGENCY, agencyName)
+            }
             return sheet
         }
 
@@ -83,12 +102,23 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // Lift the sheet above the soft keyboard so the focused field stays
+        // visible while typing. Without this the sheet stays anchored and the
+        // bottom inputs (driver name / phone) get covered.
+        dialog?.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         val dialog = dialog as? com.google.android.material.bottomsheet.BottomSheetDialog
         val bottomSheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
         bottomSheet?.let {
             it.elevation = 0f
             it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            // Expand + lock so the keyboard can't snap the sheet to a peek
+            // state mid-edit.
+            val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+            behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            behavior.skipCollapsed = true
         }
     }
 
@@ -207,6 +237,21 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.btnSubmitCreate.setOnClickListener {
                 validateAndSubmit()
             }
+        }
+
+        // Lock the Agency field when a fixed agency was passed in (mobile
+        // path: the logged-in external-fleet agency is creating the vehicle
+        // for themselves). Applied AFTER the create-mode setup so its
+        // setText("") doesn't wipe the value we just locked.
+        val fixedAgency = arguments?.getString(ARG_FIXED_AGENCY)?.takeIf { it.isNotBlank() }
+        if (fixedAgency != null) {
+            binding.etAgency.setText(fixedAgency)
+            binding.etAgency.keyListener = null
+            binding.etAgency.isFocusable = false
+            binding.etAgency.isFocusableInTouchMode = false
+            binding.etAgency.isClickable = false
+            binding.etAgency.isLongClickable = false
+            binding.etAgency.alpha = 0.7f
         }
     }
 
