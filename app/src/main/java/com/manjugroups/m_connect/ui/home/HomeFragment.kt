@@ -62,6 +62,9 @@ class HomeFragment : Fragment() {
     private var pendingVisitSkeleton: Runnable? = null
     private val visitSkeletonDelayMs = 200L
 
+    private var tooltipAnimator: android.animation.Animator? = null
+    private var handleAnimator: android.animation.Animator? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -969,18 +972,29 @@ class HomeFragment : Fragment() {
         binding.panelContent.translationX = screenWidth
 
         if (!session.hasSeenEdgeQrTooltip) {
+            binding.edgeQrTourDimBg.alpha = 0f
+            binding.edgeQrTourDimBg.visibility = android.view.View.VISIBLE
+            binding.edgeQrTourDimBg.animate().alpha(1f).setDuration(400).setStartDelay(800).start()
+
             binding.edgeQrTooltip.alpha = 0f
             binding.edgeQrTooltip.visibility = android.view.View.VISIBLE
             binding.edgeQrTooltip.animate()
                 .alpha(1f)
-                .setStartDelay(1000)
+                .setStartDelay(800)
                 .setDuration(400)
+                .withEndAction {
+                    startFloatingAnimations()
+                }
                 .start()
         }
 
         val dismissTooltipAction = {
-            if (_binding != null && binding.edgeQrTooltip.visibility == android.view.View.VISIBLE) {
+            if (_binding != null && (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE || binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE)) {
                 session.hasSeenEdgeQrTooltip = true
+                stopFloatingAnimations()
+                binding.edgeQrTourDimBg.animate().alpha(0f).setDuration(250).withEndAction {
+                    if (_binding != null) binding.edgeQrTourDimBg.visibility = android.view.View.GONE
+                }.start()
                 binding.edgeQrTooltip.animate()
                     .alpha(0f)
                     .setDuration(250)
@@ -995,6 +1009,7 @@ class HomeFragment : Fragment() {
 
         binding.edgeQrTooltip.setOnClickListener { dismissTooltipAction() }
         binding.btnDismissTooltip.setOnClickListener { dismissTooltipAction() }
+        binding.edgeQrTourDimBg.setOnClickListener { dismissTooltipAction() }
 
         var startX = 0f
         var downTime = 0L
@@ -1056,9 +1071,11 @@ class HomeFragment : Fragment() {
         if (_binding == null) return
         val screenWidth = resources.displayMetrics.widthPixels.toFloat()
         if (open) {
-            if (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE) {
+            if (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE || binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE) {
                 session.hasSeenEdgeQrTooltip = true
+                stopFloatingAnimations()
                 binding.edgeQrTooltip.visibility = android.view.View.GONE
+                binding.edgeQrTourDimBg.visibility = android.view.View.GONE
             }
             (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
             binding.edgeQrPanel.visibility = android.view.View.VISIBLE
@@ -1079,7 +1096,49 @@ class HomeFragment : Fragment() {
         }
     }
 
+    private fun startFloatingAnimations() {
+        if (_binding == null) return
+        
+        // 1. Tooltip horizontal float (moves left slightly and returns)
+        val tooltipAnim = android.animation.ObjectAnimator.ofFloat(
+            binding.edgeQrTooltip,
+            "translationX",
+            0f, -16f, 0f
+        ).apply {
+            duration = 2000
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        }
+        tooltipAnimator = tooltipAnim
+        tooltipAnim.start()
+
+        // 2. Handle horizontal float (moves left slightly and returns to nudge user)
+        val handleAnim = android.animation.ObjectAnimator.ofFloat(
+            binding.edgeDragHandle,
+            "translationX",
+            0f, -8f, 0f
+        ).apply {
+            duration = 2000
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        }
+        handleAnimator = handleAnim
+        handleAnim.start()
+    }
+
+    private fun stopFloatingAnimations() {
+        tooltipAnimator?.cancel()
+        tooltipAnimator = null
+        handleAnimator?.cancel()
+        handleAnimator = null
+        if (_binding != null) {
+            binding.edgeQrTooltip.translationX = 0f
+            binding.edgeDragHandle.translationX = 0f
+        }
+    }
+
     override fun onDestroyView() {
+        stopFloatingAnimations()
         cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
         binding.homeHeader.stopFloatingAnimation()
