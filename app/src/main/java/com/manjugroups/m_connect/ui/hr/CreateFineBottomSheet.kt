@@ -243,100 +243,34 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showEmployeePicker() {
-        val currentList: List<StaffData> = if (staffList.isNotEmpty()) staffList else emptyList()
-
-        val dialogView = LayoutInflater.from(requireContext())
-            .inflate(R.layout.bottom_sheet_select_employee, null)
-
-        val dialog = AlertDialog.Builder(requireContext(), R.style.FullWidthBottomDialogTheme)
-            .setView(dialogView)
-            .create()
-
-        dialog.window?.let { w ->
-            w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            w.setGravity(android.view.Gravity.BOTTOM)
-            w.setLayout(
-                android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                android.view.WindowManager.LayoutParams.WRAP_CONTENT
-            )
+        val currentList = if (staffList.isNotEmpty()) staffList else emptyList()
+        if (currentList.isEmpty()) {
+            Toast.makeText(requireContext(), "Loading employees...", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        var tempSelected: StaffData? = selectedStaff
+        val names = currentList.map { it.name ?: "Unknown" }.toTypedArray()
+        val checkedIndex = currentList.indexOfFirst { it.id == selectedStaff?.id }
 
-        val llContainer = dialogView.findViewById<android.widget.LinearLayout>(R.id.llEmployeeContainer)
-        val tvEmpty = dialogView.findViewById<android.widget.TextView>(R.id.tvEmptyPeople)
-        val etSearch = dialogView.findViewById<android.widget.EditText>(R.id.etSearchPeople)
-        val btnClose = dialogView.findViewById<View>(R.id.btnSheetClose)
-        val btnAdd = dialogView.findViewById<View>(R.id.btnAdd)
+        var picked = if (checkedIndex >= 0) checkedIndex else -1
 
-        fun populateList(query: String) {
-            llContainer.removeAllViews()
-            val filtered = if (query.isEmpty()) currentList
-            else currentList.filter { (it.name ?: "").contains(query, ignoreCase = true) }
-
-            tvEmpty.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
-
-            filtered.forEach { staff ->
-                val rowView = LayoutInflater.from(requireContext())
-                    .inflate(R.layout.item_sheet_employee_row, llContainer, false)
-
-                rowView.findViewById<android.widget.TextView>(R.id.tvName).text = staff.name ?: "Unknown"
-                rowView.findViewById<android.widget.TextView>(R.id.tvDetails).text =
-                    "${staff.department ?: "Department"} • ${staff.role ?: "Staff"}"
-
-                val ivAvatar = rowView.findViewById<android.widget.ImageView>(R.id.ivAvatar)
-                val resolvedPhoto = ProfilePhotos.resolve(staff.photo)
-                if (!resolvedPhoto.isNullOrEmpty()) {
-                    ivAvatar.load(resolvedPhoto) {
-                        crossfade(true)
-                        placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                        error(R.drawable.bg_attendance_avatar_placeholder)
-                        transformations(CircleCropTransformation())
-                    }
-                } else {
-                    ivAvatar.load(R.drawable.bg_attendance_avatar_placeholder) {
-                        transformations(CircleCropTransformation())
+        AlertDialog.Builder(requireContext())
+            .setTitle("Select Employee")
+            .setSingleChoiceItems(names, checkedIndex) { _, which ->
+                picked = which
+            }
+            .setPositiveButton("Add") { dlg, _ ->
+                if (picked in currentList.indices) {
+                    selectedStaff = currentList[picked]
+                    if (_binding != null) {
+                        binding.tvSelectedEmployee.text = selectedStaff?.name
+                        binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
                     }
                 }
-
-                val viewPresence = rowView.findViewById<View>(R.id.viewPresence)
-                viewPresence.visibility = if (staff.status == "active") View.VISIBLE else View.GONE
-
-                val rbSelect = rowView.findViewById<android.widget.RadioButton>(R.id.rbSelect)
-                rbSelect.isChecked = (tempSelected?.id == staff.id)
-
-                rowView.setOnClickListener {
-                    tempSelected = staff
-                    populateList(etSearch.text.toString().trim())
-                }
-
-                llContainer.addView(rowView)
+                dlg.dismiss()
             }
-        }
-
-        btnClose.setOnClickListener { dialog.dismiss() }
-
-        btnAdd.setOnClickListener {
-            tempSelected?.let { staff ->
-                selectedStaff = staff
-                if (_binding != null) {
-                    binding.tvSelectedEmployee.text = staff.name
-                    binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
-                }
-            }
-            dialog.dismiss()
-        }
-
-        etSearch.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                populateList(s?.toString()?.trim() ?: "")
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
-        })
-
-        populateList("")
-        dialog.show()
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun submitFine() {
