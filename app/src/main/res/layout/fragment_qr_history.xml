@@ -97,10 +97,11 @@
                 android:visibility="gone">
 
                 <ImageView
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:src="@drawable/ic_leave_empty"
-                    app:tint="#98A2B3" />
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/img_qr_history_empty" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -116,7 +117,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:gravity="center"
-                    android:text="Scanned QR codes will appear here."
+                    android:text="Your scanned QR codes and visitor logs will show up here."
                     android:textColor="#667085"
                     android:textSize="13sp" />
             </LinearLayout>
