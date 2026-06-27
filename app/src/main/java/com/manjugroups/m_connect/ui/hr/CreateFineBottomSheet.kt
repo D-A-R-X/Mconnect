@@ -45,8 +45,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
 
     private val api by lazy { ApiService.create() }
     private val session by lazy { SessionManager(requireContext()) }
-    private val staffList = mutableListOf<StaffData>()
-    private var selectedStaff: StaffData? = null
+
 
     private var pendingImageFile: File? = null
     private var pendingLocalPhotoFile: File? = null
@@ -154,11 +153,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             insets
         }
 
-        loadStaffList()
 
-        binding.btnSelectEmployee.setOnClickListener {
-            showEmployeePicker()
-        }
 
         binding.btnCamera.setOnClickListener {
             checkCameraPermissionAndOpen()
@@ -227,128 +222,11 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         return storageId
     }
 
-    private fun loadStaffList() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.getStaff(session.bearerToken, status = "active")
-                if (resp.success && !resp.staff.isNullOrEmpty()) {
-                    staffList.clear()
-                    staffList.addAll(resp.staff)
-                }
-            } catch (_: Exception) {
-                // Fallback to local items if network count fails
-            }
-        }
-    }
 
-    private fun showEmployeePicker() {
-        val fallbackStaff = listOf(
-            StaffData(id = "1", name = "Mari Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null),
-            StaffData(id = "2", name = "Sudalai Muthu.R", phone = null, role = null, designation = null, status = "active", employeeId = null, department = "Sales Department", photo = null)
-        )
 
-        val currentList = if (staffList.isNotEmpty()) staffList else fallbackStaff
-
-        val dialogView = LayoutInflater.from(requireContext())
-            .inflate(R.layout.bottom_sheet_select_employee, null)
-
-        val dialog = AlertDialog.Builder(requireContext(), R.style.FullWidthBottomDialogTheme)
-            .setView(dialogView)
-            .create()
-
-        dialog.window?.let { window ->
-            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            window.setGravity(android.view.Gravity.BOTTOM)
-            window.setLayout(
-                android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                android.view.WindowManager.LayoutParams.WRAP_CONTENT
-            )
-        }
-
-        var tempSelected: StaffData? = selectedStaff
-
-        val llContainer = dialogView.findViewById<android.widget.LinearLayout>(R.id.llEmployeeContainer)
-        val tvEmpty = dialogView.findViewById<android.widget.TextView>(R.id.tvEmptyPeople)
-        val etSearch = dialogView.findViewById<android.widget.EditText>(R.id.etSearchPeople)
-        val btnClose = dialogView.findViewById<View>(R.id.btnSheetClose)
-        val btnAdd = dialogView.findViewById<View>(R.id.btnAdd)
-
-        fun populateList(query: String) {
-            llContainer.removeAllViews()
-            val filtered = if (query.isEmpty()) currentList
-            else currentList.filter { (it.name ?: "").contains(query, ignoreCase = true) }
-
-            tvEmpty.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
-
-            filtered.forEach { staff ->
-                val rowView = LayoutInflater.from(requireContext())
-                    .inflate(R.layout.item_sheet_employee_row, llContainer, false)
-
-                rowView.findViewById<android.widget.TextView>(R.id.tvName).text = staff.name ?: "Unknown"
-                rowView.findViewById<android.widget.TextView>(R.id.tvDetails).text =
-                    "${staff.department ?: "Department"} • ${staff.role ?: "Staff"}"
-
-                val ivAvatar = rowView.findViewById<android.widget.ImageView>(R.id.ivAvatar)
-                val resolvedPhoto = ProfilePhotos.resolve(staff.photo)
-                if (!resolvedPhoto.isNullOrEmpty()) {
-                    ivAvatar.load(resolvedPhoto) {
-                        crossfade(true)
-                        placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                        error(R.drawable.bg_attendance_avatar_placeholder)
-                        transformations(CircleCropTransformation())
-                    }
-                } else {
-                    ivAvatar.load(R.drawable.bg_attendance_avatar_placeholder) {
-                        transformations(CircleCropTransformation())
-                    }
-                }
-
-                val viewPresence = rowView.findViewById<View>(R.id.viewPresence)
-                viewPresence.visibility = if (staff.status == "active") View.VISIBLE else View.GONE
-
-                val rbSelect = rowView.findViewById<android.widget.RadioButton>(R.id.rbSelect)
-                rbSelect.isChecked = (tempSelected?.id == staff.id)
-
-                rowView.setOnClickListener {
-                    tempSelected = staff
-                    populateList(etSearch.text.toString().trim())
-                }
-
-                llContainer.addView(rowView)
-            }
-        }
-
-        btnClose.setOnClickListener { dialog.dismiss() }
-
-        btnAdd.setOnClickListener {
-            tempSelected?.let { staff ->
-                selectedStaff = staff
-                if (_binding != null) {
-                    binding.tvSelectedEmployee.text = staff.name
-                    binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
-                }
-            }
-            dialog.dismiss()
-        }
-
-        etSearch.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                populateList(s?.toString()?.trim() ?: "")
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
-        })
-
-        populateList("")
-        dialog.show()
-    }
 
     private fun submitFine() {
-        val staffName = selectedStaff?.name ?: binding.tvSelectedEmployee.text.toString()
-        if (staffName == "Select Employee" || (selectedStaff == null && staffList.isNotEmpty())) {
-            Toast.makeText(requireContext(), "Please select an employee", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val staffName = ""
 
         val fineType = binding.etFineType.text.toString().trim()
         if (fineType.isEmpty()) {
@@ -368,7 +246,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        val department = selectedStaff?.department ?: "Sales Department"
+        val department = ""
         val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
 
         // Disable views during upload/submit
@@ -382,7 +260,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 fineType = fineType,
                 amount = amount,
                 dateStr = dateStr,
-                photo = photoId ?: selectedStaff?.photo
+                photo = photoId
             )
             dismiss()
         }
