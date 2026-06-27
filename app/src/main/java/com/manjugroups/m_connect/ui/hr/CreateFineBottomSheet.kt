@@ -358,7 +358,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 fineType = fineType,
                 amount = amount,
                 dateStr = dateStr,
-                photo = photoId ?: selectedStaff?.photo
+                photo = selectedStaff?.photo
             )
             dismiss()
         }
