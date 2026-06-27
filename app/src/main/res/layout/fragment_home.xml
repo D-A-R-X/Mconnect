@@ -360,6 +360,42 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- First-time Tooltip -->
+    <LinearLayout
+        android:id="@+id/edgeQrTooltip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="32dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_tooltip_bubble"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:elevation="16dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:text="Swipe left or tap to open QR Scanner"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/btnDismissTooltip"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_close_pill"
+            app:tint="#A5C6FF"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
     <!-- Edge Drag QR Handle and Panel -->
     <!-- Handle (thin vertical tab on the right edge) -->
     <FrameLayout

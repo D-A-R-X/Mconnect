@@ -359,6 +359,10 @@ class SessionManager(context: Context) {
         return false
     }
 
+    var hasSeenEdgeQrTooltip: Boolean
+        get() = getCachedBoolean("has_seen_edge_qr_tooltip", false)
+        set(value) = setCachedBoolean("has_seen_edge_qr_tooltip", value)
+
     companion object {
         private const val TAG = "SessionManager"
         private const val PREFS_NAME = "mconnect_session"

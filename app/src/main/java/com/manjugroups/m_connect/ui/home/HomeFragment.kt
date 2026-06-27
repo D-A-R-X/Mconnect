@@ -968,6 +968,34 @@ class HomeFragment : Fragment() {
         // Initialize the panel content offscreen to the right
         binding.panelContent.translationX = screenWidth
 
+        if (!session.hasSeenEdgeQrTooltip) {
+            binding.edgeQrTooltip.alpha = 0f
+            binding.edgeQrTooltip.visibility = android.view.View.VISIBLE
+            binding.edgeQrTooltip.animate()
+                .alpha(1f)
+                .setStartDelay(1000)
+                .setDuration(400)
+                .start()
+        }
+
+        val dismissTooltipAction = {
+            if (_binding != null && binding.edgeQrTooltip.visibility == android.view.View.VISIBLE) {
+                session.hasSeenEdgeQrTooltip = true
+                binding.edgeQrTooltip.animate()
+                    .alpha(0f)
+                    .setDuration(250)
+                    .withEndAction {
+                        if (_binding != null) {
+                            binding.edgeQrTooltip.visibility = android.view.View.GONE
+                        }
+                    }
+                    .start()
+            }
+        }
+
+        binding.edgeQrTooltip.setOnClickListener { dismissTooltipAction() }
+        binding.btnDismissTooltip.setOnClickListener { dismissTooltipAction() }
+
         var startX = 0f
         var downTime = 0L
 
@@ -1028,6 +1056,10 @@ class HomeFragment : Fragment() {
         if (_binding == null) return
         val screenWidth = resources.displayMetrics.widthPixels.toFloat()
         if (open) {
+            if (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE) {
+                session.hasSeenEdgeQrTooltip = true
+                binding.edgeQrTooltip.visibility = android.view.View.GONE
+            }
             (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
             binding.edgeQrPanel.visibility = android.view.View.VISIBLE
             binding.panelBlurBg.animate().alpha(1f).setDuration(250).start()
