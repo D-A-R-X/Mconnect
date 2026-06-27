@@ -46,6 +46,7 @@ class HomeHeaderView @JvmOverloads constructor(
     private val bannerFloatAnimators = mutableListOf<Animator>()
     private var viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isFleetBannerMode = false
+    private var basePaddingTop: Int? = null
 
     private var onProfileClickListener: (() -> Unit)? = null
     private var onBellClickListener: (() -> Unit)? = null
@@ -148,12 +149,15 @@ class HomeHeaderView @JvmOverloads constructor(
         onViewSummaryClick: (() -> Unit)? = null
     ) {
         // Apply status bar padding inset to the profile row
-        val basePaddingTop = binding.homeProfileRow.paddingTop
+        if (basePaddingTop == null) {
+            basePaddingTop = binding.homeProfileRow.paddingTop
+        }
+        val initialPaddingTop = basePaddingTop!!
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeHeaderContainer) { _, insets ->
             val topInset = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
             binding.homeProfileRow.setPadding(
                 binding.homeProfileRow.paddingStart,
-                basePaddingTop + topInset,
+                initialPaddingTop + topInset,
                 binding.homeProfileRow.paddingEnd,
                 binding.homeProfileRow.paddingBottom
             )
@@ -261,7 +265,7 @@ class HomeHeaderView @JvmOverloads constructor(
                 val role = listOfNotNull(
                     staff.designation?.takeIf { it.isNotBlank() },
                     staff.department?.takeIf { it.isNotBlank() },
-                ).joinToString(" Ã¢â‚¬Â¢ ")
+                ).joinToString(" • ")
                 if (role.isNotBlank()) {
                     binding.tvHeaderRole.text = role
                 }
