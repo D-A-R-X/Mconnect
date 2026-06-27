@@ -257,7 +257,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
             }
         }
-        picker.show(childFragmentManager, "EmployeeSelect")
+        picker.show(parentFragmentManager, "EmployeeSelect")
     }
 
     private fun submitFine() {
