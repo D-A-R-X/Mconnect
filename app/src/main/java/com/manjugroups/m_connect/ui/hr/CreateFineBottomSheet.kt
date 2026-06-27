@@ -11,7 +11,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
@@ -160,6 +159,28 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             showEmployeePicker()
         }
 
+        // ---- Inline employee picker overlay listeners ----
+        binding.btnPickerClose.setOnClickListener {
+            hideEmployeePicker()
+        }
+
+        binding.btnPickerAdd.setOnClickListener {
+            tempPickerStaff?.let { staff ->
+                selectedStaff = staff
+                binding.tvSelectedEmployee.text = staff.name
+                binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
+            }
+            hideEmployeePicker()
+        }
+
+        binding.etPickerSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                populatePickerList(s?.toString()?.trim() ?: "")
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
 
         binding.btnCamera.setOnClickListener {
             checkCameraPermissionAndOpen()
@@ -171,6 +192,80 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
 
         binding.btnSubmitFine.setOnClickListener {
             submitFine()
+        }
+    }
+
+    private var tempPickerStaff: StaffData? = null
+
+    private fun showEmployeePicker() {
+        tempPickerStaff = selectedStaff
+        binding.layoutFormContent.visibility = View.GONE
+        binding.layoutEmployeePicker.visibility = View.VISIBLE
+        binding.etPickerSearch.setText("")
+        populatePickerList("")
+    }
+
+    private fun hideEmployeePicker() {
+        binding.layoutEmployeePicker.visibility = View.GONE
+        binding.layoutFormContent.visibility = View.VISIBLE
+    }
+
+    private fun populatePickerList(query: String) {
+        if (_binding == null) return
+        val container = binding.llPickerEmployeeContainer
+        container.removeAllViews()
+
+        val currentList = staffList.toList()
+        val filtered = if (query.isEmpty()) currentList
+        else currentList.filter { (it.name ?: "").contains(query, ignoreCase = true) }
+
+        filtered.forEach { staff ->
+            val rowView = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_sheet_employee_row, container, false)
+
+            rowView.findViewById<android.widget.TextView>(R.id.tvName).text = staff.name ?: "Unknown"
+            rowView.findViewById<android.widget.TextView>(R.id.tvDetails).text =
+                "${staff.department ?: "Department"} • ${staff.role ?: "Staff"}"
+
+            val ivAvatar = rowView.findViewById<android.widget.ImageView>(R.id.ivAvatar)
+            val resolvedPhoto = ProfilePhotos.resolve(staff.photo)
+            if (!resolvedPhoto.isNullOrEmpty()) {
+                ivAvatar.load(resolvedPhoto) {
+                    crossfade(true)
+                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
+                    transformations(CircleCropTransformation())
+                }
+            } else {
+                ivAvatar.load(R.drawable.bg_attendance_avatar_placeholder) {
+                    transformations(CircleCropTransformation())
+                }
+            }
+
+            val viewPresence = rowView.findViewById<View>(R.id.viewPresence)
+            viewPresence.visibility = if (staff.status == "active") View.VISIBLE else View.GONE
+
+            val rbSelect = rowView.findViewById<android.widget.RadioButton>(R.id.rbSelect)
+            rbSelect.isChecked = (tempPickerStaff?.id == staff.id)
+
+            rowView.setOnClickListener {
+                tempPickerStaff = staff
+                populatePickerList(binding.etPickerSearch.text.toString().trim())
+            }
+
+            container.addView(rowView)
+        }
+    }
+
+    private fun loadStaffList() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken, status = "active")
+                if (resp.success && !resp.staff.isNullOrEmpty()) {
+                    staffList.clear()
+                    staffList.addAll(resp.staff)
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -226,62 +321,6 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Upload failed: ${err.message}", Toast.LENGTH_SHORT).show()
         }
         return storageId
-    }
-
-
-
-    private fun loadStaffList() {
-        try {
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    val resp = api.getStaff(session.bearerToken, status = "active")
-                    if (resp.success && !resp.staff.isNullOrEmpty()) {
-                        staffList.clear()
-                        staffList.addAll(resp.staff)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("CreateFine", "loadStaffList API error: ${e.message}", e)
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("CreateFine", "loadStaffList launch error: ${e.message}", e)
-        }
-    }
-
-    private fun showEmployeePicker() {
-        try {
-            val currentList = staffList.toList()
-            if (currentList.isEmpty()) {
-                Toast.makeText(requireActivity(), "Loading employees, please wait...", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val names = currentList.map { it.name ?: "Unknown" }.toTypedArray()
-            val checkedIndex = currentList.indexOfFirst { it.id == selectedStaff?.id }
-
-            var picked = if (checkedIndex >= 0) checkedIndex else -1
-
-            AlertDialog.Builder(requireActivity())
-                .setTitle("Select Employee")
-                .setSingleChoiceItems(names, checkedIndex) { _, which ->
-                    picked = which
-                }
-                .setPositiveButton("Add") { dlg, _ ->
-                    if (picked in currentList.indices) {
-                        selectedStaff = currentList[picked]
-                        if (_binding != null) {
-                            binding.tvSelectedEmployee.text = selectedStaff?.name
-                            binding.tvSelectedEmployee.setTextColor(Color.parseColor("#1D2939"))
-                        }
-                    }
-                    dlg.dismiss()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        } catch (e: Exception) {
-            android.util.Log.e("CreateFine", "showEmployeePicker error: ${e.message}", e)
-            Toast.makeText(requireActivity(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
-        }
     }
 
     private fun submitFine() {
