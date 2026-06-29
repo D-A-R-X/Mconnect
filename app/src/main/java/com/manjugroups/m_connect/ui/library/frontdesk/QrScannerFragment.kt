@@ -45,6 +45,7 @@ class QrScannerFragment : Fragment() {
     private var isScanningActive = true
     private var laserAnimator: ObjectAnimator? = null
     private val barcodeScanner: BarcodeScanner by lazy { BarcodeScanning.getClient() }
+    private var statusBarHeight = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -86,15 +87,16 @@ class QrScannerFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            statusBarHeight = sysBars.top
             
             // Scanner top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
 
-            // Verification layout top spacer
+            // Verification layout top spacer (starts at 0 when collapsed)
             val lpVerification = binding.spacerStatusBarVerification.layoutParams
-            lpVerification.height = sysBars.top
+            lpVerification.height = 0
             binding.spacerStatusBarVerification.layoutParams = lpVerification
 
             // Add navigation bar bottom padding to absolute floating buttons panel
@@ -108,6 +110,31 @@ class QrScannerFragment : Fragment() {
 
             insets
         }
+
+        // Setup Bottom Sheet Callback to dynamically adjust top spacer height on slide
+        val behavior = BottomSheetBehavior.from(binding.verificationBottomSheet)
+        behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
+                    val lp = binding.spacerStatusBarVerification.layoutParams
+                    lp.height = 0
+                    binding.spacerStatusBarVerification.layoutParams = lp
+                } else if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                    val lp = binding.spacerStatusBarVerification.layoutParams
+                    lp.height = statusBarHeight
+                    binding.spacerStatusBarVerification.layoutParams = lp
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // slideOffset goes from 0.0 (collapsed) to 1.0 (expanded)
+                if (slideOffset >= 0f) {
+                    val lp = binding.spacerStatusBarVerification.layoutParams
+                    lp.height = (statusBarHeight * slideOffset).toInt()
+                    binding.spacerStatusBarVerification.layoutParams = lp
+                }
+            }
+        })
 
         startLaserAnimation()
         startCamera()

@@ -21,6 +21,7 @@ class QrHistoryFragment : Fragment() {
 
     private var _binding: FragmentQrHistoryBinding? = null
     private val binding get() = _binding!!
+    private var statusBarHeight = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -44,15 +45,16 @@ class QrHistoryFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            statusBarHeight = sysBars.top
             
             // History top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
 
-            // Verification layout top spacer
+            // Verification layout top spacer (starts at 0 when collapsed)
             val lpVerification = binding.spacerStatusBarVerificationHistory.layoutParams
-            lpVerification.height = sysBars.top
+            lpVerification.height = 0
             binding.spacerStatusBarVerificationHistory.layoutParams = lpVerification
 
             // Add navigation bar bottom padding to absolute floating buttons panel
@@ -66,6 +68,31 @@ class QrHistoryFragment : Fragment() {
 
             insets
         }
+
+        // Setup Bottom Sheet Callback to dynamically adjust top spacer height on slide
+        val behavior = BottomSheetBehavior.from(binding.verificationBottomSheetHistory)
+        behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
+                    val lp = binding.spacerStatusBarVerificationHistory.layoutParams
+                    lp.height = 0
+                    binding.spacerStatusBarVerificationHistory.layoutParams = lp
+                } else if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                    val lp = binding.spacerStatusBarVerificationHistory.layoutParams
+                    lp.height = statusBarHeight
+                    binding.spacerStatusBarVerificationHistory.layoutParams = lp
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // slideOffset goes from 0.0 (collapsed) to 1.0 (expanded)
+                if (slideOffset >= 0f) {
+                    val lp = binding.spacerStatusBarVerificationHistory.layoutParams
+                    lp.height = (statusBarHeight * slideOffset).toInt()
+                    binding.spacerStatusBarVerificationHistory.layoutParams = lp
+                }
+            }
+        })
 
         binding.btnCancelHeaderVerificationHistory.setOnClickListener {
             binding.visitorVerificationContainerHistory.visibility = View.GONE
