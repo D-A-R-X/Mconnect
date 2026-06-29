@@ -6,8 +6,6 @@
     android:layout_marginHorizontal="16dp"
     android:layout_marginBottom="16dp"
     android:background="@drawable/bg_issue_card"
-    android:elevation="2dp"
-    android:outlineProvider="background"
     android:orientation="vertical"
     android:padding="16dp">
 
