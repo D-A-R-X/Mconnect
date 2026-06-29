@@ -78,6 +78,7 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity android:name=".geotrack.GeoTrackConsentActivity"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Mconnect" />
 
         <service

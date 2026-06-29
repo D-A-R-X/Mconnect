@@ -1580,7 +1580,15 @@ data class LoanData(
     val nominee1ESignature: String? = null,
     val nominee2Id: String? = null,
     val nominee2Name: String? = null,
-    val nominee2ESignature: String? = null
+    val nominee2ESignature: String? = null,
+    // Resolved approval-chain approvers (who's next at each role). assigned*
+    // are stamped at submit (the reporting/dept GM & AVP); gm/avp/accountantName
+    // are filled as each stage acts.
+    val assignedGmName: String? = null,
+    val assignedAvpName: String? = null,
+    val gmName: String? = null,
+    val avpName: String? = null,
+    val accountantName: String? = null
 )
 
 data class LoanRepaymentData(

@@ -37,6 +37,10 @@ class GmApprovalBottomSheet(
     private val onRejected: () -> Unit
 ) : BottomSheetDialogFragment() {
 
+    // The currently-rendered workflow/advance steps (empty when the fixed
+    // legacy tracker is shown). Used by the "tap the progress bar" detail popup.
+    private var workflowSteps: List<WorkflowStepData> = emptyList()
+
     private var _binding: BottomSheetGmApprovalBinding? = null
     private val binding get() = _binding!!
     private val api = ApiService.create()
@@ -330,13 +334,18 @@ class GmApprovalBottomSheet(
 
     private fun restoreLegacyFixedTracker() {
         val b = _binding ?: return
+        workflowSteps = emptyList()
         b.sheetFixedTracker.visibility = View.VISIBLE
         b.sheetWorkflowScroll.visibility = View.GONE
         updateTrackerState(loan.approvalStatus)
+        // Tap the progress bar to see who approves next.
+        b.sheetFixedTracker.isClickable = true
+        b.sheetFixedTracker.setOnClickListener { showApprovalChainDialog() }
     }
 
     private fun renderWorkflowSteps(steps: List<WorkflowStepData>) {
         val b = _binding ?: return
+        workflowSteps = steps
         b.sheetFixedTracker.visibility = View.GONE
         b.sheetWorkflowScroll.visibility = View.VISIBLE
 
@@ -427,8 +436,99 @@ class GmApprovalBottomSheet(
                 })
             }
 
+            item.isClickable = true
+            item.setOnClickListener { showApprovalChainDialog() }
             container.addView(item)
         }
+        // Tapping anywhere on the tracker also opens the chain detail.
+        container.isClickable = true
+        container.setOnClickListener { showApprovalChainDialog() }
+    }
+
+    /**
+     * "Who approves next" popup, opened by tapping the approval progress bar.
+     * Lists every stage with its role, the assigned approver's name, and its
+     * status, and calls out the next pending approver at the top. Works for the
+     * dynamic workflow/advance tracker (uses each step's resolved approver) and
+     * the legacy fixed tracker (derives the chain from approvalStatus + the
+     * approver names stamped on the loan).
+     */
+    private fun showApprovalChainDialog() {
+        if (_binding == null) return
+
+        // role, person (nullable), state: "done" | "next" | "pending" | "rejected"
+        val entries = mutableListOf<Triple<String, String?, String>>()
+
+        if (workflowSteps.isNotEmpty()) {
+            var nextTaken = false
+            workflowSteps.forEachIndexed { i, step ->
+                val s = step.status?.lowercase()?.trim().orEmpty()
+                val role = step.name?.takeIf { it.isNotBlank() }
+                    ?: step.approverRole?.takeIf { it.isNotBlank() }
+                    ?: step.approverDesignation?.takeIf { it.isNotBlank() }
+                    ?: "Step ${step.stepOrder ?: (i + 1)}"
+                val state = when {
+                    s == "rejected" -> "rejected"
+                    s == "approved" || s == "skipped" -> "done"
+                    !nextTaken -> { nextTaken = true; "next" }
+                    else -> "pending"
+                }
+                entries.add(Triple(role, step.resolvedStaffName?.takeIf { it.isNotBlank() }, state))
+            }
+        } else {
+            val status = (loan.approvalStatus ?: loan.currentStage ?: "").lowercase()
+            fun has(vararg keys: String) = keys.any { status.contains(it) }
+            val rejected = status.contains("rejected")
+            val raw = listOf(
+                Triple("Nominee 1", loan.nominee1Name, has("nominee_2", "gm", "avp", "vp", "hr", "account", "finance", "approved")),
+                Triple("Nominee 2", loan.nominee2Name, has("gm", "avp", "vp", "hr", "account", "finance", "approved")),
+                Triple("GM", loan.assignedGmName ?: loan.gmName, has("avp", "vp", "hr", "account", "finance", "approved")),
+                Triple("AVP", loan.assignedAvpName ?: loan.avpName, has("hr", "account", "finance", "approved")),
+                Triple("HR", "HR Team", has("account", "finance", "approved")),
+                Triple("Accountant", loan.accountantName?.takeIf { it.isNotBlank() } ?: "Accounts Team", has("approved")),
+            )
+            var nextTaken = false
+            raw.forEach { (role, person, done) ->
+                val state = when {
+                    done -> "done"
+                    rejected -> "rejected"
+                    !nextTaken -> { nextTaken = true; "next" }
+                    else -> "pending"
+                }
+                entries.add(Triple(role, person?.takeIf { it.isNotBlank() }, state))
+            }
+        }
+
+        val next = entries.firstOrNull { it.third == "next" }
+        val sb = StringBuilder()
+        if (next != null) {
+            sb.append("Next to approve:  ")
+                .append(next.second ?: "Unassigned")
+                .append("  (").append(next.first).append(")\n\n")
+        }
+        entries.forEach { (role, person, state) ->
+            val mark = when (state) {
+                "done" -> "✓"      // check
+                "next" -> "➜"      // arrow
+                "rejected" -> "✕"  // cross
+                else -> "•"        // bullet
+            }
+            val label = when (state) {
+                "done" -> "Approved"
+                "next" -> "Pending — next"
+                "rejected" -> "Rejected"
+                else -> "Pending"
+            }
+            sb.append(mark).append("  ").append(role)
+            if (!person.isNullOrBlank()) sb.append("  —  ").append(person)
+            sb.append("   ·  ").append(label).append('\n')
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Approval progress")
+            .setMessage(sb.toString().trim())
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     override fun onDestroyView() {

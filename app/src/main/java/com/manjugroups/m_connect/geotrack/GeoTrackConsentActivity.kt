@@ -30,6 +30,22 @@ class GeoTrackConsentActivity : AppCompatActivity() {
     private val api = GeoTrackApi.create()
     private var permissionCheckPending = false
 
+    companion object {
+        /**
+         * True while a consent screen instance is alive. Bootstrap sync runs on
+         * every MainActivity resume / punch, and each pass would otherwise launch
+         * a fresh consent screen — stacking duplicates. The launcher checks this
+         * flag so it never opens a second one.
+         */
+        @Volatile
+        var isActive = false
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        isActive = false
+    }
+
     override fun onResume() {
         super.onResume()
         // User returned from Settings — check if background location was granted
@@ -88,6 +104,7 @@ class GeoTrackConsentActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        isActive = true
         binding = ActivityGeoConsentBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
