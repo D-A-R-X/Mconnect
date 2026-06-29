@@ -165,13 +165,13 @@ class IssuesFragment : Fragment() {
 
             binding.issuesContainer.removeAllViews()
             val inflater = LayoutInflater.from(requireContext())
-            val sdf = SimpleDateFormat("Today, hh:mm a", Locale.US)
+            val sdf = SimpleDateFormat("hh:mm a", Locale.US)
 
             for (issue in filterList) {
                 val cardBinding = ItemIssueCardBinding.inflate(inflater, binding.issuesContainer, false)
 
                 cardBinding.tvIssueCardTitle.text = issue.title
-                cardBinding.tvIssueTime.text = sdf.format(Date(issue.timestamp))
+                cardBinding.tvIssueTime.text = "Today, " + sdf.format(Date(issue.timestamp))
 
                 if (issue.description.isNotEmpty()) {
                     cardBinding.tvIssueCardDesc.text = issue.description
