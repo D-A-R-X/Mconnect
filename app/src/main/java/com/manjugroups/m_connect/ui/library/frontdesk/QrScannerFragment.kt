@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 
 class QrScannerFragment : Fragment() {
@@ -351,6 +352,7 @@ class QrScannerFragment : Fragment() {
             isScanningActive = true // Resume scan
         }
 
+        BottomSheetBehavior.from(binding.verificationBottomSheet).state = BottomSheetBehavior.STATE_COLLAPSED
         binding.visitorVerificationContainer.visibility = View.VISIBLE
     }
 

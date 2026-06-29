@@ -14,6 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 
 class QrHistoryFragment : Fragment() {
@@ -230,6 +231,7 @@ class QrHistoryFragment : Fragment() {
             }
         }
 
+        BottomSheetBehavior.from(binding.verificationBottomSheetHistory).state = BottomSheetBehavior.STATE_COLLAPSED
         binding.visitorVerificationContainerHistory.visibility = View.VISIBLE
     }
 
