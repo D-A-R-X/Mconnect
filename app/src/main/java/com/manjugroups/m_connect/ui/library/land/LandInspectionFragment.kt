@@ -70,16 +70,21 @@ class LandInspectionFragment : Fragment() {
     private fun rescheduledPrefs(): android.content.SharedPreferences =
         requireContext().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
 
-    private fun isAlreadyRescheduled(propertyId: String): Boolean =
-        rescheduledPrefs().getStringSet(PREFS_KEY_IDS, emptySet())?.contains(propertyId) == true
+    private fun isAlreadyRescheduled(propertyId: String): Boolean {
+        val phone = session.userPhone.orEmpty()
+        val key = "${phone}_${propertyId}"
+        return rescheduledPrefs().getStringSet(PREFS_KEY_IDS, emptySet())?.contains(key) == true
+    }
 
     private fun markRescheduled(propertyId: String) {
         val prefs = rescheduledPrefs()
         val current = prefs.getStringSet(PREFS_KEY_IDS, emptySet()) ?: emptySet()
-        if (propertyId in current) return
+        val phone = session.userPhone.orEmpty()
+        val key = "${phone}_${propertyId}"
+        if (key in current) return
         // Build a fresh set — Android's StringSet pref returns the same
         // instance on next read if you mutate-in-place + commit.
-        prefs.edit().putStringSet(PREFS_KEY_IDS, current + propertyId).apply()
+        prefs.edit().putStringSet(PREFS_KEY_IDS, current + key).apply()
     }
 
     private enum class Status(val label: String, val key: String) {
@@ -112,6 +117,8 @@ class LandInspectionFragment : Fragment() {
         // inspector out of reports they've already started.
         val canOpenForm: Boolean
             get() = acceptanceStatus == "accepted" ||
+                acceptanceStatus == "approved" ||
+                acceptanceStatus == "date_change_approved" ||
                 acceptanceStatus.isNullOrBlank() ||
                 status != Status.NOT_STARTED
     }
@@ -182,7 +189,7 @@ class LandInspectionFragment : Fragment() {
         }
         // Refresh on return — the user may have come back from saving the
         // inspection form, in which case the row's status flipped server-side.
-        if (::session.isInitialized) loadInspections()
+        if (::session.isInitialized && hasLoadedOnce) loadInspections()
     }
 
     /**
@@ -289,6 +296,8 @@ class LandInspectionFragment : Fragment() {
             minDate = minIso,
             maxDate = maxIso,
             resultKey = RESULT_KEY_RESCHEDULE,
+            // Reschedule is a single date — no range selection.
+            singleSelect = true,
         ).show(parentFragmentManager, "reschedule_calendar")
     }
 
@@ -387,6 +396,13 @@ class LandInspectionFragment : Fragment() {
             Status.fromKey(derivedInspectionStatus)
         }
 
+        val finalAcceptanceStatus = if (inspectionAcceptanceStatus == "date_change_requested" &&
+            !inspectionDateChangeVpRespondedAt.isNullOrBlank()) {
+            "date_change_approved"
+        } else {
+            inspectionAcceptanceStatus
+        }
+
         return InspectionRow(
             propertyId = propertyId,
             title = referenceNo ?: "LP-${propertyId.take(8)}",
@@ -396,7 +412,7 @@ class LandInspectionFragment : Fragment() {
             rawInspectionDate = inspectionDate?.takeIf { it.isNotBlank() },
             place = place,
             status = finalStatus,
-            acceptanceStatus = inspectionAcceptanceStatus,
+            acceptanceStatus = finalAcceptanceStatus,
         )
     }
 
@@ -595,9 +611,9 @@ class LandInspectionFragment : Fragment() {
                         ).show()
                     }
                 }
-                item.acceptanceStatus == "accepted" -> {
-                    // THIS inspector has accepted → show only a single
-                    // "Accepted" button (no Reschedule, no actionable Accept).
+                item.acceptanceStatus == "accepted" || item.acceptanceStatus == "approved" || item.acceptanceStatus == "date_change_approved" -> {
+                    // THIS inspector has accepted or reschedule approved → show only a single
+                    // "Accepted" or "Approved" button (no Reschedule, no actionable Accept).
                     // Each assignee's acceptance is tracked per-staff on the
                     // server, so one GM accepting never flips another's card.
                     // Tapping opens the inspection form.
@@ -606,7 +622,7 @@ class LandInspectionFragment : Fragment() {
                     rescheduleBtn.visibility = View.GONE
                     acceptBtn.visibility = View.VISIBLE
                     acceptIcon.visibility = View.VISIBLE
-                    acceptLabel.text = "Accepted"
+                    acceptLabel.text = if (item.acceptanceStatus == "approved" || item.acceptanceStatus == "date_change_approved") "Approved" else "Accepted"
                     acceptBtn.alpha = 1f
                     acceptBtn.isClickable = true
                     // Grey out the button so the accepted state reads as
@@ -636,7 +652,7 @@ class LandInspectionFragment : Fragment() {
                     acceptBtn.alpha = 1f
                     acceptBtn.isClickable = true
 
-                    if (item.status == Status.IN_PROGRESS || item.acceptanceStatus == "accepted") {
+                    if (item.status == Status.IN_PROGRESS || item.acceptanceStatus == "accepted" || item.acceptanceStatus == "approved" || item.acceptanceStatus == "date_change_approved") {
                         // Already accepted or in progress: clicking accept or card opens the form
                         val openForm = View.OnClickListener {
                             SiteInspectionBottomSheet

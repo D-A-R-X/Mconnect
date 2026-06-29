@@ -50,6 +50,43 @@ interface ApiService {
         @Query("query") query: String
     ): StaffListResponse
 
+    // Fines & Deductions
+    @GET("api/hr/fines/list")
+    suspend fun listFines(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = "active",
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null,
+    ): FinesListResponse
+
+    // The caller's OWN fines (incl. attendance late fines) — view-only staff.
+    @GET("api/hr/fines/my")
+    suspend fun listMyFines(
+        @Header("Authorization") token: String,
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null,
+    ): FinesListResponse
+
+    @POST("api/hr/fines/create")
+    suspend fun createFine(
+        @Header("Authorization") token: String,
+        @Body body: CreateFineRequest,
+    ): CreateFineResponse
+
+    // Front Desk: resolve a scanned invite QR token to its visitor details.
+    @GET("api/frontdesk/invitations/by-token")
+    suspend fun getInvitationByToken(
+        @Header("Authorization") token: String,
+        @Query("token") inviteToken: String,
+    ): InvitationLookupResponse
+
+    // Front Desk: admit (check in) the scanned invitation.
+    @POST("api/frontdesk/invitations/checkin")
+    suspend fun checkinInvitation(
+        @Header("Authorization") token: String,
+        @Body body: CheckinInvitationRequest,
+    ): CheckinInvitationResponse
+
     // Attendance
     @GET("api/hr/attendance/today")
     suspend fun getMyAttendanceToday(
@@ -259,6 +296,15 @@ interface ApiService {
 
     @GET("api/hr/loans/pending-approvals")
     suspend fun getPendingLoanApprovals(@Header("Authorization") token: String): MyLoansResponse
+
+    // Configured Approval Workflow (Settings → Workflows) run + resolved steps
+    // for a loan/advance. `workflow` is null when the row is on the legacy
+    // code-stage path (no workflow configured at creation time).
+    @GET("api/hr/loans/workflow")
+    suspend fun getLoanWorkflow(
+        @Header("Authorization") token: String,
+        @Query("loanId") loanId: String
+    ): LoanWorkflowResponse
 
     @POST("api/hr/loans/approve")
     suspend fun approveLoan(
@@ -1202,7 +1248,10 @@ data class AttendanceCancelRequest(val date: String)
  * staffId/staffName from the bearer token, so they're not sent here.
  */
 data class AttendanceRequestBody(
-    val attendanceId: String,
+    // Null for a no-punch ("Absent") day with no attendance row yet — the
+    // backend seeds a row for {staffId, date}. Gson omits null fields, so the
+    // request body simply carries no attendanceId in that case.
+    val attendanceId: String? = null,
     val date: String,
     val type: String,
     val remark: String? = null,
@@ -1240,6 +1289,9 @@ data class AttendanceRecord(
     // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
     // is only present on some seeded rows; prefer lateFineDeduction.
     val lateMinutes: Int? = null,
+    val earlyOutMinutes: Int? = null,
+    val earlyMinutes: Int? = null,
+    val earlyOut: Int? = null,
     val fineAmount: Double? = null,
     val lateFineDeduction: Double? = null,
     // HR-logged "other fines" — manual deductions for loss of property,
@@ -1540,6 +1592,43 @@ data class LoanRepaymentData(
     val mode: String? = null,
     val notes: String? = null,
     val createdAt: String? = null
+)
+
+// ── Configured Approval Workflow (loans/advances) ──
+// Shape mirrors convex workflows.getRunByEntity → getWorkflowRunDetails:
+// { run, steps }. Used to render the real, configured approval chain on the
+// loan/advance pending tracker instead of the hardcoded nominee/GM/AVP/HR
+// dots. `workflow` is null for legacy code-stage rows.
+data class LoanWorkflowResponse(
+    val success: Boolean = false,
+    val workflow: WorkflowRunDetails? = null,
+)
+
+data class WorkflowRunDetails(
+    val run: WorkflowRunData? = null,
+    val steps: List<WorkflowStepData>? = null,
+)
+
+data class WorkflowRunData(
+    // pending | approved | rejected | cancelled
+    val status: String? = null,
+    val currentStepOrder: Int? = null,
+    val currentAssigneeStaffId: String? = null,
+    val currentAssigneeName: String? = null,
+    val currentAssigneeRole: String? = null,
+)
+
+data class WorkflowStepData(
+    val stepOrder: Int? = null,
+    val name: String? = null,
+    val approverType: String? = null,
+    val approverRole: String? = null,
+    val approverDesignation: String? = null,
+    val resolvedStaffName: String? = null,
+    // pending | approved | rejected | skipped
+    val status: String? = null,
+    val actedByName: String? = null,
+    val actedAt: String? = null,
 )
 
 data class LoansSummary(
@@ -3037,6 +3126,7 @@ data class InspectionListItem(
     // date_change_rejected (null on legacy rows). Gates the inspection form:
     // only "accepted" lets the inspector fill it in.
     val inspectionAcceptanceStatus: String? = null,
+    val inspectionDateChangeVpRespondedAt: String? = null,
     val reportId: String? = null,
     // VP final review of the submitted inspection. "approved" → form
     // locks to view-only on mobile (the inspector can still see what was
@@ -3102,6 +3192,8 @@ data class InspectionReportData(
     val accessibilityWidthUnit: String? = null,
     val electricity: String? = null,
     val eConnectionToLand: String? = null,
+    @com.google.gson.annotations.SerializedName(value = "eConnectionPhases", alternate = ["phases", "eConnectionPhase", "howManyPhases"])
+    val eConnectionPhases: String? = null,
     val telecom: String? = null,
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,
@@ -3153,6 +3245,8 @@ data class InspectionSaveRequest(
     val accessibilityWidthUnit: String? = null,
     val electricity: String? = null,
     val eConnectionToLand: String? = null,
+    @com.google.gson.annotations.SerializedName(value = "eConnectionPhases", alternate = ["phases", "eConnectionPhase", "howManyPhases"])
+    val eConnectionPhases: String? = null,
     val telecom: String? = null,
     val railwayStationDistance: String? = null,
     val busStopDistance: String? = null,
@@ -3226,4 +3320,90 @@ data class QueryUpdateRequest(
     val queryIndex: Int,
     val remarks: String? = null,
     val resolved: Boolean? = null,
+)
+
+// ── Fines & Deductions ──
+data class FinesListResponse(
+    val success: Boolean = false,
+    val fines: List<FineDeductionItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class FineDeductionItem(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val staffName: String = "",
+    val employeeId: String = "",
+    val department: String = "",
+    val typeName: String = "",
+    val amount: Double = 0.0,
+    val month: Int = 0,
+    val year: Int = 0,
+    val monthName: String = "",
+    val status: String = "active",
+    val notes: String? = null,
+    val photoUrl: String? = null,
+    val createdAt: String? = null,
+)
+
+data class CreateFineRequest(
+    val employeeId: String,
+    val amount: Double,
+    val month: Int,
+    val year: Int,
+    val customTypeName: String? = null,
+    val typeId: String? = null,
+    val notes: String? = null,
+    val photoStorageId: String? = null,
+    val photoFileName: String? = null,
+)
+
+data class CreateFineResponse(
+    val success: Boolean = false,
+    val fineId: String? = null,
+    val error: String? = null,
+)
+
+// ── Front Desk invitation lookup / check-in ──────────────────────────────────
+data class InvitationLookupResponse(
+    val success: Boolean = false,
+    val invitation: InvitationDetail? = null,
+    val error: String? = null,
+)
+
+data class InvitationDetail(
+    @SerializedName("_id") val id: String?,
+    val token: String?,
+    val visitorName: String?,
+    val visitorPhone: String?,
+    val visitorEmail: String?,
+    val visitorCompany: String?,
+    val visitorAge: Int?,
+    val additionalVisitors: List<AdditionalVisitor>? = emptyList(),
+    val categoryName: String?,
+    val purposeName: String?,
+    val hostName: String?,
+    val hostDepartment: String?,
+    val expectedDate: String?,
+    val expectedTimeFrom: String?,
+    val expectedTimeTo: String?,
+    val meetingNotes: String?,
+    val status: String?,
+)
+
+data class AdditionalVisitor(
+    val name: String?,
+    val phone: String?,
+    val age: Int?,
+    val email: String?,
+)
+
+data class CheckinInvitationRequest(
+    val invitationId: String,
+    val notes: String? = null,
+)
+
+data class CheckinInvitationResponse(
+    val success: Boolean = false,
+    val passNumber: String? = null,
+    val error: String? = null,
 )

@@ -367,6 +367,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         )
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
         tvOriginName?.text = "Current Location"
+        // Summary card "Location" cell — show the destination (address, else
+        // name) rather than the old static "Current Location" placeholder.
+        view.findViewById<TextView>(R.id.tvTripOriginName)?.text =
+            placeAddress?.takeIf { it.isNotBlank() }
+                ?: placeName.takeIf { it.isNotBlank() }
+                ?: "Location not set"
         bindTripClientHeader(view, placeName)
 
         btnBack?.setOnClickListener { navigateUp() }
@@ -1493,8 +1499,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val remarks = bundle.getString(OldClientRemarksBottomSheet.KEY_REMARKS).orEmpty()
             completeOldClientVisit(cpId, remarks)
         }
+        // Must use parentFragmentManager: the result listener above is
+        // registered via setFragmentResultListener (which targets THIS
+        // fragment's parentFragmentManager). Showing the sheet on
+        // childFragmentManager posts the submit result to a different
+        // manager, so the listener never fires and the visit never
+        // completes after Submit.
         OldClientRemarksBottomSheet.newInstance()
-            .show(childFragmentManager, "old_client_remarks")
+            .show(parentFragmentManager, "old_client_remarks")
     }
 
     /** Finalises an Old Client CP after remarks are captured. Same
@@ -1622,8 +1634,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     }
                     completeCollectionVisit(cpId, bundle)
                 }
+                // parentFragmentManager so the submit result reaches the
+                // setFragmentResultListener registered above (same reason as
+                // the old-client remarks sheet) — otherwise the collection
+                // visit never completes after Submit.
                 CollectionPaymentEntryBottomSheet.newInstance(resp.cases)
-                    .show(childFragmentManager, "collection_payment_entry")
+                    .show(parentFragmentManager, "collection_payment_entry")
             } catch (e: Exception) {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(

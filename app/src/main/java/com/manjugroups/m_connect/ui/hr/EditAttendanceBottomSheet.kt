@@ -141,9 +141,12 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
     private fun submitRequest() {
         if (submitting) return
         val rec = record
-        val attendanceId = rec?.id
+        // attendanceId may be null for a no-punch ("Absent") day that has no
+        // attendance row yet — the backend seeds one keyed by {staffId, date}.
+        // Only the date is mandatory to raise a remark/correction.
+        val attendanceId = rec?.id?.takeIf { it.isNotBlank() }
         val date = rec?.date
-        if (attendanceId.isNullOrBlank() || date.isNullOrBlank()) {
+        if (date.isNullOrBlank()) {
             Toast.makeText(context, "This day can't be edited", Toast.LENGTH_SHORT).show()
             return
         }

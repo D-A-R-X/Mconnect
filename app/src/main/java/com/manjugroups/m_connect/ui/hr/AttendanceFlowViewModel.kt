@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
+import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
@@ -312,15 +313,32 @@ class AttendanceFlowViewModel(
                     return@launch
                 }
 
-                context?.let {
-                    val bootstrap = response.trackingBootstrap ?: runCatching {
-                        geoApi.getTrackingBootstrap(token, deviceId ?: SessionManager(it).trackingDeviceId).data
-                    }.getOrNull()
-                    applyTrackingBootstrap(
-                        context = it.applicationContext,
-                        bootstrap = bootstrap,
-                        attendanceActive = true,
-                    )
+                context?.let { ctx ->
+                    val appCtx = ctx.applicationContext
+                    if (mode == PunchMode.PUNCH_OUT) {
+                        // Clock-out closes the GeoTrack window immediately. Don't
+                        // route through the server bootstrap on punch-out — it can
+                        // momentarily still report shouldTrack and let post-clock-out
+                        // travel leak onto the map. Flip shouldTrackNow off (blocks a
+                        // START_STICKY restart) and stop the service. We deliberately
+                        // KEEP activeTrackingSessionId so the service's final sync can
+                        // still flush the in-window tail captured since the last cycle;
+                        // no new points are captured because stop() removes the
+                        // location updates immediately. The service's own clock-in
+                        // gate is the backstop for non-app clock-outs (biometric/
+                        // midnight) and for any bootstrap-driven restart.
+                        SessionManager(appCtx).shouldTrackNow = false
+                        GeoTrackService.stop(appCtx)
+                    } else {
+                        val bootstrap = response.trackingBootstrap ?: runCatching {
+                            geoApi.getTrackingBootstrap(token, deviceId ?: SessionManager(ctx).trackingDeviceId).data
+                        }.getOrNull()
+                        applyTrackingBootstrap(
+                            context = appCtx,
+                            bootstrap = bootstrap,
+                            attendanceActive = true,
+                        )
+                    }
                 }
 
                 _uiState.update { it.copy(isSubmitting = false) }

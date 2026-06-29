@@ -53,4 +53,14 @@
         <attr name="sh_subtitle" format="string" />
         <attr name="sh_banner_image" format="reference" />
     </declare-styleable>
+
+    <declare-styleable name="HomeHeaderView">
+        <attr name="hh_show_profile_row" format="boolean" />
+        <attr name="hh_show_banner_card" format="boolean" />
+        <attr name="hh_banner_title" format="string" />
+        <attr name="hh_banner_subtitle" format="string" />
+        <attr name="hh_banner_button_text" format="string" />
+        <attr name="hh_banner_card_background" format="reference" />
+        <attr name="hh_banner_illustration" format="reference" />
+    </declare-styleable>
 </resources>

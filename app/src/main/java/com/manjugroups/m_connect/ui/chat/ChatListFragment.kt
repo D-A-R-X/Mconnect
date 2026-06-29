@@ -58,6 +58,7 @@ class ChatListFragment : Fragment() {
 
     private var refreshJob: Job? = null
     private var activeStaffCache: List<StaffData> = emptyList()
+    private val staffPhotoMap = mutableMapOf<String, String>()
     private var allChannels: List<ChannelData> = emptyList()
     private var allConversations: List<ConversationData> = emptyList()
     private var chatSearchQuery: String = ""
@@ -84,6 +85,18 @@ class ChatListFragment : Fragment() {
         session = SessionManager(requireContext())
 
         setupRecyclerView()
+
+        binding.rvChatList.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                if (dy > 10) {
+                    (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
+                } else if (!recyclerView.canScrollVertically(-1)) {
+                    (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+                }
+            }
+        })
+
         setupHeader()
         setupActions()
 
@@ -158,7 +171,14 @@ class ChatListFragment : Fragment() {
             timestampBinder = { view, millis ->
                 bindTimestamp(view, millis)
             },
-            isSelectedProvider = { item -> selectedChatIds.contains(item.id) }
+            isSelectedProvider = { item -> selectedChatIds.contains(item.id) },
+            onAvatarClick = { item ->
+                if (selectedChatIds.isEmpty()) {
+                    showProfilePreviewDialog(item)
+                } else {
+                    toggleChatSelection(item.id)
+                }
+            }
         )
         binding.rvChatList.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -464,6 +484,12 @@ class ChatListFragment : Fragment() {
                 hasLoadedOnce = true
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 renderCurrentList()
+
+                // Background-fetch profile photos for conversation
+                // participants whose photo isn't already known. This runs
+                // after the list is visible so the user sees initials
+                // first, then photos pop in once fetched.
+                fetchMissingConversationPhotos(conversations, staffList)
             } else {
                 if (_binding == null) { isLoadingChats = false; return@launch }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
@@ -495,6 +521,97 @@ class ChatListFragment : Fragment() {
         showListState()
         binding.rvChatList.visibility = View.VISIBLE
         chatListAdapter.submitList(items)
+    }
+
+    /**
+     * For each DM conversation whose participant photo is unknown,
+     * fetch getStaffDetail in the background. Once all fetches
+     * complete (or fail), re-render the list so avatars update.
+     */
+    private fun fetchMissingConversationPhotos(
+        conversations: List<ConversationData>,
+        staffList: List<StaffData>
+    ) {
+        val selfId = session.staffId
+        val staffById = staffList.associateBy { it.id }
+        android.util.Log.d("ChatListPhoto", "fetchMissingPhotos: selfId=$selfId, conversations=${conversations.size}, staffList=${staffList.size}")
+
+        // Collect participant IDs that have no photo from any source
+        val missingIds = mutableSetOf<String>()
+        for (conversation in conversations) {
+            val participant = conversation.participants
+                ?.firstOrNull { it.id != null && it.id != selfId }
+            if (participant == null) {
+                android.util.Log.d("ChatListPhoto", "  conv=${conversation.id}: no other participant found, participants=${conversation.participants?.map { "${it.id}(${it.name})" }}")
+                continue
+            }
+            val otherId = participant.id ?: continue
+
+            // Already have a resolved photo in the map
+            if (staffPhotoMap.containsKey(otherId)) {
+                android.util.Log.d("ChatListPhoto", "  conv=${conversation.id}: already in staffPhotoMap for $otherId")
+                continue
+            }
+
+            // Check participant.photo
+            val pPhoto = participant.photo?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+            if (pPhoto != null) {
+                android.util.Log.d("ChatListPhoto", "  conv=${conversation.id}: participant.photo=$pPhoto")
+                continue
+            }
+
+            // Check staff list photo
+            val sPhoto = staffById[otherId]?.photo?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+            if (sPhoto != null) {
+                android.util.Log.d("ChatListPhoto", "  conv=${conversation.id}: staffList.photo=$sPhoto")
+                continue
+            }
+
+            android.util.Log.d("ChatListPhoto", "  conv=${conversation.id}: MISSING photo for staffId=$otherId, participant.photo='${participant.photo}', staffList has key=${staffById.containsKey(otherId)}, staffPhoto='${staffById[otherId]?.photo}'")
+            missingIds.add(otherId)
+        }
+
+        android.util.Log.d("ChatListPhoto", "missingIds=$missingIds")
+        if (missingIds.isEmpty()) return
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            var anyFound = false
+            // Fetch in parallel batches on IO
+            kotlinx.coroutines.coroutineScope {
+                missingIds.map { staffId ->
+                    async(kotlinx.coroutines.Dispatchers.IO) {
+                        val result = runCatching {
+                            api.getStaffDetail(session.bearerToken, staffId)
+                        }
+                        result.onFailure { e ->
+                            android.util.Log.e("ChatListPhoto", "getStaffDetail FAILED for $staffId", e)
+                        }
+                        result.getOrNull()?.let { response ->
+                            val photo = response.staff?.photo
+                            android.util.Log.d("ChatListPhoto", "getStaffDetail for $staffId: success=${response.success}, staff=${response.staff != null}, photo='$photo'")
+                            val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photo)
+                            android.util.Log.d("ChatListPhoto", "  resolved='$resolved'")
+                            if (!resolved.isNullOrBlank()) {
+                                staffPhotoMap[staffId] = resolved
+                                anyFound = true
+                            }
+                            // Also persist to disk cache for next session
+                            response.staff?.let { staff ->
+                                context?.applicationContext?.let { ctx ->
+                                    ChatMetadataCache.saveStaff(ctx, staffId, staff)
+                                }
+                            }
+                        }
+                    }
+                }.forEach { it.await() }
+            }
+
+            android.util.Log.d("ChatListPhoto", "All fetches done. anyFound=$anyFound, staffPhotoMap=$staffPhotoMap")
+            if (anyFound && _binding != null) {
+                android.util.Log.d("ChatListPhoto", "Re-rendering list with photos")
+                renderCurrentList()
+            }
+        }
     }
 
     private fun showChatActionMenu(anchor: View, item: ChatListItem) {
@@ -590,11 +707,20 @@ class ChatListFragment : Fragment() {
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
             val title = conversation.displayName?.ifBlank { null } ?: "Chat"
-            // Look up photo from conversation participants, fallback to activeStaffCache
+            // Look up photo from conversation participants, fallback to activeStaffCache,
+            // then in-memory photo map (populated by background fetch), then disk cache
             val participant = conversation.participants?.firstOrNull { it.id != null && it.id != session.staffId }
             val otherId = participant?.id
-            val rawPhoto = participant?.photo ?: activeStaffCache.firstOrNull { it.id == otherId }?.photo
+
+            val rawPhoto = participant?.photo?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+                ?: activeStaffCache.firstOrNull { it.id == otherId }?.photo?.takeIf { it.isNotBlank() && it != "null" && it != "undefined" }
+
+            val fromMap = otherId?.let { staffPhotoMap[it] }
+            val fromSnapshot = ChatMetadataCache.loadChatSnapshot(requireContext(), "conversation-$id")?.photoUrl
             val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(rawPhoto)
+                ?: fromMap
+                ?: fromSnapshot
+            android.util.Log.d("ChatListPhoto", "buildItems conv=$id title=$title otherId=$otherId rawPhoto='$rawPhoto' fromMap='$fromMap' fromSnapshot='$fromSnapshot' resolvedPhoto='$resolvedPhoto'")
 
             // Resolve last message preview text and icon
             val previewResult = conversation.lastMessage?.let { msg ->
@@ -1599,6 +1725,50 @@ class ChatListFragment : Fragment() {
         val typedValue = TypedValue()
         requireContext().theme.resolveAttribute(attr, typedValue, true)
         return typedValue.data
+    }
+
+    private fun showProfilePreviewDialog(item: ChatListItem) {
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_profile_preview, null)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        
+        val ivPhoto = view.findViewById<ImageView>(R.id.ivPreviewPhoto)
+        val tvInitials = view.findViewById<TextView>(R.id.tvPreviewInitials)
+        val tvName = view.findViewById<TextView>(R.id.tvPreviewName)
+        
+        tvName.text = item.title
+        
+        val resolvedPhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(item.photoUrl)
+        if (!resolvedPhoto.isNullOrBlank()) {
+            ivPhoto.visibility = View.VISIBLE
+            tvInitials.visibility = View.GONE
+            ivPhoto.load(resolvedPhoto) {
+                crossfade(true)
+            }
+        } else {
+            ivPhoto.visibility = View.VISIBLE
+            tvInitials.visibility = View.VISIBLE
+            ivPhoto.setImageDrawable(null)
+            
+            val seed = item.title.hashCode()
+            val colors = avatarPalette(seed)
+            val drawable = android.graphics.drawable.GradientDrawable()
+            drawable.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            drawable.setColor(colors.first)
+            ivPhoto.background = drawable
+            
+            tvInitials.text = initialsFor(item.title)
+            tvInitials.setTextColor(colors.second)
+        }
+        
+        view.setOnClickListener {
+            dialog.dismiss()
+            // Could add an option to view chat here, but just dismiss for now
+        }
+
+        dialog.show()
     }
 
     override fun onDestroyView() {

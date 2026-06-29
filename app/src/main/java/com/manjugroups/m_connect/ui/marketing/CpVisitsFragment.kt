@@ -347,10 +347,18 @@ class CpVisitsFragment : Fragment() {
         // manualProfile) over the dialer-typed lead.contactName so the
         // header reads "Abhi" — matching the web Client profile card —
         // rather than the lower-case typed string "abi".
-        val canonicalClient = this.client?.clientName?.takeIf { it.isNotBlank() }
-        val typedContact = this.lead?.contactName?.takeIf { it.isNotBlank() }
-        val placeLabel = this.clientPlace?.name?.takeIf { it.isNotBlank() }
-        val displayName = canonicalClient ?: typedContact ?: placeLabel ?: "CP visit"
+        val profileClient = this.lead?.manualProfile?.clientName.asClientNameOrNull()
+        val canonicalClient = this.client?.clientName.asClientNameOrNull()
+        val typedContact = this.lead?.contactName.asClientNameOrNull()
+        val placeLabel = this.clientPlace?.name.asClientNameOrNull()
+        val phoneLabel = this.lead?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: this.client?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: this.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
+        val resolvedClientName = profileClient
+            ?: canonicalClient
+            ?: typedContact
+            ?: placeLabel
+        val displayName = resolvedClientName ?: phoneLabel ?: "CP visit"
         // Carry the CP outcome onto the mapped TodayVisit so the card
         // renderer can detect a "completed but no decision yet" state
         // for SV-via-CP visits (telecaller-fixed SV path).
@@ -388,8 +396,8 @@ class CpVisitsFragment : Fragment() {
             placeLng = this.clientPlace?.lng,
             tripType = "client_place",
             clientPlaceVisitId = cpId,
-            leadName = canonicalClient ?: typedContact,
-            leadPhone = this.lead?.mobileNumber ?: this.client?.mobileNumber,
+            leadName = resolvedClientName,
+            leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
             cpVisit = cpState,
             // Thread the CP's `createdAt` ms timestamp into the
@@ -405,6 +413,14 @@ class CpVisitsFragment : Fragment() {
             // with the SV list's _creationTime-based sort.
             creationTime = this.createdAt?.toDouble(),
         )
+    }
+
+    private fun String?.asClientNameOrNull(): String? {
+        val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val compact = value.filterNot { it.isWhitespace() || it == '+' || it == '-' || it == '(' || it == ')' }
+        val digitCount = value.count { it.isDigit() }
+        val phoneLike = digitCount >= 8 && compact.all { it.isDigit() }
+        return value.takeUnless { phoneLike }
     }
 
     private fun renderList() {

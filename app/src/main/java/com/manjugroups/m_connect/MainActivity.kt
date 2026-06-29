@@ -30,6 +30,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
+import com.manjugroups.m_connect.update.InAppUpdateManager
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -59,10 +60,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
+    // Google Play in-app updates. Initialized in onCreate only once we know the
+    // user stays in the shell (past the login / force-password redirects).
+    private var inAppUpdateManager: InAppUpdateManager? = null
     private var currentTab = 0
     private var cachedTopInset = 0
     private var statusBarFullBleed = false
     private var lastTrackingResumeSyncMs = 0L
+    private var isBottomNavVisible = true
     // Periodic IAM polling job — runs while the activity is in the
     // foreground so a permission flip on the web reaches gated UI
     // (App Library tiles, HR review buttons, etc.) within ~20s even
@@ -117,6 +122,13 @@ class MainActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Google Play in-app updates — checked on every cold start. High-priority
+        // releases force an immediate (blocking) update; everything else downloads
+        // flexibly in the background and prompts to restart. Constructed here,
+        // during onCreate (before STARTED), so its activity-result launcher is
+        // registered validly. No-ops on dev/sideload builds.
+        inAppUpdateManager = InAppUpdateManager(this).also { it.start() }
 
         // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
         // the user gets push notifications for chats / tasks / approvals.
@@ -274,6 +286,27 @@ class MainActivity : AppCompatActivity() {
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
 
+        // External-fleet agency principals (designation = "External Fleet")
+        // live in a single-screen portal: the Admin Fleet container, with its
+        // own bottom nav (Trips / Vehicles / Driver / Settings). Skip the
+        // normal MainActivity tab bar entirely so they never see Home / HR /
+        // Chat / Profile, which assume a real staff record they don't have.
+        if (isExternalFleetPrincipal()) {
+            setTabBarVisible(false)
+            if (savedInstanceState == null) {
+                supportFragmentManager.beginTransaction()
+                    .setReorderingAllowed(true)
+                    .replace(
+                        R.id.fragmentContainer,
+                        com.manjugroups.m_connect.ui.library.AdminFleetContainerFragment(),
+                        "external_fleet_root",
+                    )
+                    .commit()
+            }
+            lifecycleScope.launch { refreshSessionContext() }
+            return
+        }
+
         if (savedInstanceState == null) {
             selectTab(TAB_HOME)
             handleWorkflowNotificationIntent(intent)
@@ -306,6 +339,8 @@ class MainActivity : AppCompatActivity() {
         // toggled the missing one ON. Scoped to staff who actually need
         // background tracking — office staff aren't force-prompted.
         maybeShowBackgroundPermissionsGate()
+        // Finish a downloaded flexible update / resume a stalled immediate one.
+        inAppUpdateManager?.onResume()
         // Kick a periodic IAM poll while the app is in the foreground.
         // Forces a refresh every IAM_POLL_INTERVAL_MS (currently 20s)
         // regardless of throttle, so a permission change on the web
@@ -327,6 +362,14 @@ class MainActivity : AppCompatActivity() {
         // network + battery for UI nobody can see. onResume restarts.
         iamPollJob?.cancel()
         iamPollJob = null
+    }
+
+    override fun onDestroy() {
+        // Release the in-app-update install listener so we don't leak the
+        // activity through Play's callback registry.
+        inAppUpdateManager?.destroy()
+        inAppUpdateManager = null
+        super.onDestroy()
     }
 
     private fun startIamPolling() {
@@ -362,15 +405,62 @@ class MainActivity : AppCompatActivity() {
     fun setTabBarVisible(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
         val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
-        if (tabBarContainer.visibility == target) return
+        if (tabBarContainer.visibility == target) {
+            if (visible) {
+                tabBarContainer.translationY = 0f
+                tabBarContainer.alpha = 1f
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.translationY = 0f
+                    bottomNavFadeOverlay.alpha = 1f
+                }
+                isBottomNavVisible = true
+            }
+            return
+        }
         tabBarContainer.visibility = target
         if (::bottomNavFadeOverlay.isInitialized) {
             bottomNavFadeOverlay.visibility = target
+        }
+        if (visible) {
+            tabBarContainer.translationY = 0f
+            tabBarContainer.alpha = 1f
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.translationY = 0f
+                bottomNavFadeOverlay.alpha = 1f
+            }
+            isBottomNavVisible = true
         }
         // Re-dispatch insets so fragmentContainer.bottom padding flips between
         // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
         if (::mainRoot.isInitialized) {
             ViewCompat.requestApplyInsets(mainRoot)
+        }
+    }
+
+    fun setBottomNavScrollState(visible: Boolean) {
+        if (!::tabBarContainer.isInitialized) return
+        if (tabBarContainer.visibility != android.view.View.VISIBLE && visible) return
+        if (isBottomNavVisible == visible) return
+        isBottomNavVisible = visible
+
+        val translationDistance = 150f * resources.displayMetrics.density
+        val translationY = if (visible) 0f else translationDistance
+        val alpha = if (visible) 1f else 0f
+
+        tabBarContainer.animate()
+            .translationY(translationY)
+            .alpha(alpha)
+            .setDuration(400)
+            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+            .start()
+
+        if (::bottomNavFadeOverlay.isInitialized) {
+            bottomNavFadeOverlay.animate()
+                .translationY(translationY)
+                .alpha(alpha)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                .start()
         }
     }
 
@@ -512,6 +602,15 @@ class MainActivity : AppCompatActivity() {
         TAB_HOME, TAB_HR, TAB_CHAT, TAB_LIBRARY -> index
         else -> TAB_HOME
     }
+
+    /**
+     * True when the logged-in principal is an external fleet agency, as
+     * surfaced by the auth response (`designation = "External Fleet"`). These
+     * users get the Admin Fleet single-screen portal instead of the normal
+     * staff tab shell.
+     */
+    private fun isExternalFleetPrincipal(): Boolean =
+        session.designation?.trim()?.equals("External Fleet", ignoreCase = true) == true
 
     private suspend fun refreshSessionContext() {
         runCatching {

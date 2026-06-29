@@ -43,6 +43,10 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
     private val displayedMonth: Calendar = Calendar.getInstance()
     private var rangeStart: Calendar? = null
     private var rangeEnd: Calendar? = null
+    // Single-date mode: every tap selects exactly one day (start == end) and no
+    // range can be drawn. Used by the inspection reschedule, where the staff
+    // must pick ONE date.
+    private var singleSelect: Boolean = false
 
     private var resultKey: String = DEFAULT_RESULT_KEY
     private var maxDate: Calendar? = null  // null = no upper bound
@@ -85,10 +89,12 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         view.findViewById<TextView>(R.id.tvCalendarTitle).text = title
         view.findViewById<TextView>(R.id.tvCalendarSubtitle).text = subtitle
 
+        singleSelect = args?.getBoolean(ARG_SINGLE, false) == true
         val initialFrom = args?.getString(ARG_FROM)
         val initialTo = args?.getString(ARG_TO)
         rangeStart = parseIso(initialFrom)
-        rangeEnd = parseIso(initialTo)
+        // In single mode the selection is always one day, so end mirrors start.
+        rangeEnd = if (singleSelect) rangeStart else parseIso(initialTo)
         // Show the month that contains the start (or today).
         (rangeStart ?: Calendar.getInstance()).let {
             displayedMonth.time = it.time
@@ -295,6 +301,15 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         // styling so a (cap|floor) day looks AND behaves disabled.
         maxDate?.let { if (tappedStripped.timeInMillis > stripTime(it).timeInMillis) return }
         minDate?.let { if (tappedStripped.timeInMillis < stripTime(it).timeInMillis) return }
+
+        // Single-date mode — each tap replaces the selection with that one day.
+        if (singleSelect) {
+            rangeStart = tappedStripped
+            rangeEnd = tappedStripped
+            rebuild()
+            return
+        }
+
         val start = rangeStart
         val end = rangeEnd
 
@@ -358,6 +373,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
         private const val ARG_MAX_DATE = "arg_max_date"
         private const val ARG_MIN_DATE = "arg_min_date"
         private const val ARG_RESULT_KEY = "arg_result_key"
+        private const val ARG_SINGLE = "arg_single"
 
         fun newInstance(
             title: String = "Leave Duration",
@@ -367,6 +383,8 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
             maxDate: String? = null,
             minDate: String? = null,
             resultKey: String = DEFAULT_RESULT_KEY,
+            /** When true the picker selects a single date (start == end), no range. */
+            singleSelect: Boolean = false,
         ): CalendarRangePickerSheet = CalendarRangePickerSheet().apply {
             arguments = Bundle().apply {
                 putString(ARG_TITLE, title)
@@ -376,6 +394,7 @@ class CalendarRangePickerSheet : BottomSheetDialogFragment() {
                 if (maxDate != null) putString(ARG_MAX_DATE, maxDate)
                 if (minDate != null) putString(ARG_MIN_DATE, minDate)
                 putString(ARG_RESULT_KEY, resultKey)
+                putBoolean(ARG_SINGLE, singleSelect)
             }
         }
     }

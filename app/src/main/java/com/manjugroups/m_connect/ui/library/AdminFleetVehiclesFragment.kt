@@ -1,0 +1,240 @@
+package com.manjugroups.m_connect.ui.library
+
+import android.graphics.Color
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Toast
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.databinding.FragmentAdminFleetVehiclesBinding
+import com.manjugroups.m_connect.databinding.ItemAdminFleetVehicleBinding
+import com.manjugroups.m_connect.network.CreateVehicleRequest
+import com.manjugroups.m_connect.network.TravelDeskApi
+import com.manjugroups.m_connect.network.TravelDeskVehicle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
+class AdminFleetVehiclesFragment : Fragment() {
+
+    private var _binding: FragmentAdminFleetVehiclesBinding? = null
+    private val binding get() = _binding!!
+
+    private val api = TravelDeskApi.create()
+    private lateinit var session: SessionManager
+    private val vehicles = mutableListOf<VehicleItem>()
+    private lateinit var adapter: VehiclesAdapter
+    private var loadJob: Job? = null
+    private var actionJob: Job? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentAdminFleetVehiclesBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
+
+        binding.rvAdminVehicles.layoutManager = LinearLayoutManager(requireContext())
+        adapter = VehiclesAdapter(vehicles) { _ ->
+            // Travel-desk doesn't expose vehicle update from the agency side
+            // yet — only create + list. Surface that clearly instead of
+            // letting an edit silently no-op.
+            Toast.makeText(
+                requireContext(),
+                "Vehicle edit not available on mobile yet — manage from travel-desk web.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+        binding.rvAdminVehicles.adapter = adapter
+
+        binding.rvAdminVehicles.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                if (dy > 10) {
+                    (parentFragment as? AdminFleetContainerFragment)?.setBottomNavScrollState(false)
+                } else if (!recyclerView.canScrollVertically(-1)) {
+                    (parentFragment as? AdminFleetContainerFragment)?.setBottomNavScrollState(true)
+                }
+            }
+        })
+
+        binding.btnCreateVehicle.setOnClickListener {
+            // On mobile the caller IS the agency, so we lock the Agency field
+            // to the session's userName (the agency name) — the backend will
+            // anyway default to the caller's own agency when travelAgencyId
+            // is omitted, the lock is just to make that explicit in the UI.
+            val agencyName = session.userName?.takeIf { it.isNotBlank() } ?: "Your Agency"
+            val bottomSheet = CreateVehicleBottomSheet.newInstanceLockedToAgency(agencyName) {
+                plate, type, capacity, name, phone, _ ->
+                submitCreate(plate, type, capacity, name, phone)
+            }
+            bottomSheet.show(parentFragmentManager, "CreateVehicleBottomSheet")
+        }
+
+        refresh()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refresh()
+    }
+
+    private fun refresh() {
+        if (_binding == null) return
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listVehicles(token)
+                if (_binding == null) return@launch
+                vehicles.clear()
+                vehicles.addAll(resp.rows.map { mapVehicle(it) })
+                adapter.notifyDataSetChanged()
+                binding.tvVehiclesEmpty.visibility = if (vehicles.isEmpty()) View.VISIBLE else View.GONE
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Couldn't load vehicles: ${e.message ?: "network error"}",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    private fun submitCreate(
+        plate: String,
+        type: String,
+        capacity: String,
+        driverName: String,
+        driverPhone: String,
+    ) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        actionJob?.cancel()
+        actionJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.createVehicle(
+                    token,
+                    CreateVehicleRequest(
+                        vehicleNumber = plate.trim(),
+                        type = type.trim().takeIf { it.isNotBlank() },
+                        capacity = capacity.trim().toIntOrNull(),
+                        defaultDriverName = driverName.trim().takeIf { it.isNotBlank() },
+                        defaultDriverPhone = driverPhone.trim().takeIf { it.isNotBlank() },
+                    ),
+                )
+                if (_binding == null) return@launch
+                if (!resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Couldn't create vehicle.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                Toast.makeText(requireContext(), "Vehicle created successfully", Toast.LENGTH_SHORT).show()
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Couldn't create vehicle: ${e.message ?: "network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    private fun mapVehicle(v: TravelDeskVehicle): VehicleItem {
+        val statusLabel = if ((v.status ?: "active").equals("active", ignoreCase = true)) "Available" else "Inactive"
+        return VehicleItem(
+            name = v.type ?: "Vehicle",
+            plateNumber = v.vehicleNumber ?: "—",
+            status = statusLabel,
+            capacity = v.capacity?.toString() ?: "—",
+            fuelType = "—",
+            driverName = v.defaultDriverName ?: "—",
+            driverPhone = v.defaultDriverPhone ?: "—",
+        )
+    }
+
+    override fun onDestroyView() {
+        loadJob?.cancel()
+        actionJob?.cancel()
+        super.onDestroyView()
+        _binding = null
+    }
+
+    data class VehicleItem(
+        val name: String,
+        val plateNumber: String,
+        val status: String,
+        val capacity: String,
+        val fuelType: String,
+        val driverName: String,
+        val driverPhone: String,
+        val agency: String = "Default Selected"
+    )
+
+    private class VehiclesAdapter(
+        private val items: List<VehicleItem>,
+        private val onItemClick: (VehicleItem) -> Unit
+    ) : RecyclerView.Adapter<VehiclesAdapter.ViewHolder>() {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val binding = ItemAdminFleetVehicleBinding.inflate(
+                LayoutInflater.from(parent.context), parent, false
+            )
+            return ViewHolder(binding)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            holder.bind(items[position])
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        inner class ViewHolder(private val binding: ItemAdminFleetVehicleBinding) :
+            RecyclerView.ViewHolder(binding.root) {
+
+            fun bind(item: VehicleItem) {
+                binding.root.setOnClickListener { onItemClick(item) }
+                binding.tvVehiclePlate.text = item.plateNumber
+                binding.tvVehicleName.text = "${item.name} / ${item.capacity} / ${item.fuelType}"
+                binding.tvDriverName.text = item.driverName
+                binding.tvDriverPhone.text = item.driverPhone
+                binding.tvVehicleStatus.text = item.status
+                binding.tvVehicleCapacity.text = item.capacity
+                binding.tvVehicleFuel.text = item.fuelType
+
+                if (item.status == "Available") {
+                    binding.tvVehicleStatus.setBackgroundResource(R.drawable.bg_badge_success)
+                    binding.tvVehicleStatus.setTextColor(Color.parseColor("#065F46"))
+                } else {
+                    binding.tvVehicleStatus.setBackgroundResource(R.drawable.bg_badge_info)
+                    binding.tvVehicleStatus.setTextColor(Color.parseColor("#1D4ED8"))
+                }
+            }
+        }
+    }
+}

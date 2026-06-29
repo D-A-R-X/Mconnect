@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.LocationPointEntity
@@ -47,6 +48,14 @@ class GeoTrackService : Service() {
         private const val SYNC_INTERVAL_MS = 30_000L
         private const val HEARTBEAT_INTERVAL_MS = 120_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
+        // Short, self-timing wakelock taken ONLY around a network sync burst
+        // (not for the whole shift) so an upload can finish even if the device
+        // is dozing. The OS auto-releases after this timeout as a safety net.
+        private const val SYNC_WAKELOCK_MS = 15_000L
+        // The persistent foreground notification is mandatory for a location
+        // service, but it shows a single clean, user-facing line — not the
+        // internal capture/sync/battery counters that used to leak to staff.
+        private const val TRACKING_NOTIF_TEXT = "Location tracking is active during your shift."
         private const val MAX_POINT_AGE_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
         // Unsent points hang around for 30 days so a multi-day offline
         // period (field staff with no signal) still flushes when the
@@ -108,13 +117,11 @@ class GeoTrackService : Service() {
     private lateinit var session: SessionManager
     private lateinit var db: GeoTrackDatabase
     private lateinit var api: GeoTrackApi
-    private var wakeLock: PowerManager.WakeLock? = null
     private var locationManagerListener: android.location.LocationListener? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var syncJob: Job? = null
     private var heartbeatJob: Job? = null
-    private var notifJob: Job? = null
     private var cleanupJob: Job? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -125,6 +132,14 @@ class GeoTrackService : Service() {
     private val pointsSynced = AtomicInteger(0)
     private val firstLocationReceived = AtomicBoolean(false)
     private val lastProcessedTime = AtomicLong(0L)
+    // Live clock-in gate. GeoTrack must capture travel ONLY between punch-in
+    // and punch-out, so we refuse to buffer points (and tear the service down)
+    // the moment the attendance session is no longer open. Defaults to true
+    // because the service is only ever started off a clock-in; the first
+    // enforceClockInGate() pass confirms it and stops if we're actually
+    // clocked out (stale/boot/biometric/before-punch starts).
+    @Volatile private var sessionOpen = true
+    @Volatile private var clockGateStopped = false
     private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
 
@@ -206,7 +221,9 @@ class GeoTrackService : Service() {
             return START_NOT_STICKY
         }
 
-        try { acquireWakeLock() } catch (e: Exception) { Log.e(TAG, "WakeLock failed: ${e.message}") }
+        // No always-on wakelock: the location-type foreground service keeps
+        // fused updates flowing in Doze. We only take a short timed wakelock
+        // around each sync burst (see runWithSyncWakeLock).
 
         val hasFine = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
@@ -225,7 +242,6 @@ class GeoTrackService : Service() {
 
         startSyncLoop()
         startHeartbeatLoop()
-        startNotifLoop()
         startCleanupLoop()
         registerNetworkCallback()
 
@@ -237,7 +253,7 @@ class GeoTrackService : Service() {
 
     private fun startForegroundSafely(): Boolean {
         return runCatching {
-            val notification = buildNotif("Starting tracking...")
+            val notification = buildNotif(TRACKING_NOTIF_TEXT)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
@@ -270,13 +286,15 @@ class GeoTrackService : Service() {
         locationThread = null
         unregisterReceivers()
         unregisterNetworkCallback()
-        releaseWakeLock()
 
-        // Final sync
+        // Final sync — guarded by a short timed wakelock so it can complete
+        // even if the device is dozing at teardown.
         runBlocking(Dispatchers.IO) {
             try {
-                syncPoints()
-                syncEvents()
+                runWithSyncWakeLock {
+                    syncPoints()
+                    syncEvents()
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Final sync failed: ${e.message}")
             }
@@ -284,7 +302,6 @@ class GeoTrackService : Service() {
 
         syncJob?.cancel()
         heartbeatJob?.cancel()
-        notifJob?.cancel()
         cleanupJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
@@ -293,17 +310,30 @@ class GeoTrackService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ── WakeLock ──
+    //
+    // We deliberately do NOT hold a wakelock for the whole tracking session.
+    // A FOREGROUND_SERVICE_TYPE_LOCATION service keeps receiving fused
+    // location updates even in Doze, so pinning the CPU awake for an entire
+    // 8–10h shift was pure waste — it was the main reason devices overheated
+    // and drained while sitting idle in a pocket. Instead we take a SHORT,
+    // self-timing wakelock only around a network sync burst so the upload can
+    // finish if the device happens to be dozing, then immediately let the CPU
+    // sleep again.
 
-    @SuppressLint("WakelockTimeout")
-    private fun acquireWakeLock() {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MConnect::GeoTrack").apply { acquire() }
-        Log.d(TAG, "WakeLock acquired")
-    }
-
-    private fun releaseWakeLock() {
-        wakeLock?.let { if (it.isHeld) it.release() }
-        wakeLock = null
+    private suspend fun runWithSyncWakeLock(block: suspend () -> Unit) {
+        val wl: PowerManager.WakeLock? = try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MConnect::GeoTrackSync")
+                .apply { acquire(SYNC_WAKELOCK_MS) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Sync wakelock acquire failed: ${e.message}")
+            null
+        }
+        try {
+            block()
+        } finally {
+            try { if (wl?.isHeld == true) wl.release() } catch (_: Exception) {}
+        }
     }
 
     // ── Location ──
@@ -348,6 +378,11 @@ class GeoTrackService : Service() {
     private fun startLocationManagerFallback(looper: Looper) {
         if (locationManagerListener != null) return // Already registered
         try {
+            // Only ever drive ONE location source at a time. If we're falling
+            // back to LocationManager, stop fused first so the GPS chip isn't
+            // pumped by both stacks at once (double the power draw / heat).
+            try { fusedClient.removeLocationUpdates(locationCallback) } catch (_: Exception) {}
+            fusedLocationRegistered = false
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
 
             val listener = object : android.location.LocationListener {
@@ -430,6 +465,11 @@ class GeoTrackService : Service() {
     }
 
     private suspend fun processLocation(location: Location) {
+        // Clock-in gate — never buffer a point outside the punch-in → punch-out
+        // window. `sessionOpen` flips false as soon as enforceClockInGate() sees
+        // a closed session, so pre-clock-in and post-clock-out travel is dropped
+        // before it ever reaches the local buffer or the server.
+        if (!sessionOpen || clockGateStopped) return
         // Dedup: skip if less than 3 seconds since last processed point (atomic)
         val now = System.currentTimeMillis()
         val last = lastProcessedTime.get()
@@ -585,14 +625,52 @@ class GeoTrackService : Service() {
         networkCallback = null
     }
 
+    /**
+     * Authoritative clock-in gate for GeoTrack. Confirms an attendance session
+     * is open right now; if it has closed (clock-out) — or was never open (a
+     * stale/boot/before-punch start) — we stop buffering and tear the service
+     * down so no out-of-window travel is ever recorded or uploaded.
+     *
+     * Offline-safe: a null result (network/server error) is treated as
+     * "unknown" and tracking continues, so a transient outage never drops a
+     * legitimate in-window journey. Clock-out itself always happens online, so
+     * a real clock-out is detected on the next successful check.
+     *
+     * @return true to keep running, false if we stopped the service.
+     */
+    private suspend fun enforceClockInGate(): Boolean {
+        if (clockGateStopped) return false
+        val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+            ?: return true // unknown — keep tracking, recheck next cycle
+        sessionOpen = open
+        if (open) return true
+        Log.i(TAG, "Attendance session closed (clocked out) — stopping GeoTrack")
+        clockGateStopped = true
+        // Clear the bootstrap flags so START_STICKY / a later bootstrap sync
+        // doesn't resurrect tracking until the next genuine clock-in.
+        runCatching {
+            session.shouldTrackNow = false
+            session.activeTrackingSessionId = null
+        }
+        stopSelf()
+        return false
+    }
+
     private fun startSyncLoop() {
         syncJob = serviceScope.launch {
+            // Immediate gate check at startup — catches a service that came up
+            // while already clocked out (stale prefs, boot, biometric gate
+            // punch that closed at once, or a pre-clock-in start).
+            if (!enforceClockInGate()) return@launch
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
                 if (hasNetwork()) {
                     markNetworkOnlineIfNeeded()
-                    syncPoints()
-                    syncEvents()
+                    if (!enforceClockInGate()) break
+                    runWithSyncWakeLock {
+                        syncPoints()
+                        syncEvents()
+                    }
                 } else {
                     markNetworkOfflineIfNeeded()
                     Log.d(TAG, "Sync: no network, skipping")
@@ -713,15 +791,17 @@ class GeoTrackService : Service() {
                 val sessionId = session.activeTrackingSessionId
                 val deviceId = session.trackingDeviceId
                 try {
-                    api.heartbeat(
-                        session.bearerToken,
-                        HeartbeatRequest(
-                            sessionId = sessionId,
-                            deviceId = deviceId,
-                            batteryPct = battery,
-                            appVersion = BuildConfig.VERSION_NAME,
+                    runWithSyncWakeLock {
+                        api.heartbeat(
+                            session.bearerToken,
+                            HeartbeatRequest(
+                                sessionId = sessionId,
+                                deviceId = deviceId,
+                                batteryPct = battery,
+                                appVersion = BuildConfig.VERSION_NAME,
+                            )
                         )
-                    )
+                    }
                     Log.d(TAG, "Heartbeat OK (battery=${battery}%)")
                 } catch (e: Exception) {
                     Log.w(TAG, "Heartbeat failed: ${e.message} — queueing for replay")
@@ -776,19 +856,13 @@ class GeoTrackService : Service() {
         }
     }
 
-    // ── Notification updates ──
-
-    private fun startNotifLoop() {
-        notifJob = serviceScope.launch {
-            while (isActive) {
-                delay(10_000)
-                val pending = try { db.locationPointDao().getUnsentCount() } catch (_: Exception) { 0 }
-                val pendingEvents = try { db.pendingGeoTrackEventDao().getPendingCount() } catch (_: Exception) { 0 }
-                val battery = getBatteryLevel()
-                updateNotif("${pointsCaptured.get()} captured | ${pointsSynced.get()} saved | $pending pending GPS | $pendingEvents pending alerts | ${battery}%")
-            }
-        }
-    }
+    // ── Notification ──
+    //
+    // The foreground notification now shows a single static, user-facing line
+    // (TRACKING_NOTIF_TEXT) set when we enter the foreground state. There is no
+    // periodic update loop: it used to rewrite the notification every minute
+    // with internal capture/sync/battery counters, which both leaked debug
+    // detail to staff and woke the CPU + hit the DB on every tick.
 
     // ── Tamper ──
 
@@ -940,10 +1014,6 @@ class GeoTrackService : Service() {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
-
-    private fun updateNotif(text: String) {
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, buildNotif(text))
     }
 
     // ── Utils ──

@@ -3,10 +3,15 @@ package com.manjugroups.m_connect.ui.library.loans
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import com.manjugroups.m_connect.network.WorkflowStepData
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -72,18 +77,23 @@ class LoansFragment : Fragment() {
 
         requestedLoansAdapter = RequestedLoansAdapter(
             onAcceptClick = { loan ->
-                // Route by the loan's CURRENT stage, not a manual role pick:
-                //   nominee_pending → e-signature pad (saved sign auto-used)
-                //   gm/avp/hr/accountant_pending → approval sheet (no sign)
-                if (loan.currentStage?.lowercase()?.trim() == "nominee_pending") {
-                    AcceptLoanBottomSheet(loan) { loadPendingApprovals() }
-                        .show(childFragmentManager, "AcceptLoanBottomSheet")
-                } else {
-                    GmApprovalBottomSheet(
-                        loan = loan,
-                        onAccepted = { loadPendingApprovals() },
-                        onRejected = { loadPendingApprovals() },
-                    ).show(childFragmentManager, "GmApprovalBottomSheet")
+                val isAdvance = loan.requestType?.lowercase()?.trim() == "salary_advance"
+                when {
+                    // Salary advances skip the popup — Accept directly forwards
+                    // (HR -> Accounts) or finalises if Accounts is the actor.
+                    isAdvance -> approveLoanInline(loan)
+                    // Loans on nominee_pending need an e-signature, so open
+                    // that pad. Other loan stages still go through the
+                    // approval sheet for the tracker + nominee context.
+                    loan.currentStage?.lowercase()?.trim() == "nominee_pending" ->
+                        AcceptLoanBottomSheet(loan) { loadPendingApprovals() }
+                            .show(childFragmentManager, "AcceptLoanBottomSheet")
+                    else ->
+                        GmApprovalBottomSheet(
+                            loan = loan,
+                            onAccepted = { loadPendingApprovals() },
+                            onRejected = { loadPendingApprovals() },
+                        ).show(childFragmentManager, "GmApprovalBottomSheet")
                 }
             },
             onRejectClick = { loan ->
@@ -207,6 +217,7 @@ class LoansFragment : Fragment() {
             binding.tabSalary.setTypeface(null, Typeface.NORMAL)
 
             binding.tvLoansTitle.text = "My Loans"
+            binding.tvLoansSubtitle.text = "Manage Loans and Salary Advance"
             binding.tvHeroOutstandingLabel.text = "Outstanding Amount"
             binding.tvHeroNextEmiLabel.text = "Next EMI Due"
             binding.tvPreviousLoansLabel.text = "Previous Loans"
@@ -220,6 +231,7 @@ class LoansFragment : Fragment() {
             binding.tabLoans.setTypeface(null, Typeface.NORMAL)
 
             binding.tvLoansTitle.text = "My Advances"
+            binding.tvLoansSubtitle.text = "Manage Loans and Salary Advance"
             binding.tvHeroOutstandingLabel.text = "Available Salary"
             binding.tvHeroNextEmiLabel.text = "Next Due Date"
             binding.tvPreviousLoansLabel.text = "Previous Advances"
@@ -331,23 +343,38 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
+                // Fixed nominee/GM/AVP/HR tracker renders immediately as the
+                // default; if this row is workflow-routed, loadWorkflowTracker
+                // swaps in the configured chain once the steps come back.
                 updateTrackerState(loan)
+                loadWorkflowTracker(loan)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
                 binding.tvHeroBadge.setBackgroundResource(R.drawable.bg_loan_active_pill)
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#0B61CA"))
-                binding.heroActiveDetails.visibility = View.VISIBLE
-                binding.heroPendingTracker.visibility = View.GONE
+                if (loan.isAdvance) {
+                    // Active advances show only the HR -> Acc's tracker (both
+                    // green) — no "Available Salary / Next Due Date" row.
+                    // Matches the iOS design and reads as "fully approved".
+                    binding.heroActiveDetails.visibility = View.GONE
+                    binding.heroPendingTracker.visibility = View.VISIBLE
+                    updateTrackerState(loan)
+                } else {
+                    binding.heroActiveDetails.visibility = View.VISIBLE
+                    binding.heroPendingTracker.visibility = View.GONE
+                }
             }
         }
 
-        // Delete affordance — same UI + confirm pattern as My
-        // Permissions. Surfaced on every status (pending + active)
-        // so the staff can withdraw a request OR retract a record
-        // they no longer want shown. Backend enforces what's actually
-        // deletable; UI just exposes the entry point.
-        binding.btnCancelLoan.visibility = View.VISIBLE
+        // Delete affordance — surfaced on loans so staff can withdraw a
+        // request or retract a record. The design hides it on the active
+        // advance card (the tracker fills the space), so we only show it
+        // on the loan hero, plus the pending hero for both (where withdraw
+        // is the primary action).
+        binding.btnCancelLoan.visibility =
+            if (loan.isAdvance && loan.status != LoanStatus.PENDING) View.GONE
+            else View.VISIBLE
         binding.btnCancelLoan.setOnClickListener {
             showCancelLoanDialog(loan.id, loan.isAdvance)
         }
@@ -460,6 +487,131 @@ class LoansFragment : Fragment() {
         }
     }
 
+    /**
+     * Fetch the configured Approval Workflow (Settings → Workflows) for this
+     * loan/advance and, when the row is workflow-routed, replace the fixed
+     * nominee/GM/AVP/HR/Accounts tracker with the real configured chain. Rows
+     * still on the legacy code-stage path return no workflow and keep the
+     * fixed tracker that updateTrackerState() already drew.
+     */
+    private fun loadWorkflowTracker(loan: Loan) {
+        binding.workflowTrackerScroll.visibility = View.GONE
+        val loanId = loan.id.takeIf { it.isNotBlank() } ?: return
+        val token = SessionManager(requireContext()).bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            val steps = runCatching { api.getLoanWorkflow(token, loanId) }
+                .getOrNull()
+                ?.workflow
+                ?.steps
+                ?.filter { (it.stepOrder ?: 0) > 0 }
+                ?.sortedBy { it.stepOrder ?: 0 }
+                .orEmpty()
+            if (_binding == null) return@launch
+            // Empty → legacy code-stage row; leave the fixed tracker in place.
+            if (steps.isNotEmpty()) renderWorkflowSteps(steps)
+        }
+    }
+
+    private fun renderWorkflowSteps(steps: List<WorkflowStepData>) {
+        val b = _binding ?: return
+        // Hide the fixed loan/advance trackers + their connector lines.
+        b.layoutLoanTracker.visibility = View.GONE
+        b.layoutAdvanceTracker.visibility = View.GONE
+        b.loanTrackerLine.visibility = View.GONE
+        b.advanceTrackerLine.visibility = View.GONE
+        b.workflowTrackerScroll.visibility = View.VISIBLE
+
+        val container = b.workflowTrackerContainer
+        container.removeAllViews()
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        steps.forEachIndexed { index, step ->
+            val status = step.status?.lowercase()?.trim().orEmpty()
+            val done = status == "approved" || status == "skipped"
+            val rejected = status == "rejected"
+
+            val item = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(78), LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
+            }
+
+            val dotSize = dp(40)
+            val dot = FrameLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(dotSize, dotSize)
+                setBackgroundResource(
+                    if (done) R.drawable.bg_loan_track_active
+                    else R.drawable.bg_loan_icon_tile,
+                )
+            }
+            if (done) {
+                dot.addView(ImageView(requireContext()).apply {
+                    setImageResource(R.drawable.ic_loan_track_check)
+                    layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
+                })
+            } else {
+                dot.addView(TextView(requireContext()).apply {
+                    text = (step.stepOrder ?: (index + 1)).toString()
+                    setTextColor(
+                        if (rejected) Color.parseColor("#D92D20")
+                        else Color.parseColor("#98A2B3"),
+                    )
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER,
+                    )
+                })
+            }
+            item.addView(dot)
+
+            item.addView(TextView(requireContext()).apply {
+                text = step.name?.takeIf { it.isNotBlank() }
+                    ?: step.approverRole?.takeIf { it.isNotBlank() }
+                    ?: step.approverDesignation?.takeIf { it.isNotBlank() }
+                    ?: "Step ${step.stepOrder ?: (index + 1)}"
+                setTextColor(
+                    when {
+                        done -> Color.parseColor("#0B61CA")
+                        rejected -> Color.parseColor("#D92D20")
+                        else -> Color.parseColor("#98A2B3")
+                    },
+                )
+                textSize = 10f
+                gravity = Gravity.CENTER
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTypeface(null, if (done) Typeface.BOLD else Typeface.NORMAL)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(6) }
+            })
+
+            step.resolvedStaffName?.takeIf { it.isNotBlank() }?.let { who ->
+                item.addView(TextView(requireContext()).apply {
+                    text = who
+                    setTextColor(Color.parseColor("#98A2B3"))
+                    textSize = 9f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { topMargin = dp(2) }
+                })
+            }
+
+            container.addView(item)
+        }
+    }
+
     /** Mirrors the My Permissions cancel flow: reuses
      *  dialog_cancel_leave for the confirmation, then routes to
      *  cancelLoan() which calls the backend. */
@@ -535,6 +687,64 @@ class LoansFragment : Fragment() {
         requestedLoansAdapter.submitList(slice)
         binding.layoutRequestedLoans.visibility =
             if (slice.isEmpty()) View.GONE else View.VISIBLE
+        // If pending approvals arrived AFTER the initial empty-state render
+        // (the approvals fetch is async; the tab can render first with
+        // allPending still empty), tear down the inline empty state so it
+        // doesn't sit underneath the Requested Loans card.
+        if (slice.isNotEmpty() && binding.inlineLoansEmptyState.visibility == View.VISIBLE) {
+            binding.inlineLoansEmptyState.visibility = View.GONE
+            binding.rvLoans.visibility = View.VISIBLE
+        }
+    }
+
+    /** Direct, no-popup advance approval. Calls the same endpoint the
+     *  GmApprovalBottomSheet would call; the backend routes the action
+     *  through the configured workflow (or legacy hardcoded chain if none).
+     *  On final accountant approval the backend creates the disbursement
+     *  request — same as if the user clicked Accept inside the sheet. */
+    private fun approveLoanInline(loan: com.manjugroups.m_connect.network.LoanData) {
+        val id = loan.id ?: return
+        val isAdvance = loan.requestType?.lowercase()?.trim() == "salary_advance"
+        val session = SessionManager(requireContext())
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                api.approveLoan(token, com.manjugroups.m_connect.network.ApproveLoanRequest(id))
+            }.onSuccess {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    if (isAdvance) "Advance approved" else "Loan approved",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                loadPendingApprovals()
+            }.onFailure { err ->
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    extractHttpErrorMessage(err)
+                        ?: "Failed to approve: ${err.message ?: "network error"}",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Pulls the `{error: "..."}` JSON the Convex HTTP routes return so the
+     *  user sees the real reason ("You are not nominated as a guarantor on
+     *  this loan", etc.) instead of an opaque "HTTP 500". */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        val msg = runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            obj.get("error")?.asString ?: obj.get("message")?.asString
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        // Convex wraps thrown errors as "Uncaught Error: <message>\n  at ...".
+        // Show just the first line minus the wrapper so the toast is clean.
+        return msg.substringBefore('\n')
+            .replace(Regex("^Uncaught \\w*Error:\\s*"), "")
+            .trim()
+            .ifBlank { null }
     }
 
     private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {
@@ -547,7 +757,12 @@ class LoansFragment : Fragment() {
                     loadPendingApprovals()
                 }
                 .onFailure { err ->
-                    android.widget.Toast.makeText(requireContext(), "Failed to reject loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        extractHttpErrorMessage(err)
+                            ?: "Failed to reject loan: ${err.message ?: "network error"}",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
                 }
         }
     }
