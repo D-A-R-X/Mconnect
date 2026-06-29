@@ -50,6 +50,29 @@ interface ApiService {
         @Query("query") query: String
     ): StaffListResponse
 
+    // Fines & Deductions
+    @GET("api/hr/fines/list")
+    suspend fun listFines(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = "active",
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null,
+    ): FinesListResponse
+
+    // The caller's OWN fines (incl. attendance late fines) — view-only staff.
+    @GET("api/hr/fines/my")
+    suspend fun listMyFines(
+        @Header("Authorization") token: String,
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null,
+    ): FinesListResponse
+
+    @POST("api/hr/fines/create")
+    suspend fun createFine(
+        @Header("Authorization") token: String,
+        @Body body: CreateFineRequest,
+    ): CreateFineResponse
+
     // Attendance
     @GET("api/hr/attendance/today")
     suspend fun getMyAttendanceToday(
@@ -3283,4 +3306,45 @@ data class QueryUpdateRequest(
     val queryIndex: Int,
     val remarks: String? = null,
     val resolved: Boolean? = null,
+)
+
+// ── Fines & Deductions ──
+data class FinesListResponse(
+    val success: Boolean = false,
+    val fines: List<FineDeductionItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class FineDeductionItem(
+    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    val staffName: String = "",
+    val employeeId: String = "",
+    val department: String = "",
+    val typeName: String = "",
+    val amount: Double = 0.0,
+    val month: Int = 0,
+    val year: Int = 0,
+    val monthName: String = "",
+    val status: String = "active",
+    val notes: String? = null,
+    val photoUrl: String? = null,
+    val createdAt: String? = null,
+)
+
+data class CreateFineRequest(
+    val employeeId: String,
+    val amount: Double,
+    val month: Int,
+    val year: Int,
+    val customTypeName: String? = null,
+    val typeId: String? = null,
+    val notes: String? = null,
+    val photoStorageId: String? = null,
+    val photoFileName: String? = null,
+)
+
+data class CreateFineResponse(
+    val success: Boolean = false,
+    val fineId: String? = null,
+    val error: String? = null,
 )

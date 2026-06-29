@@ -11,6 +11,8 @@ import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import coil.load
 import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
@@ -23,44 +25,20 @@ class FinesDeductionsFragment : Fragment() {
     private var _binding: FragmentFinesDeductionsBinding? = null
     private val binding get() = _binding!!
 
-    private var currentRole = "Admin"
+    private val api = com.manjugroups.m_connect.network.ApiService.create()
+    private val session by lazy { com.manjugroups.m_connect.auth.SessionManager(requireContext()) }
+    private var loadJob: kotlinx.coroutines.Job? = null
 
-    // Local list of fine records initialized with mockup data matching the screenshot
-    private val fineRecords = mutableListOf<FineRecord>(
-        FineRecord(
-            name = "Mari Muthu.R",
-            department = "Sales Department",
-            fineType = "Grooming",
-            amount = 500.0,
-            date = "22 May 2026",
-            status = "Active",
-            photoUrl = null,
-            finePhotoUrl = "https://images.unsplash.com/photo-1544005313-94ddf0286df2", // Mock fine image for User mode
-            photoResId = R.drawable.avatar_mari_muthu_1
-        ),
-        FineRecord(
-            name = "Sudalai Muthu.R",
-            department = "Sales Department",
-            fineType = "Late Attendance",
-            amount = 500.0,
-            date = "22 May 2026",
-            status = "Active",
-            photoUrl = null,
-            finePhotoUrl = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d", // Mock fine image for User mode
-            photoResId = R.drawable.avatar_sudalai_muthu
-        ),
-        FineRecord(
-            name = "Mari Muthu.R",
-            department = "Sales Department",
-            fineType = "Late Attendance",
-            amount = 500.0,
-            date = "22 May 2026",
-            status = "Active",
-            photoUrl = null,
-            finePhotoUrl = null,
-            photoResId = R.drawable.avatar_mari_muthu_2
-        )
-    )
+    // Real role-based access (replaces the old mock Admin/User spinner):
+    //   canViewAll  — fines.view (admin / HR): sees the company-wide list.
+    //   canManage   — fines.manage: can create a fine (the + button).
+    // Everyone else is view-only and sees just their OWN fines (incl. any
+    // attendance late fines) via /api/hr/fines/my.
+    private val canViewAll get() = session.hasPermission("fines.view")
+    private val canManage get() = session.hasPermission("fines.manage")
+
+    // Real fine records loaded from /api/hr/fines/list — no mock data.
+    private val fineRecords = mutableListOf<FineRecord>()
 
     private var currentSearchQuery = ""
 
@@ -92,8 +70,7 @@ class FinesDeductionsFragment : Fragment() {
         }
 
         binding.finesRefresh.setupPullToRefresh {
-            renderList()
-            binding.finesRefresh.isRefreshing = false
+            loadFines()
         }
 
         binding.btnCreateFine.setOnClickListener {
@@ -108,26 +85,10 @@ class FinesDeductionsFragment : Fragment() {
                     employeePhoto: String?,
                     finePhoto: String?
                 ) {
-                    val resolvedResId = when (name) {
-                        "Mari Muthu.R" -> R.drawable.avatar_mari_muthu_1
-                        "Sudalai Muthu.R" -> R.drawable.avatar_sudalai_muthu
-                        else -> null
-                    }
-                    fineRecords.add(
-                        0, // Insert at top
-                        FineRecord(
-                            name = name,
-                            department = department,
-                            fineType = fineType,
-                            amount = amount,
-                            date = dateStr,
-                            status = "Active",
-                            photoUrl = employeePhoto,
-                            finePhotoUrl = finePhoto,
-                            photoResId = resolvedResId
-                        )
-                    )
-                    renderList()
+                    // The mobile create sheet is a stub — fines are created on
+                    // the web admin. Reload from the backend so the list only
+                    // ever reflects real, persisted data.
+                    loadFines()
                 }
             })
             sheet.show(parentFragmentManager, "create_fine_sheet")
@@ -143,33 +104,79 @@ class FinesDeductionsFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Set up Spinner for Role
-        val roles = arrayOf("Admin", "User")
-        val adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, roles)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerRole.adapter = adapter
-        binding.spinnerRole.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                currentRole = roles[position]
-                if (currentRole == "Admin") {
-                    binding.llSearchContainer.visibility = View.VISIBLE
-                    binding.btnCreateFineContainer.visibility = View.VISIBLE
-                } else {
-                    binding.llSearchContainer.visibility = View.GONE
-                    binding.btnCreateFineContainer.visibility = View.GONE
-                }
-                renderList()
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
+        // Role-based visibility, driven by real IAM permissions:
+        //   - Create (+) only for fines.manage holders.
+        //   - Search only in the company-wide (fines.view) view; the own-fines
+        //     list is short and doesn't need it.
+        binding.roleSwitcherContainer.visibility = View.GONE
+        binding.btnCreateFineContainer.visibility = if (canManage) View.VISIBLE else View.GONE
+        binding.llSearchContainer.visibility = if (canViewAll) View.VISIBLE else View.GONE
 
-        renderList()
+        loadFines()
+    }
+
+    /** Fetch real fines from /api/hr/fines/list (active only) and render. */
+    private fun loadFines() {
+        if (_binding == null) return
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            binding.finesRefresh.isRefreshing = false
+            return
+        }
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // fines.view holders get the company-wide list; everyone else
+                // gets only their own fines (incl. attendance late fines).
+                val resp = if (canViewAll) {
+                    api.listFines(token, status = "active")
+                } else {
+                    api.listMyFines(token)
+                }
+                if (_binding == null) return@launch
+                fineRecords.clear()
+                fineRecords.addAll(
+                    resp.fines.map { f ->
+                        val dept = f.department.trim()
+                            .replaceFirstChar { c -> c.uppercase() }
+                            .ifBlank { "—" }
+                        val statusLabel = f.status
+                            .replaceFirstChar { c -> c.uppercase() }
+                        FineRecord(
+                            name = f.staffName.ifBlank { f.employeeId },
+                            department = dept,
+                            fineType = f.typeName,
+                            amount = f.amount,
+                            date = listOf(f.monthName, f.year.toString())
+                                .filter { it.isNotBlank() }
+                                .joinToString(" "),
+                            status = statusLabel,
+                            photoUrl = null,
+                            finePhotoUrl = f.photoUrl,
+                            photoResId = null,
+                        )
+                    }
+                )
+                renderList()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Couldn't load fines: ${e.message ?: "network error"}",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                if (_binding != null) binding.finesRefresh.isRefreshing = false
+            }
+        }
     }
 
     private fun renderList() {
         binding.llFinesList.removeAllViews()
 
-        val filteredList = if (currentSearchQuery.isEmpty() || currentRole == "User") {
+        val filteredList = if (currentSearchQuery.isEmpty() || !canViewAll) {
             fineRecords
         } else {
             fineRecords.filter {
@@ -196,7 +203,7 @@ class FinesDeductionsFragment : Fragment() {
 
                 val avatarView = itemView.findViewById<ImageView>(R.id.ivEmployeeAvatar)
 
-                if (currentRole == "User") {
+                if (!canViewAll) {
                     val resolvedFinePhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.finePhotoUrl)
                     if (!resolvedFinePhoto.isNullOrEmpty()) {
                         // Load camera fine picture instead of profile avatar
@@ -265,6 +272,8 @@ class FinesDeductionsFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(android.graphics.Color.WHITE, true)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+        // Refresh so a fine added on the web shows up when returning here.
+        loadFines()
     }
 
     override fun onPause() {
@@ -275,6 +284,7 @@ class FinesDeductionsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        loadJob?.cancel()
         super.onDestroyView()
         _binding = null
     }
