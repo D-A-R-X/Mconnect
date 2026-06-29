@@ -49,6 +49,10 @@ class QrHistoryFragment : Fragment() {
             insets
         }
 
+        binding.btnCancelHeaderVerificationHistory.setOnClickListener {
+            binding.visitorVerificationContainerHistory.visibility = View.GONE
+        }
+
         binding.btnCloseVerificationHistory.setOnClickListener {
             binding.visitorVerificationContainerHistory.visibility = View.GONE
         }
@@ -171,14 +175,14 @@ class QrHistoryFragment : Fragment() {
         }
 
         binding.tvPrimaryNameHistory.text = primaryName
-        binding.tvPrimaryCompanyHistory.text = "Company: $primaryCompany"
-        binding.tvPrimaryPhoneHistory.text = "Phone: $primaryPhone"
-        binding.tvPrimaryEmailHistory.text = "Email: $primaryEmail"
+        binding.tvPrimaryCompanyHistory.text = primaryCompany
+        binding.tvPrimaryPhoneHistory.text = primaryPhone
+        binding.tvPrimaryEmailHistory.text = primaryEmail
         binding.tvPrimaryAgeHistory.text = "Age: $primaryAge"
 
-        binding.tvVisitCategoryTypeHistory.text = "Type: $visitorType ($purpose)"
-        binding.tvVisitHostHistory.text = "Host: $hostPerson"
-        binding.tvVisitTimeWindowHistory.text = "Time Window: $expectedTime"
+        binding.tvVisitCategoryTypeHistory.text = "$visitorType ($purpose)"
+        binding.tvVisitHostHistory.text = hostPerson
+        binding.tvVisitTimeWindowHistory.text = expectedTime
         binding.tvVisitNotesHistory.text = meetingNotes
 
         binding.containerSecondaryListHistory.removeAllViews()
@@ -195,9 +199,9 @@ class QrHistoryFragment : Fragment() {
                 val tvSecAge = secView.findViewById<TextView>(R.id.tvSecondaryAge)
 
                 tvSecName.text = sec.optString("name", "N/A")
-                tvSecCompany.text = "Company: ${sec.optString("company", "N/A")}"
-                tvSecPhone.text = "Phone: ${sec.optString("phone", "N/A")}"
-                tvSecEmail.text = "Email: ${sec.optString("email", "N/A")}"
+                tvSecCompany.text = sec.optString("company", "N/A")
+                tvSecPhone.text = sec.optString("phone", "N/A")
+                tvSecEmail.text = sec.optString("email", "N/A")
                 tvSecAge.text = "Age: ${sec.optString("age", "N/A")}"
 
                 binding.containerSecondaryListHistory.addView(secView)

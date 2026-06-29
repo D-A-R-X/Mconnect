@@ -236,14 +236,14 @@ class QrScannerFragment : Fragment() {
 
         // Bind data to views
         binding.tvPrimaryName.text = primaryName
-        binding.tvPrimaryCompany.text = "Company: $primaryCompany"
-        binding.tvPrimaryPhone.text = "Phone: $primaryPhone"
-        binding.tvPrimaryEmail.text = "Email: $primaryEmail"
+        binding.tvPrimaryCompany.text = primaryCompany
+        binding.tvPrimaryPhone.text = primaryPhone
+        binding.tvPrimaryEmail.text = primaryEmail
         binding.tvPrimaryAge.text = "Age: $primaryAge"
 
-        binding.tvVisitCategoryType.text = "Type: $visitorType ($purpose)"
-        binding.tvVisitHost.text = "Host: $hostPerson"
-        binding.tvVisitTimeWindow.text = "Time Window: $expectedTime"
+        binding.tvVisitCategoryType.text = "$visitorType ($purpose)"
+        binding.tvVisitHost.text = hostPerson
+        binding.tvVisitTimeWindow.text = expectedTime
         binding.tvVisitNotes.text = meetingNotes
 
         // Populate secondary list
@@ -261,9 +261,9 @@ class QrScannerFragment : Fragment() {
                 val tvSecAge = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryAge)
 
                 tvSecName.text = sec.optString("name", "N/A")
-                tvSecCompany.text = "Company: ${sec.optString("company", "N/A")}"
-                tvSecPhone.text = "Phone: ${sec.optString("phone", "N/A")}"
-                tvSecEmail.text = "Email: ${sec.optString("email", "N/A")}"
+                tvSecCompany.text = sec.optString("company", "N/A")
+                tvSecPhone.text = sec.optString("phone", "N/A")
+                tvSecEmail.text = sec.optString("email", "N/A")
                 tvSecAge.text = "Age: ${sec.optString("age", "N/A")}"
 
                 binding.containerSecondaryList.addView(secView)
@@ -271,6 +271,14 @@ class QrScannerFragment : Fragment() {
         }
 
         // Setup button listeners
+        binding.btnCancelHeaderVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+        }
+
         binding.btnCancelVerification.setOnClickListener {
             binding.visitorVerificationContainer.visibility = View.GONE
             binding.laserLine.visibility = View.VISIBLE

@@ -133,253 +133,560 @@
         </FrameLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <!-- Visitor Verification Glass Modal (History Overview) -->
+    <!-- Visitor Verification Full-Screen Mockup Overlay (History Overview) -->
     <FrameLayout
         android:id="@+id/visitorVerificationContainerHistory"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
         android:elevation="10dp"
-        android:background="#D9000000">
+        android:background="@drawable/bg_verification_screen">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginVertical="32dp"
-            android:background="@drawable/bg_glass_verification_modal"
-            android:orientation="vertical"
-            android:padding="20dp"
-            android:elevation="12dp">
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!-- Status bar spacer -->
+            <View
+                android:id="@+id/spacerStatusBarVerificationHistory"
+                android:layout_width="match_parent"
+                android:layout_height="24dp" />
 
             <!-- Header -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:fontFamily="@font/inter_bold"
-                android:text="Visitor Log Overview"
-                android:textColor="#0F172A"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="2dp"
-                android:fontFamily="@font/inter_regular"
-                android:text="Overview of the scanned admission record"
-                android:textColor="#64748B"
-                android:textSize="12sp"
-                android:gravity="center" />
-
-            <!-- Scrollable Content -->
-            <androidx.core.widget.NestedScrollView
+            <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="320dp"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
-                android:fillViewport="true">
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp">
 
+                <ImageView
+                    android:id="@+id/btnCancelHeaderVerificationHistory"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_alignParentStart="true"
+                    android:background="@drawable/bg_circle_blue_light"
+                    android:backgroundTint="#26FFFFFF"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_back_blue"
+                    app:tint="#FFFFFF" />
+
+                <!-- Center shield check icon, title, subtitle -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerHorizontal="true"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_shield_check" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="Visitor Log Overview"
+                        android:textColor="#FFFFFF"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Overview of the scanned admission record"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:gravity="center" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_alignParentEnd="true"
+                    android:background="@drawable/bg_circle_blue_light"
+                    android:backgroundTint="#26FFFFFF"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_visitor_scan"
+                    app:tint="#FFFFFF" />
+            </RelativeLayout>
+
+            <!-- White Card Content Container (Full Width, Rounded Top, Scrollable) -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_verification_card">
+
+                <androidx.core.widget.NestedScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:overScrollMode="never">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="20dp"
+                        android:paddingTop="24dp"
+                        android:paddingBottom="96dp">
+
+                        <!-- PRIMARY VISITOR HEADER -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_custom_user"
+                                app:tint="#2563EB" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_bold"
+                                android:text="PRIMARY VISITOR"
+                                android:textColor="#2563EB"
+                                android:textSize="12sp"
+                                android:letterSpacing="0.05" />
+                        </LinearLayout>
+
+                        <!-- PRIMARY VISITOR CARD -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_visitor_card_white"
+                            android:orientation="vertical"
+                            android:padding="16dp"
+                            android:elevation="2dp">
+
+                            <!-- Avatar & Name row -->
+                            <RelativeLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content">
+
+                                <FrameLayout
+                                    android:id="@+id/avatarContainerHistory"
+                                    android:layout_width="44dp"
+                                    android:layout_height="44dp"
+                                    android:layout_alignParentStart="true"
+                                    android:layout_centerVertical="true">
+                                    <View
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:background="@drawable/bg_circle_blue_light"
+                                        android:backgroundTint="#EFF6FF" />
+                                    <ImageView
+                                        android:layout_width="24dp"
+                                        android:layout_height="24dp"
+                                        android:layout_gravity="center"
+                                        android:src="@drawable/ic_custom_user"
+                                        app:tint="#2563EB" />
+                                </FrameLayout>
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_toEndOf="@id/avatarContainerHistory"
+                                    android:layout_marginStart="12dp"
+                                    android:layout_centerVertical="true"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/tvPrimaryNameHistory"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:fontFamily="@font/inter_bold"
+                                        android:textColor="#0F172A"
+                                        android:textSize="16sp"
+                                        android:text="Jane Doe" />
+
+                                    <TextView
+                                        android:id="@+id/tvPrimaryCompanyHistory"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:fontFamily="@font/inter_medium"
+                                        android:textColor="#64748B"
+                                        android:textSize="13sp"
+                                        android:text="Tech Solutions" />
+                                </LinearLayout>
+
+                                <!-- Primary Badge -->
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_alignParentEnd="true"
+                                    android:layout_centerVertical="true"
+                                    android:background="@drawable/bg_badge_primary"
+                                    android:fontFamily="@font/inter_bold"
+                                    android:text="✓ Primary"
+                                    android:textColor="#2563EB"
+                                    android:textSize="11sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:paddingVertical="4dp" />
+                            </RelativeLayout>
+
+                            <!-- Details list with icons -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:orientation="vertical">
+
+                                <!-- Phone -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:paddingVertical="6dp"
+                                    android:orientation="horizontal">
+                                    <ImageView
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:src="@drawable/ic_visitor_phone" />
+                                    <TextView
+                                        android:id="@+id/tvPrimaryPhoneHistory"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="10dp"
+                                        android:fontFamily="@font/inter_medium"
+                                        android:textColor="#334155"
+                                        android:textSize="13sp"
+                                        android:text="+91 98765 43210" />
+                                </LinearLayout>
+
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="1dp"
+                                    android:background="#F1F5F9" />
+
+                                <!-- Email -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:paddingVertical="6dp"
+                                    android:orientation="horizontal">
+                                    <ImageView
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:src="@drawable/ic_visitor_email" />
+                                    <TextView
+                                        android:id="@+id/tvPrimaryEmailHistory"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="10dp"
+                                        android:fontFamily="@font/inter_medium"
+                                        android:textColor="#334155"
+                                        android:textSize="13sp"
+                                        android:text="jane.doe@example.com" />
+                                </LinearLayout>
+
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="1dp"
+                                    android:background="#F1F5F9" />
+
+                                <!-- Age -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:paddingVertical="6dp"
+                                    android:orientation="horizontal">
+                                    <ImageView
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:src="@drawable/ic_visitor_calendar" />
+                                    <TextView
+                                        android:id="@+id/tvPrimaryAgeHistory"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="10dp"
+                                        android:fontFamily="@font/inter_medium"
+                                        android:textColor="#334155"
+                                        android:textSize="13sp"
+                                        android:text="Age: 28" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- ADDITIONAL VISITOR HEADER -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_custom_user"
+                                app:tint="#16A34A" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_bold"
+                                android:text="ADDITIONAL VISITOR"
+                                android:textColor="#16A34A"
+                                android:textSize="12sp"
+                                android:letterSpacing="0.05" />
+                        </LinearLayout>
+
+                        <!-- ADDITIONAL VISITORS LIST CONTAINER -->
+                        <LinearLayout
+                            android:id="@+id/layoutSecondaryVisitorsHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:id="@+id/containerSecondaryListHistory"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+                        </LinearLayout>
+
+                        <!-- VISIT DETAILS HEADER -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_visitor_clipboard"
+                                app:tint="#8B5CF6" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_bold"
+                                android:text="VISIT DETAILS"
+                                android:textColor="#8B5CF6"
+                                android:textSize="12sp"
+                                android:letterSpacing="0.05" />
+                        </LinearLayout>
+
+                        <!-- VISIT DETAILS CARD -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_visitor_card_white"
+                            android:orientation="vertical"
+                            android:padding="16dp"
+                            android:elevation="2dp">
+
+                            <!-- Category / Type -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:paddingVertical="8dp"
+                                android:orientation="horizontal">
+                                <ImageView
+                                    android:layout_width="16dp"
+                                    android:layout_height="16dp"
+                                    android:src="@drawable/ic_custom_user"
+                                    app:tint="#8B5CF6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:textColor="#334155"
+                                    android:textSize="13sp"
+                                    android:text="Type" />
+                                <TextView
+                                    android:id="@+id/tvVisitCategoryTypeHistory"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:gravity="end"
+                                    android:fontFamily="@font/inter_medium"
+                                    android:textColor="#0F172A"
+                                    android:textSize="13sp"
+                                    android:text="Vendor (Installation)" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="#F1F5F9" />
+
+                            <!-- Host -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:paddingVertical="8dp"
+                                android:orientation="horizontal">
+                                <ImageView
+                                    android:layout_width="16dp"
+                                    android:layout_height="16dp"
+                                    android:src="@drawable/ic_custom_user"
+                                    app:tint="#8B5CF6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:textColor="#334155"
+                                    android:textSize="13sp"
+                                    android:text="Host" />
+                                <TextView
+                                    android:id="@+id/tvVisitHostHistory"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:gravity="end"
+                                    android:fontFamily="@font/inter_medium"
+                                    android:textColor="#0F172A"
+                                    android:textSize="13sp"
+                                    android:text="Dev Super Admin" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="#F1F5F9" />
+
+                            <!-- Time Window -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:paddingVertical="8dp"
+                                android:orientation="horizontal">
+                                <ImageView
+                                    android:layout_width="16dp"
+                                    android:layout_height="16dp"
+                                    android:src="@drawable/ic_custom_clock"
+                                    app:tint="#8B5CF6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:textColor="#334155"
+                                    android:textSize="13sp"
+                                    android:text="Time Window" />
+                                <TextView
+                                    android:id="@+id/tvVisitTimeWindowHistory"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:gravity="end"
+                                    android:fontFamily="@font/inter_medium"
+                                    android:textColor="#0F172A"
+                                    android:textSize="13sp"
+                                    android:text="29 Jun 2026, 11:30 AM - 01:30 PM" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="#F1F5F9" />
+
+                            <!-- Notes -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="top"
+                                android:paddingVertical="8dp"
+                                android:orientation="horizontal">
+                                <ImageView
+                                    android:layout_width="16dp"
+                                    android:layout_height="16dp"
+                                    android:layout_marginTop="2dp"
+                                    android:src="@drawable/ic_visitor_clipboard"
+                                    app:tint="#8B5CF6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:fontFamily="@font/inter_semibold"
+                                    android:textColor="#334155"
+                                    android:textSize="13sp"
+                                    android:text="Meeting Notes" />
+                                <TextView
+                                    android:id="@+id/tvVisitNotesHistory"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:gravity="end"
+                                    android:fontFamily="@font/inter_medium"
+                                    android:textColor="#0F172A"
+                                    android:textSize="13sp"
+                                    android:text="Scanned Raw Payload: Aejfo783zvuLsrqHiM" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+
+                <!-- Absolute Bottom Floating Buttons Panel -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_gravity="bottom"
+                    android:background="#FFFFFF"
+                    android:paddingHorizontal="20dp"
+                    android:paddingVertical="16dp"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:elevation="8dp">
 
-                    <!-- PRIMARY VISITOR CARD -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="PRIMARY VISITOR"
-                        android:textColor="#2563EB"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.05" />
-
+                    <!-- Close Button -->
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:background="@drawable/bg_visitor_card_inner"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:id="@+id/tvPrimaryNameHistory"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_bold"
-                            android:textColor="#1E293B"
-                            android:textSize="15sp"
-                            android:text="Jane Doe" />
-
-                        <TextView
-                            android:id="@+id/tvPrimaryCompanyHistory"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Company: Tech Solutions" />
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginVertical="8dp"
-                            android:background="#E2E8F0" />
-
-                        <!-- Details: Phone, Email, Age -->
-                        <TextView
-                            android:id="@+id/tvPrimaryPhoneHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Phone: +91 98765 43210" />
-
-                        <TextView
-                            android:id="@+id/tvPrimaryEmailHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_regular"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Email: jane.doe@example.com" />
-
-                        <TextView
-                            android:id="@+id/tvPrimaryAgeHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_regular"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Age: 28" />
-                    </LinearLayout>
-
-                    <!-- SECONDARY VISITORS CONTAINER -->
-                    <LinearLayout
-                        android:id="@+id/layoutSecondaryVisitorsHistory"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:orientation="vertical">
-
+                        android:id="@+id/btnCloseVerificationHistory"
+                        android:layout_width="160dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_btn_gradient_green_12dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_visitor_check"
+                            app:tint="#FFFFFF" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
                             android:fontFamily="@font/inter_semibold"
-                            android:text="ADDITIONAL VISITORS"
-                            android:textColor="#2563EB"
-                            android:textSize="11sp"
-                            android:letterSpacing="0.05" />
-
-                        <LinearLayout
-                            android:id="@+id/containerSecondaryListHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:orientation="vertical" />
+                            android:text="Close"
+                            android:textColor="#FFFFFF"
+                            android:textSize="14sp" />
                     </LinearLayout>
-
-                    <!-- VISIT DETAILS CARD -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="VISIT DETAILS"
-                        android:textColor="#2563EB"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.05" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:background="@drawable/bg_visitor_card_inner"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:id="@+id/tvVisitCategoryTypeHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_semibold"
-                            android:textColor="#1E293B"
-                            android:textSize="13sp"
-                            android:text="Type: Vendor (Installation)" />
-
-                        <TextView
-                            android:id="@+id/tvVisitHostHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Host: Dev Super Admin" />
-
-                        <TextView
-                            android:id="@+id/tvVisitTimeWindowHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:textColor="#475569"
-                            android:textSize="12sp"
-                            android:text="Time Window: 29 Jun 2026, 11:30 AM" />
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginVertical="8dp"
-                            android:background="#E2E8F0" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_semibold"
-                            android:text="Meeting Notes:"
-                            android:textColor="#1E293B"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/tvVisitNotesHistory"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_regular"
-                            android:textColor="#64748B"
-                            android:textSize="12sp"
-                            android:text="Hardware firewall setup..." />
-                    </LinearLayout>
-
                 </LinearLayout>
-            </androidx.core.widget.NestedScrollView>
 
-            <!-- Buttons -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center">
-
-                <Button
-                    android:id="@+id/btnCloseVerificationHistory"
-                    android:layout_width="160dp"
-                    android:layout_height="48dp"
-                    android:background="@drawable/bg_btn_gradient_green_12dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="Close"
-                    android:textColor="#FFFFFF"
-                    android:textAllCaps="false"
-                    app:backgroundTint="@null" />
-            </LinearLayout>
+            </FrameLayout>
 
         </LinearLayout>
     </FrameLayout>
