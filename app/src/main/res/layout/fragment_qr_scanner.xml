@@ -130,8 +130,8 @@
                 android:backgroundTint="#40FFFFFF"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="6dp"
-                android:src="@drawable/ic_sheet_upload_outline"
+                android:padding="7dp"
+                android:src="@drawable/ic_visitor_history"
                 app:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
@@ -225,13 +225,16 @@
                 </LinearLayout>
 
                 <ImageView
+                    android:id="@+id/btnHistoryVerification"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:layout_alignParentEnd="true"
                     android:background="@drawable/bg_circle_blue_light"
                     android:backgroundTint="#26FFFFFF"
-                    android:padding="10dp"
-                    android:src="@drawable/ic_visitor_scan"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="11dp"
+                    android:src="@drawable/ic_visitor_history"
                     app:tint="#FFFFFF" />
             </RelativeLayout>
 
@@ -288,8 +291,7 @@
                             android:layout_marginTop="10dp"
                             android:background="@drawable/bg_visitor_card_white"
                             android:orientation="vertical"
-                            android:padding="16dp"
-                            android:elevation="2dp">
+                            android:padding="16dp">
 
                             <!-- Avatar & Name row -->
                             <RelativeLayout
@@ -514,8 +516,7 @@
                             android:layout_marginTop="10dp"
                             android:background="@drawable/bg_visitor_card_white"
                             android:orientation="vertical"
-                            android:padding="16dp"
-                            android:elevation="2dp">
+                            android:padding="16dp">
 
                             <!-- Category / Type -->
                             <LinearLayout
@@ -668,6 +669,7 @@
 
                 <!-- Absolute Bottom Floating Buttons Panel -->
                 <LinearLayout
+                    android:id="@+id/llBottomButtonsPanel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom"
@@ -711,7 +713,7 @@
                         android:layout_height="48dp"
                         android:layout_weight="1.2"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_btn_primary_verification"
+                        android:background="@drawable/bg_btn_gradient_green_pill"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"

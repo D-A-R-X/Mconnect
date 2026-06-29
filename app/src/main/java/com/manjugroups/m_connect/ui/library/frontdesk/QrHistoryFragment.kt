@@ -43,13 +43,35 @@ class QrHistoryFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            
+            // History top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
+
+            // Verification layout top spacer
+            val lpVerification = binding.spacerStatusBarVerificationHistory.layoutParams
+            lpVerification.height = sysBars.top
+            binding.spacerStatusBarVerificationHistory.layoutParams = lpVerification
+
+            // Add navigation bar bottom padding to absolute floating buttons panel
+            val extraBottomPadding = (16 * resources.displayMetrics.density).toInt()
+            binding.llBottomButtonsPanelHistory.setPadding(
+                binding.llBottomButtonsPanelHistory.paddingLeft,
+                binding.llBottomButtonsPanelHistory.paddingTop,
+                binding.llBottomButtonsPanelHistory.paddingRight,
+                sysBars.bottom + extraBottomPadding
+            )
+
             insets
         }
 
         binding.btnCancelHeaderVerificationHistory.setOnClickListener {
+            binding.visitorVerificationContainerHistory.visibility = View.GONE
+        }
+
+        binding.btnHistoryVerificationHistory.setOnClickListener {
+            // Already on history page, just close layout overview
             binding.visitorVerificationContainerHistory.visibility = View.GONE
         }
 

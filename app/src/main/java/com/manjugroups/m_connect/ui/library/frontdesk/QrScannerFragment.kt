@@ -70,11 +70,41 @@ class QrScannerFragment : Fragment() {
                 .commit()
         }
 
+        binding.btnHistoryVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, QrHistoryFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            
+            // Scanner top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
+
+            // Verification layout top spacer
+            val lpVerification = binding.spacerStatusBarVerification.layoutParams
+            lpVerification.height = sysBars.top
+            binding.spacerStatusBarVerification.layoutParams = lpVerification
+
+            // Add navigation bar bottom padding to absolute floating buttons panel
+            val extraBottomPadding = (16 * resources.displayMetrics.density).toInt()
+            binding.llBottomButtonsPanel.setPadding(
+                binding.llBottomButtonsPanel.paddingLeft,
+                binding.llBottomButtonsPanel.paddingTop,
+                binding.llBottomButtonsPanel.paddingRight,
+                sysBars.bottom + extraBottomPadding
+            )
+
             insets
         }
 
