@@ -85,7 +85,7 @@ class IssuesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         // Status bar margin / padding inset handling to make battery/clock visible
-        ViewCompat.setOnApplyWindowInsetsListener(binding.issuesHeader) { v, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.rootIssuesLayout) { v, insets ->
             val topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             v.setPadding(
                 v.paddingLeft,
