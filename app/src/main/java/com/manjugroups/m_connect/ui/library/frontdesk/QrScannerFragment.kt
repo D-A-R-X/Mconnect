@@ -22,7 +22,13 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentQrScannerBinding
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.CheckinInvitationRequest
+import com.manjugroups.m_connect.network.InvitationDetail
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -46,6 +52,11 @@ class QrScannerFragment : Fragment() {
     private var laserAnimator: ObjectAnimator? = null
     private val barcodeScanner: BarcodeScanner by lazy { BarcodeScanning.getClient() }
     private var statusBarHeight = 0
+
+    private val api by lazy { ApiService.create() }
+    private val session by lazy { SessionManager(requireContext()) }
+    // Set when a real invitation is loaded; needed for the Confirm -> check-in call.
+    private var currentInvitationId: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -235,9 +246,180 @@ class QrScannerFragment : Fragment() {
             binding.laserLine.visibility = View.GONE
             // Freeze camera feed
             cameraProvider?.unbindAll()
-            
-            showVerificationModal(value)
+
+            // A Front Desk invite QR encodes <origin>/frontdesk/invite/<token>.
+            // For those we resolve real visitor data from the backend; any other
+            // QR falls back to the legacy local/mock parsing.
+            val inviteToken = extractInviteToken(value)
+            if (inviteToken != null) {
+                fetchInvitation(inviteToken)
+            } else {
+                showVerificationModal(value)
+            }
         }
+    }
+
+    /** Pull the invite token out of a scanned `.../frontdesk/invite/<token>` URL. */
+    private fun extractInviteToken(value: String): String? {
+        val marker = "/frontdesk/invite/"
+        val idx = value.indexOf(marker)
+        if (idx < 0) return null
+        val token = value.substring(idx + marker.length)
+            .substringBefore('?')
+            .substringBefore('#')
+            .trim()
+            .trimEnd('/')
+        return token.ifEmpty { null }
+    }
+
+    private fun fetchInvitation(inviteToken: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getInvitationByToken(session.bearerToken, inviteToken)
+                if (_binding == null) return@launch
+                val inv = resp.invitation
+                if (resp.success && inv != null) {
+                    showRealVerification(inv)
+                } else {
+                    Toast.makeText(requireContext(), resp.error ?: "Invitation not found", Toast.LENGTH_LONG).show()
+                    resumeScanning()
+                }
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(requireContext(), "Couldn't load invitation: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                resumeScanning()
+            }
+        }
+    }
+
+    /** Hide the verification sheet and resume live scanning. */
+    private fun resumeScanning() {
+        if (_binding == null) return
+        currentInvitationId = null
+        binding.visitorVerificationContainer.visibility = View.GONE
+        binding.laserLine.visibility = View.VISIBLE
+        laserAnimator?.resume()
+        bindCameraUseCases()
+        isScanningActive = true
+    }
+
+    private fun formatWindow(inv: InvitationDetail): String {
+        val time = when {
+            !inv.expectedTimeFrom.isNullOrBlank() && !inv.expectedTimeTo.isNullOrBlank() ->
+                "${inv.expectedTimeFrom} - ${inv.expectedTimeTo}"
+            !inv.expectedTimeFrom.isNullOrBlank() -> inv.expectedTimeFrom
+            else -> ""
+        }
+        return listOf(inv.expectedDate ?: "", time ?: "")
+            .filter { it.isNotBlank() }
+            .joinToString(", ")
+            .ifBlank { "—" }
+    }
+
+    private fun showRealVerification(inv: InvitationDetail) {
+        currentInvitationId = inv.id
+
+        binding.tvPrimaryName.text = inv.visitorName ?: "—"
+        binding.tvPrimaryCompany.text = inv.visitorCompany ?: "—"
+        binding.tvPrimaryPhone.text = inv.visitorPhone ?: "—"
+        binding.tvPrimaryEmail.text = inv.visitorEmail ?: "—"
+        binding.tvPrimaryAge.text = "Age: ${inv.visitorAge?.toString() ?: "—"}"
+
+        val category = inv.categoryName ?: "Visitor"
+        binding.tvVisitCategoryType.text =
+            if (!inv.purposeName.isNullOrBlank()) "$category (${inv.purposeName})" else category
+        binding.tvVisitHost.text = inv.hostName ?: "—"
+        binding.tvVisitTimeWindow.text = formatWindow(inv)
+        binding.tvVisitNotes.text = inv.meetingNotes?.takeIf { it.isNotBlank() } ?: "—"
+
+        // Additional visitors
+        binding.containerSecondaryList.removeAllViews()
+        val additional = inv.additionalVisitors ?: emptyList()
+        if (additional.isEmpty()) {
+            binding.layoutSecondaryVisitors.visibility = View.GONE
+        } else {
+            binding.layoutSecondaryVisitors.visibility = View.VISIBLE
+            for (a in additional) {
+                val secView = LayoutInflater.from(requireContext())
+                    .inflate(R.layout.item_secondary_visitor, binding.containerSecondaryList, false)
+                secView.findViewById<android.widget.TextView>(R.id.tvSecondaryName).text = a.name ?: "—"
+                secView.findViewById<android.widget.TextView>(R.id.tvSecondaryCompany).text = inv.visitorCompany ?: "—"
+                secView.findViewById<android.widget.TextView>(R.id.tvSecondaryPhone).text = a.phone ?: "—"
+                secView.findViewById<android.widget.TextView>(R.id.tvSecondaryEmail).text = a.email ?: "—"
+                secView.findViewById<android.widget.TextView>(R.id.tvSecondaryAge).text = "Age: ${a.age?.toString() ?: "—"}"
+                binding.containerSecondaryList.addView(secView)
+            }
+        }
+
+        binding.btnCancelHeaderVerification.setOnClickListener { resumeScanning() }
+        binding.btnCancelVerification.setOnClickListener { resumeScanning() }
+        binding.btnConfirmAdmission.setOnClickListener { confirmAdmission(inv) }
+
+        BottomSheetBehavior.from(binding.verificationBottomSheet).state = BottomSheetBehavior.STATE_COLLAPSED
+        binding.visitorVerificationContainer.visibility = View.VISIBLE
+    }
+
+    private fun confirmAdmission(inv: InvitationDetail) {
+        val invitationId = currentInvitationId
+        if (invitationId == null) {
+            Toast.makeText(requireContext(), "Missing invitation reference", Toast.LENGTH_SHORT).show()
+            return
+        }
+        binding.btnConfirmAdmission.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.checkinInvitation(
+                    session.bearerToken,
+                    CheckinInvitationRequest(invitationId = invitationId),
+                )
+                if (_binding == null) return@launch
+                binding.btnConfirmAdmission.isEnabled = true
+                if (resp.success) {
+                    saveInvitationToHistory(inv, resp.passNumber)
+                    val pass = resp.passNumber?.let { " · Pass $it" } ?: ""
+                    Toast.makeText(
+                        requireContext(),
+                        "Admission confirmed$pass for ${inv.visitorName}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    resumeScanning()
+                } else {
+                    Toast.makeText(requireContext(), resp.error ?: "Check-in failed", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                binding.btnConfirmAdmission.isEnabled = true
+                Toast.makeText(requireContext(), "Check-in failed: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun saveInvitationToHistory(inv: InvitationDetail, passNumber: String?) {
+        val historyJson = JSONObject().apply {
+            put("isStructured", true)
+            put("primaryName", inv.visitorName ?: "")
+            put("primaryCompany", inv.visitorCompany ?: "")
+            put("primaryPhone", inv.visitorPhone ?: "")
+            put("primaryEmail", inv.visitorEmail ?: "")
+            put("primaryAge", inv.visitorAge?.toString() ?: "")
+            val secArr = JSONArray()
+            inv.additionalVisitors?.forEach { a ->
+                secArr.put(JSONObject().apply {
+                    put("name", a.name ?: "")
+                    put("phone", a.phone ?: "")
+                    put("age", a.age?.toString() ?: "")
+                    put("email", a.email ?: "")
+                })
+            }
+            put("secondaryList", secArr)
+            put("visitorType", inv.categoryName ?: "")
+            put("purpose", inv.purposeName ?: "")
+            put("hostPerson", inv.hostName ?: "")
+            put("expectedTime", formatWindow(inv))
+            put("meetingNotes", inv.meetingNotes ?: "")
+            passNumber?.let { put("passNumber", it) }
+        }
+        saveScanToHistory(historyJson.toString())
     }
 
     private fun showVerificationModal(qrValue: String) {

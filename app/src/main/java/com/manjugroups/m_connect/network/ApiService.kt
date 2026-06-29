@@ -73,6 +73,20 @@ interface ApiService {
         @Body body: CreateFineRequest,
     ): CreateFineResponse
 
+    // Front Desk: resolve a scanned invite QR token to its visitor details.
+    @GET("api/frontdesk/invitations/by-token")
+    suspend fun getInvitationByToken(
+        @Header("Authorization") token: String,
+        @Query("token") inviteToken: String,
+    ): InvitationLookupResponse
+
+    // Front Desk: admit (check in) the scanned invitation.
+    @POST("api/frontdesk/invitations/checkin")
+    suspend fun checkinInvitation(
+        @Header("Authorization") token: String,
+        @Body body: CheckinInvitationRequest,
+    ): CheckinInvitationResponse
+
     // Attendance
     @GET("api/hr/attendance/today")
     suspend fun getMyAttendanceToday(
@@ -3346,5 +3360,50 @@ data class CreateFineRequest(
 data class CreateFineResponse(
     val success: Boolean = false,
     val fineId: String? = null,
+    val error: String? = null,
+)
+
+// ── Front Desk invitation lookup / check-in ──────────────────────────────────
+data class InvitationLookupResponse(
+    val success: Boolean = false,
+    val invitation: InvitationDetail? = null,
+    val error: String? = null,
+)
+
+data class InvitationDetail(
+    @SerializedName("_id") val id: String?,
+    val token: String?,
+    val visitorName: String?,
+    val visitorPhone: String?,
+    val visitorEmail: String?,
+    val visitorCompany: String?,
+    val visitorAge: Int?,
+    val additionalVisitors: List<AdditionalVisitor>? = emptyList(),
+    val categoryName: String?,
+    val purposeName: String?,
+    val hostName: String?,
+    val hostDepartment: String?,
+    val expectedDate: String?,
+    val expectedTimeFrom: String?,
+    val expectedTimeTo: String?,
+    val meetingNotes: String?,
+    val status: String?,
+)
+
+data class AdditionalVisitor(
+    val name: String?,
+    val phone: String?,
+    val age: Int?,
+    val email: String?,
+)
+
+data class CheckinInvitationRequest(
+    val invitationId: String,
+    val notes: String? = null,
+)
+
+data class CheckinInvitationResponse(
+    val success: Boolean = false,
+    val passNumber: String? = null,
     val error: String? = null,
 )
