@@ -154,9 +154,31 @@ class AcceptLoanBottomSheet(
             } catch (e: Exception) {
                 binding.btnSubmit.isEnabled = true
                 binding.btnSubmit.text = "Submit"
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                val serverMsg = extractHttpErrorMessage(e)
+                Toast.makeText(
+                    requireContext(),
+                    serverMsg ?: "Error: ${e.message ?: "network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
+    }
+
+    /** Pulls the `{error: "..."}` JSON the Convex HTTP routes return so the
+     *  user sees the real reason ("You are not nominated as a guarantor on
+     *  this loan", etc.) instead of an opaque "HTTP 500". */
+    private fun extractHttpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        val msg = runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            obj.get("error")?.asString ?: obj.get("message")?.asString
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        return msg.substringBefore('\n')
+            .replace(Regex("^Uncaught \\w*Error:\\s*"), "")
+            .trim()
+            .ifBlank { null }
     }
 
     override fun onDestroyView() {

@@ -77,12 +77,20 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // Lift the sheet above the soft keyboard so the focused field stays
+        // visible while typing.
+        dialog?.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         val dialog = dialog as? com.google.android.material.bottomsheet.BottomSheetDialog
         val bottomSheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
         bottomSheet?.let {
             it.elevation = 0f
             it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+            behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            behavior.skipCollapsed = true
         }
     }
 

@@ -74,14 +74,32 @@
         </FrameLayout>
 
         <!-- Main List Container -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvAdminDrivers"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="80dp" />
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAdminDrivers"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="80dp" />
+
+            <TextView
+                android:id="@+id/tvDriversEmpty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:paddingHorizontal="32dp"
+                android:text="No drivers yet.\nTap + to add one."
+                android:textColor="#6B7280"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </FrameLayout>
 
     </LinearLayout>
 

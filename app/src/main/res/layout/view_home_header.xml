@@ -292,7 +292,7 @@
                     android:lineSpacingExtra="1dp"
                     android:text="Manage Your\nFleet with Ease"
                     android:textColor="#FFFFFF"
-                    android:textSize="17sp" />
+                    android:textSize="18sp" />
 
                 <TextView
                     android:id="@+id/tvFleetSubtitle"
@@ -302,7 +302,7 @@
                     android:fontFamily="@font/inter_medium"
                     android:letterSpacing="-0.01"
                     android:lineSpacingExtra="1dp"
-                    android:text="Track trips, assign vehicles,\nmanage drivers and keep\nyour operations running\nsmoothly."
+                    android:text="Track trips and\nmanage drivers."
                     android:textColor="#CCFFFFFF"
                     android:textSize="10sp" />
 
@@ -338,13 +338,15 @@
             </LinearLayout>
 
             <!-- Guidelines -->
-            <!-- Text boundary: 44% -->
+            <!-- Text boundary: 33% — moves the van+phone cluster further left
+                 so it clears the live-data stat cards (instead of sitting on
+                 top of them). -->
             <androidx.constraintlayout.widget.Guideline
                 android:id="@+id/guidelineFleetText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                app:layout_constraintGuide_percent="0.44" />
+                app:layout_constraintGuide_percent="0.33" />
 
             <!-- Illustration start: 40% -->
             <androidx.constraintlayout.widget.Guideline
@@ -354,20 +356,26 @@
                 android:orientation="vertical"
                 app:layout_constraintGuide_percent="0.40" />
 
-            <!-- Cards start: 71% -->
+            <!-- Cards start: 73% — slightly wider cards so labels read on one
+                 line without ellipsis. Cards graze the phone's right edge as
+                 in image 2; cluster's empty band still covers most of the
+                 overlap so the phone stays visible. -->
             <androidx.constraintlayout.widget.Guideline
                 android:id="@+id/guidelineFleetCards"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                app:layout_constraintGuide_percent="0.71" />
+                app:layout_constraintGuide_percent="0.73" />
 
-            <!-- Cards - BEHIND (declared first) -->
+            <!-- Cards - IN FRONT (raised via elevation so the illustration,
+                 which is declared after this, can no longer cover them). The
+                 elevation also gives the soft drop shadow the design shows. -->
             <LinearLayout
                 android:id="@+id/fleetCardsContainer"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="10dp"
+                android:elevation="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toTopOf="@+id/fleetDotsContainer"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -379,9 +387,10 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_fleet_card_white"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="5dp"
+                    android:layout_marginBottom="4dp"
                     android:orientation="horizontal"
-                    android:padding="7dp">
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="4dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -390,40 +399,45 @@
                         android:orientation="vertical">
 
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_regular"
+                            android:maxLines="2"
+                            android:lineSpacingMultiplier="0.95"
                             android:text="Today's Trips"
                             android:textColor="#9CA3AF"
-                            android:textSize="7.5sp" />
+                            android:textSize="8sp" />
 
                         <TextView
+                            android:id="@+id/tvFleetTodaysTripsCount"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="1dp"
                             android:fontFamily="@font/inter_bold"
-                            android:text="12"
+                            android:includeFontPadding="false"
+                            android:text="—"
                             android:textColor="#111827"
-                            android:textSize="16sp" />
+                            android:textSize="13sp" />
 
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_regular"
+                            android:maxLines="2"
+                            android:lineSpacingMultiplier="0.95"
                             android:text="Pending"
                             android:textColor="#9CA3AF"
                             android:textSize="7.5sp" />
                     </LinearLayout>
 
                     <FrameLayout
-                        android:layout_width="26dp"
-                        android:layout_height="26dp"
-                        android:layout_marginStart="3dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="4dp"
                         android:background="@drawable/bg_circle_blue_light">
 
                         <ImageView
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
                             android:layout_gravity="center"
                             android:src="@drawable/ic_admin_tab_trips"
                             app:tint="#0B61CA" />
@@ -436,7 +450,8 @@
                     android:background="@drawable/bg_fleet_card_white"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:padding="7dp">
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="4dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -445,40 +460,45 @@
                         android:orientation="vertical">
 
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_regular"
+                            android:maxLines="2"
+                            android:lineSpacingMultiplier="0.95"
                             android:text="Active Vehicles"
                             android:textColor="#9CA3AF"
-                            android:textSize="7.5sp" />
+                            android:textSize="8sp" />
 
                         <TextView
+                            android:id="@+id/tvFleetActiveVehiclesCount"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="1dp"
                             android:fontFamily="@font/inter_bold"
-                            android:text="18"
+                            android:includeFontPadding="false"
+                            android:text="—"
                             android:textColor="#111827"
-                            android:textSize="16sp" />
+                            android:textSize="13sp" />
 
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_regular"
+                            android:maxLines="2"
+                            android:lineSpacingMultiplier="0.95"
                             android:text="On the road"
                             android:textColor="#9CA3AF"
                             android:textSize="7.5sp" />
                     </LinearLayout>
 
                     <FrameLayout
-                        android:layout_width="26dp"
-                        android:layout_height="26dp"
-                        android:layout_marginStart="3dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="4dp"
                         android:background="@drawable/bg_circle_green_light">
 
                         <ImageView
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
                             android:layout_gravity="center"
                             android:src="@drawable/ic_admin_tab_vehicles"
                             app:tint="#1BCA0B" />
@@ -486,17 +506,35 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Illustration: van+phone+cityscape - IN FRONT (declared last = highest z) -->
+            <!-- Faint cityscape skyline, behind everything in the right pane. -->
+            <ImageView
+                android:id="@+id/ivFleetCityscape"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:adjustViewBounds="true"
+                android:alpha="0.5"
+                android:scaleType="fitCenter"
+                android:src="@drawable/fleet_banner_cityscape"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/guidelineFleetText"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <!-- Van + phone cluster: positioned left of the stat cards (anchored
+                 to the text guideline at 33%) at a fixed width that ends before
+                 the cards' guideline (73%), so the cards' live counts stay
+                 unobstructed. No elevation: even if there's a hairline overlap,
+                 the cards (elevation 8dp) sit on top. -->
             <ImageView
                 android:id="@+id/ivFleetVan"
-                android:layout_width="0dp"
+                android:layout_width="155dp"
                 android:layout_height="0dp"
                 android:layout_marginTop="2dp"
-                android:layout_marginBottom="14dp"
+                android:layout_marginBottom="12dp"
+                android:adjustViewBounds="true"
                 android:scaleType="fitCenter"
-                android:src="@drawable/fleet_banner_composite"
+                android:src="@drawable/fleet_van_phone_cluster"
                 app:layout_constraintBottom_toTopOf="@+id/fleetDotsContainer"
-                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@id/guidelineFleetText"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -512,18 +550,21 @@
                 app:layout_constraintStart_toStartOf="parent">
 
                 <View
+                    android:id="@+id/fleetDot0"
                     android:layout_width="6dp"
                     android:layout_height="6dp"
                     android:layout_marginHorizontal="2.5dp"
                     android:background="@drawable/bg_dot_white" />
 
                 <View
+                    android:id="@+id/fleetDot1"
                     android:layout_width="6dp"
                     android:layout_height="6dp"
                     android:layout_marginHorizontal="2.5dp"
                     android:background="@drawable/bg_dot_grey" />
 
                 <View
+                    android:id="@+id/fleetDot2"
                     android:layout_width="6dp"
                     android:layout_height="6dp"
                     android:layout_marginHorizontal="2.5dp"

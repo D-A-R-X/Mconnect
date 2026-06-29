@@ -515,9 +515,15 @@ class AppLibraryFragment : Fragment() {
         ) {
             openScreen(MyTripsFragment())
         }
+        // Admin Fleet is a role-based portal (external fleet agencies log in
+        // and land directly on it). Inside the staff app library, it's only
+        // exposed to Super Admin for testing — every other role / regular
+        // staff user never sees the tile.
         bindIamEntry(
             row = binding.itemFleetAdminFleet,
-            allowed = true,
+            allowed = session.designation
+                ?.trim()
+                ?.equals("Super Admin", ignoreCase = true) == true,
         ) {
             openScreen(com.manjugroups.m_connect.ui.library.AdminFleetContainerFragment())
         }

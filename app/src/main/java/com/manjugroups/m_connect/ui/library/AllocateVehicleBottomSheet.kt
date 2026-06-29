@@ -7,6 +7,7 @@ import android.text.Html
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -15,17 +16,29 @@ import com.manjugroups.m_connect.databinding.BottomSheetAllocateVehicleBinding
 import java.util.Calendar
 import java.util.Locale
 
+/**
+ * Allocate a pending trip to one of the agency's real vehicles. Caller passes
+ * in the vehicles list + an onAllocate callback; we collect driver name, phone,
+ * pickup time and pricing (per-km or package) and hand the structured result
+ * back. The caller drives the network call so we don't need to know the API
+ * shape inside this sheet.
+ */
 class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     private var _binding: BottomSheetAllocateVehicleBinding? = null
     private val binding get() = _binding!!
 
-    private var onAllocateCallback: ((String, String, String) -> Unit)? = null
-    private var pricingType = "Per Km"
+    private var vehicles: List<AllocateVehicleOption> = emptyList()
+    private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
+    private var pricingType = "km"  // "km" or "package"
 
     companion object {
-        fun newInstance(onAllocate: (String, String, String) -> Unit): AllocateVehicleBottomSheet {
+        fun newInstance(
+            vehicles: List<AllocateVehicleOption>,
+            onAllocate: (AllocateVehicleResult) -> Unit,
+        ): AllocateVehicleBottomSheet {
             val sheet = AllocateVehicleBottomSheet()
+            sheet.vehicles = vehicles
             sheet.onAllocateCallback = onAllocate
             return sheet
         }
@@ -33,7 +46,6 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Semi-transparent status bar for floating modal effect
         setStyle(STYLE_NORMAL, R.style.CustomCameraBottomSheetTheme)
     }
 
@@ -48,20 +60,26 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        // Remove standard BottomSheet dropshadow and elevation to match the mockup exactly
+        // Lift the sheet above the soft keyboard so the focused field stays
+        // visible while typing.
+        dialog?.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         val dialog = dialog as? com.google.android.material.bottomsheet.BottomSheetDialog
         val bottomSheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
         bottomSheet?.let {
             it.elevation = 0f
-            it.background = null // Remove default background card shadow
+            it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+            behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            behavior.skipCollapsed = true
         }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Add red asterisks to required fields
         binding.tvLabelVehicle.text = Html.fromHtml("Vehicle <font color='#EF4444'>*</font>")
         binding.tvLabelDriverName.text = Html.fromHtml("Driver Name <font color='#EF4444'>*</font>")
         binding.tvLabelDriverPhone.text = Html.fromHtml("Driver Phone Number <font color='#EF4444'>*</font>")
@@ -72,27 +90,36 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         setupTimePicker()
         setupPricingToggle()
 
-        // Default prefilled details to match the screenshot sample
-        binding.etDriverName.setText("Divakar")
-        binding.etDriverPhone.setText("9214782193")
-        binding.etPickupTime.setText("02:30 AM")
-        binding.etAmount.setText("1500")
-
         binding.btnSubmitAllocate.setOnClickListener {
             validateAndSubmit()
         }
     }
 
     private fun setupVehicleSpinner() {
-        val vehicles = listOf(
-            "Toyota Innova (TN01 AB 1234)",
-            "Maruti Swift (TN01 CD 5678)",
-            "Mahindra XUV (TN01 EF 9012)",
-            "Force Traveller (TN01 GH 3456)"
-        )
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, vehicles)
+        val labels = vehicles.map { it.label }.ifEmpty { listOf("No vehicles — add one in travel-desk") }
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, labels)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerVehicle.adapter = adapter
+
+        // When the user picks a vehicle, prefill its default driver if no
+        // driver name has been entered yet. This matches what travel-desk's
+        // server-side allocate does when driverName is left blank.
+        binding.spinnerVehicle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val v = vehicles.getOrNull(position) ?: return
+                if (binding.etDriverName.text?.toString()?.trim().isNullOrEmpty()) {
+                    v.defaultDriverName?.takeIf { it.isNotBlank() }?.let {
+                        binding.etDriverName.setText(it)
+                    }
+                }
+                if (binding.etDriverPhone.text?.toString()?.trim().isNullOrEmpty()) {
+                    v.defaultDriverPhone?.takeIf { it.isNotBlank() }?.let {
+                        binding.etDriverPhone.setText(it)
+                    }
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     private fun setupTimePicker() {
@@ -100,7 +127,6 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             val calendar = Calendar.getInstance()
             val hour = calendar.get(Calendar.HOUR_OF_DAY)
             val minute = calendar.get(Calendar.MINUTE)
-
             TimePickerDialog(requireContext(), { _, h, m ->
                 val format = if (h >= 12) "PM" else "AM"
                 val displayHour = when {
@@ -117,7 +143,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     private fun setupPricingToggle() {
         binding.btnPricePerKm.setOnClickListener {
-            pricingType = "Per Km"
+            pricingType = "km"
             binding.btnPricePerKm.setBackgroundResource(R.drawable.bg_my_trips_tab_active)
             binding.btnPricePerKm.setTextColor(Color.WHITE)
 
@@ -128,7 +154,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         }
 
         binding.btnPricePackage.setOnClickListener {
-            pricingType = "Package"
+            pricingType = "package"
             binding.btnPricePackage.setBackgroundResource(R.drawable.bg_my_trips_tab_active)
             binding.btnPricePackage.setTextColor(Color.WHITE)
 
@@ -140,18 +166,46 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun validateAndSubmit() {
-        val vehicle = binding.spinnerVehicle.selectedItem?.toString() ?: ""
+        if (vehicles.isEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "No vehicles on file. Add one in travel-desk first.",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        val selectedIndex = binding.spinnerVehicle.selectedItemPosition
+        val vehicle = vehicles.getOrNull(selectedIndex)
         val driverName = binding.etDriverName.text.toString().trim()
         val driverPhone = binding.etDriverPhone.text.toString().trim()
         val pickupTime = binding.etPickupTime.text.toString().trim()
-        val amount = binding.etAmount.text.toString().trim()
+        val amountText = binding.etAmount.text.toString().trim()
 
-        if (driverName.isEmpty() || driverPhone.isEmpty() || pickupTime.isEmpty() || amount.isEmpty()) {
+        if (vehicle == null) {
+            Toast.makeText(requireContext(), "Select a vehicle", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (driverName.isEmpty() || driverPhone.isEmpty() || pickupTime.isEmpty() || amountText.isEmpty()) {
             Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
             return
         }
+        val amount = amountText.toDoubleOrNull()
+        if (amount == null || amount < 0) {
+            Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        onAllocateCallback?.invoke(driverName, driverPhone, vehicle)
+        onAllocateCallback?.invoke(
+            AllocateVehicleResult(
+                vehicleId = vehicle.vehicleId,
+                vehicleLabel = vehicle.label,
+                driverName = driverName,
+                driverPhone = driverPhone,
+                pickupTime = pickupTime,
+                pricingMode = pricingType,
+                amount = amount,
+            )
+        )
         dismiss()
     }
 
@@ -160,3 +214,22 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         _binding = null
     }
 }
+
+/** A vehicle the agency can pick from when allocating a trip. */
+data class AllocateVehicleOption(
+    val vehicleId: String,
+    val label: String,
+    val defaultDriverName: String?,
+    val defaultDriverPhone: String?,
+)
+
+/** Structured result handed to the caller's onAllocate callback. */
+data class AllocateVehicleResult(
+    val vehicleId: String,
+    val vehicleLabel: String,
+    val driverName: String,
+    val driverPhone: String,
+    val pickupTime: String,
+    val pricingMode: String, // "km" | "package"
+    val amount: Double,
+)

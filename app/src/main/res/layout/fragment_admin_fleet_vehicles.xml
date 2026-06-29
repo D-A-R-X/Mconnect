@@ -74,14 +74,35 @@
         </FrameLayout>
 
         <!-- Main List Container -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvAdminVehicles"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="80dp" />
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAdminVehicles"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="80dp" />
+
+            <!-- Shown only when the agency has zero vehicles. The string lives
+                 here (not in strings.xml) to keep the fragment-only feature
+                 self-contained — happy to extract if other screens reuse it. -->
+            <TextView
+                android:id="@+id/tvVehiclesEmpty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:paddingHorizontal="32dp"
+                android:text="No vehicles yet.\nTap + to add one."
+                android:textColor="#6B7280"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </FrameLayout>
 
     </LinearLayout>
 

@@ -131,6 +131,21 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.layoutFleetBanner.visibility = View.VISIBLE
     }
 
+    /**
+     * Drives the fleet banner's 3-dot indicator so it stays in lock-step with
+     * the Pending / Assigned / Completed tab selection below the banner
+     * (0 = Pending, 1 = Assigned, 2 = Completed). The active dot is white, the
+     * rest grey.
+     */
+    fun setActiveFleetDot(index: Int) {
+        val dots = listOf(binding.fleetDot0, binding.fleetDot1, binding.fleetDot2)
+        dots.forEachIndexed { i, dot ->
+            dot.setBackgroundResource(
+                if (i == index) R.drawable.bg_dot_white else R.drawable.bg_dot_grey
+            )
+        }
+    }
+
     fun setOnProfileClickListener(listener: () -> Unit) {
         onProfileClickListener = listener
     }
@@ -212,10 +227,24 @@ class HomeHeaderView @JvmOverloads constructor(
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
         binding.tvAvatarInitial.text = name.first().uppercase().toString()
-        binding.tvHeaderRole.text = if (session.isAdmin) "Administrator" else "Staff"
+        binding.tvHeaderRole.text = when {
+            session.designation
+                ?.trim()
+                ?.equals("External Fleet", ignoreCase = true) == true -> "Agency"
+            session.isAdmin -> "Administrator"
+            else -> "Staff"
+        }
 
         applyAvatarPhoto(session.userPhotoUrl)
-        loadHeaderDesignation(onDesignationChanged)
+        // Skip the staff-detail refresh for external-fleet agency principals
+        // — their session.staffId points at a travelAgencies row, not a real
+        // staff record, so the call would fail and could blank the role.
+        val isExternalFleet = session.designation
+            ?.trim()
+            ?.equals("External Fleet", ignoreCase = true) == true
+        if (!isExternalFleet) {
+            loadHeaderDesignation(onDesignationChanged)
+        }
     }
 
     private fun getFragment(view: View): Fragment? {

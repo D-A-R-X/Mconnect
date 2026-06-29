@@ -14,8 +14,11 @@
         android:layout_marginTop="12dp"
         android:background="@drawable/bg_sheet_handle" />
 
-    <!-- Header -->
+    <!-- Header — title + subtitle are rebound in onViewCreated based on the
+         loan's requestType (loan vs salary_advance) so the same sheet reads
+         correctly in both contexts. -->
     <TextView
+        android:id="@+id/tvSheetTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
@@ -26,6 +29,7 @@
         android:textSize="16sp" />
 
     <TextView
+        android:id="@+id/tvSheetSubtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
@@ -277,8 +281,11 @@
             android:orientation="horizontal" />
     </HorizontalScrollView>
 
-    <!-- Nominees Outer Container Card -->
+    <!-- Nominees Outer Container Card. Hidden when this sheet is shown for a
+         salary advance (advances have no nominee signatures, only HR +
+         Accounts approval). -->
     <LinearLayout
+        android:id="@+id/sheetNomineePanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="24dp"
