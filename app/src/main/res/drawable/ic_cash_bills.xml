@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Slanted stack of green bills -->
+    <path
+        android:fillColor="#81C784"
+        android:pathData="M4,5 H20 C21.1,5 22,5.9 22,7 V13 C22,14.1 21.1,15 20,15 H4 C2.9,15 2,14.1 2,13 V7 C2,5.9 2.9,5 4,5 Z" />
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M12,10m-3,0a3,3 0 1,1 6,0a3,3 0 1,1 -6,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,8.5 C11.4,8.5 11,8.9 11,9.5 C11,10.1 13,10.1 13,10.7 C13,11 12.6,11.2 12,11.2 C11.2,11.2 10.8,10.8 10.8,10.8 L10.3,11.6 C10.6,11.8 11.3,12 12,12 C13.1,12 14,11.4 14,10.5 C14,9.6 11,9.6 11,9 C11,8.7 11.4,8.5 12,8.5 Z" />
+</vector>

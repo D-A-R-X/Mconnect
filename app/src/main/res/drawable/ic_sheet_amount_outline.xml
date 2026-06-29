@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Back coin circle outline (green) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#12B76A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12.98,19.88 C13.88,21.15 15.35,21.98 17.03,21.98 C19.76,21.98 21.98,19.76 21.98,17.03 C21.98,15.37 21.16,13.9 19.91,13" />
+
+    <!-- Front coin circle outline (blue) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9.99,17.98 C14.4028,17.98 17.98,14.4028 17.98,9.99 C17.98,5.5772 14.4028,2 9.99,2 C5.5772,2 2,5.5772 2,9.99 C2,14.4028 5.5772,17.98 9.99,17.98 Z" />
+
+    <!-- Dollar Symbol S-curve (green) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#12B76A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8,11.4031 C8,12.1731 8.6,12.8031 9.33,12.8031 H10.83 C11.47,12.8031 11.99,12.2531 11.99,11.5831 C11.99,10.8531 11.67,10.5931 11.2,10.4231 L8.8,9.5831 C8.32,9.4131 8,9.1531 8,8.4231 C8,7.7531 8.52,7.2031 9.16,7.2031 H10.66 C11.4,7.2131 12,7.8331 12,8.6031" />
+    <!-- Dollar Symbol Vertical Line Bottom (green) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#12B76A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10,12.8516 V13.5916" />
+    <!-- Dollar Symbol Vertical Line Top (green) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#12B76A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10,6.4062 V7.1862" />
+</vector>

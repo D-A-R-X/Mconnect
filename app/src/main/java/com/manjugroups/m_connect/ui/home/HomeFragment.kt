@@ -62,6 +62,9 @@ class HomeFragment : Fragment() {
     private var pendingVisitSkeleton: Runnable? = null
     private val visitSkeletonDelayMs = 200L
 
+    private var tooltipAnimator: android.animation.Animator? = null
+    private var handleAnimator: android.animation.Animator? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -113,6 +116,7 @@ class HomeFragment : Fragment() {
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         }
+        setupEdgeDragQr()
     }
 
     private fun setupPullToRefresh() {
@@ -192,8 +196,10 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Defensive: restore tab bar in case a child fragment hid it.
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        // Defensive: restore tab bar in case a child fragment hid it, unless onboarding or QR panel is visible.
+        val showTabBar = session.hasSeenEdgeQrTooltip && 
+                (_binding == null || binding.edgeQrPanel.visibility != android.view.View.VISIBLE)
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(showTabBar)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
             Color.parseColor("#0B61CA"),
             false,
@@ -962,7 +968,181 @@ class HomeFragment : Fragment() {
             if (session.isDriverMode) View.VISIBLE else View.GONE
     }
 
+    private fun setupEdgeDragQr() {
+        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        // Initialize the panel content offscreen to the right
+        binding.panelContent.translationX = screenWidth
+
+        if (!session.hasSeenEdgeQrTooltip) {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+            binding.edgeQrTourDimBg.alpha = 0f
+            binding.edgeQrTourDimBg.visibility = android.view.View.VISIBLE
+            binding.edgeQrTourDimBg.animate().alpha(1f).setDuration(400).setStartDelay(800).start()
+
+            binding.edgeQrTooltip.alpha = 0f
+            binding.edgeQrTooltip.visibility = android.view.View.VISIBLE
+            binding.edgeQrTooltip.animate()
+                .alpha(1f)
+                .setStartDelay(800)
+                .setDuration(400)
+                .withEndAction {
+                    startFloatingAnimations()
+                }
+                .start()
+        }
+
+        val dismissTooltipAction = {
+            if (_binding != null && (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE || binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE)) {
+                session.hasSeenEdgeQrTooltip = true
+                stopFloatingAnimations()
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+                binding.edgeQrTourDimBg.animate().alpha(0f).setDuration(250).withEndAction {
+                    if (_binding != null) binding.edgeQrTourDimBg.visibility = android.view.View.GONE
+                }.start()
+                binding.edgeQrTooltip.animate()
+                    .alpha(0f)
+                    .setDuration(250)
+                    .withEndAction {
+                        if (_binding != null) {
+                            binding.edgeQrTooltip.visibility = android.view.View.GONE
+                        }
+                    }
+                    .start()
+            }
+        }
+
+        binding.edgeQrTooltip.setOnClickListener { dismissTooltipAction() }
+        binding.btnDismissTooltip.setOnClickListener { dismissTooltipAction() }
+        binding.edgeQrTourDimBg.setOnClickListener { dismissTooltipAction() }
+
+        var startX = 0f
+        var downTime = 0L
+
+        binding.edgeDragHandle.setOnTouchListener { v, event ->
+            if (_binding == null) return@setOnTouchListener false
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    startX = event.rawX
+                    downTime = System.currentTimeMillis()
+                    binding.edgeQrPanel.visibility = android.view.View.VISIBLE
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - startX
+                    val dragDist = -dx
+                    if (dragDist > 0) {
+                        binding.panelBlurBg.alpha = (dragDist / 300f).coerceIn(0f, 1f)
+                        binding.panelContent.translationX = (screenWidth - dragDist).coerceAtLeast(0f)
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    val dx = event.rawX - startX
+                    val dragDist = -dx
+                    val duration = System.currentTimeMillis() - downTime
+                    
+                    if (Math.abs(dragDist) < 15 && duration < 200) {
+                        // Click / Tap detected
+                        animatePanel(true)
+                    } else if (dragDist > 120) {
+                        // Dragged past threshold
+                        animatePanel(true)
+                    } else {
+                        // Cancel / Spring back
+                        animatePanel(false)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        binding.panelBlurBg.setOnClickListener {
+            animatePanel(false)
+        }
+
+        binding.btnOverlayQr.setOnClickListener {
+            animatePanel(false)
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+    }
+
+    private fun animatePanel(open: Boolean) {
+        if (_binding == null) return
+        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        if (open) {
+            if (binding.edgeQrTooltip.visibility == android.view.View.VISIBLE || binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE) {
+                session.hasSeenEdgeQrTooltip = true
+                stopFloatingAnimations()
+                binding.edgeQrTooltip.visibility = android.view.View.GONE
+                binding.edgeQrTourDimBg.visibility = android.view.View.GONE
+            }
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+            binding.edgeQrPanel.visibility = android.view.View.VISIBLE
+            binding.panelBlurBg.animate().alpha(1f).setDuration(250).start()
+            binding.panelContent.animate().translationX(0f).setDuration(250).start()
+            binding.edgeDragHandle.animate().translationX(binding.edgeDragHandle.width.toFloat()).setDuration(250).start()
+        } else {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+            binding.panelBlurBg.animate().alpha(0f).setDuration(250).start()
+            binding.edgeDragHandle.animate().translationX(0f).setDuration(250).start()
+            binding.panelContent.animate().translationX(screenWidth).setDuration(250)
+                .withEndAction {
+                    if (_binding != null) {
+                        binding.edgeQrPanel.visibility = android.view.View.GONE
+                    }
+                }
+                .start()
+        }
+    }
+
+    private fun startFloatingAnimations() {
+        if (_binding == null) return
+        
+        // 1. Tooltip horizontal float (moves left slightly and returns)
+        val tooltipAnim = android.animation.ObjectAnimator.ofFloat(
+            binding.edgeQrTooltip,
+            "translationX",
+            0f, -16f, 0f
+        ).apply {
+            duration = 2000
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        }
+        tooltipAnimator = tooltipAnim
+        tooltipAnim.start()
+
+        // 2. Handle horizontal float (moves left slightly and returns to nudge user)
+        val handleAnim = android.animation.ObjectAnimator.ofFloat(
+            binding.edgeDragHandle,
+            "translationX",
+            0f, -8f, 0f
+        ).apply {
+            duration = 2000
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        }
+        handleAnimator = handleAnim
+        handleAnim.start()
+    }
+
+    private fun stopFloatingAnimations() {
+        tooltipAnimator?.cancel()
+        tooltipAnimator = null
+        handleAnimator?.cancel()
+        handleAnimator = null
+        if (_binding != null) {
+            binding.edgeQrTooltip.translationX = 0f
+            binding.edgeDragHandle.translationX = 0f
+        }
+    }
+
     override fun onDestroyView() {
+        stopFloatingAnimations()
         cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
         binding.homeHeader.stopFloatingAnimation()

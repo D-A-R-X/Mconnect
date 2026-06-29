@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Light green circular background badge -->
+    <path
+        android:fillColor="#D1FADF"
+        android:pathData="M16,16m-16,0a16,16 0 1,1 32,0a16,16 0 1,1 -32,0" />
+
+    <!-- User icon centered (translated by 4, 4 to center a 24x24 icon inside 32x32) -->
+    <group
+        android:translateX="4"
+        android:translateY="4">
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M20,21v-2a4,4 0,0 0,-4 -4H8a4,4 0,0 0,-4 4v2"
+            android:strokeColor="#12B76A"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="1.8" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M12,11a4,4 0,1 0,0 -8a4,4 0,0 0,0 8z"
+            android:strokeColor="#12B76A"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="1.8" />
+    </group>
+</vector>

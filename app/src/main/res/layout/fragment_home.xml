@@ -359,4 +359,134 @@
             <include layout="@layout/skeleton_trip_card" />
         </LinearLayout>
     </LinearLayout>
+
+    <!-- First-time Tour Dim Backdrop -->
+    <View
+        android:id="@+id/edgeQrTourDimBg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#4D000000"
+        android:elevation="14dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <!-- First-time Tooltip -->
+    <LinearLayout
+        android:id="@+id/edgeQrTooltip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="32dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_tooltip_bubble"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:elevation="16dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:text="Swipe left or tap to open QR Scanner"
+            android:textColor="#1E293B"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/btnDismissTooltip"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_close_pill"
+            app:tint="#64748B"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- Edge Drag QR Handle and Panel -->
+    <!-- Handle (thin vertical tab on the right edge) -->
+    <FrameLayout
+        android:id="@+id/edgeDragHandle"
+        android:layout_width="24dp"
+        android:layout_height="80dp"
+        android:layout_gravity="end|center_vertical"
+        android:background="@drawable/bg_edge_handle"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="15dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_chevron_left"
+            app:tint="#FFFFFF" />
+    </FrameLayout>
+
+    <!-- Overlay Panel (Full Screen, initially hidden) -->
+    <FrameLayout
+        android:id="@+id/edgeQrPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:elevation="10dp">
+
+        <!-- Blur/Dim background overlay -->
+        <View
+            android:id="@+id/panelBlurBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#E60F172A" />
+
+        <!-- Content Container -->
+        <FrameLayout
+            android:id="@+id/panelContent"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Rounded QR Button in the middle -->
+            <LinearLayout
+                android:id="@+id/btnOverlayQr"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/bg_glass_qr_button"
+                android:paddingHorizontal="40dp"
+                android:paddingVertical="32dp">
+
+                <ImageView
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:src="@drawable/ic_apps_qr_scanner"
+                    app:tint="#FFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Scan QR Code"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to open Front Desk Scanner"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp" />
+            </LinearLayout>
+            
+        </FrameLayout>
+    </FrameLayout>
 </FrameLayout>

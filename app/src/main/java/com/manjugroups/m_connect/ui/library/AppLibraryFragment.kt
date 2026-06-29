@@ -36,13 +36,38 @@ import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
 import com.manjugroups.m_connect.ui.library.collections.CollectionsFragment
 import com.manjugroups.m_connect.ui.library.accounts.PostSalesVerificationFragment
 import com.manjugroups.m_connect.ui.library.loans.LoanDeskFragment
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.widget.Toast
+
 
 class AppLibraryFragment : Fragment() {
 
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, SETTINGS }
+    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
+
+    private val requestCameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            openScreen(com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
+        } else {
+            Toast.makeText(requireContext(), "Camera permission is required to scan QR codes", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkCameraPermissionAndOpen() {
+        val permission = Manifest.permission.CAMERA
+        if (ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED) {
+            openScreen(com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
+        } else {
+            requestCameraPermissionLauncher.launch(permission)
+        }
+    }
     // Tracked so the IAM-bus listener can re-apply whichever filter
     // the user is currently looking at when tiles re-bind; otherwise
     // an IAM update would silently snap the filter back to ALL.
@@ -149,7 +174,8 @@ class AppLibraryFragment : Fragment() {
         val pillIcons = listOf(
             binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
             binding.pillProjectIcon, binding.pillLandIcon, binding.pillFleetIcon,
-            binding.pillSalesIcon, binding.pillAccountsIcon, binding.pillSettingsIcon
+            binding.pillSalesIcon, binding.pillAccountsIcon, binding.pillFrontDeskIcon,
+            binding.pillSettingsIcon
         )
         pillIcons.forEachIndexed { i, icon ->
             icon.animate().cancel()
@@ -233,8 +259,7 @@ class AppLibraryFragment : Fragment() {
         scrollColumn.addView(hsv, 0, hsvLp)
 
         // After layout, size each pill to exactly 1/5 of the visible HSV
-        // width so 5 fit on screen regardless of device width, and the
-        // 6th tab (currently Settings) becomes reachable by scrolling.
+        // width so 5 fit on screen regardless of device width.
         val sizePills = { width: Int ->
             val pillWidth = width / 5
             if (pillWidth > 0) {
@@ -247,6 +272,7 @@ class AppLibraryFragment : Fragment() {
                     binding.pillFleet,
                     binding.pillSales,
                     binding.pillAccounts,
+                    binding.pillFrontDesk,
                     binding.pillSettings,
                 ).forEach { pill ->
                     val lp = pill.layoutParams as android.widget.LinearLayout.LayoutParams
@@ -355,6 +381,10 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemHrAttendance,
             allowed = hasAny(listOf("attendance.view", "attendance.viewAll")),
         ) { openScreen(AttendanceHistoryFragment()) }
+        bindIamEntry(
+            row = binding.itemHrFines,
+            allowed = true,
+        ) { openScreen(com.manjugroups.m_connect.ui.hr.FinesDeductionsFragment()) }
         bindIamEntry(
             row = binding.itemHrLeave,
             allowed = hasAny(listOf("leaves.view", "leaves.viewAll", "leaves.approve")),
@@ -513,6 +543,12 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemAccountsPostSalesVerification,
             allowed = true,
         ) { openScreen(PostSalesVerificationFragment()) }
+
+        // ── Front Desk ──────────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemFrontDeskQR,
+            allowed = true,
+        ) { checkCameraPermissionAndOpen() }
     }
 
     private fun setupFilterPills() {
@@ -524,6 +560,7 @@ class AppLibraryFragment : Fragment() {
         binding.pillFleet.setOnClickListener { applyFilter(Filter.FLEET) }
         binding.pillSales.setOnClickListener { applyFilter(Filter.SALES) }
         binding.pillAccounts.setOnClickListener { applyFilter(Filter.ACCOUNTS) }
+        binding.pillFrontDesk.setOnClickListener { applyFilter(Filter.FRONT_DESK) }
         binding.pillSettings.setOnClickListener { applyFilter(Filter.SETTINGS) }
     }
 
@@ -551,6 +588,7 @@ class AppLibraryFragment : Fragment() {
         binding.cardFleet.visibility = show(binding.cardFleet, filter == Filter.ALL || filter == Filter.FLEET, Filter.FLEET)
         binding.cardSales.visibility = show(binding.cardSales, filter == Filter.ALL || filter == Filter.SALES, Filter.SALES)
         binding.cardAccounts.visibility = show(binding.cardAccounts, filter == Filter.ALL || filter == Filter.ACCOUNTS, Filter.ACCOUNTS)
+        binding.cardFrontDesk.visibility = show(binding.cardFrontDesk, filter == Filter.ALL || filter == Filter.FRONT_DESK, Filter.FRONT_DESK)
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
@@ -561,6 +599,7 @@ class AppLibraryFragment : Fragment() {
         styleTab(binding.pillFleetIcon, binding.pillFleetText, binding.pillFleetIndicator, filter == Filter.FLEET)
         styleTab(binding.pillSalesIcon, binding.pillSalesText, binding.pillSalesIndicator, filter == Filter.SALES)
         styleTab(binding.pillAccountsIcon, binding.pillAccountsText, binding.pillAccountsIndicator, filter == Filter.ACCOUNTS)
+        styleTab(binding.pillFrontDeskIcon, binding.pillFrontDeskText, binding.pillFrontDeskIndicator, filter == Filter.FRONT_DESK)
         styleTab(binding.pillSettingsIcon, binding.pillSettingsText, binding.pillSettingsIndicator, filter == Filter.SETTINGS)
     }
 
@@ -612,6 +651,7 @@ class AppLibraryFragment : Fragment() {
                 Filter.HR, binding.cardHr,
                 listOf(
                     R.id.itemHrAttendance,
+                    R.id.itemHrFines,
                     R.id.itemHrLeave,
                     R.id.itemHrPermissions,
                     R.id.itemHrLoans,
@@ -649,6 +689,10 @@ class AppLibraryFragment : Fragment() {
                 Filter.ACCOUNTS, binding.cardAccounts,
                 listOf(R.id.itemAccountsPostSalesVerification),
             ),
+            Triple(
+                Filter.FRONT_DESK, binding.cardFrontDesk,
+                listOf(R.id.itemFrontDeskQR),
+            ),
             // Settings card: itemSettings is never IAM-gated (every
             // staff can edit their own profile), so this section is
             // effectively always non-empty. Listed for completeness.
@@ -661,18 +705,15 @@ class AppLibraryFragment : Fragment() {
 
     private fun pruneEmptySections() {
         if (_binding == null) return
+        val filterHasVisibleCard = mutableMapOf<Filter, Boolean>()
         for ((filter, card, tileIds) in sectionTileMap) {
             val anyVisible = tileIds.any { id ->
                 binding.root.findViewById<View>(id)?.visibility == View.VISIBLE
             }
             card.visibility = if (anyVisible) View.VISIBLE else View.GONE
-            // Hide the matching filter pill too so a user can't tap a
-            // category that has nothing to show. Mapping pill → filter
-            // is the inverse of styleTab's mapping; we just hide the
-            // pill's parent (each pill is wrapped in its own clickable
-            // LinearLayout).
-            val pillRoot = pillRootFor(filter)
-            pillRoot?.visibility = if (anyVisible) View.VISIBLE else View.GONE
+            if (anyVisible) {
+                filterHasVisibleCard[filter] = true
+            }
 
             // When IAM hides some tiles inside a visible card, the static
             // `<View>` dividers between rows can be left dangling (no row
@@ -687,6 +728,14 @@ class AppLibraryFragment : Fragment() {
                     .firstOrNull { it.visibility == View.VISIBLE }
                     ?: tileIds.firstNotNullOfOrNull { binding.root.findViewById<View>(it) }
                 (firstVisibleTile?.parent as? ViewGroup)?.let { pruneDanglingDividers(it) }
+            }
+        }
+
+        for (filter in Filter.values()) {
+            val pillRoot = pillRootFor(filter)
+            if (pillRoot != null) {
+                val isVisible = filterHasVisibleCard[filter] == true
+                pillRoot.visibility = if (isVisible) View.VISIBLE else View.GONE
             }
         }
     }
@@ -748,6 +797,7 @@ class AppLibraryFragment : Fragment() {
         Filter.FLEET -> binding.pillFleet
         Filter.SALES -> binding.pillSales
         Filter.ACCOUNTS -> binding.pillAccounts
+        Filter.FRONT_DESK -> binding.pillFrontDesk
         Filter.SETTINGS -> binding.pillSettings
     }
 
