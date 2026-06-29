@@ -146,12 +146,22 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <!-- Non-scrollable Header (placed at the top) -->
-            <RelativeLayout
+            <!-- Non-scrollable Header Section (placed at the top) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp">
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/spacerStatusBarVerificationHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="24dp" />
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp">
 
                 <ImageView
                     android:id="@+id/btnCancelHeaderVerificationHistory"
@@ -212,6 +222,7 @@
                     android:src="@drawable/ic_visitor_history"
                     app:tint="#FFFFFF" />
             </RelativeLayout>
+            </LinearLayout>
 
             <!-- Bottom Sheet Content Container (Rounded Top, White Card) -->
             <LinearLayout
@@ -246,7 +257,7 @@
                         android:orientation="vertical">
 
                         <View
-                            android:id="@+id/spacerStatusBarVerificationHistory"
+                            android:id="@+id/spacerStatusBarVerificationContentHistory"
                             android:layout_width="match_parent"
                             android:layout_height="0dp" />
 
