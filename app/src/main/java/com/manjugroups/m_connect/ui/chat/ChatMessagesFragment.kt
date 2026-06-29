@@ -4389,26 +4389,19 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private fun checkStoragePermissionsAndLoadMedia() {
         val context = context ?: return
-        val permissions = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            arrayOf(
-                android.Manifest.permission.READ_MEDIA_IMAGES,
-                android.Manifest.permission.READ_MEDIA_VIDEO,
-                android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-            )
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(
-                android.Manifest.permission.READ_MEDIA_IMAGES,
-                android.Manifest.permission.READ_MEDIA_VIDEO
-            )
-        } else {
-            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            loadLocalMediaList()
+            return
         }
 
-        val hasAnyPermission = permissions.any {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
+        val permissions = arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        if (hasAnyPermission) {
+        if (hasPermission) {
             loadLocalMediaList()
         } else {
             storagePermissionLauncher.launch(permissions)
@@ -4493,6 +4486,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private fun queryLocalMedia(): List<LocalMediaItem> {
         val list = mutableListOf<LocalMediaItem>()
         val context = context ?: return list
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            return list
+        }
 
         val imagesUri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val imagesProjection = arrayOf(
@@ -4612,4 +4608,3 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 }
-
