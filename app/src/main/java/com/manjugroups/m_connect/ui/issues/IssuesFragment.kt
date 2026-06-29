@@ -9,7 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.ProgressBar
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
@@ -21,6 +21,8 @@ import com.manjugroups.m_connect.databinding.FragmentIssuesBinding
 import com.manjugroups.m_connect.databinding.ItemIssueCardBinding
 import com.manjugroups.m_connect.ui.common.navigateUp
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 class IssuesFragment : Fragment() {
@@ -28,22 +30,24 @@ class IssuesFragment : Fragment() {
     private var _binding: FragmentIssuesBinding? = null
     private val binding get() = _binding!!
 
-    // Local issue data model
+    // Local issue data model with timestamp
     data class IssueData(
         val title: String,
         val description: String,
         val audioPath: String?,
-        val audioDurationMs: Long
+        val audioDurationMs: Long,
+        val timestamp: Long = System.currentTimeMillis()
     )
 
     private val issuesList = mutableListOf<IssueData>()
 
-    // Global audio player tracking for list cards
+    // Global audio player tracking for list cards with waveform progress
     private var activeMediaPlayer: MediaPlayer? = null
     private var activeAudioPath: String? = null
     private var activePlayButton: ImageView? = null
-    private var activeProgressBar: ProgressBar? = null
-    private var activeTimerText: TextView? = null
+    private var activeWaveformLayout: LinearLayout? = null
+    private var activeCurrentTimeText: TextView? = null
+    private var activeTotalTimeText: TextView? = null
     private var activeDurationMs: Long = 0L
 
     private val playHandler = Handler(Looper.getMainLooper())
@@ -53,20 +57,31 @@ class IssuesFragment : Fragment() {
                 if (player.isPlaying) {
                     val currentPos = player.currentPosition
                     val duration = player.duration.coerceAtLeast(1)
-                    val progressPercent = (currentPos * 100) / duration
-                    activeProgressBar?.progress = progressPercent
+                    
+                    // Update Waveform bars
+                    activeWaveformLayout?.let { waveform ->
+                        val barCount = waveform.childCount
+                        val progressPercent = (currentPos * 100) / duration
+                        val activeBarIndex = (progressPercent * barCount) / 100
+                        for (i in 0 until barCount) {
+                            val bar = waveform.getChildAt(i)
+                            if (i <= activeBarIndex) {
+                                bar.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#0B61CA"))
+                            } else {
+                                bar.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E2E8F0"))
+                            }
+                        }
+                    }
 
-                    // Format elapsed / total time
+                    // Format elapsed time
                     val elapsedSec = currentPos / 1000
-                    val totalSec = duration / 1000
-                    activeTimerText?.text = String.format(
+                    activeCurrentTimeText?.text = String.format(
                         Locale.US,
-                        "%02d:%02d / %02d:%02d",
-                        elapsedSec / 60, elapsedSec % 60,
-                        totalSec / 60, totalSec % 60
+                        "%02d:%02d",
+                        elapsedSec / 60, elapsedSec % 60
                     )
 
-                    playHandler.postDelayed(this, 250)
+                    playHandler.postDelayed(this, 150)
                 }
             }
         }
@@ -150,16 +165,19 @@ class IssuesFragment : Fragment() {
 
             binding.issuesContainer.removeAllViews()
             val inflater = LayoutInflater.from(requireContext())
+            val sdf = SimpleDateFormat("Today, hh:mm a", Locale.US)
 
             for (issue in filterList) {
                 val cardBinding = ItemIssueCardBinding.inflate(inflater, binding.issuesContainer, false)
 
                 cardBinding.tvIssueCardTitle.text = issue.title
+                cardBinding.tvIssueTime.text = sdf.format(Date(issue.timestamp))
+
                 if (issue.description.isNotEmpty()) {
                     cardBinding.tvIssueCardDesc.text = issue.description
-                    cardBinding.tvIssueCardDesc.visibility = View.VISIBLE
+                    cardBinding.layoutDescTag.visibility = View.VISIBLE
                 } else {
-                    cardBinding.tvIssueCardDesc.visibility = View.GONE
+                    cardBinding.layoutDescTag.visibility = View.GONE
                 }
 
                 // Setup audio note player if attached
@@ -169,21 +187,27 @@ class IssuesFragment : Fragment() {
                     
                     // Format duration
                     val totalSec = issue.audioDurationMs / 1000
-                    cardBinding.tvAudioDuration.text = String.format(
+                    cardBinding.tvAudioTotalTime.text = String.format(
                         Locale.US,
-                        "00:00 / %02d:%02d",
+                        "%02d:%02d",
                         totalSec / 60, totalSec % 60
                     )
+                    cardBinding.tvAudioCurrentTime.text = "00:00"
 
                     // If this specific card matches the currently playing path, restore UI state
                     if (activeAudioPath == path && activeMediaPlayer?.isPlaying == true) {
                         cardBinding.btnPlayAudio.setImageResource(R.drawable.ic_chat_pause)
                         activePlayButton = cardBinding.btnPlayAudio
-                        activeProgressBar = cardBinding.audioProgressBar
-                        activeTimerText = cardBinding.tvAudioDuration
+                        activeWaveformLayout = cardBinding.layoutWaveform
+                        activeCurrentTimeText = cardBinding.tvAudioCurrentTime
+                        activeTotalTimeText = cardBinding.tvAudioTotalTime
                     } else {
                         cardBinding.btnPlayAudio.setImageResource(R.drawable.ic_chat_media_play)
-                        cardBinding.audioProgressBar.progress = 0
+                        // Reset waveform bars tint
+                        val waveform = cardBinding.layoutWaveform
+                        for (i in 0 until waveform.childCount) {
+                            waveform.getChildAt(i).backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E2E8F0"))
+                        }
                     }
 
                     cardBinding.btnPlayAudio.setOnClickListener {
@@ -191,8 +215,9 @@ class IssuesFragment : Fragment() {
                             path,
                             issue.audioDurationMs,
                             cardBinding.btnPlayAudio,
-                            cardBinding.audioProgressBar,
-                            cardBinding.tvAudioDuration
+                            cardBinding.layoutWaveform,
+                            cardBinding.tvAudioCurrentTime,
+                            cardBinding.tvAudioTotalTime
                         )
                     }
                 } else {
@@ -220,8 +245,9 @@ class IssuesFragment : Fragment() {
         path: String,
         durationMs: Long,
         playButton: ImageView,
-        progressBar: ProgressBar,
-        timerText: TextView
+        waveformLayout: LinearLayout,
+        currentTimeText: TextView,
+        totalTimeText: TextView
     ) {
         if (activeAudioPath == path && activeMediaPlayer != null) {
             // Already active. Either pause or resume.
@@ -230,7 +256,6 @@ class IssuesFragment : Fragment() {
                     player.pause()
                     playButton.setImageResource(R.drawable.ic_chat_media_play)
                     playHandler.removeCallbacks(progressRunnable)
-                    timerText.text = "Paused"
                 } else {
                     player.start()
                     playButton.setImageResource(R.drawable.ic_chat_pause)
@@ -256,8 +281,9 @@ class IssuesFragment : Fragment() {
             activeMediaPlayer = player
             activeAudioPath = path
             activePlayButton = playButton
-            activeProgressBar = progressBar
-            activeTimerText = timerText
+            activeWaveformLayout = waveformLayout
+            activeCurrentTimeText = currentTimeText
+            activeTotalTimeText = totalTimeText
             activeDurationMs = durationMs
 
             playButton.setImageResource(R.drawable.ic_chat_pause)
@@ -279,22 +305,22 @@ class IssuesFragment : Fragment() {
         activeMediaPlayer = null
 
         activePlayButton?.setImageResource(R.drawable.ic_chat_media_play)
-        activeProgressBar?.progress = 0
         
-        // Reset timer text back to duration if available
-        activeAudioPath?.let { path ->
-            val totalSec = activeDurationMs / 1000
-            activeTimerText?.text = String.format(
-                Locale.US,
-                "00:00 / %02d:%02d",
-                totalSec / 60, totalSec % 60
-            )
+        // Reset waveform bars tint
+        activeWaveformLayout?.let { waveform ->
+            for (i in 0 until waveform.childCount) {
+                waveform.getChildAt(i).backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E2E8F0"))
+            }
         }
+        
+        // Reset timer text back
+        activeCurrentTimeText?.text = "00:00"
 
         activeAudioPath = null
         activePlayButton = null
-        activeProgressBar = null
-        activeTimerText = null
+        activeWaveformLayout = null
+        activeCurrentTimeText = null
+        activeTotalTimeText = null
         activeDurationMs = 0L
     }
 
