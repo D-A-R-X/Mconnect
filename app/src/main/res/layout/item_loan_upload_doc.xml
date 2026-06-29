@@ -151,6 +151,7 @@
             android:visibility="gone">
 
             <ImageView
+                android:id="@+id/ivFailedIcon"
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:layout_centerVertical="true"
@@ -163,7 +164,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
-                android:layout_toEndOf="@id/pbUploading"
+                android:layout_toEndOf="@id/ivFailedIcon"
                 android:layout_marginStart="12dp"
                 android:layout_toStartOf="@+id/btnRetryUpload"
                 android:fontFamily="@font/inter_semibold"
