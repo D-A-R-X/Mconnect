@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#B3FFFFFF" /> <!-- 70% opacity white (frosted glass) -->
+    <solid android:color="#E6FFFFFF" /> <!-- Frosted white glass with 90% opacity for high contrast and readability -->
     <stroke
         android:width="2dp"
-        android:color="#E6FFFFFF" /> <!-- White glowing stroke -->
+        android:color="#FFFFFF" /> <!-- Solid white highlights to simulate glass thickness/border -->
     <corners android:radius="24dp" />
 </shape>

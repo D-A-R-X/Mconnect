@@ -133,4 +133,254 @@
         </FrameLayout>
     </androidx.core.widget.NestedScrollView>
 
+    <!-- Visitor Verification Glass Modal (History Overview) -->
+    <FrameLayout
+        android:id="@+id/visitorVerificationContainerHistory"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:elevation="10dp"
+        android:background="#D9000000">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginVertical="32dp"
+            android:background="@drawable/bg_glass_verification_modal"
+            android:orientation="vertical"
+            android:padding="20dp"
+            android:elevation="12dp">
+
+            <!-- Header -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:fontFamily="@font/inter_bold"
+                android:text="Visitor Log Overview"
+                android:textColor="#0F172A"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Overview of the scanned admission record"
+                android:textColor="#64748B"
+                android:textSize="12sp"
+                android:gravity="center" />
+
+            <!-- Scrollable Content -->
+            <androidx.core.widget.NestedScrollView
+                android:layout_width="match_parent"
+                android:layout_height="320dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- PRIMARY VISITOR CARD -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="PRIMARY VISITOR"
+                        android:textColor="#2563EB"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.05" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_visitor_card_inner"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:id="@+id/tvPrimaryNameHistory"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_bold"
+                            android:textColor="#1E293B"
+                            android:textSize="15sp"
+                            android:text="Jane Doe" />
+
+                        <TextView
+                            android:id="@+id/tvPrimaryCompanyHistory"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Company: Tech Solutions" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="8dp"
+                            android:background="#E2E8F0" />
+
+                        <!-- Details: Phone, Email, Age -->
+                        <TextView
+                            android:id="@+id/tvPrimaryPhoneHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Phone: +91 98765 43210" />
+
+                        <TextView
+                            android:id="@+id/tvPrimaryEmailHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Email: jane.doe@example.com" />
+
+                        <TextView
+                            android:id="@+id/tvPrimaryAgeHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Age: 28" />
+                    </LinearLayout>
+
+                    <!-- SECONDARY VISITORS CONTAINER -->
+                    <LinearLayout
+                        android:id="@+id/layoutSecondaryVisitorsHistory"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="ADDITIONAL VISITORS"
+                            android:textColor="#2563EB"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.05" />
+
+                        <LinearLayout
+                            android:id="@+id/containerSecondaryListHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+
+                    <!-- VISIT DETAILS CARD -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="VISIT DETAILS"
+                        android:textColor="#2563EB"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.05" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_visitor_card_inner"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:id="@+id/tvVisitCategoryTypeHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:textColor="#1E293B"
+                            android:textSize="13sp"
+                            android:text="Type: Vendor (Installation)" />
+
+                        <TextView
+                            android:id="@+id/tvVisitHostHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Host: Dev Super Admin" />
+
+                        <TextView
+                            android:id="@+id/tvVisitTimeWindowHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_medium"
+                            android:textColor="#475569"
+                            android:textSize="12sp"
+                            android:text="Time Window: 29 Jun 2026, 11:30 AM" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="8dp"
+                            android:background="#E2E8F0" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Meeting Notes:"
+                            android:textColor="#1E293B"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvVisitNotesHistory"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:text="Hardware firewall setup..." />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btnCloseVerificationHistory"
+                    android:layout_width="160dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_btn_gradient_green_12dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Close"
+                    android:textColor="#FFFFFF"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@null" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

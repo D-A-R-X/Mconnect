@@ -172,6 +172,12 @@ class QrScannerFragment : Fragment() {
         } catch (_: Exception) {}
 
         activity?.runOnUiThread {
+            // Stop laser line and animator
+            laserAnimator?.pause()
+            binding.laserLine.visibility = View.GONE
+            // Freeze camera feed
+            cameraProvider?.unbindAll()
+            
             showVerificationModal(value)
         }
     }
@@ -267,23 +273,43 @@ class QrScannerFragment : Fragment() {
         // Setup button listeners
         binding.btnCancelVerification.setOnClickListener {
             binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
             isScanningActive = true // Resume scan
         }
 
         binding.btnConfirmAdmission.setOnClickListener {
-            // Format beautiful history record
-            val historyValue = buildString {
-                append("Visitor: $primaryName ($primaryCompany)\n")
-                append("Type: $visitorType ($purpose)\n")
-                append("Host: $hostPerson\n")
-                append("Time Window: $expectedTime")
-                if (secondaryList.isNotEmpty()) {
-                    append("\nAdditional Visitors: ${secondaryList.size} person(s)")
+            // Save structured JSON string in history
+            val historyJson = JSONObject().apply {
+                put("isStructured", true)
+                put("primaryName", primaryName)
+                put("primaryCompany", primaryCompany)
+                put("primaryPhone", primaryPhone)
+                put("primaryEmail", primaryEmail)
+                put("primaryAge", primaryAge)
+                
+                val secArr = JSONArray()
+                for (sec in secondaryList) {
+                    secArr.put(sec)
                 }
+                put("secondaryList", secArr)
+                
+                put("visitorType", visitorType)
+                put("purpose", purpose)
+                put("hostPerson", hostPerson)
+                put("expectedTime", expectedTime)
+                put("meetingNotes", meetingNotes)
             }
-            saveScanToHistory(historyValue)
+            saveScanToHistory(historyJson.toString())
+            
             binding.visitorVerificationContainer.visibility = View.GONE
             Toast.makeText(requireContext(), "Admission Confirmed for $primaryName", Toast.LENGTH_SHORT).show()
+            
+            // Resume scan, camera, and laser line
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
             isScanningActive = true // Resume scan
         }
 
