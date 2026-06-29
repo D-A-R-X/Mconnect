@@ -117,6 +117,12 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
+        // Resize the sheet above the soft keyboard so the focused field
+        // (Amount / Fine Type, near the bottom) stays visible — the content
+        // is already in a ScrollView, this lets it scroll the field into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         dialog.setOnShowListener {
             val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             if (bottomSheet != null) {
@@ -332,7 +338,13 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun submitFine() {
-        val staffName = selectedStaff?.name ?: ""
+        val staff = selectedStaff
+        if (staff == null || staff.employeeId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Please select an employee", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val staffName = staff.name ?: ""
+        val staffEmployeeId = staff.employeeId!!
 
         val fineType = binding.etFineType.text.toString().trim()
         if (fineType.isEmpty()) {
@@ -360,16 +372,55 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         binding.btnSubmitFine.text = "Submitting..."
 
         fun completeCreation(photoId: String?) {
-            listener?.onFineCreated(
-                name = staffName,
-                department = department,
-                fineType = fineType,
-                amount = amount,
-                dateStr = dateStr,
-                employeePhoto = selectedStaff?.photo,
-                finePhoto = photoId
-            )
-            dismiss()
+            // Persist the fine to the backend (was previously a no-op stub, so
+            // created fines never appeared on web or app). Applies to the
+            // current month/year — matching the web's default period.
+            val cal = java.util.Calendar.getInstance()
+            val month = cal.get(java.util.Calendar.MONTH) + 1
+            val year = cal.get(java.util.Calendar.YEAR)
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    binding.btnSubmitFine.text = "Creating..."
+                    val resp = api.createFine(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.CreateFineRequest(
+                            employeeId = staffEmployeeId,
+                            amount = amount,
+                            month = month,
+                            year = year,
+                            customTypeName = fineType,
+                            photoStorageId = photoId,
+                        ),
+                    )
+                    if (resp.success) {
+                        Toast.makeText(requireContext(), "Fine created", Toast.LENGTH_SHORT).show()
+                        listener?.onFineCreated(
+                            name = staffName,
+                            department = department,
+                            fineType = fineType,
+                            amount = amount,
+                            dateStr = dateStr,
+                            employeePhoto = staff.photo,
+                            finePhoto = photoId,
+                        )
+                        dismiss()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            resp.error ?: "Couldn't create fine",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        resetSubmitButton()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Couldn't create fine: ${e.message ?: "network error"}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    resetSubmitButton()
+                }
+            }
         }
 
         val file = pendingLocalPhotoFile

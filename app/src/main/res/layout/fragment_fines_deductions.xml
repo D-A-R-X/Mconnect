@@ -74,7 +74,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_marginBottom="16dp">
+                    android:layout_marginBottom="8dp">
 
                     <!-- Search Employee Bar -->
                     <LinearLayout
@@ -84,8 +84,7 @@
                         android:background="@drawable/bg_fines_search_bar"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
-                        android:paddingHorizontal="16dp"
-                        android:layout_marginBottom="12dp">
+                        android:paddingHorizontal="16dp">
 
                         <EditText
                             android:id="@+id/etSearchEmployee"
@@ -107,8 +106,10 @@
                             app:tint="#475467" />
                     </LinearLayout>
 
-                    <!-- Role Switcher -->
+                    <!-- Role Switcher (mock toggle — hidden; access is now
+                         driven by real IAM permissions in the fragment). -->
                     <LinearLayout
+                        android:id="@+id/roleSwitcherContainer"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="end"
@@ -116,7 +117,8 @@
                         android:orientation="horizontal"
                         android:background="@drawable/bg_fines_search_bar"
                         android:paddingHorizontal="12dp"
-                        android:paddingVertical="6dp">
+                        android:paddingVertical="6dp"
+                        android:visibility="gone">
 
                         <TextView
                             android:layout_width="wrap_content"
