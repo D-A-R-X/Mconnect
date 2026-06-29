@@ -478,6 +478,10 @@ class AppLibraryFragment : Fragment() {
             allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
         ) { openScreen(TasksFragment()) }
         bindIamEntry(
+            row = binding.itemProjectIssues,
+            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+        ) { openScreen(com.manjugroups.m_connect.ui.issues.IssuesFragment()) }
+        bindIamEntry(
             row = binding.itemProjectExpenses,
             allowed = hasAny(listOf(
                 "projects.expenses.view",

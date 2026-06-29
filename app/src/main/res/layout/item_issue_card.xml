@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="16dp"
+    android:background="@drawable/bg_issue_card"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Top Section: Avatar, Title/Subtitle, and Status Badge -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Circular Avatar/Icon Container -->
+        <FrameLayout
+            android:id="@+id/layoutAvatar"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true">
+
+            <!-- No app:tint so the vector's internal light green background and gradient outline render perfectly -->
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_apps_issues" />
+        </FrameLayout>
+
+        <!-- Title & Subtitle -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_toStartOf="@+id/tvIssueStatusBadge"
+            android:layout_toEndOf="@+id/layoutAvatar"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_centerVertical="true"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvIssueCardTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="Issue Title"
+                android:textColor="#0F172A"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tvIssueCardSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Reported by me"
+                android:textColor="#64748B"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Status Badge -->
+        <TextView
+            android:id="@+id/tvIssueStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/bg_apps_coming_soon_pill"
+            android:backgroundTint="#EFF8FF"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:text="Open"
+            android:textColor="#175CD3"
+            android:textSize="12sp" />
+    </RelativeLayout>
+
+    <!-- Faint Divider Line -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
+        android:background="#F1F5F9" />
+
+    <!-- Bottom Section: Info Tag and Waveform Audio Player -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Left Column: Time -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:orientation="vertical">
+
+            <!-- Time Row -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_clock"
+                    app:tint="#64748B" />
+
+                <TextView
+                    android:id="@+id/tvIssueTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Today, 10:25 AM"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Right Column: Premium Waveform Audio Player -->
+        <LinearLayout
+            android:id="@+id/layoutAudioPlayer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.1"
+            android:gravity="end"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Play Button and Waveform Bars -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- Circular Play/Pause Button Outline -->
+                <ImageView
+                    android:id="@+id/btnPlayAudio"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="@drawable/bg_circle_blue_light"
+                    android:backgroundTint="#EFF8FF"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_chat_media_play"
+                    app:tint="#0B61CA" />
+
+                <!-- Waveform Bars Container -->
+                <LinearLayout
+                    android:id="@+id/layoutWaveform"
+                    android:layout_width="wrap_content"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- 15 Waveform Bars of varying heights -->
+                    <View android:layout_width="2dp" android:layout_height="8dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="12dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="16dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="10dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="14dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="20dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="18dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="12dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="16dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="10dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="8dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="12dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="14dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="10dp" android:layout_marginEnd="2dp" android:background="#E2E8F0"/>
+                    <View android:layout_width="2dp" android:layout_height="6dp" android:background="#E2E8F0"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Playback Timer Labels -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvAudioCurrentTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="00:00"
+                    android:textColor="#64748B"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" / "
+                    android:textColor="#94A3B8"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/tvAudioTotalTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="02:35"
+                    android:textColor="#64748B"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
