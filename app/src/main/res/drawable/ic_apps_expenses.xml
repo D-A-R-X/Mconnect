@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="32dp"
     android:height="32dp"
     android:viewportWidth="32"
@@ -9,35 +10,88 @@
         android:pathData="M16,16m-16,0a16,16 0 1,1 32,0a16,16 0 1,1 -32,0"
         android:fillColor="#DCFCE7"/>
     
-    <!-- Expenses Icon: Safe box with outer border, circle dial, slot, and clock/badge on bottom-left with exact colors -->
-    <!-- Safe box outline -->
+    <!-- Expenses Icon: Safe box with green gradient stroke -->
     <path
         android:pathData="M11,10h10c1.1,0 2,0.9 2,2v7c0,1.1 -0.9,2 -2,2h-10c-1.1,0 -2,-0.9 -2,-2v-7c0,-1.1 0.9,-2 2,-2z"
-        android:strokeColor="#16A34A"
         android:strokeWidth="1.8"
         android:strokeLineJoin="round"
-        android:fillColor="#00000000"/>
-    <!-- Dial in the center -->
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startColor="#1BCA0B"
+                android:endColor="#3D9D02"
+                android:startX="16"
+                android:startY="10"
+                android:endX="16"
+                android:endY="21"
+                android:type="linear"/>
+        </aapt:attr>
+    </path>
+    
+    <!-- Dial in the center with green gradient stroke -->
     <path
         android:pathData="M16,15.5m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0"
-        android:strokeColor="#16A34A"
         android:strokeWidth="1.5"
-        android:fillColor="#00000000"/>
-    <!-- Slot line on the right -->
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startColor="#1BCA0B"
+                android:endColor="#3D9D02"
+                android:startX="16"
+                android:startY="13.5"
+                android:endX="16"
+                android:endY="17.5"
+                android:type="linear"/>
+        </aapt:attr>
+    </path>
+    
+    <!-- Slot line on the right with green gradient stroke -->
     <path
         android:pathData="M20.5,13v5"
-        android:strokeColor="#16A34A"
         android:strokeWidth="1.5"
-        android:strokeLineCap="round"/>
-    <!-- Clock/badge on bottom-left -->
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startColor="#1BCA0B"
+                android:endColor="#3D9D02"
+                android:startX="20.5"
+                android:startY="13"
+                android:endX="20.5"
+                android:endY="18"
+                android:type="linear"/>
+        </aapt:attr>
+    </path>
+    
+    <!-- Clock/badge on bottom-left with green gradient stroke -->
     <path
         android:pathData="M8,20m-3,0a3,3 0 1,1 6,0a3,3 0 1,1 -6,0"
         android:fillColor="#DCFCE7"
-        android:strokeColor="#16A34A"
-        android:strokeWidth="1.5"/>
+        android:strokeWidth="1.5">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startColor="#1BCA0B"
+                android:endColor="#3D9D02"
+                android:startX="8"
+                android:startY="17"
+                android:endX="8"
+                android:endY="23"
+                android:type="linear"/>
+        </aapt:attr>
+    </path>
+    
     <path
         android:pathData="M8,18.5v1.5h1"
-        android:strokeColor="#16A34A"
         android:strokeWidth="1.2"
-        android:strokeLineCap="round"/>
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startColor="#1BCA0B"
+                android:endColor="#3D9D02"
+                android:startX="8"
+                android:startY="18.5"
+                android:endX="9"
+                android:endY="20"
+                android:type="linear"/>
+        </aapt:attr>
+    </path>
 </vector>
