@@ -130,8 +130,8 @@
                 android:backgroundTint="#40FFFFFF"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="6dp"
-                android:src="@drawable/ic_sheet_upload_outline"
+                android:padding="7dp"
+                android:src="@drawable/ic_visitor_history"
                 app:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
@@ -150,4 +150,630 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/scanWindow" />
 
+    <!-- Visitor Verification Glass Modal -->
+    <!-- Visitor Verification Full-Screen Mockup Overlay -->
+    <FrameLayout
+        android:id="@+id/visitorVerificationContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:elevation="10dp"
+        android:background="@drawable/bg_verification_screen">
+
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Non-scrollable Header Section (placed at the top) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/spacerStatusBarVerification"
+                    android:layout_width="match_parent"
+                    android:layout_height="24dp" />
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp">
+
+                <ImageView
+                    android:id="@+id/btnCancelHeaderVerification"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_alignParentStart="true"
+                    android:background="@drawable/bg_circle_blue_light"
+                    android:backgroundTint="#26FFFFFF"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_back_blue"
+                    app:tint="#FFFFFF" />
+
+                <!-- Center shield check icon, title, subtitle -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerHorizontal="true"
+                    android:layout_marginTop="64dp"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_shield_check" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="Visitor Verification"
+                        android:textColor="#FFFFFF"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Verify the visitor details before\nconfirming admission"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:gravity="center" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/btnHistoryVerification"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_alignParentEnd="true"
+                    android:background="@drawable/bg_circle_blue_light"
+                    android:backgroundTint="#26FFFFFF"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="11dp"
+                    android:src="@drawable/ic_visitor_history"
+                    app:tint="#FFFFFF" />
+            </RelativeLayout>
+            </LinearLayout>
+
+            <!-- Bottom Sheet Content Container (Rounded Top, White Card) -->
+            <LinearLayout
+                android:id="@+id/verificationBottomSheet"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_verification_card"
+                android:orientation="vertical"
+                app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
+                app:behavior_peekHeight="550dp"
+                app:behavior_hideable="false">
+
+                <!-- Drag Handle -->
+                <View
+                    android:layout_width="36dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="6dp"
+                    android:background="#CBD5E1"
+                    android:backgroundTint="#CBD5E1" />
+
+                <!-- Frame container to allow scrollview and bottom floating button panel -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <!-- Status bar spacer inside bottom sheet to push content down when expanded -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical">
+
+                        <View
+                            android:id="@+id/spacerStatusBarVerificationContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp" />
+
+                        <androidx.core.widget.NestedScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:fillViewport="true"
+                            android:overScrollMode="never">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:paddingHorizontal="20dp"
+                                android:paddingTop="12dp"
+                                android:paddingBottom="96dp">
+
+                                <!-- PRIMARY VISITOR HEADER -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <ImageView
+                                        android:layout_width="18dp"
+                                        android:layout_height="18dp"
+                                        android:src="@drawable/ic_custom_user"
+                                        app:tint="#2563EB" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="8dp"
+                                        android:fontFamily="@font/inter_bold"
+                                        android:text="PRIMARY VISITOR"
+                                        android:textColor="#2563EB"
+                                        android:textSize="12sp"
+                                        android:letterSpacing="0.05" />
+                                </LinearLayout>
+
+                                <!-- PRIMARY VISITOR CARD -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="10dp"
+                                    android:background="@drawable/bg_visitor_card_white"
+                                    android:orientation="vertical"
+                                    android:padding="16dp">
+
+                                    <!-- Avatar & Name row -->
+                                    <RelativeLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content">
+
+                                        <FrameLayout
+                                            android:id="@+id/avatarContainer"
+                                            android:layout_width="44dp"
+                                            android:layout_height="44dp"
+                                            android:layout_alignParentStart="true"
+                                            android:layout_centerVertical="true">
+                                            <View
+                                                android:layout_width="match_parent"
+                                                android:layout_height="match_parent"
+                                                android:background="@drawable/bg_circle_blue_light"
+                                                android:backgroundTint="#EFF6FF" />
+                                            <ImageView
+                                                android:layout_width="24dp"
+                                                android:layout_height="24dp"
+                                                android:layout_gravity="center"
+                                                android:src="@drawable/ic_custom_user"
+                                                app:tint="#2563EB" />
+                                        </FrameLayout>
+
+                                        <LinearLayout
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_toEndOf="@id/avatarContainer"
+                                            android:layout_marginStart="12dp"
+                                            android:layout_centerVertical="true"
+                                            android:orientation="vertical">
+
+                                            <TextView
+                                                android:id="@+id/tvPrimaryName"
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:fontFamily="@font/inter_bold"
+                                                android:textColor="#0F172A"
+                                                android:textSize="16sp"
+                                                android:text="Jane Doe" />
+
+                                            <TextView
+                                                android:id="@+id/tvPrimaryCompany"
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginTop="2dp"
+                                                android:fontFamily="@font/inter_medium"
+                                                android:textColor="#64748B"
+                                                android:textSize="13sp"
+                                                android:text="Tech Solutions" />
+                                        </LinearLayout>
+
+                                        <!-- Primary Badge -->
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_alignParentEnd="true"
+                                            android:layout_centerVertical="true"
+                                            android:background="@drawable/bg_badge_primary"
+                                            android:fontFamily="@font/inter_bold"
+                                            android:text="✓ Primary"
+                                            android:textColor="#2563EB"
+                                            android:textSize="11sp"
+                                            android:paddingHorizontal="10dp"
+                                            android:paddingVertical="4dp" />
+                                    </RelativeLayout>
+
+                                    <!-- Details list with icons -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="12dp"
+                                        android:orientation="vertical">
+
+                                        <!-- Phone -->
+                                        <LinearLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="wrap_content"
+                                            android:gravity="center_vertical"
+                                            android:paddingVertical="6dp"
+                                            android:orientation="horizontal">
+                                            <ImageView
+                                                android:layout_width="16dp"
+                                                android:layout_height="16dp"
+                                                android:src="@drawable/ic_visitor_phone" />
+                                            <TextView
+                                                android:id="@+id/tvPrimaryPhone"
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginStart="10dp"
+                                                android:fontFamily="@font/inter_medium"
+                                                android:textColor="#334155"
+                                                android:textSize="13sp"
+                                                android:text="+91 98765 43210" />
+                                        </LinearLayout>
+
+                                        <View
+                                            android:layout_width="match_parent"
+                                            android:layout_height="1dp"
+                                            android:background="#F1F5F9" />
+
+                                        <!-- Email -->
+                                        <LinearLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="wrap_content"
+                                            android:gravity="center_vertical"
+                                            android:paddingVertical="6dp"
+                                            android:orientation="horizontal">
+                                            <ImageView
+                                                android:layout_width="16dp"
+                                                android:layout_height="16dp"
+                                                android:src="@drawable/ic_visitor_email" />
+                                            <TextView
+                                                android:id="@+id/tvPrimaryEmail"
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginStart="10dp"
+                                                android:fontFamily="@font/inter_medium"
+                                                android:textColor="#334155"
+                                                android:textSize="13sp"
+                                                android:text="jane.doe@example.com" />
+                                        </LinearLayout>
+
+                                        <View
+                                            android:layout_width="match_parent"
+                                            android:layout_height="1dp"
+                                            android:background="#F1F5F9" />
+
+                                        <!-- Age -->
+                                        <LinearLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="wrap_content"
+                                            android:gravity="center_vertical"
+                                            android:paddingVertical="6dp"
+                                            android:orientation="horizontal">
+                                            <ImageView
+                                                android:layout_width="16dp"
+                                                android:layout_height="16dp"
+                                                android:src="@drawable/ic_visitor_calendar" />
+                                            <TextView
+                                                android:id="@+id/tvPrimaryAge"
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginStart="10dp"
+                                                android:fontFamily="@font/inter_medium"
+                                                android:textColor="#334155"
+                                                android:textSize="13sp"
+                                                android:text="Age: 28" />
+                                        </LinearLayout>
+                                    </LinearLayout>
+                                </LinearLayout>
+
+                                <!-- ADDITIONAL VISITOR HEADER -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="20dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <ImageView
+                                        android:layout_width="18dp"
+                                        android:layout_height="18dp"
+                                        android:src="@drawable/ic_custom_user"
+                                        app:tint="#16A34A" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="8dp"
+                                        android:fontFamily="@font/inter_bold"
+                                        android:text="ADDITIONAL VISITOR"
+                                        android:textColor="#16A34A"
+                                        android:textSize="12sp"
+                                        android:letterSpacing="0.05" />
+                                </LinearLayout>
+
+                                <!-- ADDITIONAL VISITORS LIST CONTAINER -->
+                                <LinearLayout
+                                    android:id="@+id/layoutSecondaryVisitors"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical">
+
+                                    <LinearLayout
+                                        android:id="@+id/containerSecondaryList"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="vertical" />
+                                </LinearLayout>
+
+                                <!-- VISIT DETAILS HEADER -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="20dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <ImageView
+                                        android:layout_width="18dp"
+                                        android:layout_height="18dp"
+                                        android:src="@drawable/ic_visitor_clipboard"
+                                        app:tint="#8B5CF6" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="8dp"
+                                        android:fontFamily="@font/inter_bold"
+                                        android:text="VISIT DETAILS"
+                                        android:textColor="#8B5CF6"
+                                        android:textSize="12sp"
+                                        android:letterSpacing="0.05" />
+                                </LinearLayout>
+
+                                <!-- VISIT DETAILS CARD -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="10dp"
+                                    android:background="@drawable/bg_visitor_card_white"
+                                    android:orientation="vertical"
+                                    android:padding="16dp">
+
+                                    <!-- Category / Type -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center_vertical"
+                                        android:paddingVertical="8dp"
+                                        android:orientation="horizontal">
+                                        <ImageView
+                                            android:layout_width="16dp"
+                                            android:layout_height="16dp"
+                                            android:src="@drawable/ic_custom_user"
+                                            app:tint="#8B5CF6" />
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="10dp"
+                                            android:fontFamily="@font/inter_semibold"
+                                            android:textColor="#334155"
+                                            android:textSize="13sp"
+                                            android:text="Type" />
+                                        <TextView
+                                            android:id="@+id/tvVisitCategoryType"
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:gravity="end"
+                                            android:fontFamily="@font/inter_medium"
+                                            android:textColor="#0F172A"
+                                            android:textSize="13sp"
+                                            android:text="Vendor (Installation)" />
+                                    </LinearLayout>
+
+                                    <View
+                                        android:layout_width="match_parent"
+                                        android:layout_height="1dp"
+                                        android:background="#F1F5F9" />
+
+                                    <!-- Host -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center_vertical"
+                                        android:paddingVertical="8dp"
+                                        android:orientation="horizontal">
+                                        <ImageView
+                                            android:layout_width="16dp"
+                                            android:layout_height="16dp"
+                                            android:src="@drawable/ic_custom_user"
+                                            app:tint="#8B5CF6" />
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="10dp"
+                                            android:fontFamily="@font/inter_semibold"
+                                            android:textColor="#334155"
+                                            android:textSize="13sp"
+                                            android:text="Host" />
+                                        <TextView
+                                            android:id="@+id/tvVisitHost"
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:gravity="end"
+                                            android:fontFamily="@font/inter_medium"
+                                            android:textColor="#0F172A"
+                                            android:textSize="13sp"
+                                            android:text="Dev Super Admin" />
+                                    </LinearLayout>
+
+                                    <View
+                                        android:layout_width="match_parent"
+                                        android:layout_height="1dp"
+                                        android:background="#F1F5F9" />
+
+                                    <!-- Time Window -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center_vertical"
+                                        android:paddingVertical="8dp"
+                                        android:orientation="horizontal">
+                                        <ImageView
+                                            android:layout_width="16dp"
+                                            android:layout_height="16dp"
+                                            android:src="@drawable/ic_custom_clock"
+                                            app:tint="#8B5CF6" />
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="10dp"
+                                            android:fontFamily="@font/inter_semibold"
+                                            android:textColor="#334155"
+                                            android:textSize="13sp"
+                                            android:text="Time Window" />
+                                        <TextView
+                                            android:id="@+id/tvVisitTimeWindow"
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:gravity="end"
+                                            android:fontFamily="@font/inter_medium"
+                                            android:textColor="#0F172A"
+                                            android:textSize="13sp"
+                                            android:text="29 Jun 2026, 11:30 AM - 01:30 PM" />
+                                    </LinearLayout>
+
+                                    <View
+                                        android:layout_width="match_parent"
+                                        android:layout_height="1dp"
+                                        android:background="#F1F5F9" />
+
+                                    <!-- Notes -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="top"
+                                        android:paddingVertical="8dp"
+                                        android:orientation="horizontal">
+                                        <ImageView
+                                            android:layout_width="16dp"
+                                            android:layout_height="16dp"
+                                            android:layout_marginTop="2dp"
+                                            android:src="@drawable/ic_visitor_clipboard"
+                                            app:tint="#8B5CF6" />
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="10dp"
+                                            android:fontFamily="@font/inter_semibold"
+                                            android:textColor="#334155"
+                                            android:textSize="13sp"
+                                            android:text="Meeting Notes" />
+                                        <TextView
+                                            android:id="@+id/tvVisitNotes"
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:gravity="end"
+                                            android:fontFamily="@font/inter_medium"
+                                            android:textColor="#0F172A"
+                                            android:textSize="13sp"
+                                            android:text="Scanned Raw Payload: Aejfo783zvuLsrqHiM" />
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+                            </LinearLayout>
+                        </androidx.core.widget.NestedScrollView>
+
+                    </LinearLayout>
+                </FrameLayout>
+            </LinearLayout>
+
+            <!-- Absolute Bottom Floating Buttons Panel -->
+            <LinearLayout
+                android:id="@+id/llBottomButtonsPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="#FFFFFF"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="16dp"
+                android:orientation="horizontal"
+                android:elevation="8dp">
+
+                <!-- Rescan Button -->
+                <LinearLayout
+                    android:id="@+id/btnCancelVerification"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_btn_secondary_verification"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_visitor_scan"
+                        app:tint="#2563EB" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Rescan"
+                        android:textColor="#2563EB"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <!-- Confirm Button -->
+                <LinearLayout
+                    android:id="@+id/btnConfirmAdmission"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1.2"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_btn_gradient_green_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_visitor_check"
+                        app:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Confirm"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+    </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

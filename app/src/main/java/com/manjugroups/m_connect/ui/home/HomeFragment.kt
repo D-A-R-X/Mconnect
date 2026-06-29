@@ -1013,7 +1013,8 @@ class HomeFragment : Fragment() {
 
         binding.edgeQrTooltip.setOnClickListener { dismissTooltipAction() }
         binding.btnDismissTooltip.setOnClickListener { dismissTooltipAction() }
-        binding.edgeQrTourDimBg.setOnClickListener { dismissTooltipAction() }
+        // Clicking the outer screen (dim background) does not dismiss the onboarding tooltip and does not show bottom navigation bar.
+        binding.edgeQrTourDimBg.setOnClickListener { /* No-op, require clicking the tooltip or dismiss button to close */ }
 
         var startX = 0f
         var downTime = 0L
@@ -1063,7 +1064,7 @@ class HomeFragment : Fragment() {
         }
 
         binding.btnOverlayQr.setOnClickListener {
-            animatePanel(false)
+            animatePanel(open = false, showTabBarOnClose = false)
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
                 .addToBackStack(null)
@@ -1071,7 +1072,7 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun animatePanel(open: Boolean) {
+    private fun animatePanel(open: Boolean, showTabBarOnClose: Boolean = true) {
         if (_binding == null) return
         val screenWidth = resources.displayMetrics.widthPixels.toFloat()
         if (open) {
@@ -1087,7 +1088,9 @@ class HomeFragment : Fragment() {
             binding.panelContent.animate().translationX(0f).setDuration(250).start()
             binding.edgeDragHandle.animate().translationX(binding.edgeDragHandle.width.toFloat()).setDuration(250).start()
         } else {
-            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+            if (showTabBarOnClose) {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+            }
             binding.panelBlurBg.animate().alpha(0f).setDuration(250).start()
             binding.edgeDragHandle.animate().translationX(0f).setDuration(250).start()
             binding.panelContent.animate().translationX(screenWidth).setDuration(250)

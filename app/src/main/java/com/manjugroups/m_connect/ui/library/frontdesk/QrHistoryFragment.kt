@@ -14,12 +14,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 
 class QrHistoryFragment : Fragment() {
 
     private var _binding: FragmentQrHistoryBinding? = null
     private val binding get() = _binding!!
+    private var statusBarHeight = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -43,10 +45,66 @@ class QrHistoryFragment : Fragment() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            statusBarHeight = sysBars.top
+            
+            // History top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
+
+            // Verification layout top spacer (static push-down for header)
+            val lpVerification = binding.spacerStatusBarVerificationHistory.layoutParams
+            lpVerification.height = sysBars.top
+            binding.spacerStatusBarVerificationHistory.layoutParams = lpVerification
+
+            // Add navigation bar bottom padding to absolute floating buttons panel
+            val extraBottomPadding = (16 * resources.displayMetrics.density).toInt()
+            binding.llBottomButtonsPanelHistory.setPadding(
+                binding.llBottomButtonsPanelHistory.paddingLeft,
+                binding.llBottomButtonsPanelHistory.paddingTop,
+                binding.llBottomButtonsPanelHistory.paddingRight,
+                sysBars.bottom + extraBottomPadding
+            )
+
             insets
+        }
+
+        // Setup Bottom Sheet Callback to dynamically adjust top spacer height on slide
+        val behavior = BottomSheetBehavior.from(binding.verificationBottomSheetHistory)
+        behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
+                    val lp = binding.spacerStatusBarVerificationContentHistory.layoutParams
+                    lp.height = 0
+                    binding.spacerStatusBarVerificationContentHistory.layoutParams = lp
+                } else if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                    val lp = binding.spacerStatusBarVerificationContentHistory.layoutParams
+                    lp.height = statusBarHeight
+                    binding.spacerStatusBarVerificationContentHistory.layoutParams = lp
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // slideOffset goes from 0.0 (collapsed) to 1.0 (expanded)
+                if (slideOffset >= 0f) {
+                    val lp = binding.spacerStatusBarVerificationContentHistory.layoutParams
+                    lp.height = (statusBarHeight * slideOffset).toInt()
+                    binding.spacerStatusBarVerificationContentHistory.layoutParams = lp
+                }
+            }
+        })
+
+        binding.btnCancelHeaderVerificationHistory.setOnClickListener {
+            binding.visitorVerificationContainerHistory.visibility = View.GONE
+        }
+
+        binding.btnHistoryVerificationHistory.setOnClickListener {
+            // Already on history page, just close layout overview
+            binding.visitorVerificationContainerHistory.visibility = View.GONE
+        }
+
+        binding.btnCloseVerificationHistory.setOnClickListener {
+            binding.visitorVerificationContainerHistory.visibility = View.GONE
         }
 
         renderHistory()
@@ -75,17 +133,133 @@ class QrHistoryFragment : Fragment() {
                 val rowView = LayoutInflater.from(requireContext())
                     .inflate(R.layout.item_qr_scan_row, binding.llHistoryList, false)
                 
-                rowView.findViewById<TextView>(R.id.tvScanValue).text = item.value
-                rowView.findViewById<TextView>(R.id.tvScanTime).text = item.timestamp
+                val tvScanValue = rowView.findViewById<TextView>(R.id.tvScanValue)
+                val tvScanDetails = rowView.findViewById<TextView>(R.id.tvScanDetails)
+                val tvScanHost = rowView.findViewById<TextView>(R.id.tvScanHost)
+                val tvScanTime = rowView.findViewById<TextView>(R.id.tvScanTime)
+
+                var isJson = false
+                var primaryName = ""
+                var company = ""
+                var visitorType = ""
+                var purpose = ""
+                var hostPerson = ""
+
+                try {
+                    val json = JSONObject(item.value)
+                    if (json.optBoolean("isStructured", false)) {
+                        isJson = true
+                        primaryName = json.optString("primaryName", "")
+                        company = json.optString("primaryCompany", "")
+                        visitorType = json.optString("visitorType", "")
+                        purpose = json.optString("purpose", "")
+                        hostPerson = json.optString("hostPerson", "")
+                    }
+                } catch (_: Exception) {}
+
+                if (isJson) {
+                    tvScanValue.text = primaryName
+                    tvScanDetails.text = "$company • $visitorType ($purpose)"
+                    tvScanHost.text = "Host: $hostPerson"
+                    tvScanDetails.visibility = View.VISIBLE
+                    tvScanHost.visibility = View.VISIBLE
+                } else {
+                    tvScanValue.text = item.value
+                    tvScanDetails.visibility = View.GONE
+                    tvScanHost.visibility = View.GONE
+                }
                 
-                // Clicking a history row shows its details in a short toast
+                tvScanTime.text = item.timestamp
+                
+                // Clicking a history row shows its details in the glass modal
                 rowView.setOnClickListener {
-                    Toast.makeText(requireContext(), item.value, Toast.LENGTH_SHORT).show()
+                    showHistoryDetailModal(item.value)
                 }
                 
                 binding.llHistoryList.addView(rowView)
             }
         }
+    }
+
+    private fun showHistoryDetailModal(historyValue: String) {
+        var primaryName = "Jane Doe"
+        var primaryPhone = "+91 98765 43210"
+        var primaryAge = "28"
+        var primaryEmail = "jane.doe@example.com"
+        var primaryCompany = "Tech Solutions"
+        var visitorType = "Vendor"
+        var purpose = "Installation"
+        var hostPerson = "Dev Super Admin"
+        var expectedTime = "29 Jun 2026, 11:30 AM - 01:30 PM"
+        var meetingNotes = "Technical interview and workspace verification."
+        val secondaryList = ArrayList<JSONObject>()
+
+        try {
+            val json = JSONObject(historyValue)
+            if (json.optBoolean("isStructured", false)) {
+                primaryName = json.optString("primaryName", primaryName)
+                primaryCompany = json.optString("primaryCompany", primaryCompany)
+                primaryPhone = json.optString("primaryPhone", primaryPhone)
+                primaryEmail = json.optString("primaryEmail", primaryEmail)
+                primaryAge = json.optString("primaryAge", primaryAge)
+                
+                val secArr = json.optJSONArray("secondaryList")
+                if (secArr != null) {
+                    for (i in 0 until secArr.length()) {
+                        secondaryList.add(secArr.getJSONObject(i))
+                    }
+                }
+                
+                visitorType = json.optString("visitorType", visitorType)
+                purpose = json.optString("purpose", purpose)
+                hostPerson = json.optString("hostPerson", hostPerson)
+                expectedTime = json.optString("expectedTime", expectedTime)
+                meetingNotes = json.optString("meetingNotes", meetingNotes)
+            } else {
+                meetingNotes = historyValue
+                secondaryList.clear()
+            }
+        } catch (e: Exception) {
+            meetingNotes = historyValue
+            secondaryList.clear()
+        }
+
+        binding.tvPrimaryNameHistory.text = primaryName
+        binding.tvPrimaryCompanyHistory.text = primaryCompany
+        binding.tvPrimaryPhoneHistory.text = primaryPhone
+        binding.tvPrimaryEmailHistory.text = primaryEmail
+        binding.tvPrimaryAgeHistory.text = "Age: $primaryAge"
+
+        binding.tvVisitCategoryTypeHistory.text = "$visitorType ($purpose)"
+        binding.tvVisitHostHistory.text = hostPerson
+        binding.tvVisitTimeWindowHistory.text = expectedTime
+        binding.tvVisitNotesHistory.text = meetingNotes
+
+        binding.containerSecondaryListHistory.removeAllViews()
+        if (secondaryList.isEmpty()) {
+            binding.layoutSecondaryVisitorsHistory.visibility = View.GONE
+        } else {
+            binding.layoutSecondaryVisitorsHistory.visibility = View.VISIBLE
+            for (sec in secondaryList) {
+                val secView = LayoutInflater.from(requireContext()).inflate(R.layout.item_secondary_visitor, binding.containerSecondaryListHistory, false)
+                val tvSecName = secView.findViewById<TextView>(R.id.tvSecondaryName)
+                val tvSecCompany = secView.findViewById<TextView>(R.id.tvSecondaryCompany)
+                val tvSecPhone = secView.findViewById<TextView>(R.id.tvSecondaryPhone)
+                val tvSecEmail = secView.findViewById<TextView>(R.id.tvSecondaryEmail)
+                val tvSecAge = secView.findViewById<TextView>(R.id.tvSecondaryAge)
+
+                tvSecName.text = sec.optString("name", "N/A")
+                tvSecCompany.text = sec.optString("company", "N/A")
+                tvSecPhone.text = sec.optString("phone", "N/A")
+                tvSecEmail.text = sec.optString("email", "N/A")
+                tvSecAge.text = "Age: ${sec.optString("age", "N/A")}"
+
+                binding.containerSecondaryListHistory.addView(secView)
+            }
+        }
+
+        BottomSheetBehavior.from(binding.verificationBottomSheetHistory).state = BottomSheetBehavior.STATE_COLLAPSED
+        binding.visitorVerificationContainerHistory.visibility = View.VISIBLE
     }
 
     private fun parseHistoryList(historyStr: String): List<ScanItem> {

@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 
 class QrScannerFragment : Fragment() {
@@ -44,6 +45,7 @@ class QrScannerFragment : Fragment() {
     private var isScanningActive = true
     private var laserAnimator: ObjectAnimator? = null
     private val barcodeScanner: BarcodeScanner by lazy { BarcodeScanning.getClient() }
+    private var statusBarHeight = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -70,13 +72,69 @@ class QrScannerFragment : Fragment() {
                 .commit()
         }
 
+        binding.btnHistoryVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, QrHistoryFragment())
+                .addToBackStack(null)
+                .commit()
+        }
+
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            statusBarHeight = sysBars.top
+            
+            // Scanner top bar spacer
             val lp = binding.statusBarPlaceholder.layoutParams
             lp.height = sysBars.top
             binding.statusBarPlaceholder.layoutParams = lp
+
+            // Verification layout top spacer (static push-down for header)
+            val lpVerification = binding.spacerStatusBarVerification.layoutParams
+            lpVerification.height = sysBars.top
+            binding.spacerStatusBarVerification.layoutParams = lpVerification
+
+            // Add navigation bar bottom padding to absolute floating buttons panel
+            val extraBottomPadding = (16 * resources.displayMetrics.density).toInt()
+            binding.llBottomButtonsPanel.setPadding(
+                binding.llBottomButtonsPanel.paddingLeft,
+                binding.llBottomButtonsPanel.paddingTop,
+                binding.llBottomButtonsPanel.paddingRight,
+                sysBars.bottom + extraBottomPadding
+            )
+
             insets
         }
+
+        // Setup Bottom Sheet Callback to dynamically adjust top spacer height on slide
+        val behavior = BottomSheetBehavior.from(binding.verificationBottomSheet)
+        behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
+                    val lp = binding.spacerStatusBarVerificationContent.layoutParams
+                    lp.height = 0
+                    binding.spacerStatusBarVerificationContent.layoutParams = lp
+                } else if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                    val lp = binding.spacerStatusBarVerificationContent.layoutParams
+                    lp.height = statusBarHeight
+                    binding.spacerStatusBarVerificationContent.layoutParams = lp
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // slideOffset goes from 0.0 (collapsed) to 1.0 (expanded)
+                if (slideOffset >= 0f) {
+                    val lp = binding.spacerStatusBarVerificationContent.layoutParams
+                    lp.height = (statusBarHeight * slideOffset).toInt()
+                    binding.spacerStatusBarVerificationContent.layoutParams = lp
+                }
+            }
+        })
 
         startLaserAnimation()
         startCamera()
@@ -171,23 +229,158 @@ class QrScannerFragment : Fragment() {
             binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         } catch (_: Exception) {}
 
-        saveScanToHistory(value)
-
-        // Show a custom styled alert dialog for successful scan
         activity?.runOnUiThread {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Scan Successful")
-                .setMessage("Content:\n$value")
-                .setPositiveButton("OK") { dialog, _ ->
-                    dialog.dismiss()
-                    isScanningActive = true // Resume scan
-                }
-                .setOnDismissListener {
-                    isScanningActive = true
-                }
-                .setCancelable(false)
-                .show()
+            // Stop laser line and animator
+            laserAnimator?.pause()
+            binding.laserLine.visibility = View.GONE
+            // Freeze camera feed
+            cameraProvider?.unbindAll()
+            
+            showVerificationModal(value)
         }
+    }
+
+    private fun showVerificationModal(qrValue: String) {
+        var primaryName = "Jane Doe"
+        var primaryPhone = "+91 98765 43210"
+        var primaryAge = "28"
+        var primaryEmail = "jane.doe@example.com"
+        var primaryCompany = "Tech Solutions"
+        var visitorType = "Vendor"
+        var purpose = "Installation"
+        var hostPerson = "Dev Super Admin"
+        var expectedTime = "29 Jun 2026, 11:30 AM - 01:30 PM"
+        var meetingNotes = "Technical interview and workspace verification."
+        val secondaryList = ArrayList<JSONObject>()
+
+        try {
+            val json = JSONObject(qrValue)
+            if (json.has("primaryVisitor")) {
+                val prim = json.getJSONObject("primaryVisitor")
+                primaryName = prim.optString("name", primaryName)
+                primaryPhone = prim.optString("phone", primaryPhone)
+                primaryAge = prim.optString("age", primaryAge)
+                primaryEmail = prim.optString("email", primaryEmail)
+                primaryCompany = prim.optString("company", primaryCompany)
+            }
+            if (json.has("additionalVisitors")) {
+                val secArr = json.getJSONArray("additionalVisitors")
+                for (i in 0 until secArr.length()) {
+                    secondaryList.add(secArr.getJSONObject(i))
+                }
+            }
+            if (json.has("visitDetails")) {
+                val det = json.getJSONObject("visitDetails")
+                visitorType = det.optString("visitorType", visitorType)
+                purpose = det.optString("purpose", purpose)
+                hostPerson = det.optString("hostPerson", hostPerson)
+                expectedTime = det.optString("expectedDateTimeWindow", expectedTime)
+                meetingNotes = det.optString("meetingNotes", meetingNotes)
+            }
+        } catch (e: Exception) {
+            // Not a JSON or missing fields: fallback to mock details
+            meetingNotes = "Scanned Raw Payload: $qrValue"
+            
+            // Add a mock secondary visitor for rich display
+            val sec1 = JSONObject().apply {
+                put("name", "John Smith")
+                put("phone", "+91 87654 32109")
+                put("age", "32")
+                put("email", "john.smith@example.com")
+                put("company", "Tech Solutions")
+            }
+            secondaryList.add(sec1)
+        }
+
+        // Bind data to views
+        binding.tvPrimaryName.text = primaryName
+        binding.tvPrimaryCompany.text = primaryCompany
+        binding.tvPrimaryPhone.text = primaryPhone
+        binding.tvPrimaryEmail.text = primaryEmail
+        binding.tvPrimaryAge.text = "Age: $primaryAge"
+
+        binding.tvVisitCategoryType.text = "$visitorType ($purpose)"
+        binding.tvVisitHost.text = hostPerson
+        binding.tvVisitTimeWindow.text = expectedTime
+        binding.tvVisitNotes.text = meetingNotes
+
+        // Populate secondary list
+        binding.containerSecondaryList.removeAllViews()
+        if (secondaryList.isEmpty()) {
+            binding.layoutSecondaryVisitors.visibility = View.GONE
+        } else {
+            binding.layoutSecondaryVisitors.visibility = View.VISIBLE
+            for (sec in secondaryList) {
+                val secView = LayoutInflater.from(requireContext()).inflate(R.layout.item_secondary_visitor, binding.containerSecondaryList, false)
+                val tvSecName = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryName)
+                val tvSecCompany = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryCompany)
+                val tvSecPhone = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryPhone)
+                val tvSecEmail = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryEmail)
+                val tvSecAge = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryAge)
+
+                tvSecName.text = sec.optString("name", "N/A")
+                tvSecCompany.text = sec.optString("company", "N/A")
+                tvSecPhone.text = sec.optString("phone", "N/A")
+                tvSecEmail.text = sec.optString("email", "N/A")
+                tvSecAge.text = "Age: ${sec.optString("age", "N/A")}"
+
+                binding.containerSecondaryList.addView(secView)
+            }
+        }
+
+        // Setup button listeners
+        binding.btnCancelHeaderVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+        }
+
+        binding.btnCancelVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+        }
+
+        binding.btnConfirmAdmission.setOnClickListener {
+            // Save structured JSON string in history
+            val historyJson = JSONObject().apply {
+                put("isStructured", true)
+                put("primaryName", primaryName)
+                put("primaryCompany", primaryCompany)
+                put("primaryPhone", primaryPhone)
+                put("primaryEmail", primaryEmail)
+                put("primaryAge", primaryAge)
+                
+                val secArr = JSONArray()
+                for (sec in secondaryList) {
+                    secArr.put(sec)
+                }
+                put("secondaryList", secArr)
+                
+                put("visitorType", visitorType)
+                put("purpose", purpose)
+                put("hostPerson", hostPerson)
+                put("expectedTime", expectedTime)
+                put("meetingNotes", meetingNotes)
+            }
+            saveScanToHistory(historyJson.toString())
+            
+            binding.visitorVerificationContainer.visibility = View.GONE
+            Toast.makeText(requireContext(), "Admission Confirmed for $primaryName", Toast.LENGTH_SHORT).show()
+            
+            // Resume scan, camera, and laser line
+            binding.laserLine.visibility = View.VISIBLE
+            laserAnimator?.resume()
+            bindCameraUseCases() // Re-bind to start preview
+            isScanningActive = true // Resume scan
+        }
+
+        BottomSheetBehavior.from(binding.verificationBottomSheet).state = BottomSheetBehavior.STATE_COLLAPSED
+        binding.visitorVerificationContainer.visibility = View.VISIBLE
     }
 
     private fun saveScanToHistory(value: String) {
