@@ -8,9 +8,9 @@
 
     <!-- Header Section -->
     <RelativeLayout
+        android:id="@+id/issuesHeader"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:layout_marginTop="24dp"
         android:paddingHorizontal="16dp">
 
         <!-- Back Button -->
@@ -88,8 +88,26 @@
             android:textSize="14sp" />
     </FrameLayout>
 
+    <!-- Scrollable Issues List -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollViewIssues"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/issuesContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp" />
+    </androidx.core.widget.NestedScrollView>
+
     <!-- Empty State Content -->
     <LinearLayout
+        android:id="@+id/layoutEmptyState"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -98,9 +116,10 @@
         android:paddingHorizontal="40dp">
 
         <ImageView
-            android:layout_width="180dp"
+            android:layout_width="220dp"
             android:layout_height="180dp"
-            android:src="@drawable/img_appearance_coming_soon"
+            android:src="@drawable/img_issues_empty"
+            android:scaleType="fitCenter"
             android:contentDescription="@null" />
 
         <TextView

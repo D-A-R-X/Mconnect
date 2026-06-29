@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_leave_history_card"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Title and Header Icon -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_apps_issues"
+            app:tint="#16A34A" />
+
+        <TextView
+            android:id="@+id/tvIssueCardTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:textColor="#0F172A"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- Description -->
+    <TextView
+        android:id="@+id/tvIssueCardDesc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/inter_regular"
+        android:textColor="#475569"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <!-- Audio Player Container (Visible only if audio attached) -->
+    <LinearLayout
+        android:id="@+id/layoutAudioPlayer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_leave_history_inner_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <!-- Play/Pause Button -->
+        <ImageView
+            android:id="@+id/btnPlayAudio"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_chat_media_play"
+            app:tint="#0B61CA" />
+
+        <!-- Simple Audio Progress Bar -->
+        <ProgressBar
+            android:id="@+id/audioProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="4dp"
+            android:layout_marginHorizontal="12dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#0B61CA"
+            android:progressBackgroundTint="#CBD5E1" />
+
+        <!-- Timer / Duration Text -->
+        <TextView
+            android:id="@+id/tvAudioDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="00:00"
+            android:textColor="#64748B"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+</LinearLayout>
