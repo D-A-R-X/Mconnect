@@ -145,7 +145,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
 
     private fun loadStaffList() {
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { api.getStaff(session.bearerToken) }
+            runCatching { api.getStaff(session.bearerToken, status = "active") }
                 .onSuccess { response ->
                     if (response.success) {
                         staffList.clear()
@@ -161,23 +161,22 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        com.manjugroups.m_connect.ui.common.StaffPickerBottomSheet()
-            .configure(
-                title = "Select Nominee $nomineeNumber",
-                subtitle = "Search and pick a staff member",
-                staff = staffList.toList(),
-            ) { selected ->
-                if (nomineeNumber == 1) {
-                    selectedNominee1 = selected
-                    binding.tvNominee1.text = selected.name
-                    binding.tvNominee1.setTextColor(android.graphics.Color.parseColor("#101828"))
-                } else {
-                    selectedNominee2 = selected
-                    binding.tvNominee2.text = selected.name
-                    binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
-                }
+        com.manjugroups.m_connect.ui.common.StaffPickerBottomSheet.show(
+            context = requireContext(),
+            title = "Select Nominee $nomineeNumber",
+            subtitle = "Search and pick a staff member",
+            staff = staffList.toList(),
+        ) { selected ->
+            if (nomineeNumber == 1) {
+                selectedNominee1 = selected
+                binding.tvNominee1.text = selected.name
+                binding.tvNominee1.setTextColor(android.graphics.Color.parseColor("#101828"))
+            } else {
+                selectedNominee2 = selected
+                binding.tvNominee2.text = selected.name
+                binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
             }
-            .show(childFragmentManager, "staff_picker_$nomineeNumber")
+        }
     }
 
     private fun showOriginalDocumentPicker() {

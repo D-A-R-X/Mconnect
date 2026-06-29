@@ -99,18 +99,15 @@
         android:textSize="13sp"
         android:visibility="gone" />
 
-    <!-- Staff list -->
-    <ScrollView
+    <!-- Staff list (RecyclerView recycles rows + lazy-loads avatars so a large
+         staff list renders instantly instead of inflating every row at once). -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvPickerList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="8dp"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/llPickerContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-    </ScrollView>
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="none" />
 </LinearLayout>

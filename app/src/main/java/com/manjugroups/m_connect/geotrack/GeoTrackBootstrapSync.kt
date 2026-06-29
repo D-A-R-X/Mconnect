@@ -94,9 +94,11 @@ object GeoTrackBootstrapSync {
         session.shouldTrackNow = shouldTrack
 
         if (shouldTrack && bootstrap?.shouldPromptConsent == true) {
-            if (allowPromptConsent) {
+            // Only launch the consent screen if one isn't already open — sync runs
+            // on every resume/punch, which would otherwise stack duplicate screens.
+            if (allowPromptConsent && !GeoTrackConsentActivity.isActive) {
                 context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 })
             }
             GeoTrackService.stop(appContext)
