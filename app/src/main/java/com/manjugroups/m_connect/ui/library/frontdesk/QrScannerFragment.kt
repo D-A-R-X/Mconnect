@@ -171,23 +171,123 @@ class QrScannerFragment : Fragment() {
             binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         } catch (_: Exception) {}
 
-        saveScanToHistory(value)
-
-        // Show a custom styled alert dialog for successful scan
         activity?.runOnUiThread {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Scan Successful")
-                .setMessage("Content:\n$value")
-                .setPositiveButton("OK") { dialog, _ ->
-                    dialog.dismiss()
-                    isScanningActive = true // Resume scan
-                }
-                .setOnDismissListener {
-                    isScanningActive = true
-                }
-                .setCancelable(false)
-                .show()
+            showVerificationModal(value)
         }
+    }
+
+    private fun showVerificationModal(qrValue: String) {
+        var primaryName = "Jane Doe"
+        var primaryPhone = "+91 98765 43210"
+        var primaryAge = "28"
+        var primaryEmail = "jane.doe@example.com"
+        var primaryCompany = "Tech Solutions"
+        var visitorType = "Vendor"
+        var purpose = "Installation"
+        var hostPerson = "Dev Super Admin"
+        var expectedTime = "29 Jun 2026, 11:30 AM - 01:30 PM"
+        var meetingNotes = "Technical interview and workspace verification."
+        val secondaryList = ArrayList<JSONObject>()
+
+        try {
+            val json = JSONObject(qrValue)
+            if (json.has("primaryVisitor")) {
+                val prim = json.getJSONObject("primaryVisitor")
+                primaryName = prim.optString("name", primaryName)
+                primaryPhone = prim.optString("phone", primaryPhone)
+                primaryAge = prim.optString("age", primaryAge)
+                primaryEmail = prim.optString("email", primaryEmail)
+                primaryCompany = prim.optString("company", primaryCompany)
+            }
+            if (json.has("additionalVisitors")) {
+                val secArr = json.getJSONArray("additionalVisitors")
+                for (i in 0 until secArr.length()) {
+                    secondaryList.add(secArr.getJSONObject(i))
+                }
+            }
+            if (json.has("visitDetails")) {
+                val det = json.getJSONObject("visitDetails")
+                visitorType = det.optString("visitorType", visitorType)
+                purpose = det.optString("purpose", purpose)
+                hostPerson = det.optString("hostPerson", hostPerson)
+                expectedTime = det.optString("expectedDateTimeWindow", expectedTime)
+                meetingNotes = det.optString("meetingNotes", meetingNotes)
+            }
+        } catch (e: Exception) {
+            // Not a JSON or missing fields: fallback to mock details
+            meetingNotes = "Scanned Raw Payload: $qrValue"
+            
+            // Add a mock secondary visitor for rich display
+            val sec1 = JSONObject().apply {
+                put("name", "John Smith")
+                put("phone", "+91 87654 32109")
+                put("age", "32")
+                put("email", "john.smith@example.com")
+                put("company", "Tech Solutions")
+            }
+            secondaryList.add(sec1)
+        }
+
+        // Bind data to views
+        binding.tvPrimaryName.text = primaryName
+        binding.tvPrimaryCompany.text = "Company: $primaryCompany"
+        binding.tvPrimaryPhone.text = "Phone: $primaryPhone"
+        binding.tvPrimaryEmail.text = "Email: $primaryEmail"
+        binding.tvPrimaryAge.text = "Age: $primaryAge"
+
+        binding.tvVisitCategoryType.text = "Type: $visitorType ($purpose)"
+        binding.tvVisitHost.text = "Host: $hostPerson"
+        binding.tvVisitTimeWindow.text = "Time Window: $expectedTime"
+        binding.tvVisitNotes.text = meetingNotes
+
+        // Populate secondary list
+        binding.containerSecondaryList.removeAllViews()
+        if (secondaryList.isEmpty()) {
+            binding.layoutSecondaryVisitors.visibility = View.GONE
+        } else {
+            binding.layoutSecondaryVisitors.visibility = View.VISIBLE
+            for (sec in secondaryList) {
+                val secView = LayoutInflater.from(requireContext()).inflate(R.layout.item_secondary_visitor, binding.containerSecondaryList, false)
+                val tvSecName = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryName)
+                val tvSecCompany = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryCompany)
+                val tvSecPhone = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryPhone)
+                val tvSecEmail = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryEmail)
+                val tvSecAge = secView.findViewById<android.widget.TextView>(R.id.tvSecondaryAge)
+
+                tvSecName.text = sec.optString("name", "N/A")
+                tvSecCompany.text = "Company: ${sec.optString("company", "N/A")}"
+                tvSecPhone.text = "Phone: ${sec.optString("phone", "N/A")}"
+                tvSecEmail.text = "Email: ${sec.optString("email", "N/A")}"
+                tvSecAge.text = "Age: ${sec.optString("age", "N/A")}"
+
+                binding.containerSecondaryList.addView(secView)
+            }
+        }
+
+        // Setup button listeners
+        binding.btnCancelVerification.setOnClickListener {
+            binding.visitorVerificationContainer.visibility = View.GONE
+            isScanningActive = true // Resume scan
+        }
+
+        binding.btnConfirmAdmission.setOnClickListener {
+            // Format beautiful history record
+            val historyValue = buildString {
+                append("Visitor: $primaryName ($primaryCompany)\n")
+                append("Type: $visitorType ($purpose)\n")
+                append("Host: $hostPerson\n")
+                append("Time Window: $expectedTime")
+                if (secondaryList.isNotEmpty()) {
+                    append("\nAdditional Visitors: ${secondaryList.size} person(s)")
+                }
+            }
+            saveScanToHistory(historyValue)
+            binding.visitorVerificationContainer.visibility = View.GONE
+            Toast.makeText(requireContext(), "Admission Confirmed for $primaryName", Toast.LENGTH_SHORT).show()
+            isScanningActive = true // Resume scan
+        }
+
+        binding.visitorVerificationContainer.visibility = View.VISIBLE
     }
 
     private fun saveScanToHistory(value: String) {
