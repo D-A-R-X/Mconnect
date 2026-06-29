@@ -10,10 +10,10 @@
         android:pathData="M16,16m-16,0a16,16 0 1,1 32,0a16,16 0 1,1 -32,0"
         android:fillColor="#DCFCE7"/>
     
-    <!-- Expenses Icon: Safe box with green gradient stroke -->
+    <!-- Expenses Icon: Safe box with thin 1.2dp green gradient stroke -->
     <path
         android:pathData="M11,10h10c1.1,0 2,0.9 2,2v7c0,1.1 -0.9,2 -2,2h-10c-1.1,0 -2,-0.9 -2,-2v-7c0,-1.1 0.9,-2 2,-2z"
-        android:strokeWidth="1.8"
+        android:strokeWidth="1.2"
         android:strokeLineJoin="round"
         android:fillColor="#00000000">
         <aapt:attr name="android:strokeColor">
@@ -28,10 +28,10 @@
         </aapt:attr>
     </path>
     
-    <!-- Dial in the center with green gradient stroke -->
+    <!-- Dial in the center with thin 1.2dp green gradient stroke -->
     <path
         android:pathData="M16,15.5m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0"
-        android:strokeWidth="1.5"
+        android:strokeWidth="1.2"
         android:fillColor="#00000000">
         <aapt:attr name="android:strokeColor">
             <gradient
@@ -45,10 +45,10 @@
         </aapt:attr>
     </path>
     
-    <!-- Slot line on the right with green gradient stroke -->
+    <!-- Slot line on the right with thin 1.2dp green gradient stroke -->
     <path
         android:pathData="M20.5,13v5"
-        android:strokeWidth="1.5"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round">
         <aapt:attr name="android:strokeColor">
             <gradient
@@ -62,11 +62,11 @@
         </aapt:attr>
     </path>
     
-    <!-- Clock/badge on bottom-left with green gradient stroke -->
+    <!-- Clock/badge on bottom-left with thin 1.2dp green gradient stroke -->
     <path
         android:pathData="M8,20m-3,0a3,3 0 1,1 6,0a3,3 0 1,1 -6,0"
         android:fillColor="#DCFCE7"
-        android:strokeWidth="1.5">
+        android:strokeWidth="1.2">
         <aapt:attr name="android:strokeColor">
             <gradient
                 android:startColor="#1BCA0B"
@@ -81,7 +81,7 @@
     
     <path
         android:pathData="M8,18.5v1.5h1"
-        android:strokeWidth="1.2"
+        android:strokeWidth="1.0"
         android:strokeLineCap="round">
         <aapt:attr name="android:strokeColor">
             <gradient
