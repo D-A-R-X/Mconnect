@@ -39,7 +39,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="4dp"
             android:fontFamily="@font/inter_regular"
-            android:text="This is creation in Late Attendance"
+            android:text="This is creation in Fines &amp; Deductions"
             android:textColor="#667085"
             android:textSize="14sp" />
 

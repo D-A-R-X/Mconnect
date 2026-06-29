@@ -36,7 +36,7 @@
             android:layout_weight="1"
             android:gravity="center"
             android:fontFamily="@font/inter_bold"
-            android:text="Late Attendance"
+            android:text="Fines &amp; Deductions"
             android:textColor="#1D2939"
             android:textSize="18sp"
             android:layout_marginEnd="32dp" />
