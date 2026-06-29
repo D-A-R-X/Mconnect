@@ -173,12 +173,7 @@ class IssuesFragment : Fragment() {
                 cardBinding.tvIssueCardTitle.text = issue.title
                 cardBinding.tvIssueTime.text = "Today, " + sdf.format(Date(issue.timestamp))
 
-                if (issue.description.isNotEmpty()) {
-                    cardBinding.tvIssueCardDesc.text = issue.description
-                    cardBinding.layoutDescTag.visibility = View.VISIBLE
-                } else {
-                    cardBinding.layoutDescTag.visibility = View.GONE
-                }
+
 
                 // Setup audio note player if attached
                 val path = issue.audioPath

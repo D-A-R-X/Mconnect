@@ -5,7 +5,9 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
     android:layout_marginBottom="16dp"
-    android:background="@drawable/bg_leave_history_card"
+    android:background="@drawable/bg_issue_card"
+    android:elevation="2dp"
+    android:outlineProvider="background"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -14,21 +16,19 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <!-- Circular Avatar/Icon -->
+        <!-- Circular Avatar/Icon Container -->
         <FrameLayout
             android:id="@+id/layoutAvatar"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:background="@drawable/bg_circle_green_light">
+            android:layout_centerVertical="true">
 
+            <!-- No app:tint so the vector's internal light green background and gradient outline render perfectly -->
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_apps_issues"
-                app:tint="#16A34A" />
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_apps_issues" />
         </FrameLayout>
 
         <!-- Title & Subtitle -->
@@ -47,7 +47,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_bold"
-                android:text="Bunk"
+                android:text="Issue Title"
                 android:textColor="#0F172A"
                 android:textSize="16sp" />
 
@@ -94,7 +94,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Left Column: Time & Description Tag -->
+        <!-- Left Column: Time -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -124,36 +124,6 @@
                     android:textColor="#64748B"
                     android:textSize="12sp" />
             </LinearLayout>
-
-            <!-- Description Tag (Vibrant green pill with spark icon) -->
-            <LinearLayout
-                android:id="@+id/layoutDescTag"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_apps_coming_soon_pill"
-                android:backgroundTint="#E8F5E9"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="6dp"
-                android:visibility="gone">
-
-                <ImageView
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
-                    android:src="@drawable/ic_home_summary_star"
-                    app:tint="#16A34A" />
-
-                <TextView
-                    android:id="@+id/tvIssueCardDesc"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:textColor="#16A34A"
-                    android:textSize="12sp" />
-            </LinearLayout>
         </LinearLayout>
 
         <!-- Right Column: Premium Waveform Audio Player -->
@@ -161,7 +131,7 @@
             android:id="@+id/layoutAudioPlayer"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_weight="1.1"
             android:gravity="end"
             android:orientation="vertical"
             android:visibility="gone">
