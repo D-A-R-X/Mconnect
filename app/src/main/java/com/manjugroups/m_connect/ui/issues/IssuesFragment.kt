@@ -117,6 +117,9 @@ class IssuesFragment : Fragment() {
             navigateUp()
         }
 
+        // Load saved issues
+        loadIssues()
+
         // Show Create Issue Bottom Sheet
         binding.btnCreateIssue.setOnClickListener {
             val bottomSheet = CreateIssueBottomSheet()
@@ -128,6 +131,7 @@ class IssuesFragment : Fragment() {
                     audioDurationMs: Long
                 ) {
                     issuesList.add(0, IssueData(title, description, audioPath, audioDurationMs))
+                    saveIssues()
                     renderIssues()
                 }
             })
@@ -151,6 +155,25 @@ class IssuesFragment : Fragment() {
 
         // Initial render
         renderIssues()
+    }
+
+    private fun saveIssues() {
+        val context = context ?: return
+        val sharedPrefs = context.getSharedPreferences("issues_prefs", android.content.Context.MODE_PRIVATE)
+        val json = com.google.gson.Gson().toJson(issuesList)
+        sharedPrefs.edit().putString("saved_issues", json).apply()
+    }
+
+    private fun loadIssues() {
+        val context = context ?: return
+        val sharedPrefs = context.getSharedPreferences("issues_prefs", android.content.Context.MODE_PRIVATE)
+        val json = sharedPrefs.getString("saved_issues", null)
+        if (json != null) {
+            val type = object : com.google.gson.reflect.TypeToken<List<IssueData>>() {}.type
+            val loadedList: List<IssueData> = com.google.gson.Gson().fromJson(json, type)
+            issuesList.clear()
+            issuesList.addAll(loadedList)
+        }
     }
 
     private fun renderIssues(filterList: List<IssueData> = issuesList) {
