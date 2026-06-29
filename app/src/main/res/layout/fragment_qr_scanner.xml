@@ -403,9 +403,9 @@
                     android:layout_height="48dp"
                     android:layout_weight="1.2"
                     android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_btn_primary_verification"
+                    android:background="@drawable/bg_btn_gradient_green_12dp"
                     android:fontFamily="@font/inter_semibold"
-                    android:text="Confirm Admission"
+                    android:text="Confirm"
                     android:textColor="#FFFFFF"
                     android:textAllCaps="false"
                     app:backgroundTint="@null" />
