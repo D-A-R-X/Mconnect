@@ -431,17 +431,14 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
 
     private fun hasStoragePermission(): Boolean {
         val context = context ?: return false
-        val permissions = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(
-                android.Manifest.permission.READ_MEDIA_IMAGES,
-                android.Manifest.permission.READ_MEDIA_VIDEO
-            )
-        } else {
-            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            return false
         }
-        return permissions.any {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
+
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private fun loadGalleryMedia(recyclerView: RecyclerView) {
@@ -514,6 +511,9 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
     private fun queryGalleryMedia(): List<LocalPreviewItem> {
         val list = mutableListOf<LocalPreviewItem>()
         val context = context ?: return list
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            return list
+        }
 
         val imagesUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val imagesProjection = arrayOf(
