@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Light green rounded background -->
+    <path
+        android:pathData="M8,4h16c2.2,0 4,1.8 4,4v16c0,2.2 -1.8,4 -4,4H8c-2.2,0 -4,-1.8 -4,-4V8c0,-2.2 1.8,-4 4,-4z"
+        android:fillColor="#E8F5E9"/>
+    
+    <!-- Dark green inner icon: a rounded box with a minus inside -->
+    <path
+        android:pathData="M11,11h10c1.1,0 2,0.9 2,2v6c0,1.1 -0.9,2 -2,2H11c-1.1,0 -2,-0.9 -2,-2v-6c0,-1.1 0.9,-2 2,-2z"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="1.8"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M13,16h6"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"/>
+</vector>
