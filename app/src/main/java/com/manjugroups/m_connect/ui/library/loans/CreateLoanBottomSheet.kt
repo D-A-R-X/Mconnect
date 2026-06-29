@@ -161,11 +161,12 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        val names = staffList.map { it.name ?: "Unknown Staff" }.toTypedArray()
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select Nominee $nomineeNumber")
-            .setItems(names) { _, which ->
-                val selected = staffList[which]
+        com.manjugroups.m_connect.ui.common.StaffPickerBottomSheet()
+            .configure(
+                title = "Select Nominee $nomineeNumber",
+                subtitle = "Search and pick a staff member",
+                staff = staffList.toList(),
+            ) { selected ->
                 if (nomineeNumber == 1) {
                     selectedNominee1 = selected
                     binding.tvNominee1.text = selected.name
@@ -176,7 +177,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                     binding.tvNominee2.setTextColor(android.graphics.Color.parseColor("#101828"))
                 }
             }
-            .show()
+            .show(childFragmentManager, "staff_picker_$nomineeNumber")
     }
 
     private fun showOriginalDocumentPicker() {
