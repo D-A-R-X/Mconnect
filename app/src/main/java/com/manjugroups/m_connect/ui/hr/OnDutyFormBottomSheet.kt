@@ -229,6 +229,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         cardOwnFourWheeler = view.findViewById(R.id.cardOwnFourWheeler)
         cardOfficeTwoWheeler = view.findViewById(R.id.cardOfficeTwoWheeler)
         cardOfficeFourWheeler = view.findViewById(R.id.cardOfficeFourWheeler)
+        cardOfficePublicTransport = view.findViewById(R.id.cardOfficePublicTransport)
 
         tvOwnTwoWheeler = view.findViewById(R.id.tvOwnTwoWheeler)
         tvOwnFourWheeler = view.findViewById(R.id.tvOwnFourWheeler)
