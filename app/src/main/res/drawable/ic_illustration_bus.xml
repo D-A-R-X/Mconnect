@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="48dp"
+    android:viewportWidth="80"
+    android:viewportHeight="48">
+    
+    <!-- Bus Body (Main Cabin) -->
+    <path
+        android:pathData="M8,12 h60 a4,4 0 0 1 4,4 v18 a4,4 0 0 1 -4,4 h-60 a4,4 0 0 1 -4,-4 v-18 a4,4 0 0 1 4,-4 z"
+        android:fillColor="#0B61CA"/>
+        
+    <!-- Front Windshield -->
+    <path
+        android:pathData="M64,14 h6 a2,2 0 0 1 2,2 v10 h-8 z"
+        android:fillColor="#E2E8F0"/>
+        
+    <!-- Side Windows -->
+    <path
+        android:pathData="M8,14 h10 v8 h-10 z M21,14 h10 v8 h-10 z M34,14 h10 v8 h-10 z M47,14 h10 v8 h-10 z"
+        android:fillColor="#E2E8F0"/>
+        
+    <!-- Bottom Trim/Bumper -->
+    <path
+        android:pathData="M4,34 h72 v3 h-72 z"
+        android:fillColor="#1E293B"/>
+        
+    <!-- Wheels -->
+    <path
+        android:pathData="M20,38 m-5,0a5,5 0 1,1 10,0a5,5 0 1,1 -10,0"
+        android:fillColor="#1E293B"/>
+    <path
+        android:pathData="M20,38 m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -2,0"
+        android:fillColor="#94A3B8"/>
+        
+    <path
+        android:pathData="M60,38 m-5,0a5,5 0 1,1 10,0a5,5 0 1,1 -10,0"
+        android:fillColor="#1E293B"/>
+    <path
+        android:pathData="M60,38 m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -2,0"
+        android:fillColor="#94A3B8"/>
+        
+    <!-- Headlight & Taillight -->
+    <path
+        android:pathData="M72,28 h1 v3 h-1 z"
+        android:fillColor="#FBBF24"/>
+    <path
+        android:pathData="M3,28 h1 v3 h-1 z"
+        android:fillColor="#EF4444"/>
+</vector>

@@ -38,7 +38,6 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private var selectedTargetName: String? = null
     private var selectedVehicleOwnership: String? = null // "Own Vehicle", "Office Vehicle"
     private var selectedVehicleType: String? = null // "2 Wheeler", "4 Wheeler"
-    private var isAnimatingSelection = false
 
     private var allProjects: List<ProjectSummary> = emptyList()
     // Real vendor master data, fetched from /api/library/vendors. Empty
@@ -75,16 +74,13 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private lateinit var cardOwnFourWheeler: View
     private lateinit var cardOfficeTwoWheeler: View
     private lateinit var cardOfficeFourWheeler: View
+    private lateinit var cardOfficePublicTransport: View
 
     private lateinit var tvOwnTwoWheeler: TextView
     private lateinit var tvOwnFourWheeler: TextView
     private lateinit var tvOfficeTwoWheeler: TextView
     private lateinit var tvOfficeFourWheeler: TextView
-
-    private lateinit var imgOwnTwoWheelerAnim: ImageView
-    private lateinit var imgOwnFourWheelerAnim: ImageView
-    private lateinit var imgOfficeTwoWheelerAnim: ImageView
-    private lateinit var imgOfficeFourWheelerAnim: ImageView
+    private lateinit var tvOfficePublicTransport: TextView
 
     private lateinit var btnOnDutySubmit: View
     private lateinit var layoutBottomButtons: View
@@ -136,38 +132,9 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 it.setBackgroundColor(Color.TRANSPARENT)
                 it.elevation = 0f
                 val behavior = BottomSheetBehavior.from(it)
-                val displayMetrics = resources.displayMetrics
-                val screenHeight = displayMetrics.heightPixels
-                behavior.peekHeight = screenHeight / 2
-                behavior.skipCollapsed = false
-                behavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                behavior.skipCollapsed = true
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.isDraggable = true
-                
-                // Allow bottom sheet to expand to full height when dragged up
-                it.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-
-                // Pin the floating buttons to the bottom of the visible sheet area
-                behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
-                    override fun onStateChanged(bottomSheet: View, newState: Int) {
-                        updateButtonTranslation(bottomSheet)
-                    }
-
-                    override fun onSlide(bottomSheet: View, slideOffset: Float) {
-                        updateButtonTranslation(bottomSheet)
-                    }
-                })
-
-                it.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                    updateButtonTranslation(it)
-                }
-
-                // Update layout translation right before the view is drawn to avoid initial layout positioning delay
-                it.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
-                    override fun onPreDraw(): Boolean {
-                        updateButtonTranslation(it)
-                        return true
-                    }
-                })
             }
         }
         return dialog
@@ -184,12 +151,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun updateButtonTranslation(bottomSheet: View) {
-        if (::layoutBottomButtons.isInitialized) {
-            val targetTranslation = -bottomSheet.top.toFloat()
-            if (layoutBottomButtons.translationY != targetTranslation) {
-                layoutBottomButtons.translationY = targetTranslation
-            }
-        }
+        // No-op to prevent buttons from shifting/overlapping with wrap_content layout
     }
 
     override fun onCreateView(
@@ -226,21 +188,18 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         cardOwnFourWheeler = view.findViewById(R.id.cardOwnFourWheeler)
         cardOfficeTwoWheeler = view.findViewById(R.id.cardOfficeTwoWheeler)
         cardOfficeFourWheeler = view.findViewById(R.id.cardOfficeFourWheeler)
+        cardOfficePublicTransport = view.findViewById(R.id.cardOfficePublicTransport)
 
         tvOwnTwoWheeler = view.findViewById(R.id.tvOwnTwoWheeler)
         tvOwnFourWheeler = view.findViewById(R.id.tvOwnFourWheeler)
         tvOfficeTwoWheeler = view.findViewById(R.id.tvOfficeTwoWheeler)
         tvOfficeFourWheeler = view.findViewById(R.id.tvOfficeFourWheeler)
+        tvOfficePublicTransport = view.findViewById(R.id.tvOfficePublicTransport)
 
-        imgOwnTwoWheelerAnim = view.findViewById(R.id.imgOwnTwoWheelerAnim)
-        imgOwnFourWheelerAnim = view.findViewById(R.id.imgOwnFourWheelerAnim)
-        imgOfficeTwoWheelerAnim = view.findViewById(R.id.imgOfficeTwoWheelerAnim)
-        imgOfficeFourWheelerAnim = view.findViewById(R.id.imgOfficeFourWheelerAnim)
+        // Animation image views removed from XML
 
         btnOnDutySubmit = view.findViewById(R.id.btnOnDutySubmit)
         layoutBottomButtons = view.findViewById(R.id.layoutBottomButtons)
-
-
 
         // Setup RecyclerView
         rvPickerList.layoutManager = LinearLayoutManager(requireContext())
@@ -269,41 +228,45 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
-        // Step 2 Listeners with custom slide animations
+        // Step 2 Listeners for immediate selection without animations
         cardOwnTwoWheeler.setOnClickListener {
-            animateVehicleSelection(
+            selectVehicle(
                 cardOwnTwoWheeler,
-                imgOwnTwoWheelerAnim,
                 tvOwnTwoWheeler,
                 "Own Vehicle",
                 "2 Wheeler"
             )
         }
         cardOwnFourWheeler.setOnClickListener {
-            animateVehicleSelection(
+            selectVehicle(
                 cardOwnFourWheeler,
-                imgOwnFourWheelerAnim,
                 tvOwnFourWheeler,
                 "Own Vehicle",
                 "4 Wheeler"
             )
         }
         cardOfficeTwoWheeler.setOnClickListener {
-            animateVehicleSelection(
+            selectVehicle(
                 cardOfficeTwoWheeler,
-                imgOfficeTwoWheelerAnim,
                 tvOfficeTwoWheeler,
                 "Office Vehicle",
                 "2 Wheeler"
             )
         }
         cardOfficeFourWheeler.setOnClickListener {
-            animateVehicleSelection(
+            selectVehicle(
                 cardOfficeFourWheeler,
-                imgOfficeFourWheelerAnim,
                 tvOfficeFourWheeler,
                 "Office Vehicle",
                 "4 Wheeler"
+            )
+        }
+        cardOfficePublicTransport.setOnClickListener {
+            selectVehicle(
+                cardOfficePublicTransport,
+                tvOfficePublicTransport,
+                "Public Vehicle",
+                "Public Transport"
             )
         }
 
@@ -470,7 +433,6 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private fun showStep2() {
         selectedVehicleOwnership = null
         selectedVehicleType = null
-        isAnimatingSelection = false
         layoutStep1.visibility = View.GONE
         layoutStep2.visibility = View.VISIBLE
         btnOnDutyNext.visibility = View.GONE
@@ -525,64 +487,27 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         tvSheetSubtitle.text = "Select a category to start on duty flow"
     }
 
-    private fun animateVehicleSelection(
+    private fun selectVehicle(
         selectedCard: View,
-        animatingIcon: ImageView,
         textView: TextView,
         ownership: String,
         vehicleType: String
     ) {
-        // Prevent simultaneous or rapid clicks during animation
-        if (isAnimatingSelection) return
-
-        // If already selected, do not allow unselection or re-triggering animation
+        // If already selected, do not allow unselection
         if (selectedVehicleOwnership == ownership && selectedVehicleType == vehicleType) return
-        if (animatingIcon.visibility == View.VISIBLE) return
 
-        isAnimatingSelection = true
         selectedVehicleOwnership = ownership
         selectedVehicleType = vehicleType
-
-        // Disable all cards during animation to prevent concurrent selection clicks
-        setCardsClickable(false)
 
         // 1. Reset all cards to normal unselected state
         resetAllStep2Cards()
 
-        // 2. Prepare the animating icon
-        animatingIcon.visibility = View.VISIBLE
-        animatingIcon.translationX = -60f // Start slightly off-screen inside the card
-        animatingIcon.alpha = 1f
+        // 2. Update the card to selected styling
+        selectedCard.setBackgroundResource(R.drawable.bg_on_duty_card_selected)
+        textView.setTextColor(Color.parseColor("#0B61CA"))
 
-        // Fade the text slightly during the slide animation
-        textView.animate().alpha(0.2f).setDuration(150).start()
-
-        // 3. Animate the icon from left to right across the card width
-        val distance = if (selectedCard.width > 0) selectedCard.width.toFloat() else 350f
-
-        animatingIcon.animate()
-            .translationX(distance)
-            .alpha(0.1f) // Fade out as it exits the right edge
-            .setDuration(700) // 700ms slide transition
-            .withEndAction {
-                animatingIcon.visibility = View.INVISIBLE
-                animatingIcon.translationX = 0f
-                animatingIcon.alpha = 1f
-                textView.alpha = 1f
-
-                // 4. Update the card to selected styling
-                selectedCard.setBackgroundResource(R.drawable.bg_on_duty_card_selected_blue)
-                textView.setTextColor(Color.WHITE)
-
-                // Re-enable all cards after animation completes
-                setCardsClickable(true)
-
-                // 5. Update validation state
-                validateStep2()
-
-                isAnimatingSelection = false
-            }
-            .start()
+        // 3. Update validation state
+        validateStep2()
     }
 
     private fun resetAllStep2Cards() {
@@ -590,21 +515,19 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         cardOwnFourWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
         cardOfficeTwoWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
         cardOfficeFourWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
+        cardOfficePublicTransport.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
 
         tvOwnTwoWheeler.setTextColor(Color.parseColor("#101828"))
         tvOwnFourWheeler.setTextColor(Color.parseColor("#101828"))
         tvOfficeTwoWheeler.setTextColor(Color.parseColor("#101828"))
         tvOfficeFourWheeler.setTextColor(Color.parseColor("#101828"))
+        tvOfficePublicTransport.setTextColor(Color.parseColor("#101828"))
 
         tvOwnTwoWheeler.alpha = 1f
         tvOwnFourWheeler.alpha = 1f
         tvOfficeTwoWheeler.alpha = 1f
         tvOfficeFourWheeler.alpha = 1f
-
-        imgOwnTwoWheelerAnim.visibility = View.INVISIBLE
-        imgOwnFourWheelerAnim.visibility = View.INVISIBLE
-        imgOfficeTwoWheelerAnim.visibility = View.INVISIBLE
-        imgOfficeFourWheelerAnim.visibility = View.INVISIBLE
+        tvOfficePublicTransport.alpha = 1f
     }
 
     private fun setCardsClickable(clickable: Boolean) {
@@ -613,11 +536,13 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             cardOwnFourWheeler.isClickable = clickable
             cardOfficeTwoWheeler.isClickable = clickable
             cardOfficeFourWheeler.isClickable = clickable
+            cardOfficePublicTransport.isClickable = clickable
 
             cardOwnTwoWheeler.isFocusable = clickable
             cardOwnFourWheeler.isFocusable = clickable
             cardOfficeTwoWheeler.isFocusable = clickable
             cardOfficeFourWheeler.isFocusable = clickable
+            cardOfficePublicTransport.isFocusable = clickable
         }
     }
 
