@@ -132,6 +132,7 @@
                 android:focusable="true"
                 android:padding="7dp"
                 android:src="@drawable/ic_visitor_history"
+                android:visibility="gone"
                 app:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
@@ -218,6 +219,7 @@
                         android:textSize="18sp" />
 
                     <TextView
+                        android:id="@+id/tvVerificationSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
@@ -239,6 +241,7 @@
                     android:focusable="true"
                     android:padding="11dp"
                     android:src="@drawable/ic_visitor_history"
+                    android:visibility="gone"
                     app:tint="#FFFFFF" />
             </RelativeLayout>
             </LinearLayout>
@@ -317,6 +320,26 @@
                                         android:textColor="#2563EB"
                                         android:textSize="12sp"
                                         android:letterSpacing="0.05" />
+
+                                    <Space
+                                        android:layout_width="0dp"
+                                        android:layout_height="1dp"
+                                        android:layout_weight="1" />
+
+                                    <TextView
+                                        android:id="@+id/tvCheckedInTag"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:background="@drawable/bg_tag_checked_in"
+                                        android:fontFamily="@font/inter_semibold"
+                                        android:paddingStart="10dp"
+                                        android:paddingTop="3dp"
+                                        android:paddingEnd="10dp"
+                                        android:paddingBottom="3dp"
+                                        android:text="● Checked In"
+                                        android:textColor="#15803D"
+                                        android:textSize="10sp"
+                                        android:visibility="gone" />
                                 </LinearLayout>
 
                                 <!-- PRIMARY VISITOR CARD -->
@@ -763,6 +786,7 @@
                         android:src="@drawable/ic_visitor_check"
                         app:tint="#FFFFFF" />
                     <TextView
+                        android:id="@+id/tvConfirmAdmissionText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
