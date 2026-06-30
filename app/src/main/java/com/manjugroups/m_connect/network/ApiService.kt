@@ -1604,7 +1604,15 @@ data class LoanData(
     val assignedAvpName: String? = null,
     val gmName: String? = null,
     val avpName: String? = null,
-    val accountantName: String? = null
+    val hrApprovalName: String? = null,
+    val accountantName: String? = null,
+    // Display-only names the backend resolves for stages that haven't acted yet
+    // (who *will* approve at GM/AVP/HR/Accounts), so the tracker can label every
+    // step even while pending.
+    val resolvedGmName: String? = null,
+    val resolvedAvpName: String? = null,
+    val resolvedHrName: String? = null,
+    val resolvedAccountantName: String? = null
 )
 
 data class LoanRepaymentData(

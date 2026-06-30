@@ -343,13 +343,11 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
-                // Fixed tracker renders immediately. Salary advances always use
-                // the simple fixed HR -> Acc's tracker — only loans may be
-                // workflow-routed and swap in the configured GM/AVP/HR chain.
+                // Always use the fixed tracker — the clean nominee/GM/AVP/HR/
+                // Acc's chain for loans and HR -> Acc's for advances. The
+                // dynamic workflow tracker was async-swapping in over this and
+                // reading as a glitch, so it's no longer shown on the card.
                 updateTrackerState(loan)
-                if (!loan.isAdvance) {
-                    loadWorkflowTracker(loan)
-                }
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
@@ -415,6 +413,13 @@ class LoansFragment : Fragment() {
             else -> if (loan.status == LoanStatus.ACTIVE) 5 else -1
         }
         val hrDone = rank >= 4
+        val accountsDone = rank >= 5
+
+        // Hide the dynamic workflow tracker here so it can never overlap the
+        // fixed tracker (the glitch where the advance HR/Acc's pills showed
+        // under a loan's nominee/GM/AVP chain). For loans, loadWorkflowTracker
+        // re-shows it afterwards only when the row is workflow-routed.
+        binding.workflowTrackerScroll.visibility = View.GONE
 
         if (loan.isAdvance) {
             binding.loanTrackerLine.visibility = View.GONE
@@ -422,13 +427,22 @@ class LoansFragment : Fragment() {
             binding.advanceTrackerLine.visibility = View.VISIBLE
             binding.layoutAdvanceTracker.visibility = View.VISIBLE
 
-            // HR is always green (active) for advances
-            binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
-            binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
-            binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
-            binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
-
+            // Salary advances run HR -> Accounts. Each goes green only once that
+            // step is actually approved: HR after it advances past hr_pending,
+            // Accounts after disbursement.
             if (hrDone) {
+                binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
+                binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
+                binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
+                binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
+            } else {
+                binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_pending)
+                binding.advanceIconHr.setColorFilter(Color.parseColor("#98A2B3"))
+                binding.advanceTextHr.setTextColor(Color.parseColor("#98A2B3"))
+                binding.advanceTextHr.setTypeface(null, Typeface.NORMAL)
+            }
+
+            if (accountsDone) {
                 binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_green)
                 binding.advanceIconAccs.setColorFilter(Color.parseColor("#1BCA0B"))
                 binding.advanceTextAccs.setTextColor(Color.parseColor("#1BCA0B"))
@@ -486,6 +500,23 @@ class LoansFragment : Fragment() {
 
             // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
             setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+
+            // Approver name under each step — shown when known (nominees always;
+            // GM/AVP/HR/Accounts once assigned at submit or after they act).
+            fun setName(tv: TextView, name: String?) {
+                if (name.isNullOrBlank()) {
+                    tv.visibility = View.GONE
+                } else {
+                    tv.text = name
+                    tv.visibility = View.VISIBLE
+                }
+            }
+            setName(binding.trackNameNominee1, loan.nominee1Name)
+            setName(binding.trackNameNominee2, loan.nominee2Name)
+            setName(binding.trackNameGm, loan.gmName)
+            setName(binding.trackNameAvp, loan.avpName)
+            setName(binding.trackNameHr, loan.hrName)
+            setName(binding.trackNameAccs, loan.accountantName)
         }
     }
 

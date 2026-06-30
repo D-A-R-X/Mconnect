@@ -28,7 +28,13 @@ data class Loan(
     val nominee1Status: String? = null,
     val nominee2Status: String? = null,
     val nominee1Name: String? = null,
-    val nominee2Name: String? = null
+    val nominee2Name: String? = null,
+    // Approver names for the progress tracker (assigned at submit, then the
+    // acted name once each stage approves).
+    val gmName: String? = null,
+    val avpName: String? = null,
+    val hrName: String? = null,
+    val accountantName: String? = null
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
@@ -130,7 +136,13 @@ object LoanMapper {
             nominee1Status = remote.nominee1Status,
             nominee2Status = remote.nominee2Status,
             nominee1Name = remote.nominee1Name,
-            nominee2Name = remote.nominee2Name
+            nominee2Name = remote.nominee2Name,
+            // Prefer the acted/assigned name; fall back to the backend-resolved
+            // role holder so a pending stage still shows who will approve.
+            gmName = remote.gmName ?: remote.assignedGmName ?: remote.resolvedGmName,
+            avpName = remote.avpName ?: remote.assignedAvpName ?: remote.resolvedAvpName,
+            hrName = remote.hrApprovalName ?: remote.resolvedHrName,
+            accountantName = remote.accountantName ?: remote.resolvedAccountantName
         )
     }
 
