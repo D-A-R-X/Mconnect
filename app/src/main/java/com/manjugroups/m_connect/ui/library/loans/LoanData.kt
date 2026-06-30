@@ -26,7 +26,9 @@ data class Loan(
     // Workflow stage that drives the pending tracker (see ApiService.LoanData).
     val currentStage: String? = null,
     val nominee1Status: String? = null,
-    val nominee2Status: String? = null
+    val nominee2Status: String? = null,
+    val nominee1Name: String? = null,
+    val nominee2Name: String? = null
 )
 
 enum class LoanType { HOME, EDUCATION, OTHER }
@@ -126,7 +128,9 @@ object LoanMapper {
             approvalStatus = remote.approvalStatus,
             currentStage = remote.currentStage,
             nominee1Status = remote.nominee1Status,
-            nominee2Status = remote.nominee2Status
+            nominee2Status = remote.nominee2Status,
+            nominee1Name = remote.nominee1Name,
+            nominee2Name = remote.nominee2Name
         )
     }
 

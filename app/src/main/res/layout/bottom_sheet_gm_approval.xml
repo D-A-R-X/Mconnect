@@ -346,10 +346,13 @@
                     android:scaleType="fitCenter" />
 
                 <ImageView
+                    android:id="@+id/btnExpandNominee1Signature"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_gravity="bottom|end"
                     android:layout_margin="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_expand_fullscreen" />
             </FrameLayout>
@@ -391,10 +394,13 @@
                     android:scaleType="fitCenter" />
 
                 <ImageView
+                    android:id="@+id/btnExpandNominee2Signature"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_gravity="bottom|end"
                     android:layout_margin="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_expand_fullscreen" />
             </FrameLayout>

@@ -1577,9 +1577,13 @@ data class LoanData(
     // Nominee fields for approval chain
     val nominee1Id: String? = null,
     val nominee1Name: String? = null,
+    // Backend stores the nominee e-signature under *SignatureStorageId; map it
+    // so the signature preview actually has an id to load.
+    @SerializedName("nominee1SignatureStorageId")
     val nominee1ESignature: String? = null,
     val nominee2Id: String? = null,
     val nominee2Name: String? = null,
+    @SerializedName("nominee2SignatureStorageId")
     val nominee2ESignature: String? = null,
     // Resolved approval-chain approvers (who's next at each role). assigned*
     // are stamped at submit (the reporting/dept GM & AVP); gm/avp/accountantName
