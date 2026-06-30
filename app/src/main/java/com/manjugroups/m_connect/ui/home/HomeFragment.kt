@@ -25,6 +25,7 @@ import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -738,6 +739,7 @@ class HomeFragment : Fragment() {
             clientMobile = visit.leadPhone,
         )
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
@@ -747,6 +749,7 @@ class HomeFragment : Fragment() {
         val fragment = com.manjugroups.m_connect.ui.marketing
             .CompletedVisitDetailFragment.forVisit(visit)
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
@@ -805,6 +808,7 @@ class HomeFragment : Fragment() {
             destLng = place.lng
         )
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
@@ -1013,8 +1017,8 @@ class HomeFragment : Fragment() {
 
         binding.edgeQrTooltip.setOnClickListener { dismissTooltipAction() }
         binding.btnDismissTooltip.setOnClickListener { dismissTooltipAction() }
-        // Clicking the outer screen (dim background) does not dismiss the onboarding tooltip and does not show bottom navigation bar.
-        binding.edgeQrTourDimBg.setOnClickListener { /* No-op, require clicking the tooltip or dismiss button to close */ }
+        // Clicking the outer screen (dim background) dismisses the onboarding tooltip.
+        binding.edgeQrTourDimBg.setOnClickListener { dismissTooltipAction() }
 
         var startX = 0f
         var downTime = 0L

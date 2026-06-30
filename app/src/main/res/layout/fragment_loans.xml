@@ -826,8 +826,9 @@
                     android:layout_marginStart="8dp"
                     app:cardCornerRadius="10dp"
                     app:cardBackgroundColor="#FFFFFF"
-                    app:cardElevation="2dp"
-                    app:strokeWidth="0dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="#EAECF0"
                     android:clickable="true"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground">

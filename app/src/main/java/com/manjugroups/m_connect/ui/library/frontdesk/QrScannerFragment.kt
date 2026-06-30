@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.frontdesk
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
@@ -17,6 +19,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -57,6 +60,21 @@ class QrScannerFragment : Fragment() {
     private val session by lazy { SessionManager(requireContext()) }
     // Set when a real invitation is loaded; needed for the Confirm -> check-in call.
     private var currentInvitationId: String? = null
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startCamera()
+        } else {
+            Toast.makeText(
+                requireContext(),
+                "Camera permission is required to scan QR codes.",
+                Toast.LENGTH_SHORT
+            ).show()
+            parentFragmentManager.popBackStack()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -148,7 +166,20 @@ class QrScannerFragment : Fragment() {
         })
 
         startLaserAnimation()
-        startCamera()
+        checkCameraPermissionAndStart()
+    }
+
+    private fun checkCameraPermissionAndStart() {
+        val hasCamera = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasCamera) {
+            startCamera()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     private fun startLaserAnimation() {

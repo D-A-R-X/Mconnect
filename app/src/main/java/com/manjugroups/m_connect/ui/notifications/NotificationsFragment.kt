@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -342,6 +343,7 @@ class NotificationsFragment : Fragment() {
 
             if (fragment != null) {
                 parentFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
                     .replace(R.id.fragmentContainer, fragment)
                     .addToBackStack(null)
                     .commit()

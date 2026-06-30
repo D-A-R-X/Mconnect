@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 
 class ProfileFragment : Fragment() {
@@ -163,6 +164,7 @@ class ProfileFragment : Fragment() {
 
         binding.rowLanguage.setOnClickListener {
             parentFragmentManager.beginTransaction()
+                .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, LanguageFragment())
                 .addToBackStack(null)
                 .commit()
@@ -170,6 +172,7 @@ class ProfileFragment : Fragment() {
 
         binding.rowAppearance.setOnClickListener {
             parentFragmentManager.beginTransaction()
+                .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, AppearanceFragment())
                 .addToBackStack(null)
                 .commit()

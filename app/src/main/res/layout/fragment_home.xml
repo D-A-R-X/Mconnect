@@ -398,13 +398,15 @@
 
         <ImageView
             android:id="@+id/btnDismissTooltip"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="8dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
             android:src="@drawable/ic_close_pill"
             app:tint="#64748B"
             android:clickable="true"
-            android:focusable="true" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
     <!-- Edge Drag QR Handle and Panel -->
