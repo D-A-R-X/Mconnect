@@ -39,6 +39,7 @@ import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -669,6 +670,7 @@ class MainActivity : AppCompatActivity() {
 
                 fragment?.let {
                     supportFragmentManager.beginTransaction()
+                        .applySmoothTransitions()
                         .replace(R.id.fragmentContainer, it)
                         .addToBackStack(null)
                         .commit()
@@ -698,6 +700,7 @@ class MainActivity : AppCompatActivity() {
 
                 fragment?.let {
                     supportFragmentManager.beginTransaction()
+                        .applySmoothTransitions()
                         .replace(R.id.fragmentContainer, it)
                         .addToBackStack(null)
                         .commit()

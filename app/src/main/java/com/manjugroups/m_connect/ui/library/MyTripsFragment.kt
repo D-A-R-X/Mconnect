@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.ui.home.DriverTripCompletedBottomSheet
 import com.manjugroups.m_connect.ui.home.HomeUiState
 import com.manjugroups.m_connect.ui.home.HomeViewModel
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.CompletedVisitDetailFragment
 import kotlinx.coroutines.launch
@@ -476,6 +477,7 @@ class MyTripsFragment : Fragment() {
             clientMobile = visit.leadPhone,
         )
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
@@ -484,6 +486,7 @@ class MyTripsFragment : Fragment() {
     private fun openCompletedVisitDetail(visit: TodayVisit) {
         val fragment = CompletedVisitDetailFragment.forVisit(visit)
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
