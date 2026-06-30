@@ -75,16 +75,19 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     private lateinit var cardOwnFourWheeler: View
     private lateinit var cardOfficeTwoWheeler: View
     private lateinit var cardOfficeFourWheeler: View
+    private lateinit var cardOfficePublicTransport: View
 
     private lateinit var tvOwnTwoWheeler: TextView
     private lateinit var tvOwnFourWheeler: TextView
     private lateinit var tvOfficeTwoWheeler: TextView
     private lateinit var tvOfficeFourWheeler: TextView
+    private lateinit var tvOfficePublicTransport: TextView
 
     private lateinit var imgOwnTwoWheelerAnim: ImageView
     private lateinit var imgOwnFourWheelerAnim: ImageView
     private lateinit var imgOfficeTwoWheelerAnim: ImageView
     private lateinit var imgOfficeFourWheelerAnim: ImageView
+    private lateinit var imgOfficePublicTransportAnim: ImageView
 
     private lateinit var btnOnDutySubmit: View
     private lateinit var layoutBottomButtons: View
@@ -231,16 +234,16 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         tvOwnFourWheeler = view.findViewById(R.id.tvOwnFourWheeler)
         tvOfficeTwoWheeler = view.findViewById(R.id.tvOfficeTwoWheeler)
         tvOfficeFourWheeler = view.findViewById(R.id.tvOfficeFourWheeler)
+        tvOfficePublicTransport = view.findViewById(R.id.tvOfficePublicTransport)
 
         imgOwnTwoWheelerAnim = view.findViewById(R.id.imgOwnTwoWheelerAnim)
         imgOwnFourWheelerAnim = view.findViewById(R.id.imgOwnFourWheelerAnim)
         imgOfficeTwoWheelerAnim = view.findViewById(R.id.imgOfficeTwoWheelerAnim)
         imgOfficeFourWheelerAnim = view.findViewById(R.id.imgOfficeFourWheelerAnim)
+        imgOfficePublicTransportAnim = view.findViewById(R.id.imgOfficePublicTransportAnim)
 
         btnOnDutySubmit = view.findViewById(R.id.btnOnDutySubmit)
         layoutBottomButtons = view.findViewById(R.id.layoutBottomButtons)
-
-
 
         // Setup RecyclerView
         rvPickerList.layoutManager = LinearLayoutManager(requireContext())
@@ -304,6 +307,15 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 tvOfficeFourWheeler,
                 "Office Vehicle",
                 "4 Wheeler"
+            )
+        }
+        cardOfficePublicTransport.setOnClickListener {
+            animateVehicleSelection(
+                cardOfficePublicTransport,
+                imgOfficePublicTransportAnim,
+                tvOfficePublicTransport,
+                "Office Vehicle",
+                "Public Transport"
             )
         }
 
@@ -590,21 +602,25 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         cardOwnFourWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
         cardOfficeTwoWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
         cardOfficeFourWheeler.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
+        cardOfficePublicTransport.setBackgroundResource(R.drawable.bg_on_duty_card_normal)
 
         tvOwnTwoWheeler.setTextColor(Color.parseColor("#101828"))
         tvOwnFourWheeler.setTextColor(Color.parseColor("#101828"))
         tvOfficeTwoWheeler.setTextColor(Color.parseColor("#101828"))
         tvOfficeFourWheeler.setTextColor(Color.parseColor("#101828"))
+        tvOfficePublicTransport.setTextColor(Color.parseColor("#101828"))
 
         tvOwnTwoWheeler.alpha = 1f
         tvOwnFourWheeler.alpha = 1f
         tvOfficeTwoWheeler.alpha = 1f
         tvOfficeFourWheeler.alpha = 1f
+        tvOfficePublicTransport.alpha = 1f
 
         imgOwnTwoWheelerAnim.visibility = View.INVISIBLE
         imgOwnFourWheelerAnim.visibility = View.INVISIBLE
         imgOfficeTwoWheelerAnim.visibility = View.INVISIBLE
         imgOfficeFourWheelerAnim.visibility = View.INVISIBLE
+        imgOfficePublicTransportAnim.visibility = View.INVISIBLE
     }
 
     private fun setCardsClickable(clickable: Boolean) {
@@ -613,11 +629,13 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             cardOwnFourWheeler.isClickable = clickable
             cardOfficeTwoWheeler.isClickable = clickable
             cardOfficeFourWheeler.isClickable = clickable
+            cardOfficePublicTransport.isClickable = clickable
 
             cardOwnTwoWheeler.isFocusable = clickable
             cardOwnFourWheeler.isFocusable = clickable
             cardOfficeTwoWheeler.isFocusable = clickable
             cardOfficeFourWheeler.isFocusable = clickable
+            cardOfficePublicTransport.isFocusable = clickable
         }
     }
 
