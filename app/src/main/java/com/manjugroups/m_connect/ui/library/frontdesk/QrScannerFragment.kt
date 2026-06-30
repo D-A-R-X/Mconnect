@@ -29,9 +29,17 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentQrScannerBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CheckinInvitationRequest
+import com.manjugroups.m_connect.network.CheckoutInvitationRequest
 import com.manjugroups.m_connect.network.InvitationDetail
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.manjugroups.m_connect.BuildConfig
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -310,7 +318,12 @@ class QrScannerFragment : Fragment() {
                 if (_binding == null) return@launch
                 val inv = resp.invitation
                 if (resp.success && inv != null) {
-                    showRealVerification(inv)
+                    // Resolve whether an admitted visitor is still in or already
+                    // out before rendering, so a checked-out QR never offers the
+                    // Check Out action again.
+                    val resolved = resolveCheckinState(inv)
+                    if (_binding == null) return@launch
+                    showRealVerification(resolved)
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Invitation not found", Toast.LENGTH_LONG).show()
                     resumeScanning()
@@ -384,10 +397,195 @@ class QrScannerFragment : Fragment() {
 
         binding.btnCancelHeaderVerification.setOnClickListener { resumeScanning() }
         binding.btnCancelVerification.setOnClickListener { resumeScanning() }
-        binding.btnConfirmAdmission.setOnClickListener { confirmAdmission(inv) }
+        applyCheckStateUi(inv)
 
         BottomSheetBehavior.from(binding.verificationBottomSheet).state = BottomSheetBehavior.STATE_COLLAPSED
         binding.visitorVerificationContainer.visibility = View.VISIBLE
+    }
+
+    /**
+     * Toggle the verification action based on the invitation's live check-in
+     * state: not yet in -> Confirm Admission; currently in -> Check Out (re-scan
+     * verifies the visitor and shows the check-in time); already out -> a
+     * read-only summary with both timestamps. "Rescan" (btnCancelVerification)
+     * is always available.
+     */
+    private fun applyCheckStateUi(inv: InvitationDetail) {
+        // The enriched backend gives an explicit checkinState ("in"/"out").
+        // When it's absent (older backend), fall back to the invitation status,
+        // which flips to "checked_in" the instant a visitor is admitted — so the
+        // Check Out action + Checked In tag still work without the enrichment.
+        val checkedOut = inv.checkinState == "out"
+        val checkedIn = !checkedOut &&
+            (inv.checkinState == "in" || inv.status.equals("checked_in", ignoreCase = true))
+
+        when {
+            checkedOut -> {
+                // Grey "Checked Out" tag + read-only summary; no action button.
+                binding.tvCheckedInTag.visibility = View.VISIBLE
+                binding.tvCheckedInTag.text = "● Checked Out"
+                binding.tvCheckedInTag.setBackgroundResource(R.drawable.bg_tag_checked_out)
+                binding.tvCheckedInTag.setTextColor(android.graphics.Color.parseColor("#475467"))
+                val parts = mutableListOf<String>()
+                if (inv.checkinAt != null) parts.add("Checked in ${fmtCheckTime(inv.checkinAt)}")
+                if (inv.checkoutAt != null) parts.add("Checked out ${fmtCheckTime(inv.checkoutAt)}")
+                binding.tvVerificationSubtitle.text =
+                    if (parts.isEmpty()) "This visitor has already checked out"
+                    else parts.joinToString("  ·  ")
+                binding.btnConfirmAdmission.visibility = View.GONE
+            }
+            checkedIn -> {
+                binding.tvCheckedInTag.visibility = View.VISIBLE
+                binding.tvCheckedInTag.text = "● Checked In"
+                binding.tvCheckedInTag.setBackgroundResource(R.drawable.bg_tag_checked_in)
+                binding.tvCheckedInTag.setTextColor(android.graphics.Color.parseColor("#15803D"))
+                binding.tvVerificationSubtitle.text =
+                    if (inv.checkinAt != null)
+                        "Checked in ${fmtCheckTime(inv.checkinAt)} · tap Check Out when leaving"
+                    else
+                        "Visitor is checked in · tap Check Out when leaving"
+                binding.tvConfirmAdmissionText.text = "Check Out"
+                binding.btnConfirmAdmission.visibility = View.VISIBLE
+                binding.btnConfirmAdmission.isEnabled = true
+                binding.btnConfirmAdmission.setOnClickListener { confirmCheckout(inv) }
+            }
+            else -> {
+                binding.tvCheckedInTag.visibility = View.GONE
+                binding.tvVerificationSubtitle.text =
+                    "Verify the visitor details before confirming admission"
+                binding.tvConfirmAdmissionText.text = "Confirm"
+                binding.btnConfirmAdmission.visibility = View.VISIBLE
+                binding.btnConfirmAdmission.isEnabled = true
+                binding.btnConfirmAdmission.setOnClickListener { confirmAdmission(inv) }
+            }
+        }
+    }
+
+    private fun fmtCheckTime(ms: Long?): String {
+        if (ms == null || ms <= 0L) return "—"
+        return java.text.SimpleDateFormat("d MMM, h:mm a", java.util.Locale.getDefault())
+            .format(java.util.Date(ms))
+    }
+
+    private fun confirmCheckout(inv: InvitationDetail) {
+        val invitationId = currentInvitationId ?: run {
+            Toast.makeText(requireContext(), "Missing invitation reference", Toast.LENGTH_SHORT).show()
+            return
+        }
+        binding.btnConfirmAdmission.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Prefer the dedicated HTTP route; if that isn't deployed yet (404),
+            // fall back to calling the already-deployed frontdesk.checkout
+            // mutation directly via Convex's function API so check-out still works.
+            val ok = try {
+                api.checkoutInvitation(
+                    session.bearerToken,
+                    CheckoutInvitationRequest(invitationId = invitationId),
+                ).success
+            } catch (e: Exception) {
+                checkoutViaConvexApi(invitationId)
+            }
+            if (_binding == null) return@launch
+            binding.btnConfirmAdmission.isEnabled = true
+            if (ok) {
+                Toast.makeText(
+                    requireContext(),
+                    "${inv.visitorName ?: "Visitor"} checked out",
+                    Toast.LENGTH_LONG,
+                ).show()
+                applyCheckStateUi(
+                    inv.copy(checkinState = "out", checkoutAt = System.currentTimeMillis()),
+                )
+            } else {
+                Toast.makeText(requireContext(), "Check-out failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /**
+     * Check-out fallback that works before the /api/frontdesk/invitations/checkout
+     * HTTP route is deployed: it calls the already-deployed frontdesk.checkout
+     * mutation through Convex's function API. It first resolves the active
+     * check-in id for this invitation (listActive), then marks it out. Runs on
+     * IO because the OkHttp calls block.
+     */
+    private fun sessionTokenRaw(): String =
+        session.bearerToken.removePrefix("Bearer ").trim()
+
+    /**
+     * Blocking Convex function-API call (run on IO). Returns the success
+     * envelope, or null on any error / non-success. Lets the scanner use the
+     * already-deployed frontdesk.* functions even before the dedicated HTTP
+     * routes ship.
+     */
+    private fun convexFunctionCall(endpoint: String, path: String, args: JSONObject): JSONObject? {
+        return try {
+            val cloudBase = BuildConfig.BASE_URL.trimEnd('/')
+                .replace(".convex.site", ".convex.cloud")
+            val request = Request.Builder()
+                .url("$cloudBase/api/$endpoint")
+                .post(
+                    JSONObject().put("path", path).put("args", args).put("format", "json")
+                        .toString().toRequestBody("application/json".toMediaType()),
+                )
+                .build()
+            OkHttpClient().newCall(request).execute().use { resp ->
+                val text = resp.body?.string() ?: return null
+                val obj = JSONObject(text)
+                if (obj.optString("status") == "success") obj else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun checkoutViaConvexApi(invitationId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val active = convexFunctionCall(
+                "query", "frontdesk:listActive",
+                JSONObject().put("sessionToken", sessionTokenRaw()),
+            ) ?: return@withContext false
+            val rows = active.optJSONArray("value") ?: return@withContext false
+            var checkinId: String? = null
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                if (row.optString("invitationId") == invitationId) {
+                    checkinId = row.optString("_id")
+                    break
+                }
+            }
+            if (checkinId.isNullOrBlank()) return@withContext false
+            convexFunctionCall(
+                "mutation", "frontdesk:checkout",
+                JSONObject().put("sessionToken", sessionTokenRaw()).put("checkinId", checkinId),
+            ) != null
+        }
+
+    /**
+     * Derive the true check-in state when the backend hasn't enriched it yet: a
+     * "checked_in" invitation whose check-in is no longer among active visitors
+     * has been checked out. Keeps an explicit checkinState when the backend
+     * already provides one, and leaves the row untouched if the lookup fails.
+     */
+    private suspend fun resolveCheckinState(inv: InvitationDetail): InvitationDetail {
+        if (inv.checkinState != null) return inv
+        if (!inv.status.equals("checked_in", ignoreCase = true)) return inv
+        val invId = inv.id ?: return inv
+        return withContext(Dispatchers.IO) {
+            val active = convexFunctionCall(
+                "query", "frontdesk:listActive",
+                JSONObject().put("sessionToken", sessionTokenRaw()),
+            ) ?: return@withContext inv
+            val rows = active.optJSONArray("value") ?: return@withContext inv
+            var isActive = false
+            for (i in 0 until rows.length()) {
+                if (rows.getJSONObject(i).optString("invitationId") == invId) {
+                    isActive = true
+                    break
+                }
+            }
+            inv.copy(checkinState = if (isActive) "in" else "out")
+        }
     }
 
     private fun confirmAdmission(inv: InvitationDetail) {
@@ -413,7 +611,11 @@ class QrScannerFragment : Fragment() {
                         "Admission confirmed$pass for ${inv.visitorName}",
                         Toast.LENGTH_LONG,
                     ).show()
-                    resumeScanning()
+                    // Stay on the screen but flip to the checked-in state so the
+                    // operator can Check Out or Rescan to verify.
+                    applyCheckStateUi(
+                        inv.copy(checkinState = "in", checkinAt = System.currentTimeMillis()),
+                    )
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Check-in failed", Toast.LENGTH_LONG).show()
                 }
