@@ -23,6 +23,7 @@ import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -233,6 +234,7 @@ class HrDashboardFragment : Fragment() {
                 return@setOnClickListener
             }
             parentFragmentManager.beginTransaction()
+                .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, ClockInAreaFragment())
                 .addToBackStack(null)
                 .commit()
@@ -1335,6 +1337,7 @@ class HrDashboardFragment : Fragment() {
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(
                 R.id.fragmentContainer,
                 SelfieClockInDetailFragment.newInstance(

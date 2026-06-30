@@ -43,6 +43,7 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentChatMessagesBinding
 import com.manjugroups.m_connect.network.ApiService
@@ -475,6 +476,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         }
                         
                         parentFragmentManager.beginTransaction()
+                            .applySmoothTransitions()
                             .replace(
                                 R.id.fragmentContainer,
                                 ChatMessagesFragment.forConversation(
@@ -2827,6 +2829,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             photoUrl = chatPhotoUrl
         )
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()

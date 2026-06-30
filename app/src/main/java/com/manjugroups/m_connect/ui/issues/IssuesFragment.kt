@@ -257,8 +257,8 @@ class IssuesFragment : Fragment() {
         title = title ?: "",
         description = description ?: "",
         audioPath = audioUrl,            // remote URL — MediaPlayer streams it
-        audioDurationMs = audioDurationMs ?: 0L,
-        timestamp = createdAt ?: System.currentTimeMillis(),
+        audioDurationMs = audioDurationMs?.toLong() ?: 0L,
+        timestamp = createdAt?.toLong() ?: System.currentTimeMillis(),
     )
 
     private fun loadIssuesFromCache() {

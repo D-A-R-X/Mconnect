@@ -99,6 +99,13 @@ interface ApiService {
         @Body body: CheckinInvitationRequest,
     ): CheckinInvitationResponse
 
+    // Front Desk: re-scan a checked-in invitation and mark the visitor leaving.
+    @POST("api/frontdesk/invitations/checkout")
+    suspend fun checkoutInvitation(
+        @Header("Authorization") token: String,
+        @Body body: CheckoutInvitationRequest,
+    ): CheckoutInvitationResponse
+
     // Attendance
     @GET("api/hr/attendance/today")
     suspend fun getMyAttendanceToday(
@@ -3420,6 +3427,13 @@ data class InvitationDetail(
     val expectedTimeTo: String?,
     val meetingNotes: String?,
     val status: String?,
+    // Live check-in state so the scanner can toggle between Confirm Admission,
+    // Check Out, and a checked-out summary. checkinState: "in" | "out" | null.
+    val checkinId: String? = null,
+    val checkinState: String? = null,
+    val checkinAt: Long? = null,
+    val checkoutAt: Long? = null,
+    val passNumber: String? = null,
 )
 
 data class AdditionalVisitor(
@@ -3437,6 +3451,16 @@ data class CheckinInvitationRequest(
 data class CheckinInvitationResponse(
     val success: Boolean = false,
     val passNumber: String? = null,
+    val error: String? = null,
+)
+
+data class CheckoutInvitationRequest(
+    val invitationId: String,
+)
+
+data class CheckoutInvitationResponse(
+    val success: Boolean = false,
+    val checkoutAt: Long? = null,
     val error: String? = null,
 )
 
@@ -3471,7 +3495,11 @@ data class IssueItem(
     val description: String?,
     val audioStorageId: String?,
     val audioUrl: String?,
-    val audioDurationMs: Long?,
+    // Convex returns these as JSON numbers that may carry a fractional part
+    // (e.g. _creationTime-derived timestamps). Parsing them as Double avoids a
+    // Gson NumberFormatException that would fail the WHOLE response and leave
+    // the Issues list silently empty.
+    val audioDurationMs: Double?,
     val status: String?,
-    val createdAt: Long?,
+    val createdAt: Double?,
 )

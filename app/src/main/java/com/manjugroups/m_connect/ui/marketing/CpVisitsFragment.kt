@@ -36,6 +36,7 @@ import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -832,6 +833,7 @@ class CpVisitsFragment : Fragment() {
             android.widget.Toast.LENGTH_SHORT,
         ).show()
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(
                 R.id.fragmentContainer,
                 com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
@@ -842,6 +844,7 @@ class CpVisitsFragment : Fragment() {
 
     private fun openCompletedDetail(visit: TodayVisit) {
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(
                 R.id.fragmentContainer,
                 CompletedVisitDetailFragment.forVisit(visit),
@@ -852,6 +855,7 @@ class CpVisitsFragment : Fragment() {
 
     private fun openVisit(visit: TodayVisit) {
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(
                 R.id.fragmentContainer,
                 TripNavigationFragment.forVisit(

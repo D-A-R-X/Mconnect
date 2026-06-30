@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLoansBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -913,6 +914,7 @@ class LoansFragment : Fragment() {
 
     private fun openRepaymentHistory(loan: Loan) {
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(
                 R.id.fragmentContainer,
                 RepaymentHistoryFragment.newInstance(loan.id, loan.status)

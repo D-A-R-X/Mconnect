@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -310,6 +311,7 @@ class TasksFragment : Fragment() {
     private fun openDetail(task: TaskData) {
         val fragment = TaskDetailFragment.newInstance(task.id)
         parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()

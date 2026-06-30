@@ -36,6 +36,7 @@ import com.manjugroups.m_connect.network.CreateGroupConversationRequest
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.Job
@@ -145,6 +146,7 @@ class ChatListFragment : Fragment() {
                 }
 
                 parentFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
                     .replace(R.id.fragmentContainer, fragment)
                     .addToBackStack(null)
                     .commit()
@@ -1528,6 +1530,7 @@ class ChatListFragment : Fragment() {
                     return@onSuccess
                 }
                 parentFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
                     .replace(
                         R.id.fragmentContainer,
                         ChatMessagesFragment.forConversation(
@@ -1560,6 +1563,7 @@ class ChatListFragment : Fragment() {
                     return@onSuccess
                 }
                 parentFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
                     .replace(
                         R.id.fragmentContainer,
                         ChatMessagesFragment.forConversation(
@@ -1593,6 +1597,7 @@ class ChatListFragment : Fragment() {
                     return@onSuccess
                 }
                 parentFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
                     .replace(
                         R.id.fragmentContainer,
                         ChatMessagesFragment.forChannel(
