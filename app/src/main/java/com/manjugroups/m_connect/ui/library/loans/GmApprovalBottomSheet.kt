@@ -111,6 +111,48 @@ class GmApprovalBottomSheet(
         binding.btnReject.setOnClickListener {
             rejectLoan()
         }
+
+        binding.btnExpandNominee1Signature.setOnClickListener {
+            showSignatureFullscreen(loan.nominee1ESignature, loan.nominee1Name ?: "Nominee 1")
+        }
+        binding.btnExpandNominee2Signature.setOnClickListener {
+            showSignatureFullscreen(loan.nominee2ESignature, loan.nominee2Name ?: "Nominee 2")
+        }
+    }
+
+    /** Open a nominee's e-signature full screen (the expand button on each box). */
+    private fun showSignatureFullscreen(storageId: String?, who: String) {
+        if (storageId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "No signature available yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val density = resources.displayMetrics.density
+        val image = ImageView(requireContext()).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            minimumHeight = (260 * density).toInt()
+            setBackgroundColor(Color.WHITE)
+            setPadding((16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt())
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("$who — Signature")
+            .setView(image)
+            .setPositiveButton("Close", null)
+            .create()
+        dialog.show()
+        val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                val bmp = withContext(Dispatchers.IO) {
+                    val client = OkHttpClient()
+                    val request = Request.Builder().url(url).build()
+                    client.newCall(request).execute().body?.byteStream()?.let {
+                        BitmapFactory.decodeStream(it)
+                    }
+                }
+                if (bmp != null) image.setImageBitmap(bmp)
+            }
+        }
     }
 
     /** Pulls the `{error: "..."}` JSON the Convex HTTP routes return so the
@@ -220,8 +262,10 @@ class GmApprovalBottomSheet(
     private fun loadSignatureImage(token: String, storageId: String, target: ImageView) {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
-                val resp = withContext(Dispatchers.IO) { api.getStorageUrl(token, storageId) }
-                val url = resp.url ?: return@runCatching
+                // Hit the public serve endpoint directly. /api/storage/get-url can
+                // return an internal URL the device can't reach (the same issue the
+                // web had), which left the signature preview blank.
+                val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
                 val bitmap = withContext(Dispatchers.IO) {
                     val client = OkHttpClient()
                     val request = Request.Builder().url(url).build()
@@ -321,7 +365,12 @@ class GmApprovalBottomSheet(
                 .orEmpty()
             if (_binding == null) return@launch
             if (steps.isNotEmpty()) {
-                renderWorkflowSteps(steps)
+                // The configured loan workflow only covers GM/AVP/HR/Accounts,
+                // so prepend the nominee guarantor steps (otherwise the progress
+                // bar omits them) and renumber the whole chain sequentially.
+                val combined = (nomineeSteps() + steps)
+                    .mapIndexed { i, s -> s.copy(stepOrder = i + 1) }
+                renderWorkflowSteps(combined)
             } else {
                 // Legacy row (no workflow configured). Show the hardcoded
                 // chain so the approval can still proceed — backend's
@@ -329,6 +378,56 @@ class GmApprovalBottomSheet(
                 // for these rows.
                 restoreLegacyFixedTracker()
             }
+        }
+    }
+
+    /**
+     * Nominee guarantor steps shown at the front of the workflow tracker. The
+     * configured loan workflow only models GM/AVP/HR/Accounts, so without these
+     * the progress bar wouldn't show the nominees' approval status at all.
+     */
+    private fun nomineeSteps(): List<WorkflowStepData> {
+        fun st(s: String?): String {
+            val v = s?.lowercase()?.trim().orEmpty()
+            return when {
+                v.contains("reject") || v.contains("declin") -> "rejected"
+                v.contains("approv") || v.contains("sign") || v.contains("accept") || v.contains("done") -> "approved"
+                else -> "pending"
+            }
+        }
+        val out = mutableListOf<WorkflowStepData>()
+        if (!loan.nominee1Name.isNullOrBlank() || !loan.nominee1Id.isNullOrBlank()) {
+            out.add(
+                WorkflowStepData(
+                    name = "Nominee 1",
+                    resolvedStaffName = loan.nominee1Name,
+                    status = st(loan.nominee1Status),
+                ),
+            )
+        }
+        if (!loan.nominee2Name.isNullOrBlank() || !loan.nominee2Id.isNullOrBlank()) {
+            out.add(
+                WorkflowStepData(
+                    name = "Nominee 2",
+                    resolvedStaffName = loan.nominee2Name,
+                    status = st(loan.nominee2Status),
+                ),
+            )
+        }
+        return out
+    }
+
+    /** Role-appropriate icon for a workflow step dot (shown instead of a number). */
+    private fun iconForStep(step: WorkflowStepData): Int {
+        val r = listOfNotNull(step.name, step.approverRole, step.approverDesignation)
+            .joinToString(" ").lowercase()
+        return when {
+            r.contains("nominee") -> R.drawable.ic_track_shield
+            r.contains("avp") || r.contains("vice president") -> R.drawable.ic_track_avp
+            r.contains("gm") || r.contains("general manager") -> R.drawable.ic_track_gm
+            r.contains("hr") || r.contains("human resource") -> R.drawable.ic_track_hr
+            r.contains("account") -> R.drawable.ic_track_accs
+            else -> R.drawable.ic_track_shield
         }
     }
 
@@ -381,19 +480,14 @@ class GmApprovalBottomSheet(
                     layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
                 })
             } else {
-                dot.addView(TextView(requireContext()).apply {
-                    text = (step.stepOrder ?: (index + 1)).toString()
-                    setTextColor(
+                // Role icon (not a step number) for pending/rejected stages.
+                dot.addView(ImageView(requireContext()).apply {
+                    setImageResource(iconForStep(step))
+                    imageTintList = android.content.res.ColorStateList.valueOf(
                         if (rejected) Color.parseColor("#D92D20")
                         else Color.parseColor("#98A2B3"),
                     )
-                    textSize = 13f
-                    typeface = Typeface.DEFAULT_BOLD
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        Gravity.CENTER,
-                    )
+                    layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
                 })
             }
             item.addView(dot)

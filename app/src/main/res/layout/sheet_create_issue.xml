@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet_with_border"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="24dp">
+
+    <!-- Bottom Sheet Drag Handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="#D1D5DB" />
+
+    <!-- Sheet Header Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:fontFamily="@font/inter_bold"
+        android:text="New Issue"
+        android:textColor="#0F172A"
+        android:textSize="18sp" />
+
+    <!-- Project (Compulsory) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Project"
+            android:textColor="#334155"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" *"
+            android:textColor="#EF4444"
+            android:fontFamily="@font/inter_bold"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvSelectProject"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center_vertical"
+        android:text="Select project"
+        android:paddingHorizontal="16dp"
+        android:textColor="#94A3B8"
+        android:textSize="14sp" />
+
+    <!-- Issue Title (Compulsory) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Issue Title"
+            android:textColor="#334155"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" *"
+            android:textColor="#EF4444"
+            android:fontFamily="@font/inter_bold"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/etIssueTitle"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_input"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Enter issue title"
+        android:inputType="textCapSentences"
+        android:paddingHorizontal="16dp"
+        android:textColor="#0F172A"
+        android:textColorHint="#94A3B8"
+        android:textSize="14sp" />
+
+    <!-- Issue Description -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Description"
+        android:textColor="#334155"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etIssueDesc"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_input"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="top"
+        android:hint="Enter issue description"
+        android:inputType="textMultiLine|textCapSentences"
+        android:padding="16dp"
+        android:textColor="#0F172A"
+        android:textColorHint="#94A3B8"
+        android:textSize="14sp" />
+
+    <!-- Audio Attachment Section -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Voice Note"
+        android:textColor="#334155"
+        android:textSize="14sp" />
+
+    <!-- Custom Audio Recorder UI -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_leave_history_inner_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <!-- Left status / timer container -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvAudioStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="No audio attached"
+                android:textColor="#64748B"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvAudioTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="00:00"
+                android:textColor="#0B61CA"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Play/Pause preview button (visible after recording) -->
+        <ImageView
+            android:id="@+id/btnPlayPreview"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="4dp"
+            android:src="@drawable/ic_chat_media_play"
+            android:visibility="gone"
+            app:tint="#0B61CA" />
+
+        <!-- Delete preview button (visible after recording) -->
+        <ImageView
+            android:id="@+id/btnDeletePreview"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="4dp"
+            android:src="@drawable/ic_chat_delete"
+            android:visibility="gone"
+            app:tint="#EF4444" />
+
+        <!-- Record / Stop button -->
+        <FrameLayout
+            android:id="@+id/btnRecordAudio"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_chat_rec_mic_circle"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/ivRecordIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_chat_mic"
+                app:tint="#FFFFFF" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Submit Button -->
+    <Button
+        android:id="@+id/btnSubmitIssue"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_btn_submit_green_gradient"
+        android:fontFamily="@font/inter_bold"
+        android:text="Submit Issue"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        app:backgroundTint="@null" />
+
+</LinearLayout>

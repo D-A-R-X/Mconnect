@@ -469,6 +469,18 @@
                                 android:text="NOMINEE 1"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameNominee1"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <!-- Item 2: Nominee 2 -->
@@ -500,6 +512,18 @@
                                 android:text="NOMINEE 2"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameNominee2"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <!-- Item 3: GM -->
@@ -531,6 +555,18 @@
                                 android:text="GM"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameGm"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <!-- Item 4: AVP -->
@@ -562,6 +598,18 @@
                                 android:text="AVP"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameAvp"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <!-- Item 5: HR -->
@@ -592,6 +640,18 @@
                                 android:text="HR"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameHr"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <!-- Item 6: ACC'S -->
@@ -622,6 +682,18 @@
                                 android:text="ACC'S"
                                 android:textColor="#98A2B3"
                                 android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/trackNameAccs"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/inter_regular"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp"
+                                android:visibility="gone" />
                         </LinearLayout>
                     </LinearLayout>
 

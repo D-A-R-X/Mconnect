@@ -73,6 +73,18 @@ interface ApiService {
         @Body body: CreateFineRequest,
     ): CreateFineResponse
 
+    // Issues (project-scoped, raised from the app)
+    @POST("api/projects/issues")
+    suspend fun createProjectIssue(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectIssueRequest,
+    ): CreateIssueResponse
+
+    @GET("api/issues/my")
+    suspend fun listMyIssues(
+        @Header("Authorization") token: String,
+    ): IssuesListResponse
+
     // Front Desk: resolve a scanned invite QR token to its visitor details.
     @GET("api/frontdesk/invitations/by-token")
     suspend fun getInvitationByToken(
@@ -1577,9 +1589,13 @@ data class LoanData(
     // Nominee fields for approval chain
     val nominee1Id: String? = null,
     val nominee1Name: String? = null,
+    // Backend stores the nominee e-signature under *SignatureStorageId; map it
+    // so the signature preview actually has an id to load.
+    @SerializedName("nominee1SignatureStorageId")
     val nominee1ESignature: String? = null,
     val nominee2Id: String? = null,
     val nominee2Name: String? = null,
+    @SerializedName("nominee2SignatureStorageId")
     val nominee2ESignature: String? = null,
     // Resolved approval-chain approvers (who's next at each role). assigned*
     // are stamped at submit (the reporting/dept GM & AVP); gm/avp/accountantName
@@ -1588,7 +1604,15 @@ data class LoanData(
     val assignedAvpName: String? = null,
     val gmName: String? = null,
     val avpName: String? = null,
-    val accountantName: String? = null
+    val hrApprovalName: String? = null,
+    val accountantName: String? = null,
+    // Display-only names the backend resolves for stages that haven't acted yet
+    // (who *will* approve at GM/AVP/HR/Accounts), so the tracker can label every
+    // step even while pending.
+    val resolvedGmName: String? = null,
+    val resolvedAvpName: String? = null,
+    val resolvedHrName: String? = null,
+    val resolvedAccountantName: String? = null
 )
 
 data class LoanRepaymentData(
@@ -3414,4 +3438,40 @@ data class CheckinInvitationResponse(
     val success: Boolean = false,
     val passNumber: String? = null,
     val error: String? = null,
+)
+
+// ── Issues (project-scoped) ──────────────────────────────────────────────────
+data class CreateProjectIssueRequest(
+    val projectId: String,
+    val title: String,
+    val description: String? = null,
+    val audioStorageId: String? = null,
+    val audioFileName: String? = null,
+    val audioFileType: String? = null,
+    val audioFileSize: Long? = null,
+    val audioDurationSeconds: Long? = null,
+)
+
+data class CreateIssueResponse(
+    val success: Boolean = false,
+    @SerializedName("id") val issueId: String? = null,
+    val error: String? = null,
+)
+
+data class IssuesListResponse(
+    val success: Boolean = false,
+    val issues: List<IssueItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class IssueItem(
+    @SerializedName("_id") val id: String?,
+    val projectId: String?,
+    val title: String?,
+    val description: String?,
+    val audioStorageId: String?,
+    val audioUrl: String?,
+    val audioDurationMs: Long?,
+    val status: String?,
+    val createdAt: Long?,
 )
