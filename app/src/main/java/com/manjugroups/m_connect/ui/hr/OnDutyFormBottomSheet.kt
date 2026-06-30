@@ -315,7 +315,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 cardOfficePublicTransport,
                 imgOfficePublicTransportAnim,
                 tvOfficePublicTransport,
-                "Office Vehicle",
+                "Public Vehicle",
                 "Public Transport"
             )
         }

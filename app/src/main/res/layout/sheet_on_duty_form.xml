@@ -378,7 +378,7 @@
                         android:id="@+id/cardOfficeTwoWheeler"
                         android:layout_width="0dp"
                         android:layout_height="54dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="6dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_on_duty_card_normal"
                         android:clickable="true"
@@ -392,7 +392,7 @@
                             android:fontFamily="@font/inter_semibold"
                             android:text="Two Wheeler"
                             android:textColor="#101828"
-                            android:textSize="13sp" />
+                            android:textSize="14sp" />
 
                         <!-- Animating Bike Icon -->
                         <ImageView
@@ -411,7 +411,7 @@
                         android:id="@+id/cardOfficeFourWheeler"
                         android:layout_width="0dp"
                         android:layout_height="54dp"
-                        android:layout_marginHorizontal="4dp"
+                        android:layout_marginStart="6dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_on_duty_card_normal"
                         android:clickable="true"
@@ -425,7 +425,7 @@
                             android:fontFamily="@font/inter_semibold"
                             android:text="Four Wheeler"
                             android:textColor="#101828"
-                            android:textSize="13sp" />
+                            android:textSize="14sp" />
 
                         <!-- Animating Car Icon -->
                         <ImageView
@@ -438,14 +438,32 @@
                             android:src="@drawable/ic_illustration_car"
                             android:visibility="invisible" />
                     </FrameLayout>
+                </LinearLayout>
 
-                    <!-- Office Vehicle - Public Transport Card -->
+                <!-- Heading 3: Public Vehicle -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Public Vehicle"
+                    android:textColor="#344054"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="24dp"
+                    android:orientation="horizontal"
+                    android:splitMotionEvents="false">
+
+                    <!-- Public Vehicle - Public Transport Card -->
                     <FrameLayout
                         android:id="@+id/cardOfficePublicTransport"
                         android:layout_width="0dp"
                         android:layout_height="54dp"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1.2"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
                         android:background="@drawable/bg_on_duty_card_normal"
                         android:clickable="true"
                         android:focusable="true">
@@ -458,7 +476,7 @@
                             android:fontFamily="@font/inter_semibold"
                             android:text="Public Transport"
                             android:textColor="#101828"
-                            android:textSize="12sp" />
+                            android:textSize="14sp" />
 
                         <!-- Animating Bus Icon -->
                         <ImageView
@@ -471,6 +489,14 @@
                             android:src="@drawable/ic_illustration_bus"
                             android:visibility="invisible" />
                     </FrameLayout>
+
+                    <!-- Invisible placeholder card to keep it half width (symmetrical) -->
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="54dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:visibility="invisible" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
