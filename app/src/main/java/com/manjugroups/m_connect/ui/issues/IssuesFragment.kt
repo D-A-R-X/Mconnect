@@ -15,11 +15,20 @@ import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentIssuesBinding
 import com.manjugroups.m_connect.databinding.ItemIssueCardBinding
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.IssueItem
 import com.manjugroups.m_connect.ui.common.navigateUp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,6 +49,9 @@ class IssuesFragment : Fragment() {
     )
 
     private val issuesList = mutableListOf<IssueData>()
+
+    private val api = ApiService.create()
+    private val session by lazy { SessionManager(requireContext()) }
 
     // Global audio player tracking for list cards with waveform progress
     private var activeMediaPlayer: MediaPlayer? = null
@@ -125,14 +137,13 @@ class IssuesFragment : Fragment() {
             val bottomSheet = CreateIssueBottomSheet()
             bottomSheet.setOnIssueCreatedListener(object : CreateIssueBottomSheet.OnIssueCreatedListener {
                 override fun onIssueCreated(
+                    projectId: String,
                     title: String,
                     description: String,
                     audioPath: String?,
                     audioDurationMs: Long
                 ) {
-                    issuesList.add(0, IssueData(title, description, audioPath, audioDurationMs))
-                    saveIssues()
-                    renderIssues()
+                    submitIssueToBackend(projectId, title, description, audioPath, audioDurationMs)
                 }
             })
             bottomSheet.show(parentFragmentManager, "CreateIssueBottomSheet")
@@ -157,6 +168,63 @@ class IssuesFragment : Fragment() {
         renderIssues()
     }
 
+    /** Upload the optional voice note, then create the issue on the backend
+     *  and reload the list from the server. */
+    private fun submitIssueToBackend(
+        projectId: String,
+        title: String,
+        description: String,
+        audioPath: String?,
+        audioDurationMs: Long,
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                var audioStorageId: String? = null
+                var audioSize: Long? = null
+                if (!audioPath.isNullOrBlank()) {
+                    val file = File(audioPath)
+                    if (file.exists()) {
+                        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+                        audioSize = bytes.size.toLong()
+                        val up = api.uploadStorageFile(
+                            session.bearerToken,
+                            bytes.toRequestBody("audio/mp4".toMediaTypeOrNull()),
+                        )
+                        if (up.success) audioStorageId = up.storageId
+                    }
+                }
+                val resp = api.createProjectIssue(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.CreateProjectIssueRequest(
+                        projectId = projectId,
+                        title = title,
+                        description = description.ifBlank { null },
+                        audioStorageId = audioStorageId,
+                        audioFileName = audioStorageId?.let { "voice.m4a" },
+                        audioFileType = audioStorageId?.let { "audio/mp4" },
+                        audioFileSize = audioSize,
+                        audioDurationSeconds = audioDurationMs.takeIf { it > 0 }?.let { it / 1000 },
+                    ),
+                )
+                if (_binding == null) return@launch
+                if (resp.success) {
+                    Toast.makeText(requireContext(), "Issue submitted", Toast.LENGTH_SHORT).show()
+                    loadIssues()
+                } else {
+                    Toast.makeText(requireContext(), resp.error ?: "Couldn't submit issue", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Couldn't submit issue: ${e.message ?: "network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Cache the current list locally so it survives offline / restarts. */
     private fun saveIssues() {
         val context = context ?: return
         val sharedPrefs = context.getSharedPreferences("issues_prefs", android.content.Context.MODE_PRIVATE)
@@ -164,7 +232,36 @@ class IssuesFragment : Fragment() {
         sharedPrefs.edit().putString("saved_issues", json).apply()
     }
 
+    /** Load issues from the backend (own issues, newest first); fall back to the
+     *  local cache when offline. Audio plays from the resolved remote URL. */
     private fun loadIssues() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val ok = try {
+                val resp = api.listMyIssues(session.bearerToken)
+                if (resp.success) {
+                    issuesList.clear()
+                    issuesList.addAll(resp.issues.map { it.toIssueData() })
+                    saveIssues()
+                    true
+                } else false
+            } catch (e: Exception) {
+                false
+            }
+            if (_binding == null) return@launch
+            if (!ok) loadIssuesFromCache()
+            renderIssues()
+        }
+    }
+
+    private fun IssueItem.toIssueData() = IssueData(
+        title = title ?: "",
+        description = description ?: "",
+        audioPath = audioUrl,            // remote URL — MediaPlayer streams it
+        audioDurationMs = audioDurationMs ?: 0L,
+        timestamp = createdAt ?: System.currentTimeMillis(),
+    )
+
+    private fun loadIssuesFromCache() {
         val context = context ?: return
         val sharedPrefs = context.getSharedPreferences("issues_prefs", android.content.Context.MODE_PRIVATE)
         val json = sharedPrefs.getString("saved_issues", null)
@@ -198,9 +295,10 @@ class IssuesFragment : Fragment() {
 
 
 
-                // Setup audio note player if attached
+                // Setup audio note player if attached (remote URL from the
+                // backend, or a local file for not-yet-synced cached items).
                 val path = issue.audioPath
-                if (path != null && File(path).exists()) {
+                if (!path.isNullOrBlank() && (path.startsWith("http") || File(path).exists())) {
                     cardBinding.layoutAudioPlayer.visibility = View.VISIBLE
                     
                     // Format duration
@@ -287,25 +385,35 @@ class IssuesFragment : Fragment() {
         stopActivePlayback()
 
         runCatching {
-            val player = MediaPlayer().apply {
-                setDataSource(path)
-                prepare()
-                start()
-                setOnCompletionListener {
-                    stopActivePlayback()
-                }
+            val player = MediaPlayer()
+            player.setDataSource(path)
+            player.setOnCompletionListener { stopActivePlayback() }
+
+            fun onReady(p: MediaPlayer) {
+                activeMediaPlayer = p
+                activeAudioPath = path
+                activePlayButton = playButton
+                activeWaveformLayout = waveformLayout
+                activeCurrentTimeText = currentTimeText
+                activeTotalTimeText = totalTimeText
+                activeDurationMs = durationMs
+                p.start()
+                playButton.setImageResource(R.drawable.ic_chat_pause)
+                playHandler.post(progressRunnable)
             }
 
-            activeMediaPlayer = player
-            activeAudioPath = path
-            activePlayButton = playButton
-            activeWaveformLayout = waveformLayout
-            activeCurrentTimeText = currentTimeText
-            activeTotalTimeText = totalTimeText
-            activeDurationMs = durationMs
-
-            playButton.setImageResource(R.drawable.ic_chat_pause)
-            playHandler.post(progressRunnable)
+            if (path.startsWith("http")) {
+                // Remote URL — prepare off the main thread to avoid an ANR while
+                // buffering, then start when ready.
+                player.setOnPreparedListener { if (_binding != null) onReady(it) }
+                player.setOnErrorListener { _, _, _ ->
+                    stopActivePlayback(); true
+                }
+                player.prepareAsync()
+            } else {
+                player.prepare()
+                onReady(player)
+            }
         }.onFailure {
             Toast.makeText(requireContext(), "Failed to play audio note", Toast.LENGTH_SHORT).show()
             stopActivePlayback()

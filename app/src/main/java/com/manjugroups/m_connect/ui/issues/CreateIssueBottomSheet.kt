@@ -17,8 +17,13 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.SheetCreateIssueBinding
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.ProjectSummary
+import kotlinx.coroutines.launch
 import java.io.File
 
 class CreateIssueBottomSheet : BottomSheetDialogFragment() {
@@ -26,15 +31,50 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
     private var _binding: SheetCreateIssueBinding? = null
     private val binding get() = _binding!!
 
+    private val api = ApiService.create()
+    private val session by lazy { SessionManager(requireContext()) }
+    private val projects = mutableListOf<ProjectSummary>()
+    private var selectedProjectId: String? = null
+
     // Callback listener for issue creation
     interface OnIssueCreatedListener {
-        fun onIssueCreated(title: String, description: String, audioPath: String?, audioDurationMs: Long)
+        fun onIssueCreated(projectId: String, title: String, description: String, audioPath: String?, audioDurationMs: Long)
     }
 
     private var listener: OnIssueCreatedListener? = null
 
     fun setOnIssueCreatedListener(listener: OnIssueCreatedListener) {
         this.listener = listener
+    }
+
+    private fun loadProjects() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.getMyProjects(session.bearerToken) }
+                .onSuccess { resp ->
+                    if (_binding == null) return@onSuccess
+                    if (resp.success) {
+                        projects.clear()
+                        projects.addAll(resp.projects)
+                    }
+                }
+        }
+    }
+
+    private fun showProjectPicker() {
+        if (projects.isEmpty()) {
+            Toast.makeText(requireContext(), "Loading projects…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = projects.map { it.name ?: "Untitled" }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Select Project")
+            .setItems(names) { _, which ->
+                val p = projects[which]
+                selectedProjectId = p.id
+                binding.tvSelectProject.text = p.name ?: "Untitled"
+                binding.tvSelectProject.setTextColor(android.graphics.Color.parseColor("#0F172A"))
+            }
+            .show()
     }
 
     // Audio recording & playback variables
@@ -110,6 +150,10 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
 
         // Initialize UI status
         binding.tvAudioStatus.text = "Tap microphone to record voice note"
+
+        // Project selector (issues are project-scoped).
+        loadProjects()
+        binding.tvSelectProject.setOnClickListener { showProjectPicker() }
 
         // Handle microphone recording trigger
         binding.btnRecordAudio.setOnClickListener {
@@ -258,13 +302,18 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
         val title = binding.etIssueTitle.text.toString().trim()
         val desc = binding.etIssueDesc.text.toString().trim()
 
+        val projectId = selectedProjectId
+        if (projectId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Please select a project", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (title.isEmpty()) {
             Toast.makeText(requireContext(), "Title is compulsory", Toast.LENGTH_SHORT).show()
             return
         }
 
         stopPreviewPlayback()
-        listener?.onIssueCreated(title, desc, audioFile?.absolutePath, audioDurationMs)
+        listener?.onIssueCreated(projectId, title, desc, audioFile?.absolutePath, audioDurationMs)
         dismiss()
     }
 

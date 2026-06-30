@@ -28,6 +28,45 @@
         android:textColor="#0F172A"
         android:textSize="18sp" />
 
+    <!-- Project (Compulsory) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Project"
+            android:textColor="#334155"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" *"
+            android:textColor="#EF4444"
+            android:fontFamily="@font/inter_bold"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvSelectProject"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center_vertical"
+        android:text="Select project"
+        android:paddingHorizontal="16dp"
+        android:textColor="#94A3B8"
+        android:textSize="14sp" />
+
     <!-- Issue Title (Compulsory) -->
     <LinearLayout
         android:layout_width="match_parent"

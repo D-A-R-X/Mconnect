@@ -73,6 +73,18 @@ interface ApiService {
         @Body body: CreateFineRequest,
     ): CreateFineResponse
 
+    // Issues (project-scoped, raised from the app)
+    @POST("api/projects/issues")
+    suspend fun createProjectIssue(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectIssueRequest,
+    ): CreateIssueResponse
+
+    @GET("api/issues/my")
+    suspend fun listMyIssues(
+        @Header("Authorization") token: String,
+    ): IssuesListResponse
+
     // Front Desk: resolve a scanned invite QR token to its visitor details.
     @GET("api/frontdesk/invitations/by-token")
     suspend fun getInvitationByToken(
@@ -3418,4 +3430,40 @@ data class CheckinInvitationResponse(
     val success: Boolean = false,
     val passNumber: String? = null,
     val error: String? = null,
+)
+
+// ── Issues (project-scoped) ──────────────────────────────────────────────────
+data class CreateProjectIssueRequest(
+    val projectId: String,
+    val title: String,
+    val description: String? = null,
+    val audioStorageId: String? = null,
+    val audioFileName: String? = null,
+    val audioFileType: String? = null,
+    val audioFileSize: Long? = null,
+    val audioDurationSeconds: Long? = null,
+)
+
+data class CreateIssueResponse(
+    val success: Boolean = false,
+    @SerializedName("id") val issueId: String? = null,
+    val error: String? = null,
+)
+
+data class IssuesListResponse(
+    val success: Boolean = false,
+    val issues: List<IssueItem> = emptyList(),
+    val error: String? = null,
+)
+
+data class IssueItem(
+    @SerializedName("_id") val id: String?,
+    val projectId: String?,
+    val title: String?,
+    val description: String?,
+    val audioStorageId: String?,
+    val audioUrl: String?,
+    val audioDurationMs: Long?,
+    val status: String?,
+    val createdAt: Long?,
 )

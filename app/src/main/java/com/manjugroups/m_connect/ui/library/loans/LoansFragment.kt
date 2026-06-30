@@ -343,11 +343,13 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
-                // Fixed nominee/GM/AVP/HR tracker renders immediately as the
-                // default; if this row is workflow-routed, loadWorkflowTracker
-                // swaps in the configured chain once the steps come back.
+                // Fixed tracker renders immediately. Salary advances always use
+                // the simple fixed HR -> Acc's tracker — only loans may be
+                // workflow-routed and swap in the configured GM/AVP/HR chain.
                 updateTrackerState(loan)
-                loadWorkflowTracker(loan)
+                if (!loan.isAdvance) {
+                    loadWorkflowTracker(loan)
+                }
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
