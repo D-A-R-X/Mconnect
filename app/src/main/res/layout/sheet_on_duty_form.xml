@@ -54,7 +54,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingBottom="80dp"
-            android:clipToPadding="false"
             android:splitMotionEvents="false">
 
             <!-- Step 1 Layout Scroll Content -->
