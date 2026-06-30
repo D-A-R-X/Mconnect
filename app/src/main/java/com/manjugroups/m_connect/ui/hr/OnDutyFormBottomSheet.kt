@@ -141,9 +141,9 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 val displayMetrics = resources.displayMetrics
                 val screenHeight = displayMetrics.heightPixels
-                behavior.peekHeight = screenHeight / 2
-                behavior.skipCollapsed = false
-                behavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                behavior.peekHeight = screenHeight
+                behavior.skipCollapsed = true
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.isDraggable = true
                 
                 // Allow bottom sheet to expand to full height when dragged up
