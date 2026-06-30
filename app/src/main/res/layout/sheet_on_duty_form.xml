@@ -43,8 +43,7 @@
     <!-- Scrollable content wrapper to support half-screen/full-screen behavior -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:fillViewport="true"
         android:overScrollMode="never"
         android:splitMotionEvents="false">
@@ -53,7 +52,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="80dp"
+            android:paddingBottom="16dp"
+            android:clipToPadding="false"
             android:splitMotionEvents="false">
 
             <!-- Step 1 Layout Scroll Content -->
@@ -309,17 +309,6 @@
                             android:text="Two Wheeler"
                             android:textColor="#101828"
                             android:textSize="14sp" />
-
-                        <!-- Animating Bike Icon -->
-                        <ImageView
-                            android:id="@+id/imgOwnTwoWheelerAnim"
-                            android:layout_width="80dp"
-                            android:layout_height="48dp"
-                            android:layout_gravity="center_vertical"
-                            android:layout_marginStart="8dp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_illustration_bike"
-                            android:visibility="invisible" />
                     </FrameLayout>
 
                     <!-- Own Vehicle - Four Wheeler Card -->
@@ -342,17 +331,6 @@
                             android:text="Four Wheeler"
                             android:textColor="#101828"
                             android:textSize="14sp" />
-
-                        <!-- Animating Car Icon -->
-                        <ImageView
-                            android:id="@+id/imgOwnFourWheelerAnim"
-                            android:layout_width="80dp"
-                            android:layout_height="48dp"
-                            android:layout_gravity="center_vertical"
-                            android:layout_marginStart="8dp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_illustration_car"
-                            android:visibility="invisible" />
                     </FrameLayout>
                 </LinearLayout>
 
@@ -393,17 +371,6 @@
                             android:text="Two Wheeler"
                             android:textColor="#101828"
                             android:textSize="14sp" />
-
-                        <!-- Animating Bike Icon -->
-                        <ImageView
-                            android:id="@+id/imgOfficeTwoWheelerAnim"
-                            android:layout_width="80dp"
-                            android:layout_height="48dp"
-                            android:layout_gravity="center_vertical"
-                            android:layout_marginStart="8dp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_illustration_bike"
-                            android:visibility="invisible" />
                     </FrameLayout>
 
                     <!-- Office Vehicle - Four Wheeler Card -->
@@ -426,17 +393,6 @@
                             android:text="Four Wheeler"
                             android:textColor="#101828"
                             android:textSize="14sp" />
-
-                        <!-- Animating Car Icon -->
-                        <ImageView
-                            android:id="@+id/imgOfficeFourWheelerAnim"
-                            android:layout_width="80dp"
-                            android:layout_height="48dp"
-                            android:layout_gravity="center_vertical"
-                            android:layout_marginStart="8dp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_illustration_car"
-                            android:visibility="invisible" />
                     </FrameLayout>
                 </LinearLayout>
 
@@ -477,17 +433,6 @@
                             android:text="Public Transport"
                             android:textColor="#101828"
                             android:textSize="14sp" />
-
-                        <!-- Animating Bus Icon -->
-                        <ImageView
-                            android:id="@+id/imgOfficePublicTransportAnim"
-                            android:layout_width="80dp"
-                            android:layout_height="48dp"
-                            android:layout_gravity="center_vertical"
-                            android:layout_marginStart="8dp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_illustration_bus"
-                            android:visibility="invisible" />
                     </FrameLayout>
 
                     <!-- Invisible placeholder card to keep it half width (symmetrical) -->
