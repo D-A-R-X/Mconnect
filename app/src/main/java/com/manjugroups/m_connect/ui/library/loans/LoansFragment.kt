@@ -344,11 +344,11 @@ class LoansFragment : Fragment() {
                 binding.tvHeroBadge.setTextColor(Color.parseColor("#F79009"))
                 binding.heroActiveDetails.visibility = View.GONE
                 binding.heroPendingTracker.visibility = View.VISIBLE
-                // Fixed nominee/GM/AVP/HR tracker renders immediately as the
-                // default; if this row is workflow-routed, loadWorkflowTracker
-                // swaps in the configured chain once the steps come back.
+                // Always use the fixed tracker — the clean nominee/GM/AVP/HR/
+                // Acc's chain for loans and HR -> Acc's for advances. The
+                // dynamic workflow tracker was async-swapping in over this and
+                // reading as a glitch, so it's no longer shown on the card.
                 updateTrackerState(loan)
-                loadWorkflowTracker(loan)
             }
             else -> {
                 binding.tvHeroBadge.text = if (loan.isAdvance) "Active Advance" else "Active Loan"
@@ -414,6 +414,13 @@ class LoansFragment : Fragment() {
             else -> if (loan.status == LoanStatus.ACTIVE) 5 else -1
         }
         val hrDone = rank >= 4
+        val accountsDone = rank >= 5
+
+        // Hide the dynamic workflow tracker here so it can never overlap the
+        // fixed tracker (the glitch where the advance HR/Acc's pills showed
+        // under a loan's nominee/GM/AVP chain). For loans, loadWorkflowTracker
+        // re-shows it afterwards only when the row is workflow-routed.
+        binding.workflowTrackerScroll.visibility = View.GONE
 
         if (loan.isAdvance) {
             binding.loanTrackerLine.visibility = View.GONE
@@ -421,13 +428,22 @@ class LoansFragment : Fragment() {
             binding.advanceTrackerLine.visibility = View.VISIBLE
             binding.layoutAdvanceTracker.visibility = View.VISIBLE
 
-            // HR is always green (active) for advances
-            binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
-            binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
-            binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
-            binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
-
+            // Salary advances run HR -> Accounts. Each goes green only once that
+            // step is actually approved: HR after it advances past hr_pending,
+            // Accounts after disbursement.
             if (hrDone) {
+                binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_green)
+                binding.advanceIconHr.setColorFilter(Color.parseColor("#1BCA0B"))
+                binding.advanceTextHr.setTextColor(Color.parseColor("#1BCA0B"))
+                binding.advanceTextHr.setTypeface(null, Typeface.BOLD)
+            } else {
+                binding.advanceStepHr.setBackgroundResource(R.drawable.bg_advance_step_pending)
+                binding.advanceIconHr.setColorFilter(Color.parseColor("#98A2B3"))
+                binding.advanceTextHr.setTextColor(Color.parseColor("#98A2B3"))
+                binding.advanceTextHr.setTypeface(null, Typeface.NORMAL)
+            }
+
+            if (accountsDone) {
                 binding.advanceStepAccs.setBackgroundResource(R.drawable.bg_advance_step_green)
                 binding.advanceIconAccs.setColorFilter(Color.parseColor("#1BCA0B"))
                 binding.advanceTextAccs.setTextColor(Color.parseColor("#1BCA0B"))
@@ -485,6 +501,23 @@ class LoansFragment : Fragment() {
 
             // ACC'S is never technically "done" while pending, as if Accounts approves, it becomes Active.
             setPending(binding.trackFrameAccs, binding.trackIconAccs, binding.trackTextAccs, R.drawable.ic_track_accs)
+
+            // Approver name under each step — shown when known (nominees always;
+            // GM/AVP/HR/Accounts once assigned at submit or after they act).
+            fun setName(tv: TextView, name: String?) {
+                if (name.isNullOrBlank()) {
+                    tv.visibility = View.GONE
+                } else {
+                    tv.text = name
+                    tv.visibility = View.VISIBLE
+                }
+            }
+            setName(binding.trackNameNominee1, loan.nominee1Name)
+            setName(binding.trackNameNominee2, loan.nominee2Name)
+            setName(binding.trackNameGm, loan.gmName)
+            setName(binding.trackNameAvp, loan.avpName)
+            setName(binding.trackNameHr, loan.hrName)
+            setName(binding.trackNameAccs, loan.accountantName)
         }
     }
 
@@ -509,7 +542,43 @@ class LoansFragment : Fragment() {
                 .orEmpty()
             if (_binding == null) return@launch
             // Empty → legacy code-stage row; leave the fixed tracker in place.
-            if (steps.isNotEmpty()) renderWorkflowSteps(steps)
+            if (steps.isNotEmpty()) {
+                // The configured workflow only covers GM/AVP/HR/Accounts, so
+                // prepend the nominee guarantor steps and renumber the chain.
+                val combined = (nomineeSteps(loan) + steps)
+                    .mapIndexed { i, s -> s.copy(stepOrder = i + 1) }
+                renderWorkflowSteps(combined)
+            }
+        }
+    }
+
+    /** Nominee guarantor steps for the front of the workflow tracker. */
+    private fun nomineeSteps(loan: Loan): List<WorkflowStepData> {
+        fun st(s: String?): String {
+            val v = s?.lowercase()?.trim().orEmpty()
+            return when {
+                v.contains("reject") || v.contains("declin") -> "rejected"
+                v.contains("approv") || v.contains("sign") || v.contains("accept") || v.contains("done") -> "approved"
+                else -> "pending"
+            }
+        }
+        val out = mutableListOf<WorkflowStepData>()
+        out.add(WorkflowStepData(name = "Nominee 1", resolvedStaffName = loan.nominee1Name, status = st(loan.nominee1Status)))
+        out.add(WorkflowStepData(name = "Nominee 2", resolvedStaffName = loan.nominee2Name, status = st(loan.nominee2Status)))
+        return out
+    }
+
+    /** Role-appropriate icon for a workflow step dot (shown instead of a number). */
+    private fun iconForStep(step: WorkflowStepData): Int {
+        val r = listOfNotNull(step.name, step.approverRole, step.approverDesignation)
+            .joinToString(" ").lowercase()
+        return when {
+            r.contains("nominee") -> R.drawable.ic_track_shield
+            r.contains("avp") || r.contains("vice president") -> R.drawable.ic_track_avp
+            r.contains("gm") || r.contains("general manager") -> R.drawable.ic_track_gm
+            r.contains("hr") || r.contains("human resource") -> R.drawable.ic_track_hr
+            r.contains("account") -> R.drawable.ic_track_accs
+            else -> R.drawable.ic_track_shield
         }
     }
 
@@ -554,19 +623,14 @@ class LoansFragment : Fragment() {
                     layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
                 })
             } else {
-                dot.addView(TextView(requireContext()).apply {
-                    text = (step.stepOrder ?: (index + 1)).toString()
-                    setTextColor(
+                // Role icon (not a step number) for pending/rejected stages.
+                dot.addView(ImageView(requireContext()).apply {
+                    setImageResource(iconForStep(step))
+                    imageTintList = android.content.res.ColorStateList.valueOf(
                         if (rejected) Color.parseColor("#D92D20")
                         else Color.parseColor("#98A2B3"),
                     )
-                    textSize = 13f
-                    typeface = Typeface.DEFAULT_BOLD
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        Gravity.CENTER,
-                    )
+                    layoutParams = FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
                 })
             }
             item.addView(dot)
@@ -681,8 +745,14 @@ class LoansFragment : Fragment() {
      *  request that belongs to the other tab. */
     private fun renderPendingApprovals() {
         if (_binding == null) return
-        val slice = allPending.filter { isAdvance ->
-            val isAdv = isAdvance.requestType?.lowercase()?.trim() == "salary_advance"
+        val slice = allPending.filter { p ->
+            // A cancelled/rejected/closed request is no longer actionable — never
+            // surface it in the Requested Loans (pending-approval) section.
+            val status = p.status?.lowercase()?.trim()
+            if (status in setOf("cancelled", "canceled", "rejected", "completed", "repaid", "closed")) {
+                return@filter false
+            }
+            val isAdv = p.requestType?.lowercase()?.trim() == "salary_advance"
             if (selectedTab == TAB_LOANS) !isAdv else isAdv
         }
         requestedLoansAdapter.submitList(slice)

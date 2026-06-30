@@ -83,10 +83,13 @@ class AcceptLoanBottomSheet(
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 val resp = withContext(Dispatchers.IO) { api.getDigitalSign(token) }
-                if (resp.success && resp.hasSignature && !resp.url.isNullOrBlank()) {
+                if (resp.success && resp.hasSignature && !resp.storageId.isNullOrBlank()) {
+                    // Public serve endpoint — /api/storage/get-url can return an
+                    // internal URL the device can't reach, leaving the pad blank.
+                    val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=${resp.storageId}"
                     val bmp = withContext(Dispatchers.IO) {
                         val client = okhttp3.OkHttpClient()
-                        val request = okhttp3.Request.Builder().url(resp.url).build()
+                        val request = okhttp3.Request.Builder().url(url).build()
                         client.newCall(request).execute().body?.byteStream()?.let {
                             android.graphics.BitmapFactory.decodeStream(it)
                         }
