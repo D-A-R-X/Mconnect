@@ -132,7 +132,6 @@
                 android:focusable="true"
                 android:padding="7dp"
                 android:src="@drawable/ic_visitor_history"
-                android:visibility="gone"
                 app:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
