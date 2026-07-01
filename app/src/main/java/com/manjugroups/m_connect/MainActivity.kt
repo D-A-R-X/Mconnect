@@ -373,6 +373,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+
     private fun startIamPolling() {
         if (iamPollJob?.isActive == true) return
         iamPollJob = lifecycleScope.launch {

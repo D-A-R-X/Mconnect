@@ -72,6 +72,10 @@ class InAppUpdateManager(
         manager.appUpdateInfo
             .addOnSuccessListener { info ->
                 when {
+                    // Already downloaded (a prior session) — nudge to install.
+                    info.installStatus() == InstallStatus.DOWNLOADED ->
+                        promptCompleteFlexibleUpdate()
+
                     // An immediate update Play already started but didn't finish.
                     info.updateAvailability() ==
                         UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS ->
@@ -83,8 +87,13 @@ class InAppUpdateManager(
                         info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE) ->
                         launchImmediate(info)
 
+                    // Flexible: show OUR branded "Update available" prompt on the
+                    // current (home) screen. Tapping Update starts the real
+                    // background download; the branded "restart" snackbar then
+                    // fires once it finishes (see installListener). Re-runs on
+                    // every launch, so it keeps prompting until the app is current.
                     info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) ->
-                        launchFlexible(info)
+                        showUpdateAvailableDialog { launchFlexible(info) }
                 }
             }
             .addOnFailureListener { e ->
@@ -112,10 +121,85 @@ class InAppUpdateManager(
             .addOnFailureListener { /* ignore — off Play / transient */ }
     }
 
+    /**
+     * Our branded "Update available" prompt, shown on the current (home) screen
+     * when Play has a flexible update. If the user dismisses it, it re-appears on
+     * the next launch (start() re-checks) — so it persists until the app updates.
+     */
+    private fun showUpdateAvailableDialog(onUpdate: () -> Unit) {
+        val view = android.view.LayoutInflater.from(activity)
+            .inflate(com.manjugroups.m_connect.R.layout.dialog_app_update, null)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT),
+        )
+        view.findViewById<View>(com.manjugroups.m_connect.R.id.btnUpdateLater)
+            .setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(com.manjugroups.m_connect.R.id.btnUpdateNow)
+            .setOnClickListener {
+                dialog.dismiss()
+                onUpdate()
+            }
+        runCatching { dialog.show() }
+        dialog.window?.setLayout(
+            (320 * activity.resources.displayMetrics.density).toInt(),
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+    }
+
+    /** Branded "update ready to install" snackbar (restart to apply). */
+    private fun showUpdateReadySnackbar(indefinite: Boolean, onRestart: () -> Unit) {
+        val root: View = activity.findViewById(android.R.id.content) ?: return
+        val snackbar = Snackbar.make(
+            root,
+            "Update downloaded — ready to install.",
+            if (indefinite) Snackbar.LENGTH_INDEFINITE else Snackbar.LENGTH_LONG,
+        )
+        snackbar.setAction("RESTART") { onRestart() }
+        snackbar.setTextColor(android.graphics.Color.WHITE)
+        snackbar.setActionTextColor(android.graphics.Color.parseColor("#7FB0FF"))
+        val sbView = snackbar.view
+        sbView.setBackgroundResource(com.manjugroups.m_connect.R.drawable.bg_update_snackbar)
+        (sbView.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.let { p ->
+            val m = (12 * activity.resources.displayMetrics.density).toInt()
+            p.setMargins(m, m, m, m)
+            sbView.layoutParams = p
+        }
+        sbView.findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(activity, com.manjugroups.m_connect.R.font.inter_medium)
+            textSize = 14f
+        }
+        sbView.findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_action)?.apply {
+            typeface = androidx.core.content.res.ResourcesCompat.getFont(activity, com.manjugroups.m_connect.R.font.inter_semibold)
+        }
+        snackbar.show()
+    }
+
     fun destroy() {
         if (listenerRegistered) {
             runCatching { manager.unregisterListener(installListener) }
             listenerRegistered = false
+        }
+    }
+
+    /** Fallback when the in-app update flow can't start: open the Play page. */
+    private fun openPlayStore() {
+        val pkg = activity.packageName
+        val market = android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("market://details?id=$pkg"),
+        ).setPackage("com.android.vending")
+        runCatching { activity.startActivity(market) }.onFailure {
+            runCatching {
+                activity.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg"),
+                    ),
+                )
+            }
         }
     }
 
@@ -136,19 +220,14 @@ class InAppUpdateManager(
                 launcher,
                 AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
             )
-        }.onFailure { Log.w(TAG, "startUpdateFlow (flexible) failed: ${it.message}") }
+        }.onFailure {
+            Log.w(TAG, "startUpdateFlow (flexible) failed: ${it.message}")
+            openPlayStore()
+        }
     }
 
     private fun promptCompleteFlexibleUpdate() {
-        val root: View = activity.findViewById(android.R.id.content) ?: return
-        Snackbar.make(
-            root,
-            "An update has just been downloaded.",
-            Snackbar.LENGTH_INDEFINITE,
-        ).apply {
-            setAction("RESTART") { manager.completeUpdate() }
-            show()
-        }
+        showUpdateReadySnackbar(indefinite = true) { manager.completeUpdate() }
     }
 
     companion object {

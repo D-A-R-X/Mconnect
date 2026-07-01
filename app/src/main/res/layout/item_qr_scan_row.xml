@@ -84,6 +84,23 @@
         android:orientation="vertical">
 
         <TextView
+            android:id="@+id/tvScanStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginBottom="5dp"
+            android:background="@drawable/bg_tag_checked_in"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingStart="8dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="2dp"
+            android:text="Checked In"
+            android:textColor="#15803D"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/tvScanTime"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
