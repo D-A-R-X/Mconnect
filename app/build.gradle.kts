@@ -41,7 +41,7 @@ val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
 )
 val defaultAppUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://dev-convex-http.aivida.in/")
 )
 val appUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
