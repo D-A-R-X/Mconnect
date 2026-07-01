@@ -102,6 +102,9 @@ class QrScannerFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
 
+        // Scan history is IAM-gated (frontdesk.view). Everyone can scan, but only
+        // permitted roles see the history log of check-ins / check-outs.
+        binding.btnHistory.visibility = if (canViewHistory) View.VISIBLE else View.GONE
         binding.btnHistory.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, QrHistoryFragment())
@@ -432,33 +435,61 @@ class QrScannerFragment : Fragment() {
                 binding.tvVerificationSubtitle.text =
                     if (parts.isEmpty()) "This visitor has already checked out"
                     else parts.joinToString("  ·  ")
-                binding.btnConfirmAdmission.visibility = View.GONE
+                showActionButton(false)
             }
             checkedIn -> {
                 binding.tvCheckedInTag.visibility = View.VISIBLE
                 binding.tvCheckedInTag.text = "● Checked In"
                 binding.tvCheckedInTag.setBackgroundResource(R.drawable.bg_tag_checked_in)
                 binding.tvCheckedInTag.setTextColor(android.graphics.Color.parseColor("#15803D"))
-                binding.tvVerificationSubtitle.text =
-                    if (inv.checkinAt != null)
-                        "Checked in ${fmtCheckTime(inv.checkinAt)} · tap Check Out when leaving"
-                    else
-                        "Visitor is checked in · tap Check Out when leaving"
-                binding.tvConfirmAdmissionText.text = "Check Out"
-                binding.btnConfirmAdmission.visibility = View.VISIBLE
-                binding.btnConfirmAdmission.isEnabled = true
-                binding.btnConfirmAdmission.setOnClickListener { confirmCheckout(inv) }
+                // Only a staff member with frontdesk.checkout may release a
+                // visitor; everyone else just sees the checked-in details.
+                val canAct = canCheckout
+                binding.tvVerificationSubtitle.text = when {
+                    inv.checkinAt != null && canAct -> "Checked in ${fmtCheckTime(inv.checkinAt)} · tap Check Out when leaving"
+                    inv.checkinAt != null -> "Checked in ${fmtCheckTime(inv.checkinAt)}"
+                    canAct -> "Visitor is checked in · tap Check Out when leaving"
+                    else -> "Visitor is checked in"
+                }
+                if (canAct) {
+                    binding.tvConfirmAdmissionText.text = "Check Out"
+                    binding.btnConfirmAdmission.setOnClickListener { confirmCheckout(inv) }
+                }
+                showActionButton(canAct)
             }
             else -> {
                 binding.tvCheckedInTag.visibility = View.GONE
+                // Only a staff member with frontdesk.checkin may admit a visitor.
                 binding.tvVerificationSubtitle.text =
-                    "Verify the visitor details before confirming admission"
-                binding.tvConfirmAdmissionText.text = "Confirm"
-                binding.btnConfirmAdmission.visibility = View.VISIBLE
-                binding.btnConfirmAdmission.isEnabled = true
-                binding.btnConfirmAdmission.setOnClickListener { confirmAdmission(inv) }
+                    if (canCheckin) "Verify the visitor details before confirming admission"
+                    else "Verify the visitor details"
+                if (canCheckin) {
+                    binding.tvConfirmAdmissionText.text = "Confirm"
+                    binding.btnConfirmAdmission.setOnClickListener { confirmAdmission(inv) }
+                }
+                showActionButton(canCheckin)
             }
         }
+    }
+
+    // Frontdesk IAM: anyone may open the scanner and pull up a record, but only
+    // permitted roles get the admit / release actions. isAdmin bypasses.
+    private val canCheckin get() = session.hasPermission("frontdesk.checkin")
+    private val canCheckout get() = session.hasPermission("frontdesk.checkout")
+    private val canViewHistory get() = session.hasPermission("frontdesk.view")
+
+    /**
+     * Show or hide the primary action (Confirm / Check Out) and keep the layout
+     * responsive: when it's hidden (no permission or checked-out), Rescan is the
+     * only weighted child so it fills the row — we just drop its trailing gap so
+     * it centres cleanly instead of leaving an 8dp hole on the right.
+     */
+    private fun showActionButton(visible: Boolean) {
+        binding.btnConfirmAdmission.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.btnConfirmAdmission.isEnabled = visible
+        val lp = binding.btnCancelVerification.layoutParams as android.view.ViewGroup.MarginLayoutParams
+        lp.marginEnd = if (visible) (8 * resources.displayMetrics.density).toInt() else 0
+        binding.btnCancelVerification.layoutParams = lp
     }
 
     private fun fmtCheckTime(ms: Long?): String {
@@ -496,6 +527,7 @@ class QrScannerFragment : Fragment() {
                 applyCheckStateUi(
                     inv.copy(checkinState = "out", checkoutAt = System.currentTimeMillis()),
                 )
+                updateHistoryStatus(invitationId, "checked_out")
             } else {
                 Toast.makeText(requireContext(), "Check-out failed", Toast.LENGTH_LONG).show()
             }
@@ -630,6 +662,10 @@ class QrScannerFragment : Fragment() {
     private fun saveInvitationToHistory(inv: InvitationDetail, passNumber: String?) {
         val historyJson = JSONObject().apply {
             put("isStructured", true)
+            // Key + status so the history row can show Checked In / Checked Out
+            // (updated by updateHistoryStatus on check-out).
+            put("invitationId", currentInvitationId ?: "")
+            put("status", "checked_in")
             put("primaryName", inv.visitorName ?: "")
             put("primaryCompany", inv.visitorCompany ?: "")
             put("primaryPhone", inv.visitorPhone ?: "")
@@ -653,6 +689,33 @@ class QrScannerFragment : Fragment() {
             passNumber?.let { put("passNumber", it) }
         }
         saveScanToHistory(historyJson.toString())
+    }
+
+    /** Flip a saved history entry's status (e.g. to "checked_out") by invitationId. */
+    private fun updateHistoryStatus(invitationId: String, status: String) {
+        if (invitationId.isBlank()) return
+        val prefs = requireContext()
+            .getSharedPreferences("qr_scanner_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("qr_history_list", "[]") ?: "[]"
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val entry = arr.optJSONObject(i) ?: continue
+                val payload = try {
+                    JSONObject(entry.optString("value", ""))
+                } catch (e: Exception) {
+                    continue
+                }
+                if (payload.optString("invitationId") == invitationId) {
+                    payload.put("status", status)
+                    entry.put("value", payload.toString())
+                    prefs.edit().putString("qr_history_list", arr.toString()).apply()
+                    return
+                }
+            }
+        } catch (e: Exception) {
+            // ignore — history is best-effort
+        }
     }
 
     private fun showVerificationModal(qrValue: String) {
