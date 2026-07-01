@@ -561,9 +561,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun animateIcon(index: Int, imageView: ImageView) {
+        imageView.animate().cancel()
+        imageView.rotation = 0f
+        imageView.translationY = 0f
+        imageView.scaleX = 1f
+        imageView.scaleY = 1f
+
+        // Smooth vertical jump-and-settle animation (lifts by -14px and pops scale, then settles)
+        imageView.animate()
+            .translationY(-14f)
+            .scaleX(1.15f)
+            .scaleY(1.15f)
+            .setDuration(160)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withEndAction {
+                imageView.animate()
+                    .translationY(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(180)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(1.2f))
+                    .start()
+            }
+            .start()
+    }
+
     private fun updateTabUi(index: Int) {
-        // Matches the design tokens — bright green for the active tab, light cool gray
-        // for inactive ones. Same outline icon in both states, only the tint changes.
         val activeColor = Color.parseColor("#1BCA0B")
         val inactiveColor = Color.parseColor("#D0D5DD")
 
@@ -578,6 +602,15 @@ class MainActivity : AppCompatActivity() {
             config.icon.alpha = 1f
             config.indicator.visibility = View.GONE
             config.text.setTextColor(tint)
+            
+            if (isActive) {
+                animateIcon(i, config.icon)
+                try {
+                    config.tab.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                } catch (e: Exception) {
+                    // Fail-safe
+                }
+            }
         }
     }
 
