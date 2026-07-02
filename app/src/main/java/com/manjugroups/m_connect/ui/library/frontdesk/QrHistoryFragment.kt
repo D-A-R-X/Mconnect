@@ -137,6 +137,7 @@ class QrHistoryFragment : Fragment() {
                 val tvScanDetails = rowView.findViewById<TextView>(R.id.tvScanDetails)
                 val tvScanHost = rowView.findViewById<TextView>(R.id.tvScanHost)
                 val tvScanTime = rowView.findViewById<TextView>(R.id.tvScanTime)
+                val tvScanStatus = rowView.findViewById<TextView>(R.id.tvScanStatus)
 
                 var isJson = false
                 var primaryName = ""
@@ -144,6 +145,7 @@ class QrHistoryFragment : Fragment() {
                 var visitorType = ""
                 var purpose = ""
                 var hostPerson = ""
+                var status = ""
 
                 try {
                     val json = JSONObject(item.value)
@@ -154,8 +156,26 @@ class QrHistoryFragment : Fragment() {
                         visitorType = json.optString("visitorType", "")
                         purpose = json.optString("purpose", "")
                         hostPerson = json.optString("hostPerson", "")
+                        status = json.optString("status", "")
                     }
                 } catch (_: Exception) {}
+
+                // Check-in / check-out status badge.
+                when (status) {
+                    "checked_out" -> {
+                        tvScanStatus.text = "Checked Out"
+                        tvScanStatus.setBackgroundResource(R.drawable.bg_tag_checked_out)
+                        tvScanStatus.setTextColor(android.graphics.Color.parseColor("#475467"))
+                        tvScanStatus.visibility = View.VISIBLE
+                    }
+                    "checked_in" -> {
+                        tvScanStatus.text = "Checked In"
+                        tvScanStatus.setBackgroundResource(R.drawable.bg_tag_checked_in)
+                        tvScanStatus.setTextColor(android.graphics.Color.parseColor("#15803D"))
+                        tvScanStatus.visibility = View.VISIBLE
+                    }
+                    else -> tvScanStatus.visibility = View.GONE
+                }
 
                 if (isJson) {
                     tvScanValue.text = primaryName

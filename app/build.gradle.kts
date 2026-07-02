@@ -41,11 +41,35 @@ val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
 )
 val defaultAppUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://dev-convex-http.aivida.in/")
 )
 val appUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
 )
+
+// versionCode MUST strictly increase on every release, or Google Play — and the
+// in-app update flow, which keys off it — won't offer the update. A hardcoded
+// versionCode is what was blocking store updates. Derive it from the git commit
+// count so it bumps automatically and can't be forgotten; a release pipeline may
+// override via MCONNECT_VERSION_CODE. The floor (6) keeps us above the last store
+// release (5) if git history is unavailable (e.g. a shallow CI clone — in that
+// case set MCONNECT_VERSION_CODE explicitly).
+fun gitCommitCount(): Int = try {
+    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val out = process.inputStream.bufferedReader().use { it.readText() }.trim()
+    process.waitFor()
+    out.toIntOrNull() ?: 0
+} catch (e: Exception) {
+    0
+}
+
+val appVersionCode: Int =
+    System.getenv("MCONNECT_VERSION_CODE")?.toIntOrNull() ?: maxOf(6, gitCommitCount())
+val appVersionName: String =
+    System.getenv("MCONNECT_VERSION_NAME") ?: "1.0.$appVersionCode"
 
 android {
     namespace = "com.manjugroups.m_connect"
