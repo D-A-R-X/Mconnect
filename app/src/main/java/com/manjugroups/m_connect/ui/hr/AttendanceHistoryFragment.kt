@@ -50,6 +50,7 @@ class AttendanceHistoryFragment : Fragment() {
     private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()
     private var cachedRequests: List<AttendanceApprovalRecord> = emptyList()
     private var cachedStaffList: List<com.manjugroups.m_connect.network.StaffData> = emptyList()
+    private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
 
     private var activeTab = 0
     private var activeSubTab = 0 // 0 = Attendance, 1 = Request
@@ -315,7 +316,7 @@ class AttendanceHistoryFragment : Fragment() {
                         binding.tabLayout.updateBadge(1, cachedStaffList.size * 2)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
-                    2, 3, 4, 5 -> {
+                    2, 3, 4 -> {
                         if (cachedApprovals.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getPendingAttendanceApprovals(session.bearerToken)
@@ -333,11 +334,27 @@ class AttendanceHistoryFragment : Fragment() {
                         binding.tabLayout.updateBadge(2, cachedApprovals.size)
                         binding.tabLayout.updateBadge(3, cachedApprovals.size)
                         binding.tabLayout.updateBadge(4, cachedApprovals.size)
-                        binding.tabLayout.updateBadge(5, cachedApprovals.size)
                         
                         // Dynamically update sub-tabs counts
                         updateSubTabStyles()
                         
+                        filterCurrentList(binding.etSearch.text?.toString().orEmpty())
+                    }
+                    5 -> {
+                        if (cachedStaffList.isEmpty() || isPullRefresh) {
+                            cachedStaffList = getFallbackStaffList()
+                        }
+                        if (cachedFines.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.listFines(session.bearerToken, status = "active")
+                            }.getOrNull()
+                            cachedFines = if (resp?.fines != null && resp.fines.isNotEmpty()) {
+                                resp.fines
+                            } else {
+                                getFallbackFinesList()
+                            }
+                        }
+                        binding.tabLayout.updateBadge(5, cachedStaffList.size * 2)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                 }
@@ -983,7 +1000,7 @@ class AttendanceHistoryFragment : Fragment() {
             1 -> {
                 renderTeamAttendance(cachedStaffList, query)
             }
-            2, 3, 4, 5 -> {
+            2, 3, 4 -> {
                 val sourceList = if (activeSubTab == 0) cachedApprovals else cachedRequests
                 val filtered = if (query.isBlank()) {
                     sourceList
@@ -995,6 +1012,9 @@ class AttendanceHistoryFragment : Fragment() {
                     }
                 }
                 renderApprovals(filtered)
+            }
+            5 -> {
+                renderTeamAttendance(cachedStaffList, query)
             }
         }
     }
@@ -1068,6 +1088,23 @@ class AttendanceHistoryFragment : Fragment() {
                     tvStatus.setTextColor(Color.parseColor("#067647"))
                     tvHours.text = "08:00:00 hrs"
                     tvRange.text = "09:00 am · 05:00 pm"
+                }
+
+                // Bind Fine info if activeTab == 5
+                val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
+                if (activeTab == 5) {
+                    val staffFine = cachedFines.find {
+                        it.staffName.equals(staff.name, ignoreCase = true) ||
+                        it.employeeId.equals(staff.employeeId, ignoreCase = true)
+                    }
+                    if (staffFine != null && dateIndex == 0) {
+                        tvFine.visibility = View.VISIBLE
+                        tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", staffFine.amount)
+                    } else {
+                        tvFine.visibility = View.GONE
+                    }
+                } else {
+                    tvFine.visibility = View.GONE
                 }
 
                 // Bind Profile Section
@@ -1258,6 +1295,25 @@ class AttendanceHistoryFragment : Fragment() {
                 department = "HR",
                 designation = "HR Manager",
                 employeeId = "EMP001"
+            )
+        )
+    }
+
+    private fun getFallbackFinesList(): List<com.manjugroups.m_connect.network.FineDeductionItem> {
+        return listOf(
+            com.manjugroups.m_connect.network.FineDeductionItem(
+                id = "fine_1",
+                staffName = "Elaine",
+                amount = 700.0,
+                typeName = "Late Fine",
+                status = "active"
+            ),
+            com.manjugroups.m_connect.network.FineDeductionItem(
+                id = "fine_2",
+                staffName = "Sudalai Muthu",
+                amount = 500.0,
+                typeName = "Late Fine",
+                status = "active"
             )
         )
     }
