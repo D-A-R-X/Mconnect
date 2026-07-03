@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Base tower -->
+    <path
+        android:pathData="M12,18 L12,22 M9,22 L15,22 M12,11 L12,18"
+        android:strokeColor="#5A7CF8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+    <!-- Concentric arcs -->
+    <path
+        android:pathData="M12,11 C13.104,11 14,10.104 14,9 C14,7.896 13.104,7 12,7 C10.896,7 10,7.896 10,9 C10,10.104 10.896,11 12,11 Z"
+        android:strokeColor="#5A7CF8"
+        android:strokeWidth="2" />
+    <path
+        android:pathData="M8.5,12.5 C7.5,11.5 7,10.2 7,9 C7,7.8 7.5,6.5 8.5,5.5 M15.5,12.5 C16.5,11.5 17,10.2 17,9 C17,7.8 16.5,6.5 15.5,5.5"
+        android:strokeColor="#5A7CF8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M5.5,15.5 C4,14 3,11.5 3,9 C3,6.5 4,4 5.5,2.5 M18.5,15.5 C20,14 21,11.5 21,9 C21,6.5 20,4 18.5,2.5"
+        android:strokeColor="#5A7CF8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+</vector>
