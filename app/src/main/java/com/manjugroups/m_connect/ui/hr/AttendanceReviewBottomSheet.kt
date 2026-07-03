@@ -9,12 +9,23 @@ import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.BottomSheetAttendanceReviewBinding
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.SessionRouteData
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -32,6 +43,9 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
 
     private var isPlaying = false
     private var activeSpeed = 1.0
+
+    private val geoApi = GeoTrackApi.create()
+    private lateinit var session: SessionManager
 
     companion object {
         fun newInstance(record: AttendanceApprovalRecord, listener: OnActionClickListener): AttendanceReviewBottomSheet {
@@ -71,12 +85,145 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
 
         bindHeaderAndDetails()
         setupTabs()
         setupPlaybackControls()
         setupActionButtons()
+        setupRouteMap(savedInstanceState)
     }
+
+    // ── Real travelled-route map (feeds the route-preview holder) ──────────
+    //
+    // Uses the same day-route source as the web / GeoTrackLive: fetch the
+    // staff's session route for the attendance date and draw the snapped
+    // polyline + stop markers. Only fills the placeholder area — the
+    // playback controls and every other view are left exactly as-is.
+    private fun setupRouteMap(savedInstanceState: Bundle?) {
+        val mapView = binding.mapRoutePreview
+        mapView.onCreate(savedInstanceState)
+        mapView.getMapAsync { map ->
+            map.uiSettings.isMapToolbarEnabled = false
+            loadRoute(map)
+        }
+    }
+
+    private fun loadRoute(map: GoogleMap) {
+        val rec = record ?: return
+
+        // Clear the layout's placeholder stat values up front so the mock
+        // numbers ("286", "7h 42m", …) never show — only live data does.
+        binding.tvReviewGpsPoints.text = "—"
+        binding.tvReviewTrips.text = "—"
+        binding.tvReviewDistance.text = "—"
+        val activeMins = rec.totalMinutes ?: 0
+        binding.tvReviewActiveTime.text =
+            if (activeMins > 0) "${activeMins / 60}h ${activeMins % 60}m" else "—"
+
+        val staffId = rec.staffId ?: return
+        val range = dayRangeMillis(rec.date) ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val data = runCatching {
+                geoApi.getSessionRoute(
+                    token = session.bearerToken,
+                    staffId = staffId,
+                    dayStart = range.first,
+                    dayEnd = range.second,
+                    minStopMinutes = 30,
+                ).data
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (data == null) return@launch
+
+            // Live travel stats for this staff/day, from the same route source.
+            binding.tvReviewGpsPoints.text = data.timeline.size.toString()
+            binding.tvReviewTrips.text = data.trips.size.toString()
+            val meters = if (data.distanceMeters > 0) data.distanceMeters
+                else data.trips.sumOf { it.distanceMeters }
+            binding.tvReviewDistance.text =
+                if (meters >= 1000) String.format(Locale.getDefault(), "%.1f km", meters / 1000.0)
+                else "$meters m"
+
+            drawRoute(map, data)
+        }
+    }
+
+    private fun drawRoute(map: GoogleMap, data: SessionRouteData) {
+        val boundsBuilder = LatLngBounds.Builder()
+        var hasBounds = false
+        val routeColor = Color.parseColor("#2563EB")
+
+        val tripPaths = data.trips.mapNotNull { trip ->
+            val path = trip.snappedPath.orEmpty().map { LatLng(it.lat, it.lng) }
+            if (path.size >= 2) path else null
+        }
+        if (tripPaths.isNotEmpty()) {
+            tripPaths.forEach { path ->
+                map.addPolyline(PolylineOptions().addAll(path).color(routeColor).width(8f))
+                path.forEach { boundsBuilder.include(it); hasBounds = true }
+            }
+        } else if (data.timeline.size >= 2) {
+            val timelinePath = data.timeline.map { LatLng(it.lat, it.lng) }
+            map.addPolyline(PolylineOptions().addAll(timelinePath).color(routeColor).width(8f))
+            timelinePath.forEach { boundsBuilder.include(it); hasBounds = true }
+        }
+
+        val stops = (data.stops + data.trips.flatMap { it.stops.orEmpty() })
+            .distinctBy { "${it.arrivedAt}:${it.departedAt}" }
+        stops.forEach { stop ->
+            val point = LatLng(stop.lat, stop.lng)
+            map.addMarker(MarkerOptions().position(point).title(stop.address ?: "Stop"))
+            boundsBuilder.include(point); hasBounds = true
+        }
+
+        // No travelled route for this record/date — keep the map hidden and
+        // leave the original "Route Preview" placeholder showing, rather than
+        // exposing an empty world-view map.
+        if (!hasBounds) return
+
+        // Real data arrived — reveal the map and hide the placeholder graphic.
+        binding.mapRoutePreview.visibility = View.VISIBLE
+        binding.imgRoutePlaceholder.visibility = View.GONE
+        binding.layoutRoutePlaceholderText.visibility = View.GONE
+
+        val bounds = boundsBuilder.build()
+        val mapView = binding.mapRoutePreview
+        mapView.post {
+            val w = mapView.width
+            val h = mapView.height
+            runCatching {
+                if (w > 0 && h > 0) {
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, w, h, dp(28)))
+                } else {
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(28)))
+                }
+            }.onFailure {
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 13f))
+            }
+        }
+    }
+
+    /** Local-day (Asia/Kolkata) [start, endExclusive) epoch-millis for a
+     *  "yyyy-MM-dd" attendance date. */
+    private fun dayRangeMillis(dateStr: String?): Pair<Long, Long>? {
+        if (dateStr.isNullOrBlank()) return null
+        val tz = TimeZone.getTimeZone("Asia/Kolkata")
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }
+        val parsed = runCatching { fmt.parse(dateStr) }.getOrNull() ?: return null
+        val cal = Calendar.getInstance(tz).apply {
+            time = parsed
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val start = cal.timeInMillis
+        cal.add(Calendar.DAY_OF_MONTH, 1)
+        return start to cal.timeInMillis
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun bindHeaderAndDetails() {
         val rec = record ?: return
@@ -213,7 +360,23 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        _binding?.mapRoutePreview?.onResume()
+    }
+
+    override fun onPause() {
+        _binding?.mapRoutePreview?.onPause()
+        super.onPause()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        _binding?.mapRoutePreview?.onLowMemory()
+    }
+
     override fun onDestroyView() {
+        _binding?.mapRoutePreview?.onDestroy()
         super.onDestroyView()
         _binding = null
     }

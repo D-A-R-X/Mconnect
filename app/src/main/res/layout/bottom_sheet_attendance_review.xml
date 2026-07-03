@@ -614,7 +614,19 @@
                     android:layout_height="180dp"
                     android:background="#E8EDF5">
 
+                    <!-- Real travelled-route map (lite mode). Drawn behind the
+                         placeholder + play overlay; the placeholder graphic is
+                         hidden once the route renders. -->
+                    <com.google.android.gms.maps.MapView
+                        android:id="@+id/mapRoutePreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="invisible"
+                        app:liteMode="true"
+                        app:mapType="normal" />
+
                     <ImageView
+                        android:id="@+id/imgRoutePlaceholder"
                         android:layout_width="64dp"
                         android:layout_height="64dp"
                         android:layout_gravity="center"
@@ -623,6 +635,7 @@
                         app:tint="#0B61CA" />
 
                     <LinearLayout
+                        android:id="@+id/layoutRoutePlaceholderText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"

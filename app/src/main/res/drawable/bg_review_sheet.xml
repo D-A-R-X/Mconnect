@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded-top content sheet that floats over a page's gradient header
+     (My Loans / home treatment). Uses the page's own surface colour so it
+     blends seamlessly with the background below it — no white-on-grey seam —
+     while the white record cards on top keep their contrast. The rounded top
+     corners still lift over the blue header for the shouldered-card look. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/colorSurfaceSecondary" />
+    <corners
+        android:topLeftRadius="30dp"
+        android:topRightRadius="30dp" />
+</shape>

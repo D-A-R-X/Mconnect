@@ -14,9 +14,24 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Approval scopes the queue can show, mirroring the web "Team Approvals"
+ * sub-tabs. All are bounded to the caller's own reporting hierarchy.
+ */
+enum class ApprovalCategory(
+    val label: String,
+    val scope: String,
+    val onlyOverdue: Boolean,
+) {
+    MY_TEAM("My Team", "direct", false),
+    ALL_TEAM("All Team", "subtree", false),
+    BLOCKING("Blocking Reviews", "subtree", true),
+}
+
 data class AttendanceReviewState(
     val pending: List<AttendanceApprovalRecord> = emptyList(),
     val isLoading: Boolean = false,
+    val category: ApprovalCategory = ApprovalCategory.MY_TEAM,
 )
 
 class AttendanceReviewViewModel : ViewModel() {
@@ -29,12 +44,24 @@ class AttendanceReviewViewModel : ViewModel() {
     private val _event = MutableSharedFlow<String>()
     val event: SharedFlow<String> = _event.asSharedFlow()
 
+    /** Switch category and reload. Ignores taps while a load is in flight. */
+    fun selectCategory(bearerToken: String, category: ApprovalCategory) {
+        if (_uiState.value.isLoading) return
+        _uiState.value = _uiState.value.copy(category = category)
+        load(bearerToken)
+    }
+
     fun load(bearerToken: String) {
+        val category = _uiState.value.category
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
                 val resp = runCatching {
-                    api.getPendingAttendanceApprovals(bearerToken)
+                    api.getPendingAttendanceApprovals(
+                        bearerToken,
+                        scope = category.scope,
+                        onlyOverdue = if (category.onlyOverdue) true else null,
+                    )
                 }.getOrNull()
                 _uiState.value = _uiState.value.copy(
                     pending = resp?.records ?: emptyList(),
