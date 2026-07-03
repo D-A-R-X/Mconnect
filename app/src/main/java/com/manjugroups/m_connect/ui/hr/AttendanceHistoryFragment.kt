@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.graphics.Color
 import android.widget.ImageView
 import android.widget.Toast
+import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import coil.load
 import coil.transform.CircleCropTransformation
@@ -24,6 +25,10 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
+import com.manjugroups.m_connect.network.ApproveAttendanceRequest
+import com.manjugroups.m_connect.network.RejectRequest
+import com.manjugroups.m_connect.network.AttendanceApprovalRecord
+import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -39,6 +44,10 @@ class AttendanceHistoryFragment : Fragment() {
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
     private val submittedRemarkDates = mutableSetOf<String>()
+
+    private var activeTab = 0
+    private val labels = listOf("Present", "Half-day", "Absent", "Weekoff", "Holiday")
+    private val values = listOf("present", "half-day", "absent", "weekoff", "holiday")
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentAttendanceHistoryBinding.inflate(inflater, container, false)
@@ -92,6 +101,23 @@ class AttendanceHistoryFragment : Fragment() {
             }
         }
 
+        val tabs = listOf(
+            HorizontalTabLayout.Tab("My Attendance"),
+            HorizontalTabLayout.Tab("Team Attendance"),
+            HorizontalTabLayout.Tab("Team Approval"),
+            HorizontalTabLayout.Tab("All Approval"),
+            HorizontalTabLayout.Tab("HR Review"),
+            HorizontalTabLayout.Tab("All")
+        )
+        binding.tabLayout.setTabs(tabs, defaultSelection = activeTab)
+        binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
+            override fun onTabSelected(index: Int) {
+                activeTab = index
+                loadData()
+            }
+        })
+        loadBadgeCounts()
+
         applyGreenGradient(binding.tvTotalDays)
         applyGreenGradient(binding.tvTotalHours)
         loadData()
@@ -120,63 +146,112 @@ class AttendanceHistoryFragment : Fragment() {
             cb.get(Calendar.DAY_OF_MONTH) == cb.getActualMaximum(Calendar.DAY_OF_MONTH)
     }
 
+    private fun loadBadgeCounts() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Fetch pending approvals
+                val approvalsResp = api.getPendingAttendanceApprovals(session.bearerToken)
+                if (approvalsResp.success) {
+                    val pendingCount = approvalsResp.records.size
+                    binding.tabLayout.updateBadge(2, pendingCount)
+                }
+                
+                // Fetch my attendance count for current month
+                val myResp = api.getMyAttendance(session.bearerToken, filterFromDate, filterToDate)
+                if (myResp.success) {
+                    val myCount = myResp.records.size
+                    binding.tabLayout.updateBadge(0, myCount)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun showEmptyState(title: String, desc: String, imageRes: Int) {
+        binding.emptyState.visibility = View.VISIBLE
+        binding.emptyState.setEmptyState(imageRes, title, desc)
+    }
+
     private fun loadData() {
-        // Skip the full-screen skeleton during a pull-refresh — the swipe
-        // spinner already signals "loading".
         val isPullRefresh = binding.attendanceRefresh.isRefreshing
         if (!isPullRefresh) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             binding.attendanceScroll.visibility = View.GONE
+            binding.emptyState.visibility = View.GONE
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getMyAttendance(
-                    session.bearerToken,
-                    fromDate = filterFromDate,
-                    toDate = filterToDate
-                )
-                if (resp.success) {
-                    val records = resp.records
+                when (activeTab) {
+                    0 -> {
+                        val resp = api.getMyAttendance(
+                            session.bearerToken,
+                            fromDate = filterFromDate,
+                            toDate = filterToDate
+                        )
+                        if (resp.success) {
+                            val records = resp.records
+                            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val daysPresent = records.count { r ->
+                                if (r.date == today) return@count false
+                                val av = r.approvedAttendance?.lowercase()
+                                when (av) {
+                                    "absent", "weekoff", "holiday" -> false
+                                    "present", "half-day" -> true
+                                    else -> (r.totalMinutes ?: 0) > 0
+                                }
+                            }
+                            val totalMinutes = records.sumOf { it.totalMinutes ?: 0 }
+                            val totalHours = totalMinutes / 60
+                            val remainingMins = totalMinutes % 60
 
-                    // Today's row is provisional — it hasn't crossed
-                    // midnight yet, so it hasn't entered the RO Team
-                    // Approval → HR Review pipeline. Exclude it from
-                    // the Days Present tile so the aggregate only
-                    // reflects days that have actually closed. Today
-                    // still appears in the list below with its live
-                    // status, but the tile waits for the day to end.
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                        .format(Date())
+                            binding.tvTotalDays.text = daysPresent.toString()
+                            binding.tvTotalHours.text = String.format(Locale.getDefault(), "%02d:%02d Hrs", totalHours, remainingMins)
 
-                    // Present-day count rules — keep in line with what
-                    // the user can read off the HR Overview table:
-                    //   • Today → never count (still in progress).
-                    //   • Explicit absent / week-off / holiday → never
-                    //     count (this was the 20 May "Approved (absent)"
-                    //     bug that inflated the count by one).
-                    //   • Explicit present / half-day → count.
-                    //   • Otherwise: any day with real duration counts,
-                    //     even while still status="pending". 24 May had
-                    //     4h 51m and 23 May had 0h 32m of actual work
-                    //     and were getting hidden from the count just
-                    //     because the row hadn't been HR-approved yet.
-                    val daysPresent = records.count { r ->
-                        if (r.date == today) return@count false
-                        val av = r.approvedAttendance?.lowercase()
-                        when (av) {
-                            "absent", "weekoff", "holiday" -> false
-                            "present", "half-day" -> true
-                            else -> (r.totalMinutes ?: 0) > 0
+                            renderRecords(records)
+
+                            binding.tabLayout.updateBadge(0, records.size)
                         }
                     }
-                    val totalMinutes = records.sumOf { it.totalMinutes ?: 0 }
-                    val totalHours = totalMinutes / 60
-                    val remainingMins = totalMinutes % 60
+                    1 -> {
+                        binding.attendanceList.removeAllViews()
+                        showEmptyState(
+                            title = "No team records",
+                            desc = "Attendance records from your team will appear here.",
+                            imageRes = R.drawable.ic_leave_empty
+                        )
+                    }
+                    2 -> {
+                        val resp = api.getPendingAttendanceApprovals(session.bearerToken)
+                        if (resp.success) {
+                            val approvals = resp.records
+                            renderApprovals(approvals)
 
-                    binding.tvTotalDays.text = daysPresent.toString()
-                    binding.tvTotalHours.text = String.format(Locale.getDefault(), "%02d:%02d Hrs", totalHours, remainingMins)
-
-                    renderRecords(records)
+                            binding.tabLayout.updateBadge(2, approvals.size)
+                        }
+                    }
+                    3 -> {
+                        binding.attendanceList.removeAllViews()
+                        showEmptyState(
+                            title = "No approvals to show",
+                            desc = "There are no pending approvals across the company.",
+                            imageRes = R.drawable.ic_leave_empty
+                        )
+                    }
+                    4 -> {
+                        binding.attendanceList.removeAllViews()
+                        showEmptyState(
+                            title = "All caught up!",
+                            desc = "There are no attendance corrections pending HR review.",
+                            imageRes = R.drawable.ic_leave_empty
+                        )
+                    }
+                    5 -> {
+                        binding.attendanceList.removeAllViews()
+                        showEmptyState(
+                            title = "No archives",
+                            desc = "All historical attendance records will land here.",
+                            imageRes = R.drawable.ic_leave_empty
+                        )
+                    }
                 }
             } catch (_: Exception) { }
             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
@@ -187,6 +262,15 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderRecords(records: List<AttendanceRecord>) {
         binding.attendanceList.removeAllViews()
+        if (records.isEmpty()) {
+            showEmptyState(
+                title = "No attendance records",
+                desc = "Your attendance history for this period is empty.",
+                imageRes = R.drawable.ic_leave_empty
+            )
+            return
+        }
+        binding.emptyState.visibility = View.GONE
 
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val dateFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
@@ -622,6 +706,152 @@ class AttendanceHistoryFragment : Fragment() {
             }
         }
         return record.earlyOutMinutes ?: record.earlyMinutes ?: record.earlyOut ?: 0
+    }
+
+    private fun formatDateLabel(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(raw) ?: return null
+            SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(parsed)
+        }.getOrNull()
+    }
+
+    private fun formatTime(iso: String?): String? {
+        if (iso.isNullOrBlank()) return null
+        val millis = parseIsoMillis(iso) ?: return null
+        return SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
+    }
+
+    private fun formatDuration(totalMinutes: Int): String {
+        val h = totalMinutes / 60
+        val m = totalMinutes % 60
+        return when {
+            h > 0 && m > 0 -> "${h}h ${m}m"
+            h > 0 -> "${h}h"
+            else -> "${m}m"
+        }
+    }
+
+    private fun renderApprovals(approvals: List<AttendanceApprovalRecord>) {
+        binding.attendanceList.removeAllViews()
+        if (approvals.isEmpty()) {
+            showEmptyState(
+                title = "No attendance to review",
+                desc = "Pending punches from your team will land here.",
+                imageRes = R.drawable.ic_leave_empty
+            )
+            return
+        }
+        binding.emptyState.visibility = View.GONE
+
+        approvals.forEach { record ->
+            val card = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_attendance_approval, binding.attendanceList, false)
+
+            val staffName = record.staffName?.trim().orEmpty().ifBlank { "Staff" }
+            card.findViewById<TextView>(R.id.tvAttStaffName).text = staffName
+            card.findViewById<TextView>(R.id.tvAttStaffInitial).text =
+                staffName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+
+            val meta = listOfNotNull(
+                record.employeeId?.takeIf { it.isNotBlank() },
+                record.designation?.takeIf { it.isNotBlank() },
+                record.department?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ").ifBlank { "—" }
+            card.findViewById<TextView>(R.id.tvAttStaffMeta).text = meta
+
+            val sourceLabel = when (record.source?.lowercase(Locale.US)) {
+                "mobile" -> "Mobile"
+                "biometric" -> "Biometric"
+                "manual" -> "Manual"
+                "csv-import" -> "CSV"
+                null, "" -> "—"
+                else -> record.source.replaceFirstChar { it.titlecase(Locale.US) }
+            }
+            card.findViewById<TextView>(R.id.tvAttSource).text = sourceLabel
+
+            card.findViewById<TextView>(R.id.tvAttDate).text =
+                formatDateLabel(record.date) ?: (record.date ?: "—")
+            card.findViewById<TextView>(R.id.tvAttPunchIn).text = formatTime(record.punchInTime) ?: "—"
+            card.findViewById<TextView>(R.id.tvAttPunchOut).text = formatTime(record.punchOutTime) ?: "—"
+            card.findViewById<TextView>(R.id.tvAttDuration).text =
+                record.totalMinutes?.let { formatDuration(it) } ?: "—"
+
+            card.findViewById<TextView>(R.id.btnApproveAttendance).setOnClickListener {
+                record.id?.let { showApproveDialog(it) }
+            }
+            card.findViewById<TextView>(R.id.btnRejectAttendance).setOnClickListener {
+                record.id?.let { showRejectDialog(it) }
+            }
+
+            binding.attendanceList.addView(card)
+        }
+    }
+
+    private fun showApproveDialog(id: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Approve as")
+            .setItems(labels.toTypedArray()) { _, which ->
+                approveRecord(id, values[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRejectDialog(id: String) {
+        val input = EditText(requireContext()).apply {
+            hint = "Reason for rejection"
+            minLines = 3
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Reject attendance")
+            .setView(input)
+            .setPositiveButton("Reject") { _, _ ->
+                val reason = input.text?.toString()?.trim().orEmpty().ifBlank { "Rejected" }
+                rejectRecord(id, reason)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun approveRecord(id: String, approvedAttendance: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.approveAttendance(
+                    session.bearerToken,
+                    ApproveAttendanceRequest(id, approvedAttendance)
+                )
+                if (resp.success) {
+                    Toast.makeText(requireContext(), "Approved successfully", Toast.LENGTH_SHORT).show()
+                    loadData()
+                    loadBadgeCounts()
+                } else {
+                    Toast.makeText(requireContext(), "Failed to approve", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun rejectRecord(id: String, reason: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.rejectAttendance(
+                    session.bearerToken,
+                    RejectRequest(id, reason)
+                )
+                if (resp.success) {
+                    Toast.makeText(requireContext(), "Rejected successfully", Toast.LENGTH_SHORT).show()
+                    loadData()
+                    loadBadgeCounts()
+                } else {
+                    Toast.makeText(requireContext(), "Failed to reject", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onDestroyView() {

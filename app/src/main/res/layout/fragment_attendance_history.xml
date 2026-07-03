@@ -173,6 +173,13 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Horizontal Scrollable Tabs -->
+    <com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+        android:id="@+id/tabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+
     <!-- Attendance list -->
     <FrameLayout
         android:layout_width="match_parent"
@@ -199,6 +206,17 @@
                     android:paddingBottom="40dp" />
             </ScrollView>
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <com.manjugroups.m_connect.ui.common.EmptyStateView
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:paddingHorizontal="20dp"
+            android:visibility="gone"
+            app:es_image="@drawable/ic_leave_empty"
+            app:es_title="No records found"
+            app:es_description="Check back later for new updates." />
 
         <View
             android:layout_width="match_parent"
