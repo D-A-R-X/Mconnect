@@ -61,6 +61,20 @@
         </LinearLayout>
 
         <ImageView
+            android:id="@+id/btnAttendanceSearch"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_toStartOf="@id/btnAttendanceFilter"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/frame_21472"
+            android:src="@drawable/ic_attendance_search"
+            android:scaleType="centerInside"
+            android:contentDescription="Search"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <ImageView
             android:id="@+id/btnAttendanceFilter"
             android:layout_width="32dp"
             android:layout_height="32dp"
@@ -73,6 +87,31 @@
             android:clickable="true"
             android:focusable="true" />
     </RelativeLayout>
+
+    <!-- Search bar (Expandable/Toggleable) -->
+    <FrameLayout
+        android:id="@+id/layoutSearch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="20dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <EditText
+            android:id="@+id/etSearch"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_search_bar"
+            android:drawablePadding="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:hint="Search team members..."
+            android:inputType="text"
+            android:paddingHorizontal="14dp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textCursorDrawable="@null"
+            android:textSize="14sp" />
+    </FrameLayout>
 
     <!-- Summary stats -->
     <LinearLayout
@@ -173,6 +212,13 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Horizontal Scrollable Tabs -->
+    <com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+        android:id="@+id/tabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+
     <!-- Attendance list -->
     <FrameLayout
         android:layout_width="match_parent"
@@ -199,6 +245,17 @@
                     android:paddingBottom="40dp" />
             </ScrollView>
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <com.manjugroups.m_connect.ui.common.EmptyStateView
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:paddingHorizontal="20dp"
+            android:visibility="gone"
+            app:es_image="@drawable/ic_leave_empty"
+            app:es_title="No records found"
+            app:es_description="Check back later for new updates." />
 
         <View
             android:layout_width="match_parent"

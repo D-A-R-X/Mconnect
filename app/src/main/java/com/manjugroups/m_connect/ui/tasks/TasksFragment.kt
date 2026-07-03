@@ -17,7 +17,6 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
-import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -59,10 +58,6 @@ class TasksFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
-
-        view.findViewById<View>(R.id.btnTasksBack).setOnClickListener {
-            navigateUp()
-        }
 
         // Push the blue header below the OS status bar and grow its height
         // by the same amount so the gradient still extends edge-to-edge

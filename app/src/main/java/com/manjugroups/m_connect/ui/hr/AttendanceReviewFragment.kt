@@ -56,8 +56,14 @@ class AttendanceReviewFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        view.findViewById<View>(R.id.btnBack).setOnClickListener {
-            navigateUp()
+        view.findViewById<com.manjugroups.m_connect.ui.common.SummaryHeaderView>(R.id.summaryHeader)
+            .apply {
+                setBackButtonVisible(true)
+                setOnBackClickListener { navigateUp() }
+            }
+
+        view.findViewById<View>(R.id.btnCategorySelector).setOnClickListener { anchor ->
+            showCategoryMenu(anchor)
         }
 
         collectState()
@@ -87,6 +93,10 @@ class AttendanceReviewFragment : Fragment() {
         val skeleton = contentRoot.findViewById<View>(R.id.skeletonContainer)
         val list = contentRoot.findViewById<LinearLayout>(R.id.approvalsList)
         val empty = contentRoot.findViewById<View>(R.id.emptyState)
+
+        // Keep the dropdown label in sync with the active category, even
+        // mid-load, so the selection reflects immediately on tap.
+        contentRoot.findViewById<TextView>(R.id.tvCategoryLabel).text = state.category.label
 
         if (state.isLoading) {
             skeleton.visibility = View.VISIBLE
@@ -148,6 +158,73 @@ class AttendanceReviewFragment : Fragment() {
         }
         return card
     }
+
+    /**
+     * Category dropdown — the same PopupWindow + dim backdrop component the
+     * Leaves / Permissions scope selectors use, so the approval surfaces
+     * feel identical (rounded card, centred items, dividers, active-in-blue).
+     */
+    private fun showCategoryMenu(anchor: View) {
+        val backdrop = contentRoot.findViewById<View>(R.id.scopeBackdrop)
+        backdrop.visibility = View.VISIBLE
+        backdrop.alpha = 0f
+        backdrop.animate().alpha(1f).setDuration(200).start()
+
+        val popupView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_scope_menu_attendance, null)
+        val popupWidth = dp(190)
+        val popup = android.widget.PopupWindow(
+            popupView,
+            popupWidth,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true,
+        ).apply {
+            elevation = dp(12).toFloat()
+            isOutsideTouchable = true
+            setBackgroundDrawable(
+                android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            )
+            setOnDismissListener {
+                backdrop.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction { backdrop.visibility = View.GONE }
+                    .start()
+            }
+        }
+        backdrop.setOnClickListener { popup.dismiss() }
+
+        val current = viewModel.uiState.value.category
+        val activeColor = androidx.core.content.ContextCompat.getColor(
+            requireContext(), R.color.chat_blue_top,
+        )
+        val defaultColor = Color.parseColor("#061D3D")
+
+        val rows = listOf(
+            R.id.menuMyTeam to ApprovalCategory.MY_TEAM,
+            R.id.menuAllTeam to ApprovalCategory.ALL_TEAM,
+            R.id.menuBlocking to ApprovalCategory.BLOCKING,
+        )
+        rows.forEach { (viewId, category) ->
+            popupView.findViewById<TextView>(viewId).apply {
+                text = category.label
+                setTextColor(if (current == category) activeColor else defaultColor)
+                setOnClickListener {
+                    popup.dismiss()
+                    if (current != category) viewModel.selectCategory(session.bearerToken, category)
+                }
+            }
+        }
+
+        popup.showAsDropDown(anchor, 0, dp(4))
+        popupView.alpha = 0f
+        popupView.scaleX = 0.95f
+        popupView.scaleY = 0.95f
+        popupView.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(150).start()
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     private fun showApproveDialog(id: String) {
         AlertDialog.Builder(requireContext())

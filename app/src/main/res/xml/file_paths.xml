@@ -2,6 +2,7 @@
 <paths>
     <cache-path name="punch_photos" path="punch_photos/" />
     <cache-path name="arrival_photos" path="arrival_photos/" />
+    <cache-path name="on_duty_proof" path="on_duty_proof/" />
     <cache-path name="expense_receipts" path="expense_receipts/" />
     <cache-path name="voice_notes" path="voice_notes/" />
     <cache-path name="chat_photos" path="chat_photos/" />

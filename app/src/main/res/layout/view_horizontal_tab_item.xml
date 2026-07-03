@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/llTabRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="36dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <TextView
+        android:id="@+id/tvTabText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#475467"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvTabBadge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="6dp"
+        android:gravity="center"
+        android:textSize="10sp"
+        android:fontFamily="@font/inter_bold"
+        android:visibility="gone" />
+</LinearLayout>

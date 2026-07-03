@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Unfilled portion of the task-progress bar. Light grey so the track is
+     visible on the white task cards (was #FEFEFE = invisible on white, which
+     made 0% tasks look like they had no bar). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#FEFEFE" />
+    <solid android:color="#EAECF0" />
     <corners android:radius="100dp" />
 </shape>
