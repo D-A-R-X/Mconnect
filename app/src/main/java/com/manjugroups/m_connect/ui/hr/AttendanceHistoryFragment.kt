@@ -139,22 +139,24 @@ class AttendanceHistoryFragment : Fragment() {
             HorizontalTabLayout.Tab("All")
         )
         binding.tabLayout.setTabs(tabs, defaultSelection = activeTab)
-        if (activeTab in 2..5) {
+        if (activeTab == 4) {
             binding.layoutSubTabs.visibility = View.VISIBLE
             updateSubTabStyles()
         } else {
             binding.layoutSubTabs.visibility = View.GONE
+            activeSubTab = 0
         }
         binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 activeTab = index
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
-                if (index in 2..5) {
+                if (index == 4) {
                     binding.layoutSubTabs.visibility = View.VISIBLE
                     updateSubTabStyles()
                 } else {
                     binding.layoutSubTabs.visibility = View.GONE
+                    activeSubTab = 0
                 }
                 loadData()
             }
@@ -850,6 +852,10 @@ class AttendanceHistoryFragment : Fragment() {
             val ivAvatar = card.findViewById<ImageView>(R.id.ivAttStaffAvatar)
             ivAvatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
 
+            val btnReject = card.findViewById<View>(R.id.btnRejectAttendance)
+            val btnApprove = card.findViewById<View>(R.id.btnApproveAttendance)
+            val btnHrReview = card.findViewById<View>(R.id.btnHrReviewAction)
+
             val openSheetListener = View.OnClickListener {
                 val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
                     override fun onApprove(recordId: String) {
@@ -862,9 +868,22 @@ class AttendanceHistoryFragment : Fragment() {
                 sheet.show(parentFragmentManager, "attendance_review")
             }
 
-            card.setOnClickListener(openSheetListener)
-            card.findViewById<View>(R.id.btnApproveAttendance).setOnClickListener(openSheetListener)
-            card.findViewById<View>(R.id.btnRejectAttendance).setOnClickListener(openSheetListener)
+            if (activeTab == 4 && activeSubTab == 1) {
+                btnReject.visibility = View.GONE
+                btnApprove.visibility = View.GONE
+                btnHrReview.visibility = View.VISIBLE
+                
+                btnHrReview.setOnClickListener(openSheetListener)
+                card.setOnClickListener(openSheetListener)
+            } else {
+                btnReject.visibility = View.VISIBLE
+                btnApprove.visibility = View.VISIBLE
+                btnHrReview.visibility = View.GONE
+                
+                card.setOnClickListener(openSheetListener)
+                btnApprove.setOnClickListener(openSheetListener)
+                btnReject.setOnClickListener(openSheetListener)
+            }
 
             binding.attendanceList.addView(card)
         }
