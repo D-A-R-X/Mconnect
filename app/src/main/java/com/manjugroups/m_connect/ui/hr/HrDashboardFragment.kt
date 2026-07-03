@@ -267,6 +267,18 @@ class HrDashboardFragment : Fragment() {
             }
         }
 
+        // Public Transport on-duty routes through the proof sheet; once the
+        // travel proof is uploaded it hands the storageIds + note back here
+        // and we close the trip with them attached.
+        parentFragmentManager.setFragmentResultListener(
+            OnDutyProofBottomSheet.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val ids = bundle.getStringArrayList(OnDutyProofBottomSheet.KEY_PROOF_IDS)
+            val note = bundle.getString(OnDutyProofBottomSheet.KEY_PROOF_NOTE)
+            finishOnDuty(proofPhotoIds = ids, proofNote = note)
+        }
+
         binding.btnClockOut.setOnClickListener {
             // Show the SAME "Today" figure the dashboard card displays.
             // While the session is open the API's todayMinutes is 0 (it
@@ -566,7 +578,14 @@ class HrDashboardFragment : Fragment() {
                         // unlimited — each tap re-stamps the day's punch-out, so
                         // the last tap becomes the effective punch-out (locked
                         // by the midnight finalize).
-                        session.clearOnDutyDetails()
+                        // On-duty is NOT cleared from here anymore. It is a
+                        // manual lifecycle: it ends only when the user taps
+                        // Complete On Duty (finishOnDuty) or clocks out from
+                        // the app (PUNCH_OUT result). Deriving the clear from
+                        // attendance state is what lost the trip on relaunch —
+                        // a momentary "not clocked in" read (e.g. a stale
+                        // hasOpenSession after a cold start) would wipe a still
+                        // active on-duty session and re-prompt "On Duty".
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnClockOut.isEnabled = !state.isSubmitting
@@ -578,7 +597,10 @@ class HrDashboardFragment : Fragment() {
                         stopLiveTodayTicker()
                         updateHeaderTexts(false)
                     } else {
-                        session.clearOnDutyDetails()
+                        // On-duty is intentionally NOT cleared here (see the
+                        // clocked-out branch above). The not-clocked-in render
+                        // must never wipe a persisted on-duty session — that
+                        // was the relaunch/crash data-loss bug.
                         binding.clockInButtonGroup.visibility = View.VISIBLE
                         binding.clockedInButtonGroup.visibility = View.GONE
                         binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
@@ -1139,18 +1161,68 @@ class HrDashboardFragment : Fragment() {
     }
 
     /**
-     * Close the active OnDuty trip on the server, then clear the local
-     * session flags + refresh UI. Local state is cleared regardless of
-     * server outcome so the user can't get stuck with a stale "On Duty"
-     * pill if the network is down — the nightly trip-finalize cron will
-     * close any orphaned active trip.
+     * Application-context variant used by the background on-duty complete.
+     * The fragment may already be gone by the time this runs, so it takes a
+     * captured Context instead of requireContext(), and it is time-boxed so
+     * a slow GPS fix can never stall the (now already-cleared) flow — it
+     * just falls back to the last known location or null.
+     */
+    private suspend fun fetchLocationForContextOrNull(ctx: android.content.Context): Location? {
+        return try {
+            kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                val client = LocationServices.getFusedLocationProviderClient(ctx)
+                val token = CancellationTokenSource().token
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+                    ?: client.lastLocation.await()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Entry point for the "Complete On Duty" tap. Public Transport trips
+     * must attach travel proof first (Rapido/bus ticket, etc.), so they
+     * detour through [OnDutyProofBottomSheet]; every other vehicle closes
+     * straight away.
      */
     private fun completeOnDutyTrip() {
+        val isPublicTransport =
+            session.onDutyVehicleType.equals("Public Transport", ignoreCase = true) ||
+                session.onDutyVehicleOwnership.equals("Public Vehicle", ignoreCase = true)
+        if (isPublicTransport) {
+            OnDutyProofBottomSheet.newInstance().show(parentFragmentManager, "on_duty_proof")
+            return
+        }
+        finishOnDuty(proofPhotoIds = null, proofNote = null)
+    }
+
+    /**
+     * Close the active OnDuty trip. Optimistic by design: the local
+     * session flags + UI clear *immediately* so the button flips back the
+     * instant it's tapped — the old flow blocked on a high-accuracy GPS
+     * fix before doing anything, which is what made completion feel like
+     * it hung for several seconds. The network complete (with a
+     * best-effort, time-boxed location fix) runs on the activity scope so
+     * it survives this fragment being destroyed. Local state is cleared
+     * regardless of server outcome; the server falls back to the most
+     * recent active on-duty trip on the next call, and the nightly
+     * trip-finalize cron closes any orphan.
+     */
+    private fun finishOnDuty(proofPhotoIds: List<String>?, proofNote: String?) {
         val tripId = session.onDutyTripId
         val token = session.bearerToken
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val loc = fetchLocationOrNull()
+        val appCtx = requireContext().applicationContext
+
+        session.clearOnDutyDetails()
+        Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+        updateOnDutyButtonUi()
+        val isClockedIn = flowViewModel.uiState.value.isClockedIn
+        updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
+
+        requireActivity().lifecycleScope.launch {
+            val loc = fetchLocationForContextOrNull(appCtx)
+            runCatching {
                 api.completeOnDutyTrip(
                     token,
                     com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
@@ -1158,18 +1230,11 @@ class HrDashboardFragment : Fragment() {
                         lat = loc?.latitude,
                         lng = loc?.longitude,
                         address = null,
+                        proofPhotoIds = proofPhotoIds?.takeIf { it.isNotEmpty() },
+                        proofNote = proofNote?.takeIf { it.isNotBlank() },
                     ),
                 )
-            } catch (_: Exception) {
-                // Silent — the local state still clears. The cron-based
-                // trip finalizer closes any orphaned active row.
             }
-            if (_binding == null) return@launch
-            session.clearOnDutyDetails()
-            Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
-            updateOnDutyButtonUi()
-            val isClockedIn = flowViewModel.uiState.value.isClockedIn
-            updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
         }
     }
 

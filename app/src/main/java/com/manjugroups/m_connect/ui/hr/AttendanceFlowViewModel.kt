@@ -37,6 +37,14 @@ import java.util.TimeZone
 data class AttendanceFlowState(
     val isLoading: Boolean = false,
     val isSubmitting: Boolean = false,
+    /** True once authoritative attendance has been fetched from the server
+     *  at least once. Distinguishes the initial/default state (nothing
+     *  loaded yet, every flag still at its default) from a genuine "not
+     *  clocked in" server result. UI must not act destructively on the
+     *  empty default — e.g. wiping a persisted on-duty session before we
+     *  actually know today's clock state, which lost the on-duty trip on
+     *  every cold start / relaunch. */
+    val hasLoaded: Boolean = false,
     /** True only while an open session exists right now. Drives the live
      *  ticker and the blue "You're Clocked In" / "Clocked Out" header on
      *  the Attendance tab. Flips back to false after every clock-out. */
@@ -126,6 +134,7 @@ class AttendanceFlowViewModel(
                 _uiState.value = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
+                    hasLoaded = true,
                     isClockedIn = isClockedInForUi,
                     hasClockedInToday = hasClockedInTodayForUi,
                     todayMinutes = totalMinutes,

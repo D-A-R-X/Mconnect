@@ -1247,6 +1247,10 @@ data class CompleteOnDutyTripRequest(
     val lat: Double? = null,
     val lng: Double? = null,
     val address: String? = null,
+    // Proof-of-travel attachments. Required for Public Transport on-duty
+    // (Rapido screenshot, bus ticket, etc.); null/empty for other vehicles.
+    val proofPhotoIds: List<String>? = null,
+    val proofNote: String? = null,
 )
 
 data class CompleteOnDutyTripResponse(
