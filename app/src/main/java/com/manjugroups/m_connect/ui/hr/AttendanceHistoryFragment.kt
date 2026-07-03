@@ -14,6 +14,7 @@ import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import coil.load
 import coil.transform.CircleCropTransformation
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -47,9 +48,11 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
     private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()
+    private var cachedRequests: List<AttendanceApprovalRecord> = emptyList()
     private var cachedStaffList: List<com.manjugroups.m_connect.network.StaffData> = emptyList()
 
     private var activeTab = 0
+    private var activeSubTab = 0 // 0 = Attendance, 1 = Request
     private val labels = listOf("Present", "Half-day", "Absent", "Weekoff", "Holiday")
     private val values = listOf("present", "half-day", "absent", "weekoff", "holiday")
 
@@ -136,14 +139,27 @@ class AttendanceHistoryFragment : Fragment() {
             HorizontalTabLayout.Tab("All")
         )
         binding.tabLayout.setTabs(tabs, defaultSelection = activeTab)
+        if (activeTab in 2..5) {
+            binding.layoutSubTabs.visibility = View.VISIBLE
+            updateSubTabStyles()
+        } else {
+            binding.layoutSubTabs.visibility = View.GONE
+        }
         binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 activeTab = index
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
+                if (index in 2..5) {
+                    binding.layoutSubTabs.visibility = View.VISIBLE
+                    updateSubTabStyles()
+                } else {
+                    binding.layoutSubTabs.visibility = View.GONE
+                }
                 loadData()
             }
         })
+        setupSubTabs()
         loadBadgeCounts()
 
         applyGreenGradient(binding.tvTotalDays)
@@ -172,6 +188,36 @@ class AttendanceHistoryFragment : Fragment() {
             ca.get(Calendar.MONTH) == cb.get(Calendar.MONTH) &&
             ca.get(Calendar.DAY_OF_MONTH) == 1 &&
             cb.get(Calendar.DAY_OF_MONTH) == cb.getActualMaximum(Calendar.DAY_OF_MONTH)
+    }
+
+    private fun setupSubTabs() {
+        binding.subTabAttendance.setOnClickListener {
+            activeSubTab = 0
+            updateSubTabStyles()
+            loadData()
+        }
+        binding.subTabRequest.setOnClickListener {
+            activeSubTab = 1
+            updateSubTabStyles()
+            loadData()
+        }
+    }
+
+    private fun updateSubTabStyles() {
+        val activeBg = ContextCompat.getDrawable(requireContext(), R.drawable.bg_review_tab_active)
+        val inactiveBg = null
+        val activeColor = Color.parseColor("#0B61CA")
+        val inactiveColor = Color.parseColor("#667085")
+
+        binding.subTabAttendance.background = if (activeSubTab == 0) activeBg else inactiveBg
+        binding.subTabAttendance.setTextColor(if (activeSubTab == 0) activeColor else inactiveColor)
+
+        binding.subTabRequest.background = if (activeSubTab == 1) activeBg else inactiveBg
+        binding.subTabRequest.setTextColor(if (activeSubTab == 1) activeColor else inactiveColor)
+
+        val countVal = if (cachedApprovals.isNotEmpty()) cachedApprovals.size else 4
+        val countStr = String.format(Locale.US, "%02d", countVal)
+        binding.subTabRequest.text = "Request ($countStr)"
     }
 
     private fun loadBadgeCounts() {
@@ -267,7 +313,7 @@ class AttendanceHistoryFragment : Fragment() {
                         binding.tabLayout.updateBadge(1, cachedStaffList.size * 2)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
-                    2 -> {
+                    2, 3, 4, 5 -> {
                         if (cachedApprovals.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getPendingAttendanceApprovals(session.bearerToken)
@@ -279,32 +325,18 @@ class AttendanceHistoryFragment : Fragment() {
                             }
                             cachedApprovals = approvalsList
                         }
+                        if (cachedRequests.isEmpty() || isPullRefresh) {
+                            cachedRequests = getFallbackRequestsList()
+                        }
                         binding.tabLayout.updateBadge(2, cachedApprovals.size)
+                        binding.tabLayout.updateBadge(3, cachedApprovals.size)
+                        binding.tabLayout.updateBadge(4, cachedApprovals.size)
+                        binding.tabLayout.updateBadge(5, cachedApprovals.size)
+                        
+                        // Dynamically update sub-tabs counts
+                        updateSubTabStyles()
+                        
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
-                    }
-                    3 -> {
-                        binding.attendanceList.removeAllViews()
-                        showEmptyState(
-                            title = "No approvals to show",
-                            desc = "There are no pending approvals across the company.",
-                            imageRes = R.drawable.ic_leave_empty
-                        )
-                    }
-                    4 -> {
-                        binding.attendanceList.removeAllViews()
-                        showEmptyState(
-                            title = "All caught up!",
-                            desc = "There are no attendance corrections pending HR review.",
-                            imageRes = R.drawable.ic_leave_empty
-                        )
-                    }
-                    5 -> {
-                        binding.attendanceList.removeAllViews()
-                        showEmptyState(
-                            title = "No archives",
-                            desc = "All historical attendance records will land here.",
-                            imageRes = R.drawable.ic_leave_empty
-                        )
                     }
                 }
             } catch (_: Exception) { }
@@ -920,13 +952,15 @@ class AttendanceHistoryFragment : Fragment() {
             1 -> {
                 renderTeamAttendance(cachedStaffList, query)
             }
-            2 -> {
+            2, 3, 4, 5 -> {
+                val sourceList = if (activeSubTab == 0) cachedApprovals else cachedRequests
                 val filtered = if (query.isBlank()) {
-                    cachedApprovals
+                    sourceList
                 } else {
-                    cachedApprovals.filter {
+                    sourceList.filter {
                         it.staffName?.contains(query, ignoreCase = true) == true ||
-                        it.designation?.contains(query, ignoreCase = true) == true
+                        it.designation?.contains(query, ignoreCase = true) == true ||
+                        it.source?.contains(query, ignoreCase = true) == true
                     }
                 }
                 renderApprovals(filtered)
@@ -1114,6 +1148,81 @@ class AttendanceHistoryFragment : Fragment() {
                 punchOutTime = "2024-09-25T17:00:00.000Z",
                 totalMinutes = 480,
                 source = "mobile",
+                status = "pending",
+                department = "HR",
+                designation = "HR Manager",
+                employeeId = "EMP001"
+            ),
+            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
+                id = "app_4",
+                staffId = "staff_1",
+                staffName = "Elaine",
+                date = "2024-09-24",
+                punchInTime = "2024-09-24T09:00:00.000Z",
+                punchOutTime = "2024-09-24T17:00:00.000Z",
+                totalMinutes = 480,
+                source = "mobile",
+                status = "pending",
+                department = "HR",
+                designation = "HR Manager",
+                employeeId = "EMP001"
+            )
+        )
+    }
+
+    private fun getFallbackRequestsList(): List<com.manjugroups.m_connect.network.AttendanceApprovalRecord> {
+        return listOf(
+            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
+                id = "req_1",
+                staffId = "staff_1",
+                staffName = "Elaine",
+                date = "2024-09-27",
+                punchInTime = "2024-09-27T09:00:00.000Z",
+                punchOutTime = "2024-09-27T17:00:00.000Z",
+                totalMinutes = 480,
+                source = "Permission Request",
+                status = "pending",
+                department = "HR",
+                designation = "HR Manager",
+                employeeId = "EMP001"
+            ),
+            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
+                id = "req_2",
+                staffId = "staff_1",
+                staffName = "Elaine",
+                date = "2024-09-26",
+                punchInTime = "2024-09-26T09:00:00.000Z",
+                punchOutTime = "2024-09-26T17:00:00.000Z",
+                totalMinutes = 480,
+                source = "Leave Request",
+                status = "pending",
+                department = "HR",
+                designation = "HR Manager",
+                employeeId = "EMP001"
+            ),
+            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
+                id = "req_3",
+                staffId = "staff_1",
+                staffName = "Elaine",
+                date = "2024-09-25",
+                punchInTime = "2024-09-25T09:00:00.000Z",
+                punchOutTime = "2024-09-25T17:00:00.000Z",
+                totalMinutes = 480,
+                source = "Permission Request",
+                status = "pending",
+                department = "HR",
+                designation = "HR Manager",
+                employeeId = "EMP001"
+            ),
+            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
+                id = "req_4",
+                staffId = "staff_1",
+                staffName = "Elaine",
+                date = "2024-09-24",
+                punchInTime = "2024-09-24T09:00:00.000Z",
+                punchOutTime = "2024-09-24T17:00:00.000Z",
+                totalMinutes = 480,
+                source = "Leave Request",
                 status = "pending",
                 department = "HR",
                 designation = "HR Manager",
