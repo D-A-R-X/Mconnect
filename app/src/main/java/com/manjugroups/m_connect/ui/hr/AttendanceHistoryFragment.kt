@@ -857,15 +857,27 @@ class AttendanceHistoryFragment : Fragment() {
             val btnHrReview = card.findViewById<View>(R.id.btnHrReviewAction)
 
             val openSheetListener = View.OnClickListener {
-                val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
-                    override fun onApprove(recordId: String) {
-                        approveRecord(recordId, "present")
-                    }
-                    override fun onReject(recordId: String) {
-                        showRejectDialog(recordId)
-                    }
-                })
-                sheet.show(parentFragmentManager, "attendance_review")
+                if (activeTab == 4 && activeSubTab == 1) {
+                    val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
+                        override fun onApprove(recordId: String, status: String) {
+                            approveRecord(recordId, status)
+                        }
+                        override fun onReject(recordId: String) {
+                            showRejectDialog(recordId)
+                        }
+                    })
+                    sheet.show(parentFragmentManager, "review_attendance_request")
+                } else {
+                    val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
+                        override fun onApprove(recordId: String) {
+                            approveRecord(recordId, "present")
+                        }
+                        override fun onReject(recordId: String) {
+                            showRejectDialog(recordId)
+                        }
+                    })
+                    sheet.show(parentFragmentManager, "attendance_review")
+                }
             }
 
             if (activeTab == 4 && activeSubTab == 1) {
