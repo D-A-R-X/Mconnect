@@ -99,6 +99,9 @@ class HrDashboardFragment : Fragment() {
     private var hasCompletedFirstAttendanceLoad = false
     private var recentHistoryRecords: List<AttendanceRecord> = emptyList()
     private var liveTickerJob: Job? = null
+    // Fires just after midnight to reload attendance so the clocked-out Clock
+    // Out lock clears for the new day.
+    private var midnightRefreshJob: Job? = null
     // Reference to the dynamic "Today" history card's hours TextView, so the
     // live ticker can update it each second. Reset whenever the history list
     // is rebuilt.
@@ -564,38 +567,39 @@ class HrDashboardFragment : Fragment() {
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnClockOut.isEnabled = !state.isSubmitting
                         binding.btnClockOut.text = "Clock Out"
+                        binding.btnClockOut.setTextColor(Color.WHITE)
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnOnDuty.visibility = View.VISIBLE
                         binding.btnOnDuty.isEnabled = !state.isSubmitting
                         updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
                         updateHeaderTexts(true)
                     } else if (hasClockedOutToday) {
-                        // One-time Clock In rule: once the staff has punched in
-                        // today the button never reverts to "Clock In". It
-                        // stays "Clock Out" until the day ends. Clock Out is
-                        // unlimited — each tap re-stamps the day's punch-out, so
-                        // the last tap becomes the effective punch-out (locked
-                        // by the midnight finalize).
-                        // On-duty is NOT cleared from here anymore. It is a
-                        // manual lifecycle: it ends only when the user taps
-                        // Complete On Duty (finishOnDuty) or clocks out from
-                        // the app (PUNCH_OUT result). Deriving the clear from
-                        // attendance state is what lost the trip on relaunch —
-                        // a momentary "not clocked in" read (e.g. a stale
-                        // hasOpenSession after a cold start) would wipe a still
-                        // active on-duty session and re-prompt "On Duty".
+                        // Already clocked out today → the day is done: lock the
+                        // Clock Out button (pale grey, disabled) so it can't be
+                        // tapped again. The day's attendance finalizes at
+                        // midnight; scheduleMidnightRefresh() reloads right after
+                        // 12 AM so the button re-enables for the new day.
+                        // On-duty is NOT cleared from here (manual lifecycle):
+                        // it ends only on Complete On Duty or an app clock-out.
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
-                        binding.btnClockOut.isEnabled = !state.isSubmitting
-                        binding.btnClockOut.text = "Clock Out"
+                        binding.btnClockOut.isEnabled = false
+                        binding.btnClockOut.text = "Clocked Out"
+                        binding.btnClockOut.setTextColor(Color.parseColor("#667085"))
                         binding.btnClockOut.setBackgroundResource(
-                            R.drawable.bg_attendance_btn_primary
+                            R.drawable.bg_attendance_btn_disabled
                         )
+                        // Day is over → no On Duty; only the greyed-out Clock
+                        // Out button remains (it fills the row once On Duty is
+                        // gone). On-duty was already cleared on the clock-out.
+                        binding.btnOnDuty.visibility = View.GONE
                         binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
                         stopLiveTodayTicker()
                         updateHeaderTexts(false)
+                        scheduleMidnightRefresh()
                     } else {
                         // On-duty is intentionally NOT cleared here (see the
                         // clocked-out branch above). The not-clocked-in render
@@ -706,7 +710,7 @@ class HrDashboardFragment : Fragment() {
             if (hasClockedOutToday) {
                 binding.tvAttendanceHeaderTitle.text = "Clocked Out"
                 binding.tvAttendanceHeaderSubtitle.text =
-                    "Tap Clock Out again to update — final time locks at midnight"
+                    "You're done for the day — attendance finalizes at midnight"
             } else {
                 binding.tvAttendanceHeaderTitle.text = "Let’s Clock-In!"
                 binding.tvAttendanceHeaderSubtitle.text =
@@ -742,6 +746,32 @@ class HrDashboardFragment : Fragment() {
     private fun stopLiveTodayTicker() {
         liveTickerJob?.cancel()
         liveTickerJob = null
+    }
+
+    /**
+     * When the user is clocked out for the day, the Clock Out button is
+     * locked. Schedule a reload just after midnight so the day rolls over and
+     * the button becomes actionable again for the new day (the finalize of
+     * the previous day happens server-side). Reopening the app on a new day
+     * already picks up the fresh state via onResume; this covers the case
+     * where the app is left open across midnight.
+     */
+    private fun scheduleMidnightRefresh() {
+        if (midnightRefreshJob?.isActive == true) return
+        val now = Calendar.getInstance()
+        val nextMidnight = (now.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 2)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val delayMs = (nextMidnight.timeInMillis - now.timeInMillis).coerceAtLeast(0L)
+        midnightRefreshJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(delayMs)
+            if (_binding == null) return@launch
+            flowViewModel.loadTodayAttendance(session.bearerToken)
+        }
     }
 
     private fun parseIsoMillisOrNull(iso: String): Long? {

@@ -1364,6 +1364,9 @@ data class SessionData(
     val punchInTime: String?,
     val punchOutTime: String?,
     val source: String?,
+    // Source of the punch-out specifically (mobile clock-out on a biometric
+    // punch-in, etc.). Falls back to `source` when absent.
+    val punchOutSource: String? = null,
     val totalMinutes: Int?
 )
 data class TodayShiftResponse(
@@ -1431,7 +1434,10 @@ data class AttendanceApprovalRecord(
     val approvedAttendance: String? = null,
     val department: String? = null,
     val designation: String? = null,
-    val employeeId: String? = null
+    val employeeId: String? = null,
+    // "remarks" = employee-submitted correction/leave request; "attendance" =
+    // normal punch record. Drives the HR Review Attendance/Request sub-tabs.
+    val requestType: String? = null
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
