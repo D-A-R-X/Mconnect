@@ -23,60 +23,69 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Compact header: matches the Leave Approvals styling so the two
-                 approval queues feel like one product. -->
-            <FrameLayout
-                android:id="@+id/headerContainer"
+            <!-- Shared app header (same component the Leaves / Permissions
+                 pages use) so this approval queue matches the rest of the
+                 app: status-bar-safe spacing, gradient, back button. -->
+            <com.manjugroups.m_connect.ui.common.SummaryHeaderView
+                android:id="@+id/summaryHeader"
                 android:layout_width="match_parent"
-                android:layout_height="148dp"
-                android:background="@drawable/bg_attendance_header_gradient"
-                android:paddingStart="20dp"
-                android:paddingTop="20dp">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <ImageView
-                        android:id="@+id/btnBack"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:clickable="true"
-                        android:contentDescription="Back"
-                        android:focusable="true"
-                        android:src="@drawable/ic_arrow_left"
-                        app:tint="@android:color/white" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:fontFamily="@font/inter_bold"
-                        android:text="Attendance Approvals"
-                        android:textColor="@android:color/white"
-                        android:textSize="22sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:text="In Review"
-                        android:textColor="#CCFFFFFF"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </FrameLayout>
+                android:layout_height="wrap_content"
+                app:sh_title="Attendance Approvals"
+                app:sh_subtitle="In Review" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="-32dp"
-                android:layout_marginHorizontal="12dp"
-                android:background="@drawable/bg_stat_card"
+                android:layout_marginTop="-44dp"
+                android:background="@drawable/bg_review_sheet"
                 android:orientation="vertical"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="14dp">
+                android:paddingHorizontal="16dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="14dp">
+
+                <!-- Category selector — same chip + popup component used by
+                     the Leaves / Permissions scope dropdowns. Mirrors the web
+                     Team Approvals sub-tabs (My Team / All Team / Blocking). -->
+                <FrameLayout
+                    android:id="@+id/btnCategorySelector"
+                    android:layout_width="wrap_content"
+                    android:layout_height="45dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/bg_scope_chip"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_scope_chip_inner"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp">
+
+                        <TextView
+                            android:id="@+id/tvCategoryLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:letterSpacing="-0.02"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:text="My Team"
+                            android:textColor="#061D3D"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:id="@+id/ivCategoryChevron"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginStart="6dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_chevron_down"
+                            app:tint="#667085" />
+                    </LinearLayout>
+                </FrameLayout>
 
                 <!-- Skeleton placeholder while the pending list is loading. -->
                 <LinearLayout
@@ -108,9 +117,10 @@
                     android:id="@+id/emptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:paddingVertical="16dp"
+                    android:layout_marginTop="48dp"
+                    android:paddingVertical="24dp"
                     android:visibility="gone"
+                    app:es_image="@drawable/ic_leave_empty"
                     app:es_title="No attendance to review"
                     app:es_description="Pending punches from your team will land here." />
             </LinearLayout>
@@ -126,4 +136,18 @@
         android:background="@drawable/bg_bottom_nav_fade_grey"
         android:clickable="false"
         android:focusable="false" />
+
+    <!-- Dim backdrop behind the category dropdown (tap to dismiss). -->
+    <View
+        android:id="@+id/scopeBackdrop"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#99363636"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

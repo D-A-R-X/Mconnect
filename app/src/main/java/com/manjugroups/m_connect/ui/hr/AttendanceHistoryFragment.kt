@@ -47,9 +47,10 @@ class AttendanceHistoryFragment : Fragment() {
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
-    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()
-    private var cachedRequests: List<AttendanceApprovalRecord> = emptyList()
-    private var cachedStaffList: List<com.manjugroups.m_connect.network.StaffData> = emptyList()
+    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()      // Team Approval
+    private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()   // All Approval
+    private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()       // HR Review (both sub-tabs)
+    private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance + All
     private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
 
     private var activeTab = 0
@@ -218,44 +219,43 @@ class AttendanceHistoryFragment : Fragment() {
         binding.subTabRequest.background = if (activeSubTab == 1) activeBg else inactiveBg
         binding.subTabRequest.setTextColor(if (activeSubTab == 1) activeColor else inactiveColor)
 
-        val countVal = if (cachedApprovals.isNotEmpty()) cachedApprovals.size else 4
-        val countStr = String.format(Locale.US, "%02d", countVal)
-        binding.subTabRequest.text = "Request ($countStr)"
+        val attCount = cachedHrReview.count { it.requestType != "remarks" }
+        val reqCount = cachedHrReview.count { it.requestType == "remarks" }
+        binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
+        binding.subTabRequest.text = String.format(Locale.US, "Request (%02d)", reqCount)
     }
 
     private fun loadBadgeCounts() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Fetch pending approvals
-                val approvalsResp = api.getPendingAttendanceApprovals(session.bearerToken)
-                if (approvalsResp.success) {
-                    val pendingCount = approvalsResp.records.size
-                    binding.tabLayout.updateBadge(2, pendingCount)
-                }
-                
-                // Fetch my attendance count for current month
-                val myResp = api.getMyAttendance(session.bearerToken, filterFromDate, filterToDate)
-                if (myResp.success) {
-                    val myCount = myResp.records.size
-                    binding.tabLayout.updateBadge(0, myCount)
+                // My Attendance (0)
+                val myResp = runCatching {
+                    api.getMyAttendance(session.bearerToken, filterFromDate, filterToDate)
+                }.getOrNull()
+                if (myResp?.success == true) {
+                    binding.tabLayout.updateBadge(0, myResp.records.size)
                 }
 
-                // Fetch staff list for team attendance count
-                cachedStaffList = getFallbackStaffList()
-                val teamCount = cachedStaffList.size * 2
-                binding.tabLayout.updateBadge(1, teamCount)
+                // Team Attendance (1) + All (5) share the subtree records
+                val teamResp = runCatching {
+                    api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
+                }.getOrNull()
+                if (teamResp?.success == true) {
+                    cachedTeamAttendance = teamResp.records
+                    binding.tabLayout.updateBadge(1, teamResp.records.size)
+                    binding.tabLayout.updateBadge(5, teamResp.records.size)
+                }
 
-                // Fetch pending approvals for badge count
-                val approvalResp = runCatching {
+                // Team Approval (2)
+                val approvalsResp = runCatching {
                     api.getPendingAttendanceApprovals(session.bearerToken)
                 }.getOrNull()
-                val approvalsList = if (approvalResp?.success == true && approvalResp.records.isNotEmpty()) {
-                    approvalResp.records
-                } else {
-                    getFallbackApprovalsList()
+                if (approvalsResp?.success == true) {
+                    cachedApprovals = approvalsResp.records
+                    binding.tabLayout.updateBadge(2, approvalsResp.records.size)
                 }
-                cachedApprovals = approvalsList
-                binding.tabLayout.updateBadge(2, cachedApprovals.size)
+                // All Approval (3) / HR Review (4) badges update on tab open
+                // (permission-gated).
             } catch (_: Exception) {}
         }
     }
@@ -310,51 +310,66 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     1 -> {
-                        if (cachedStaffList.isEmpty() || isPullRefresh) {
-                            cachedStaffList = getFallbackStaffList()
+                        // Team Attendance — caller's reporting subtree (live).
+                        if (cachedTeamAttendance.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
+                            }.getOrNull()
+                            cachedTeamAttendance = if (resp?.success == true) resp.records else emptyList()
                         }
-                        binding.tabLayout.updateBadge(1, cachedStaffList.size * 2)
+                        binding.tabLayout.updateBadge(1, cachedTeamAttendance.size)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
-                    2, 3, 4 -> {
+                    2 -> {
+                        // Team Approval — live pending approvals for the caller's team.
                         if (cachedApprovals.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getPendingAttendanceApprovals(session.bearerToken)
                             }.getOrNull()
-                            val approvalsList = if (resp?.success == true && resp.records.isNotEmpty()) {
-                                resp.records
-                            } else {
-                                getFallbackApprovalsList()
-                            }
-                            cachedApprovals = approvalsList
-                        }
-                        if (cachedRequests.isEmpty() || isPullRefresh) {
-                            cachedRequests = getFallbackRequestsList()
+                            cachedApprovals = if (resp?.success == true) resp.records else emptyList()
                         }
                         binding.tabLayout.updateBadge(2, cachedApprovals.size)
-                        binding.tabLayout.updateBadge(3, cachedApprovals.size)
-                        binding.tabLayout.updateBadge(4, cachedApprovals.size)
-                        
-                        // Dynamically update sub-tabs counts
+                        filterCurrentList(binding.etSearch.text?.toString().orEmpty())
+                    }
+                    3 -> {
+                        // All Approval — company-wide (server gates by permission).
+                        if (cachedAllApprovals.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.getPendingAttendanceApprovals(session.bearerToken, all = true)
+                            }.getOrNull()
+                            cachedAllApprovals = if (resp?.success == true) resp.records else emptyList()
+                        }
+                        binding.tabLayout.updateBadge(3, cachedAllApprovals.size)
+                        filterCurrentList(binding.etSearch.text?.toString().orEmpty())
+                    }
+                    4 -> {
+                        // HR Review — live; split into Attendance / Request
+                        // sub-tabs by requestType.
+                        if (cachedHrReview.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.getHrReview(session.bearerToken, filterFromDate, filterToDate)
+                            }.getOrNull()
+                            cachedHrReview = if (resp?.success == true) resp.records else emptyList()
+                        }
+                        binding.tabLayout.updateBadge(4, cachedHrReview.size)
                         updateSubTabStyles()
-                        
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     5 -> {
-                        if (cachedStaffList.isEmpty() || isPullRefresh) {
-                            cachedStaffList = getFallbackStaffList()
+                        // All — team attendance rows + active-fine badges (live).
+                        if (cachedTeamAttendance.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
+                            }.getOrNull()
+                            cachedTeamAttendance = if (resp?.success == true) resp.records else emptyList()
                         }
                         if (cachedFines.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.listFines(session.bearerToken, status = "active")
                             }.getOrNull()
-                            cachedFines = if (resp?.fines != null && resp.fines.isNotEmpty()) {
-                                resp.fines
-                            } else {
-                                getFallbackFinesList()
-                            }
+                            cachedFines = resp?.fines ?: emptyList()
                         }
-                        binding.tabLayout.updateBadge(5, cachedStaffList.size * 2)
+                        binding.tabLayout.updateBadge(5, cachedTeamAttendance.size)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                 }
@@ -363,6 +378,49 @@ class AttendanceHistoryFragment : Fragment() {
             binding.attendanceScroll.visibility = View.VISIBLE
             binding.attendanceRefresh.isRefreshing = false
         }
+    }
+
+    /**
+     * Merge the real attendance rows with synthetic "Absent" rows for every
+     * past day in [fromDate, toDate] that has no record — the days the staff
+     * never punched. Newest day first. Today is skipped when it has no row
+     * yet (the day is still running, not absent). Synthetic rows carry no
+     * id, which the edit sheet already treats as a no-punch day.
+     */
+    private fun fillAbsentDays(
+        records: List<AttendanceRecord>,
+        fromDate: String,
+        toDate: String,
+    ): List<AttendanceRecord> {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val from = runCatching { fmt.parse(fromDate) }.getOrNull() ?: return records
+        var to = runCatching { fmt.parse(toDate) }.getOrNull() ?: return records
+        val today = runCatching { fmt.parse(fmt.format(Date())) }.getOrNull() ?: Date()
+        if (to.after(today)) to = today
+        if (to.before(from)) return records
+
+        val byDate = records.associateBy { it.date }
+        val out = mutableListOf<AttendanceRecord>()
+        val cal = Calendar.getInstance().apply { time = to }
+        while (!cal.time.before(from)) {
+            val dStr = fmt.format(cal.time)
+            val existing = byDate[dStr]
+            when {
+                existing != null -> out.add(existing)
+                cal.time.before(today) -> out.add(
+                    AttendanceRecord(
+                        id = null,
+                        date = dStr,
+                        status = null,
+                        totalMinutes = 0,
+                        approvedAttendance = null,
+                    )
+                )
+                // Today with no row yet → still running, not absent → skip.
+            }
+            cal.add(Calendar.DAY_OF_MONTH, -1)
+        }
+        return out
     }
 
     private fun renderRecords(records: List<AttendanceRecord>) {
@@ -440,7 +498,7 @@ class AttendanceHistoryFragment : Fragment() {
             val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
             val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
             val isSubmitted = record.date?.let { date ->
-                submittedRemarkDates.contains(date) || (date.contains("27") && !date.contains("2026"))
+                submittedRemarkDates.contains(date)
             } == true
 
             if (isSubmitted) {
@@ -984,338 +1042,146 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
+    private fun filterApprovals(
+        records: List<AttendanceApprovalRecord>,
+        query: String,
+    ): List<AttendanceApprovalRecord> {
+        if (query.isBlank()) return records
+        return records.filter {
+            it.staffName?.contains(query, ignoreCase = true) == true ||
+                it.designation?.contains(query, ignoreCase = true) == true ||
+                it.employeeId?.contains(query, ignoreCase = true) == true ||
+                it.source?.contains(query, ignoreCase = true) == true ||
+                it.date?.contains(query, ignoreCase = true) == true
+        }
+    }
+
     private fun filterCurrentList(query: String) {
         when (activeTab) {
             0 -> {
+                // Fill in the days that have no attendance row at all — the
+                // "not punched / absent" days — so staff can see them and
+                // raise a remark / time-correction (the edit sheet + request
+                // endpoint already accept a date with no attendanceId).
+                val full = fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
                 val filtered = if (query.isBlank()) {
-                    cachedMyRecords
+                    full
                 } else {
-                    cachedMyRecords.filter {
+                    full.filter {
                         it.date?.contains(query, ignoreCase = true) == true ||
-                        it.approvedAttendance?.contains(query, ignoreCase = true) == true
+                        it.approvedAttendance?.contains(query, ignoreCase = true) == true ||
+                        (it.id == null && "absent".contains(query, ignoreCase = true))
                     }
                 }
                 renderRecords(filtered)
             }
-            1 -> {
-                renderTeamAttendance(cachedStaffList, query)
-            }
-            2, 3, 4 -> {
-                val sourceList = if (activeSubTab == 0) cachedApprovals else cachedRequests
-                val filtered = if (query.isBlank()) {
-                    sourceList
+            1 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query), showFines = false)
+            2 -> renderApprovals(filterApprovals(cachedApprovals, query))
+            3 -> renderApprovals(filterApprovals(cachedAllApprovals, query))
+            4 -> {
+                val source = if (activeSubTab == 0) {
+                    cachedHrReview.filter { it.requestType != "remarks" }
                 } else {
-                    sourceList.filter {
-                        it.staffName?.contains(query, ignoreCase = true) == true ||
-                        it.designation?.contains(query, ignoreCase = true) == true ||
-                        it.source?.contains(query, ignoreCase = true) == true
-                    }
+                    cachedHrReview.filter { it.requestType == "remarks" }
                 }
-                renderApprovals(filtered)
+                renderApprovals(filterApprovals(source, query))
             }
-            5 -> {
-                renderTeamAttendance(cachedStaffList, query)
-            }
+            5 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query), showFines = true)
         }
     }
 
-    private fun renderTeamAttendance(staffList: List<com.manjugroups.m_connect.network.StaffData>, query: String) {
+    private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean) {
         binding.attendanceList.removeAllViews()
-        val filtered = if (query.isBlank()) {
-            staffList
-        } else {
-            staffList.filter { it.name?.contains(query, ignoreCase = true) == true }
-        }
-
-        if (filtered.isEmpty()) {
+        if (records.isEmpty()) {
             showEmptyState(
-                title = "No team records",
-                desc = "No staff members matched your search.",
+                title = "No team attendance",
+                desc = "No team attendance records for this period.",
                 imageRes = R.drawable.ic_leave_empty
             )
             return
         }
         binding.emptyState.visibility = View.GONE
 
-        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val displayFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
-        val fromDateParsed = runCatching { parseFmt.parse(filterFromDate) }.getOrNull()
-        val toDateParsed = runCatching { parseFmt.parse(filterToDate) }.getOrNull()
+        records.forEach { record ->
+            val card = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
 
-        // Generate dates within current filter range
-        val dateStrings = mutableListOf<String>()
-        val dateLabels = mutableListOf<String>()
-        val cal = Calendar.getInstance()
-        if (toDateParsed != null && fromDateParsed != null) {
-            val c = Calendar.getInstance().apply { time = toDateParsed }
-            dateStrings.add(parseFmt.format(c.time))
-            dateLabels.add(displayFmt.format(c.time))
+            card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
+                formatDateLabel(record.date) ?: (record.date ?: "—")
 
-            c.add(Calendar.DAY_OF_MONTH, -1)
-            if (c.time.after(fromDateParsed) || c.time.equals(fromDateParsed)) {
-                dateStrings.add(parseFmt.format(c.time))
-                dateLabels.add(displayFmt.format(c.time))
+            val tvStatus = card.findViewById<TextView>(R.id.tvHistoryItemStatus)
+            val tvHours = card.findViewById<TextView>(R.id.tvHistoryItemHours)
+            val tvRange = card.findViewById<TextView>(R.id.tvHistoryItemRange)
+
+            applyAttendanceStatus(tvStatus, record)
+
+            val mins = record.totalMinutes ?: 0
+            tvHours.text = String.format(Locale.getDefault(), "%02d:%02d:00 hrs", mins / 60, mins % 60)
+
+            val inLabel = formatTime(record.punchInTime) ?: "--"
+            val outLabel = formatTime(record.punchOutTime) ?: "--"
+            tvRange.text = "$inLabel · $outLabel"
+
+            // Active-fine badge — only on the All tab, when the staff has a
+            // matching active fine.
+            val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
+            val fine = if (showFines) cachedFines.firstOrNull {
+                it.staffName.equals(record.staffName, ignoreCase = true) ||
+                    (!record.employeeId.isNullOrBlank() && it.employeeId.equals(record.employeeId, ignoreCase = true))
+            } else null
+            if (fine != null) {
+                tvFine.visibility = View.VISIBLE
+                tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", fine.amount)
+            } else {
+                tvFine.visibility = View.GONE
             }
-        } else {
-            // Fallbacks
-            dateStrings.add("2026-06-30")
-            dateLabels.add("30 June 2026")
-            dateStrings.add("2026-06-29")
-            dateLabels.add("29 June 2026")
-        }
 
-        filtered.forEach { staff ->
-            dateStrings.forEachIndexed { dateIndex, dateStr ->
-                val card = LayoutInflater.from(requireContext())
-                    .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
+            card.findViewById<TextView>(R.id.tvStaffName).text =
+                record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
+            card.findViewById<ImageView>(R.id.ivStaffAvatar)
+                .setImageResource(R.drawable.bg_attendance_avatar_placeholder)
 
-                card.findViewById<TextView>(R.id.tvHistoryItemDate).text = dateLabels[dateIndex]
-
-                val tvStatus = card.findViewById<TextView>(R.id.tvHistoryItemStatus)
-                val tvHours = card.findViewById<TextView>(R.id.tvHistoryItemHours)
-                val tvRange = card.findViewById<TextView>(R.id.tvHistoryItemRange)
-
-                val isWeekOff = dateIndex % 2 != 0
-                if (isWeekOff) {
-                    tvStatus.text = "Week Off"
-                    tvStatus.setBackgroundResource(R.drawable.bg_chip_inactive)
-                    tvStatus.setTextColor(Color.parseColor("#475467"))
-                    tvHours.text = "00:00:00 hrs"
-                    tvRange.text = "-- · --"
-                } else {
-                    tvStatus.text = "Present"
-                    tvStatus.setBackgroundResource(R.drawable.bg_pill_green_light)
-                    tvStatus.setTextColor(Color.parseColor("#067647"))
-                    tvHours.text = "08:00:00 hrs"
-                    tvRange.text = "09:00 am · 05:00 pm"
-                }
-
-                // Bind Fine info if activeTab == 5
-                val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
-                if (activeTab == 5) {
-                    val staffFine = cachedFines.find {
-                        it.staffName.equals(staff.name, ignoreCase = true) ||
-                        it.employeeId.equals(staff.employeeId, ignoreCase = true)
-                    }
-                    if (staffFine != null && dateIndex == 0) {
-                        tvFine.visibility = View.VISIBLE
-                        tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", staffFine.amount)
-                    } else {
-                        tvFine.visibility = View.GONE
-                    }
-                } else {
-                    tvFine.visibility = View.GONE
-                }
-
-                // Bind Profile Section
-                val ivAvatar = card.findViewById<ImageView>(R.id.ivStaffAvatar)
-                val tvName = card.findViewById<TextView>(R.id.tvStaffName)
-
-                tvName.text = staff.name?.trim().orEmpty().ifBlank { "Staff Member" }
-                val photoUrl = staff.photo
-                if (photoUrl.isNullOrBlank()) {
-                    ivAvatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
-                } else {
-                    ivAvatar.load(photoUrl) {
-                        transformations(CircleCropTransformation())
-                        placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                        error(R.drawable.bg_attendance_avatar_placeholder)
-                    }
-                }
-
-                binding.attendanceList.addView(card)
-            }
+            binding.attendanceList.addView(card)
         }
     }
 
-    private fun getFallbackStaffList(): List<com.manjugroups.m_connect.network.StaffData> {
-        return listOf(
-            com.manjugroups.m_connect.network.StaffData(
-                id = "1",
-                name = "Elaine",
-                phone = "9876543210",
-                role = "Staff",
-                designation = "HR Manager",
-                status = "active",
-                employeeId = "EMP001",
-                department = "HR",
-                photo = null
-            ),
-            com.manjugroups.m_connect.network.StaffData(
-                id = "2",
-                name = "Mari Muthu",
-                phone = "9876543211",
-                role = "Staff",
-                designation = "Senior Developer",
-                status = "active",
-                employeeId = "EMP002",
-                department = "Engineering",
-                photo = null
-            ),
-            com.manjugroups.m_connect.network.StaffData(
-                id = "3",
-                name = "Sudalai Muthu",
-                phone = "9876543212",
-                role = "Staff",
-                designation = "Marketing Lead",
-                status = "active",
-                employeeId = "EMP003",
-                department = "Marketing",
-                photo = null
-            ),
-            com.manjugroups.m_connect.network.StaffData(
-                id = "4",
-                name = "Elaine Vance",
-                phone = "9876543213",
-                role = "Staff",
-                designation = "Sales Executive",
-                status = "active",
-                employeeId = "EMP004",
-                department = "Sales",
-                photo = null
-            )
-        )
-    }
-
-    private fun getFallbackApprovalsList(): List<com.manjugroups.m_connect.network.AttendanceApprovalRecord> {
-        return listOf(
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "app_1",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-27",
-                punchInTime = "2024-09-27T09:00:00.000Z",
-                punchOutTime = "2024-09-27T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "mobile",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "app_2",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-26",
-                punchInTime = "2024-09-26T09:00:00.000Z",
-                punchOutTime = "2024-09-26T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "mobile",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "app_3",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-25",
-                punchInTime = "2024-09-25T09:00:00.000Z",
-                punchOutTime = "2024-09-25T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "mobile",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "app_4",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-24",
-                punchInTime = "2024-09-24T09:00:00.000Z",
-                punchOutTime = "2024-09-24T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "mobile",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            )
-        )
-    }
-
-    private fun getFallbackRequestsList(): List<com.manjugroups.m_connect.network.AttendanceApprovalRecord> {
-        return listOf(
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "req_1",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-27",
-                punchInTime = "2024-09-27T09:00:00.000Z",
-                punchOutTime = "2024-09-27T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "Permission Request",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "req_2",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-26",
-                punchInTime = "2024-09-26T09:00:00.000Z",
-                punchOutTime = "2024-09-26T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "Leave Request",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "req_3",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-25",
-                punchInTime = "2024-09-25T09:00:00.000Z",
-                punchOutTime = "2024-09-25T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "Permission Request",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            ),
-            com.manjugroups.m_connect.network.AttendanceApprovalRecord(
-                id = "req_4",
-                staffId = "staff_1",
-                staffName = "Elaine",
-                date = "2024-09-24",
-                punchInTime = "2024-09-24T09:00:00.000Z",
-                punchOutTime = "2024-09-24T17:00:00.000Z",
-                totalMinutes = 480,
-                source = "Leave Request",
-                status = "pending",
-                department = "HR",
-                designation = "HR Manager",
-                employeeId = "EMP001"
-            )
-        )
-    }
-
-    private fun getFallbackFinesList(): List<com.manjugroups.m_connect.network.FineDeductionItem> {
-        return listOf(
-            com.manjugroups.m_connect.network.FineDeductionItem(
-                id = "fine_1",
-                staffName = "Elaine",
-                amount = 700.0,
-                typeName = "Late Fine",
-                status = "active"
-            ),
-            com.manjugroups.m_connect.network.FineDeductionItem(
-                id = "fine_2",
-                staffName = "Sudalai Muthu",
-                amount = 500.0,
-                typeName = "Late Fine",
-                status = "active"
-            )
-        )
+    /** Colour + label the status pill from the record's approved bucket
+     *  (falls back to Present when time was logged, else Pending). */
+    private fun applyAttendanceStatus(tv: TextView, record: AttendanceApprovalRecord) {
+        val bucket = record.approvedAttendance?.lowercase(Locale.US)
+            ?: if ((record.totalMinutes ?: 0) > 0) "present" else null
+        when (bucket) {
+            "present" -> {
+                tv.text = "Present"
+                tv.setBackgroundResource(R.drawable.bg_pill_green_light)
+                tv.setTextColor(Color.parseColor("#067647"))
+            }
+            "half-day" -> {
+                tv.text = "Half Day"
+                tv.setBackgroundResource(R.drawable.bg_pill_green_light)
+                tv.setTextColor(Color.parseColor("#067647"))
+            }
+            "absent" -> {
+                tv.text = "Absent"
+                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.setTextColor(Color.parseColor("#B42318"))
+            }
+            "weekoff" -> {
+                tv.text = "Week Off"
+                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.setTextColor(Color.parseColor("#475467"))
+            }
+            "holiday" -> {
+                tv.text = "Holiday"
+                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.setTextColor(Color.parseColor("#475467"))
+            }
+            else -> {
+                tv.text = "Pending"
+                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.setTextColor(Color.parseColor("#475467"))
+            }
+        }
     }
 
     override fun onDestroyView() {

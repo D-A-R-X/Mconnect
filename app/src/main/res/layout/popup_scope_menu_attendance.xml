@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Category dropdown for the attendance approvals queue. Same styling as
+     popup_scope_menu_perm so the two approval surfaces feel identical. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="190dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_scope_popup"
+    android:orientation="vertical"
+    android:paddingVertical="6dp">
+
+    <TextView
+        android:id="@+id/menuMyTeam"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:letterSpacing="-0.02"
+        android:maxLines="1"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
+        android:singleLine="true"
+        android:text="My Team"
+        android:textColor="#061D3D"
+        android:textSize="14sp" />
+
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
+
+    <TextView
+        android:id="@+id/menuAllTeam"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:letterSpacing="-0.02"
+        android:maxLines="1"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
+        android:singleLine="true"
+        android:text="All Team"
+        android:textColor="#061D3D"
+        android:textSize="14sp" />
+
+    <View
+        android:layout_width="64dp"
+        android:layout_height="1dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_scope_popup_divider" />
+
+    <TextView
+        android:id="@+id/menuBlocking"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:letterSpacing="-0.02"
+        android:maxLines="1"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="8dp"
+        android:singleLine="true"
+        android:text="Blocking Reviews"
+        android:textColor="#061D3D"
+        android:textSize="14sp" />
+</LinearLayout>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Note / clipboard icon for the My Tasks cards (from note.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M13.3334 5.49998V12C13.3334 14 12.14 14.6666 10.6667 14.6666H5.33335C3.86002 14.6666 2.66669 14 2.66669 12V5.49998C2.66669 3.33331 3.86002 2.83331 5.33335 2.83331C5.33335 3.24665 5.5 3.61998 5.77334 3.89331C6.04667 4.16664 6.42002 4.33331 6.83335 4.33331H9.16669C9.99335 4.33331 10.6667 3.65998 10.6667 2.83331C12.14 2.83331 13.3334 3.33331 13.3334 5.49998Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.6666 2.83331C10.6666 3.65998 9.99331 4.33331 9.16665 4.33331H6.83331C6.41998 4.33331 6.04663 4.16664 5.7733 3.89331C5.49996 3.61998 5.33331 3.24665 5.33331 2.83331C5.33331 2.00665 6.00665 1.33331 6.83331 1.33331H9.16665C9.57998 1.33331 9.95333 1.49998 10.2267 1.77332C10.5 2.04665 10.6666 2.41998 10.6666 2.83331Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M5.33331 8.66669H7.99998"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M5.33331 11.3333H10.6666"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

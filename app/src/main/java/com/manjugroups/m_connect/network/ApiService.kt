@@ -193,9 +193,32 @@ interface ApiService {
     ): SimpleResponse
 
     // Attendance — manager approval queue (mirrors leaves/permissions approval).
+    // scope = "direct" (My Team) | "subtree" (All Team); onlyOverdue = Blocking
+    // reviews; all = company-wide "All Approval" (needs permission, else 403).
+    // Null params fall back to the server default (direct reports).
     @GET("api/hr/attendance/pending-approvals")
     suspend fun getPendingAttendanceApprovals(
-        @Header("Authorization") token: String
+        @Header("Authorization") token: String,
+        @Query("scope") scope: String? = null,
+        @Query("onlyOverdue") onlyOverdue: Boolean? = null,
+        @Query("all") all: Boolean? = null,
+    ): AttendanceApprovalsResponse
+
+    // Team Attendance tab — the caller's reporting-subtree attendance for a
+    // date range. Records fit AttendanceApprovalRecord (staff/date/punch/status).
+    @GET("api/hr/attendance/team-attendance")
+    suspend fun getTeamAttendance(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String,
+        @Query("toDate") toDate: String,
+    ): AttendanceApprovalsResponse
+
+    // HR Review tab — company-wide rows awaiting HR action (needs permission).
+    @GET("api/hr/attendance/hr-review")
+    suspend fun getHrReview(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String,
+        @Query("toDate") toDate: String,
     ): AttendanceApprovalsResponse
 
     @POST("api/hr/attendance/approve")
@@ -1341,6 +1364,9 @@ data class SessionData(
     val punchInTime: String?,
     val punchOutTime: String?,
     val source: String?,
+    // Source of the punch-out specifically (mobile clock-out on a biometric
+    // punch-in, etc.). Falls back to `source` when absent.
+    val punchOutSource: String? = null,
     val totalMinutes: Int?
 )
 data class TodayShiftResponse(
@@ -1408,7 +1434,10 @@ data class AttendanceApprovalRecord(
     val approvedAttendance: String? = null,
     val department: String? = null,
     val designation: String? = null,
-    val employeeId: String? = null
+    val employeeId: String? = null,
+    // "remarks" = employee-submitted correction/leave request; "attendance" =
+    // normal punch record. Drives the HR Review Attendance/Request sub-tabs.
+    val requestType: String? = null
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket

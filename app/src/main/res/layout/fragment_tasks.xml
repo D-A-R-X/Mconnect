@@ -11,16 +11,18 @@
     <FrameLayout
         android:id="@+id/headerContainer"
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="156dp"
         android:background="#0B61CA">
 
         <ImageView
-            android:layout_width="120dp"
-            android:layout_height="100dp"
+            android:layout_width="140dp"
+            android:layout_height="96dp"
             android:layout_gravity="end|top"
-            android:layout_marginTop="32dp"
-            android:layout_marginEnd="12dp"
-            android:src="@drawable/ic_task_illustration"
+            android:layout_marginTop="22dp"
+            android:layout_marginEnd="8dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/img_tasks_header"
             android:contentDescription="@null" />
 
         <LinearLayout
@@ -29,20 +31,10 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <ImageView
-                android:id="@+id/btnTasksBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginTop="20dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:padding="4dp"
-                android:src="@drawable/ic_arrow_left"
-                app:tint="#FFFFFF" />
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="36dp"
                 android:fontFamily="@font/inter_bold"
                 android:text="My Tasks"
                 android:textColor="#FFFFFF"
@@ -64,38 +56,48 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="-20dp"
-        android:background="@drawable/bg_auth_sheet"
+        android:background="@drawable/bg_tasks_sheet"
         android:orientation="vertical">
 
-        <!-- Search Bar -->
+        <!-- Search Bar — same reusable component as the CP Visits search
+             (bg_cpv_search_bar + ic_cpv_search), magnifier on the right. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="20dp"
-            android:layout_marginTop="20dp">
+            android:layout_marginTop="14dp">
 
             <EditText
                 android:id="@+id/etSearchTasks"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_search_bar"
-                android:drawableStart="@drawable/ic_chat_search"
-                android:drawablePadding="10dp"
-                android:fontFamily="@font/inter_medium"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_cpv_search_bar"
+                android:fontFamily="@font/inter_regular"
                 android:hint="Search Tasks"
                 android:imeOptions="actionSearch"
+                android:includeFontPadding="false"
                 android:inputType="text"
-                android:paddingHorizontal="16dp"
+                android:maxLines="1"
+                android:paddingStart="16dp"
+                android:paddingEnd="46dp"
                 android:textColor="#101828"
-                android:textColorHint="#98A2B3"
+                android:textColorHint="#9CA3AF"
                 android:textSize="14sp" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cpv_search" />
         </FrameLayout>
 
         <!-- Filter Pills -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:scrollbars="none">
 
             <com.google.android.material.chip.ChipGroup
@@ -115,7 +117,7 @@
                     android:checked="true"
                     android:text="All"
                     android:textColor="@color/chip_filter_text"
-                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipBackgroundColor="@color/chip_tasks_bg"
                     app:chipStrokeWidth="0dp"
                     app:checkedIconVisible="false" />
 
@@ -126,7 +128,7 @@
                     android:layout_height="wrap_content"
                     android:text="In progress"
                     android:textColor="@color/chip_filter_text"
-                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipBackgroundColor="@color/chip_tasks_bg"
                     app:chipStrokeWidth="0dp"
                     app:checkedIconVisible="false" />
 
@@ -137,7 +139,7 @@
                     android:layout_height="wrap_content"
                     android:text="Pending"
                     android:textColor="@color/chip_filter_text"
-                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipBackgroundColor="@color/chip_tasks_bg"
                     app:chipStrokeWidth="0dp"
                     app:checkedIconVisible="false" />
 
@@ -148,7 +150,7 @@
                     android:layout_height="wrap_content"
                     android:text="Completed"
                     android:textColor="@color/chip_filter_text"
-                    app:chipBackgroundColor="@color/chip_filter_bg"
+                    app:chipBackgroundColor="@color/chip_tasks_bg"
                     app:chipStrokeWidth="0dp"
                     app:checkedIconVisible="false" />
             </com.google.android.material.chip.ChipGroup>
@@ -179,7 +181,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:paddingHorizontal="20dp"
-                        android:paddingTop="12dp"
+                        android:paddingTop="8dp"
                         android:paddingBottom="40dp" />
 
                     <com.manjugroups.m_connect.ui.common.EmptyStateView
@@ -199,7 +201,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
                 android:layout_gravity="bottom"
-                android:background="@drawable/bg_bottom_nav_fade_white"
+                android:background="@drawable/bg_bottom_nav_fade_grey"
                 android:clickable="false"
                 android:focusable="false" />
         </FrameLayout>
