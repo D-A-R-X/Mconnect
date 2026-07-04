@@ -12,6 +12,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -353,6 +355,13 @@ class TasksFragment : Fragment() {
         val context = container.context
         val density = context.resources.displayMetrics.density
 
+        // Real mock profile photos
+        val avatarUrls = listOf(
+            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80",
+            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80",
+            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80"
+        )
+
         for (i in 0 until 3) {
             val frame = android.widget.FrameLayout(context)
             val size = (24 * density).toInt()
@@ -372,8 +381,12 @@ class TasksFragment : Fragment() {
             }
 
             val iv = ImageView(context).apply {
-                setImageResource(R.drawable.bg_attendance_avatar_placeholder)
                 scaleType = ImageView.ScaleType.CENTER_CROP
+                load(avatarUrls[i]) {
+                    transformations(CircleCropTransformation())
+                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
+                }
             }
             card.addView(iv)
             frame.addView(card)
