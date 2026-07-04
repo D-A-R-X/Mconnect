@@ -1,0 +1,16 @@
+<!-- Red end flag. Anchor at the pole base (bottom-centre of the pole). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="34dp"
+    android:viewportWidth="28"
+    android:viewportHeight="34">
+    <path
+        android:fillColor="#991B1B"
+        android:pathData="M7,3 L7,32"
+        android:strokeColor="#991B1B"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M7,3 L24,9 L7,15 Z" />
+</vector>

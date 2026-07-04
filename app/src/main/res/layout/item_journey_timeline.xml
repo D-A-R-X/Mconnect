@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One journey-timeline row: time · dot+connector · title/subtitle · trailing stat.
+     Populated at runtime by AttendanceReviewBottomSheet from real GPS data. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/tvJtTime"
+        android:layout_width="66dp"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#344054"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_marginHorizontal="12dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <View
+            android:id="@+id/jtDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:layout_marginTop="3dp"
+            android:background="@drawable/bg_dot_green" />
+
+        <View
+            android:id="@+id/jtLine"
+            android:layout_width="2dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="2dp"
+            android:minHeight="34dp"
+            android:background="#EAECF0" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginBottom="14dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvJtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvJtSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:textColor="#667085"
+            android:textSize="11sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvJtTrailing"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="end"
+        android:textColor="#475467"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>
