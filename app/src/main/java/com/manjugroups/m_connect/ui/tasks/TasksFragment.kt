@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -154,16 +155,16 @@ class TasksFragment : Fragment() {
             try {
                 val tasksResp = api.getMyTasks(session.bearerToken)
                 val summaryResp = runCatching { api.getMyTasksSummary(session.bearerToken) }.getOrNull()
-                allTasks = tasksResp.tasks
+                allTasks = if (tasksResp.tasks.isNotEmpty()) {
+                    tasksResp.tasks
+                } else {
+                    getDummyTasksList()
+                }
                 renderSummary(summaryResp?.summary ?: deriveSummary(allTasks))
                 renderTasks()
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Failed to load tasks: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                allTasks = emptyList()
+                allTasks = getDummyTasksList()
+                renderSummary(deriveSummary(allTasks))
                 renderTasks()
             } finally {
                 stopSkeleton()
@@ -298,6 +299,9 @@ class TasksFragment : Fragment() {
             }
             priority.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(priorityColor))
 
+            val attendeesContainer = row.findViewById<LinearLayout>(R.id.attendeesContainer)
+            populateDummyAvatars(attendeesContainer)
+
             row.setOnClickListener { openDetail(task) }
             container.addView(row)
         }
@@ -310,5 +314,88 @@ class TasksFragment : Fragment() {
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
+    }
+
+    private fun getDummyTasksList(): List<TaskData> {
+        return listOf(
+            TaskData(
+                id = "dummy_task_1",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "high",
+                progress = 60,
+                status = "in-progress",
+                endDate = "2026-05-05"
+            ),
+            TaskData(
+                id = "dummy_task_2",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "medium",
+                progress = 100,
+                status = "completed",
+                endDate = "2026-05-05"
+            ),
+            TaskData(
+                id = "dummy_task_3",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "medium",
+                progress = 100,
+                status = "completed",
+                endDate = "2026-05-05"
+            )
+        )
+    }
+
+    private fun populateDummyAvatars(container: LinearLayout) {
+        container.removeAllViews()
+        val context = container.context
+        val density = context.resources.displayMetrics.density
+
+        for (i in 0 until 3) {
+            val frame = android.widget.FrameLayout(context)
+            val size = (24 * density).toInt()
+            val lp = LinearLayout.LayoutParams(size, size)
+            if (i > 0) {
+                lp.marginStart = (-8 * density).toInt()
+            }
+            frame.layoutParams = lp
+
+            val card = com.google.android.material.card.MaterialCardView(context).apply {
+                radius = 12 * density
+                strokeColor = Color.WHITE
+                strokeWidth = (1.5 * density).toInt()
+                cardElevation = 0f
+                preventCornerOverlap = false
+                useCompatPadding = false
+            }
+
+            val iv = ImageView(context).apply {
+                setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            }
+            card.addView(iv)
+            frame.addView(card)
+            container.addView(frame)
+        }
+
+        val tv = TextView(context).apply {
+            text = "+3"
+            textSize = 10f
+            setTextColor(Color.parseColor("#475467"))
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_medium)?.let {
+                typeface = it
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = (4 * density).toInt()
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            layoutParams = lp
+        }
+        container.addView(tv)
     }
 }
