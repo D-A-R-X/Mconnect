@@ -446,11 +446,14 @@ class AttendanceHistoryFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
                 parsed?.let { dateFmt.format(it) } ?: (record.date ?: "")
 
+            // Total worked hours. Blank ("—") when the backend hasn't
+            // surfaced a total — today's row before the midnight finalize
+            // (a mobile clock-out no longer closes/totals the day) and
+            // absent days both come through as null/0. Mirrors the web.
             val mins = record.totalMinutes ?: 0
-            val hours = mins / 60
-            val minutes = mins % 60
             card.findViewById<TextView>(R.id.tvHistoryItemHours).text =
-                String.format(Locale.getDefault(), "%02d:%02d:00 hrs", hours, minutes)
+                if (mins > 0) String.format(Locale.getDefault(), "%02d:%02d:00 hrs", mins / 60, mins % 60)
+                else "—"
 
             // Punch-out value mirrors the web table: prefer the
             // server-derived `punchOutTime` (the backend fills this from

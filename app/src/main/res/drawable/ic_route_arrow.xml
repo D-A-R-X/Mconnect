@@ -1,0 +1,13 @@
+<!-- Direction arrowhead (points up at 0°; rotated to each segment's bearing).
+     Tinted to the line colour at render time. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M12,3 L20,20 L12,15.5 L4,20 Z" />
+</vector>

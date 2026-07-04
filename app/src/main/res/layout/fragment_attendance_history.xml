@@ -312,13 +312,13 @@
             android:layout_height="match_parent"
             android:background="?attr/colorSurfacePrimary"
             android:orientation="vertical"
+            android:paddingHorizontal="20dp"
             android:visibility="gone">
 
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
-            <include layout="@layout/skeleton_list_item" />
+            <include layout="@layout/skeleton_attendance_card" />
+            <include layout="@layout/skeleton_attendance_card" />
+            <include layout="@layout/skeleton_attendance_card" />
+            <include layout="@layout/skeleton_attendance_card" />
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>
