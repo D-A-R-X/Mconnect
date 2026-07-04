@@ -73,11 +73,12 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         // fragments safely without Parcelable boilerplate, so we encode
         // each session as "in|out|source").
         val sessions: List<SessionData> = sessionsJson.map { raw ->
-            val parts = raw.split("|", limit = 3)
+            val parts = raw.split("|", limit = 4)
             SessionData(
                 punchInTime = parts.getOrNull(0)?.takeIf { it.isNotEmpty() },
                 punchOutTime = parts.getOrNull(1)?.takeIf { it.isNotEmpty() },
                 source = parts.getOrNull(2)?.takeIf { it.isNotEmpty() },
+                punchOutSource = parts.getOrNull(3)?.takeIf { it.isNotEmpty() },
                 totalMinutes = null,
             )
         }
@@ -158,17 +159,23 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
     /**
      * Walk every session and emit one [Event] per timestamp present.
      * A closed session yields two events (IN then OUT); a still-open
-     * session yields just the IN. The list is sorted by the ISO string,
-     * which is lexicographically equivalent to chronological order for
-     * Convex's normalised ISO-8601 outputs.
+     * session yields just the IN. Sorted by actual parsed time, ascending —
+     * oldest at the top, newest at the bottom. (Sorting the raw ISO string
+     * mis-orders biometric rows whose timestamps use a different format /
+     * offset, which is why the log read newest-first.)
      */
     private fun flatten(sessions: List<SessionData>): List<Event> {
         val out = mutableListOf<Event>()
         sessions.forEach { s ->
             s.punchInTime?.takeIf { it.isNotBlank() }?.let { out.add(Event(it, Kind.IN, s.source)) }
-            s.punchOutTime?.takeIf { it.isNotBlank() }?.let { out.add(Event(it, Kind.OUT, s.source)) }
+            s.punchOutTime?.takeIf { it.isNotBlank() }?.let {
+                // The OUT event's chip is the punch-out's own source (e.g. a
+                // mobile clock-out on a biometric punch-in), falling back to
+                // the session source for historical rows without it.
+                out.add(Event(it, Kind.OUT, s.punchOutSource ?: s.source))
+            }
         }
-        return out.sortedBy { it.timeIso }
+        return out.sortedBy { parseIsoMillis(it.timeIso) ?: Long.MAX_VALUE }
     }
 
     private fun formatDate(iso: String): String? {
@@ -218,8 +225,12 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
             // standard Bundle without dragging in a new dependency or a
             // brittle hand-rolled Parcelable.
             val encoded = ArrayList(record.sessions.orEmpty().map { s ->
-                listOf(s.punchInTime.orEmpty(), s.punchOutTime.orEmpty(), s.source.orEmpty())
-                    .joinToString("|")
+                listOf(
+                    s.punchInTime.orEmpty(),
+                    s.punchOutTime.orEmpty(),
+                    s.source.orEmpty(),
+                    s.punchOutSource.orEmpty(),
+                ).joinToString("|")
             })
             return AttendancePunchLogSheet().apply {
                 arguments = bundleOf(

@@ -14,6 +14,7 @@ import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import coil.load
 import coil.transform.CircleCropTransformation
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -46,12 +47,14 @@ class AttendanceHistoryFragment : Fragment() {
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
-    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()
-    private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList()
-    private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()
-    private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()
+    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()      // Team Approval
+    private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()   // All Approval
+    private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()       // HR Review (both sub-tabs)
+    private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance + All
+    private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
 
     private var activeTab = 0
+    private var activeSubTab = 0 // 0 = Attendance, 1 = Request
     private val labels = listOf("Present", "Half-day", "Absent", "Weekoff", "Holiday")
     private val values = listOf("present", "half-day", "absent", "weekoff", "holiday")
 
@@ -138,14 +141,29 @@ class AttendanceHistoryFragment : Fragment() {
             HorizontalTabLayout.Tab("All")
         )
         binding.tabLayout.setTabs(tabs, defaultSelection = activeTab)
+        if (activeTab == 4) {
+            binding.layoutSubTabs.visibility = View.VISIBLE
+            updateSubTabStyles()
+        } else {
+            binding.layoutSubTabs.visibility = View.GONE
+            activeSubTab = 0
+        }
         binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 activeTab = index
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
+                if (index == 4) {
+                    binding.layoutSubTabs.visibility = View.VISIBLE
+                    updateSubTabStyles()
+                } else {
+                    binding.layoutSubTabs.visibility = View.GONE
+                    activeSubTab = 0
+                }
                 loadData()
             }
         })
+        setupSubTabs()
         loadBadgeCounts()
 
         applyGreenGradient(binding.tvTotalDays)
@@ -176,10 +194,41 @@ class AttendanceHistoryFragment : Fragment() {
             cb.get(Calendar.DAY_OF_MONTH) == cb.getActualMaximum(Calendar.DAY_OF_MONTH)
     }
 
+    private fun setupSubTabs() {
+        binding.subTabAttendance.setOnClickListener {
+            activeSubTab = 0
+            updateSubTabStyles()
+            loadData()
+        }
+        binding.subTabRequest.setOnClickListener {
+            activeSubTab = 1
+            updateSubTabStyles()
+            loadData()
+        }
+    }
+
+    private fun updateSubTabStyles() {
+        val activeBg = ContextCompat.getDrawable(requireContext(), R.drawable.bg_review_tab_active)
+        val inactiveBg = null
+        val activeColor = Color.parseColor("#0B61CA")
+        val inactiveColor = Color.parseColor("#667085")
+
+        binding.subTabAttendance.background = if (activeSubTab == 0) activeBg else inactiveBg
+        binding.subTabAttendance.setTextColor(if (activeSubTab == 0) activeColor else inactiveColor)
+
+        binding.subTabRequest.background = if (activeSubTab == 1) activeBg else inactiveBg
+        binding.subTabRequest.setTextColor(if (activeSubTab == 1) activeColor else inactiveColor)
+
+        val attCount = cachedHrReview.count { it.requestType != "remarks" }
+        val reqCount = cachedHrReview.count { it.requestType == "remarks" }
+        binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
+        binding.subTabRequest.text = String.format(Locale.US, "Request (%02d)", reqCount)
+    }
+
     private fun loadBadgeCounts() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // My Attendance (tab 0)
+                // My Attendance (0)
                 val myResp = runCatching {
                     api.getMyAttendance(session.bearerToken, filterFromDate, filterToDate)
                 }.getOrNull()
@@ -187,16 +236,17 @@ class AttendanceHistoryFragment : Fragment() {
                     binding.tabLayout.updateBadge(0, myResp.records.size)
                 }
 
-                // Team Attendance (tab 1)
+                // Team Attendance (1) + All (5) share the subtree records
                 val teamResp = runCatching {
                     api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
                 }.getOrNull()
                 if (teamResp?.success == true) {
                     cachedTeamAttendance = teamResp.records
                     binding.tabLayout.updateBadge(1, teamResp.records.size)
+                    binding.tabLayout.updateBadge(5, teamResp.records.size)
                 }
 
-                // Team Approval (tab 2)
+                // Team Approval (2)
                 val approvalsResp = runCatching {
                     api.getPendingAttendanceApprovals(session.bearerToken)
                 }.getOrNull()
@@ -204,8 +254,8 @@ class AttendanceHistoryFragment : Fragment() {
                     cachedApprovals = approvalsResp.records
                     binding.tabLayout.updateBadge(2, approvalsResp.records.size)
                 }
-                // All Approval / HR Review badges update when those tabs open
-                // (they are permission-gated).
+                // All Approval (3) / HR Review (4) badges update on tab open
+                // (permission-gated).
             } catch (_: Exception) {}
         }
     }
@@ -260,8 +310,7 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     1 -> {
-                        // Team Attendance — the caller's reporting-subtree
-                        // attendance for the current filter range (live).
+                        // Team Attendance — caller's reporting subtree (live).
                         if (cachedTeamAttendance.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
@@ -272,7 +321,7 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     2 -> {
-                        // Team Approval — live pending approvals only (no mock).
+                        // Team Approval — live pending approvals for the caller's team.
                         if (cachedApprovals.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getPendingAttendanceApprovals(session.bearerToken)
@@ -283,8 +332,7 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     3 -> {
-                        // All Approval — company-wide (server gates by permission;
-                        // a 403 simply yields an empty list here).
+                        // All Approval — company-wide (server gates by permission).
                         if (cachedAllApprovals.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getPendingAttendanceApprovals(session.bearerToken, all = true)
@@ -295,7 +343,8 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     4 -> {
-                        // HR Review — company-wide rows awaiting HR (permission-gated).
+                        // HR Review — live; split into Attendance / Request
+                        // sub-tabs by requestType.
                         if (cachedHrReview.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
                                 api.getHrReview(session.bearerToken, filterFromDate, filterToDate)
@@ -303,16 +352,25 @@ class AttendanceHistoryFragment : Fragment() {
                             cachedHrReview = if (resp?.success == true) resp.records else emptyList()
                         }
                         binding.tabLayout.updateBadge(4, cachedHrReview.size)
+                        updateSubTabStyles()
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     5 -> {
-                        // Archive — no dedicated live endpoint yet; honest empty.
-                        binding.attendanceList.removeAllViews()
-                        showEmptyState(
-                            title = "No archives",
-                            desc = "All historical attendance records will land here.",
-                            imageRes = R.drawable.ic_leave_empty
-                        )
+                        // All — team attendance rows + active-fine badges (live).
+                        if (cachedTeamAttendance.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
+                            }.getOrNull()
+                            cachedTeamAttendance = if (resp?.success == true) resp.records else emptyList()
+                        }
+                        if (cachedFines.isEmpty() || isPullRefresh) {
+                            val resp = runCatching {
+                                api.listFines(session.bearerToken, status = "active")
+                            }.getOrNull()
+                            cachedFines = resp?.fines ?: emptyList()
+                        }
+                        binding.tabLayout.updateBadge(5, cachedTeamAttendance.size)
+                        filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                 }
             } catch (_: Exception) { }
@@ -320,6 +378,49 @@ class AttendanceHistoryFragment : Fragment() {
             binding.attendanceScroll.visibility = View.VISIBLE
             binding.attendanceRefresh.isRefreshing = false
         }
+    }
+
+    /**
+     * Merge the real attendance rows with synthetic "Absent" rows for every
+     * past day in [fromDate, toDate] that has no record — the days the staff
+     * never punched. Newest day first. Today is skipped when it has no row
+     * yet (the day is still running, not absent). Synthetic rows carry no
+     * id, which the edit sheet already treats as a no-punch day.
+     */
+    private fun fillAbsentDays(
+        records: List<AttendanceRecord>,
+        fromDate: String,
+        toDate: String,
+    ): List<AttendanceRecord> {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val from = runCatching { fmt.parse(fromDate) }.getOrNull() ?: return records
+        var to = runCatching { fmt.parse(toDate) }.getOrNull() ?: return records
+        val today = runCatching { fmt.parse(fmt.format(Date())) }.getOrNull() ?: Date()
+        if (to.after(today)) to = today
+        if (to.before(from)) return records
+
+        val byDate = records.associateBy { it.date }
+        val out = mutableListOf<AttendanceRecord>()
+        val cal = Calendar.getInstance().apply { time = to }
+        while (!cal.time.before(from)) {
+            val dStr = fmt.format(cal.time)
+            val existing = byDate[dStr]
+            when {
+                existing != null -> out.add(existing)
+                cal.time.before(today) -> out.add(
+                    AttendanceRecord(
+                        id = null,
+                        date = dStr,
+                        status = null,
+                        totalMinutes = 0,
+                        approvedAttendance = null,
+                    )
+                )
+                // Today with no row yet → still running, not absent → skip.
+            }
+            cal.add(Calendar.DAY_OF_MONTH, -1)
+        }
+        return out
     }
 
     private fun renderRecords(records: List<AttendanceRecord>) {
@@ -397,7 +498,7 @@ class AttendanceHistoryFragment : Fragment() {
             val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
             val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
             val isSubmitted = record.date?.let { date ->
-                submittedRemarkDates.contains(date) || (date.contains("27") && !date.contains("2026"))
+                submittedRemarkDates.contains(date)
             } == true
 
             if (isSubmitted) {
@@ -826,21 +927,50 @@ class AttendanceHistoryFragment : Fragment() {
             val ivAvatar = card.findViewById<ImageView>(R.id.ivAttStaffAvatar)
             ivAvatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
 
+            val btnReject = card.findViewById<View>(R.id.btnRejectAttendance)
+            val btnApprove = card.findViewById<View>(R.id.btnApproveAttendance)
+            val btnHrReview = card.findViewById<View>(R.id.btnHrReviewAction)
+
             val openSheetListener = View.OnClickListener {
-                val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
-                    override fun onApprove(recordId: String) {
-                        approveRecord(recordId, "present")
-                    }
-                    override fun onReject(recordId: String) {
-                        showRejectDialog(recordId)
-                    }
-                })
-                sheet.show(parentFragmentManager, "attendance_review")
+                if (activeTab == 4 && activeSubTab == 1) {
+                    val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
+                        override fun onApprove(recordId: String, status: String) {
+                            approveRecord(recordId, status)
+                        }
+                        override fun onReject(recordId: String) {
+                            showRejectDialog(recordId)
+                        }
+                    })
+                    sheet.show(parentFragmentManager, "review_attendance_request")
+                } else {
+                    val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
+                        override fun onApprove(recordId: String) {
+                            approveRecord(recordId, "present")
+                        }
+                        override fun onReject(recordId: String) {
+                            showRejectDialog(recordId)
+                        }
+                    })
+                    sheet.show(parentFragmentManager, "attendance_review")
+                }
             }
 
-            card.setOnClickListener(openSheetListener)
-            card.findViewById<View>(R.id.btnApproveAttendance).setOnClickListener(openSheetListener)
-            card.findViewById<View>(R.id.btnRejectAttendance).setOnClickListener(openSheetListener)
+            if (activeTab == 4 && activeSubTab == 1) {
+                btnReject.visibility = View.GONE
+                btnApprove.visibility = View.GONE
+                btnHrReview.visibility = View.VISIBLE
+                
+                btnHrReview.setOnClickListener(openSheetListener)
+                card.setOnClickListener(openSheetListener)
+            } else {
+                btnReject.visibility = View.VISIBLE
+                btnApprove.visibility = View.VISIBLE
+                btnHrReview.visibility = View.GONE
+                
+                card.setOnClickListener(openSheetListener)
+                btnApprove.setOnClickListener(openSheetListener)
+                btnReject.setOnClickListener(openSheetListener)
+            }
 
             binding.attendanceList.addView(card)
         }
@@ -921,6 +1051,7 @@ class AttendanceHistoryFragment : Fragment() {
             it.staffName?.contains(query, ignoreCase = true) == true ||
                 it.designation?.contains(query, ignoreCase = true) == true ||
                 it.employeeId?.contains(query, ignoreCase = true) == true ||
+                it.source?.contains(query, ignoreCase = true) == true ||
                 it.date?.contains(query, ignoreCase = true) == true
         }
     }
@@ -928,24 +1059,38 @@ class AttendanceHistoryFragment : Fragment() {
     private fun filterCurrentList(query: String) {
         when (activeTab) {
             0 -> {
+                // Fill in the days that have no attendance row at all — the
+                // "not punched / absent" days — so staff can see them and
+                // raise a remark / time-correction (the edit sheet + request
+                // endpoint already accept a date with no attendanceId).
+                val full = fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
                 val filtered = if (query.isBlank()) {
-                    cachedMyRecords
+                    full
                 } else {
-                    cachedMyRecords.filter {
+                    full.filter {
                         it.date?.contains(query, ignoreCase = true) == true ||
-                        it.approvedAttendance?.contains(query, ignoreCase = true) == true
+                        it.approvedAttendance?.contains(query, ignoreCase = true) == true ||
+                        (it.id == null && "absent".contains(query, ignoreCase = true))
                     }
                 }
                 renderRecords(filtered)
             }
-            1 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query))
+            1 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query), showFines = false)
             2 -> renderApprovals(filterApprovals(cachedApprovals, query))
             3 -> renderApprovals(filterApprovals(cachedAllApprovals, query))
-            4 -> renderApprovals(filterApprovals(cachedHrReview, query))
+            4 -> {
+                val source = if (activeSubTab == 0) {
+                    cachedHrReview.filter { it.requestType != "remarks" }
+                } else {
+                    cachedHrReview.filter { it.requestType == "remarks" }
+                }
+                renderApprovals(filterApprovals(source, query))
+            }
+            5 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query), showFines = true)
         }
     }
 
-    private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>) {
+    private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean) {
         binding.attendanceList.removeAllViews()
         if (records.isEmpty()) {
             showEmptyState(
@@ -977,10 +1122,24 @@ class AttendanceHistoryFragment : Fragment() {
             val outLabel = formatTime(record.punchOutTime) ?: "--"
             tvRange.text = "$inLabel · $outLabel"
 
-            val ivAvatar = card.findViewById<ImageView>(R.id.ivStaffAvatar)
+            // Active-fine badge — only on the All tab, when the staff has a
+            // matching active fine.
+            val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
+            val fine = if (showFines) cachedFines.firstOrNull {
+                it.staffName.equals(record.staffName, ignoreCase = true) ||
+                    (!record.employeeId.isNullOrBlank() && it.employeeId.equals(record.employeeId, ignoreCase = true))
+            } else null
+            if (fine != null) {
+                tvFine.visibility = View.VISIBLE
+                tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", fine.amount)
+            } else {
+                tvFine.visibility = View.GONE
+            }
+
             card.findViewById<TextView>(R.id.tvStaffName).text =
                 record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
-            ivAvatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            card.findViewById<ImageView>(R.id.ivStaffAvatar)
+                .setImageResource(R.drawable.bg_attendance_avatar_placeholder)
 
             binding.attendanceList.addView(card)
         }
