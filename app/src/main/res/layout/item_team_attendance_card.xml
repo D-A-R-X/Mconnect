@@ -47,6 +47,22 @@
             android:textSize="11sp"
             tools:text="Present" />
 
+        <TextView
+            android:id="@+id/tvHistoryItemFine"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_pill_red_light"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:textColor="#D92D20"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="Fine: ₹700"
+            tools:visibility="visible" />
+
         <!-- User profile section -->
         <LinearLayout
             android:layout_width="wrap_content"
