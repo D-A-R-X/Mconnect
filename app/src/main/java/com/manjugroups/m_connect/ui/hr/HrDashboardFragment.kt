@@ -562,38 +562,28 @@ class HrDashboardFragment : Fragment() {
                     if (state.isClockedIn) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
+                        binding.btnOnDuty.visibility = View.VISIBLE
                         binding.btnClockOut.isEnabled = !state.isSubmitting
                         binding.btnClockOut.text = "Clock Out"
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
+                        binding.btnClockOut.alpha = 1.0f
                         binding.btnOnDuty.isEnabled = !state.isSubmitting
                         updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
                         updateHeaderTexts(true)
                     } else if (hasClockedOutToday) {
-                        // One-time Clock In rule: once the staff has punched in
-                        // today the button never reverts to "Clock In". It
-                        // stays "Clock Out" until the day ends. Clock Out is
-                        // unlimited — each tap re-stamps the day's punch-out, so
-                        // the last tap becomes the effective punch-out (locked
-                        // by the midnight finalize).
-                        // On-duty is NOT cleared from here anymore. It is a
-                        // manual lifecycle: it ends only when the user taps
-                        // Complete On Duty (finishOnDuty) or clocks out from
-                        // the app (PUNCH_OUT result). Deriving the clear from
-                        // attendance state is what lost the trip on relaunch —
-                        // a momentary "not clocked in" read (e.g. a stale
-                        // hasOpenSession after a cold start) would wipe a still
-                        // active on-duty session and re-prompt "On Duty".
+                        // Once clocked out today, hide On Duty and show full-width Clocked Out button (disabled green gradient, alpha 0.5f)
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
-                        binding.btnClockOut.isEnabled = !state.isSubmitting
-                        binding.btnClockOut.text = "Clock Out"
+                        binding.btnOnDuty.visibility = View.GONE
+                        binding.btnClockOut.isEnabled = false
+                        binding.btnClockOut.text = "Clocked Out"
                         binding.btnClockOut.setBackgroundResource(
                             R.drawable.bg_attendance_btn_primary
                         )
-                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
+                        binding.btnClockOut.alpha = 0.5f
                         stopLiveTodayTicker()
                         updateHeaderTexts(false)
                     } else {
