@@ -1633,6 +1633,13 @@ data class GeoTrip(
     val pointCount: Int = 0,
     val placeName: String? = null,
     val placeAddress: String? = null,
+    // Trip classification — drives the line colour on the map, mirroring web:
+    // on-duty (onDutyCategory set) → amber, field visit (fieldVisitId set) →
+    // green, otherwise → blue. vehicleType picks the vehicle marker icon.
+    val onDutyCategory: String? = null,
+    val fieldVisitId: String? = null,
+    val vehicleType: String? = null,
+    val vehicleOwnership: String? = null,
     val snappedPath: List<LatLngPoint>? = null,
     val stops: List<GeoTripStop>? = null
 )

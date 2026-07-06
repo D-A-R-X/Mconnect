@@ -614,15 +614,16 @@
                     android:layout_height="180dp"
                     android:background="#E8EDF5">
 
-                    <!-- Real travelled-route map (lite mode). Drawn behind the
-                         placeholder + play overlay; the placeholder graphic is
-                         hidden once the route renders. -->
+                    <!-- Real travelled-route map. Full mode (like every other
+                         map in the app — clock-in, GeoTrack Live, trip nav) so
+                         the route/heartbeats/trips actually render; lite mode
+                         snapshots blank when revealed after layout. Drawn behind
+                         the placeholder, which is hidden once the route renders. -->
                     <com.google.android.gms.maps.MapView
                         android:id="@+id/mapRoutePreview"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:visibility="invisible"
-                        app:liteMode="true"
                         app:mapType="normal" />
 
                     <ImageView
@@ -647,7 +648,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/inter_semibold"
-                            android:text="Route Preview"
+                            android:text="No trips recorded"
                             android:textColor="#344054"
                             android:textSize="13sp" />
 
@@ -656,7 +657,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
                             android:fontFamily="@font/inter_regular"
-                            android:text="Office → Site A → Site B → Office"
+                            android:text="No travel was tracked for this day"
                             android:textColor="#667085"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -675,6 +676,7 @@
 
                 <!-- Replay journey controls -->
                 <LinearLayout
+                    android:id="@+id/layoutReplayControls"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="#FFFFFF"
@@ -741,8 +743,11 @@
                         android:orientation="horizontal">
 
                         <LinearLayout
+                            android:id="@+id/btnReplayBack10"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="center"
                             android:orientation="horizontal"
                             android:padding="8dp">
@@ -773,8 +778,11 @@
                             app:tint="#FFFFFF" />
 
                         <LinearLayout
+                            android:id="@+id/btnReplayForward10"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="center"
                             android:orientation="horizontal"
                             android:padding="8dp">
@@ -866,8 +874,10 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- Timeline entries -->
+            <!-- Timeline entries (mock rows below are cleared + replaced at
+                 runtime with the real journey timeline) -->
             <LinearLayout
+                android:id="@+id/layoutTimelineEntries"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"

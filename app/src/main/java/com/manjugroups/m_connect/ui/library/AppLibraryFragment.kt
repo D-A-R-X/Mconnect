@@ -384,7 +384,7 @@ class AppLibraryFragment : Fragment() {
         ) { openScreen(AttendanceHistoryFragment()) }
         bindIamEntry(
             row = binding.itemHrFines,
-            allowed = true,
+            allowed = hasAny(listOf("fines.viewOwn", "fines.view")),
         ) { openScreen(com.manjugroups.m_connect.ui.hr.FinesDeductionsFragment()) }
         bindIamEntry(
             row = binding.itemHrLeave,
@@ -462,16 +462,9 @@ class AppLibraryFragment : Fragment() {
                 session.hasPermission("marketing.bookings.create"),
         ) { openScreen(BookingsFragment.newInstance()) }
 
-        // Managers only — surfaced when the backend grants attendance.approve.
-        // Show the matching divider so the row joins the HR card cleanly when
-        // it's visible, and stays invisible (no orphan separator) when it's not.
-        val canApproveAttendance = session.hasPermission("attendance.approve")
-        binding.dividerHrAttendanceReview.visibility =
-            if (canApproveAttendance) View.VISIBLE else View.GONE
-        bindIamEntry(
-            row = binding.itemHrAttendanceReview,
-            allowed = canApproveAttendance,
-        ) { openScreen(AttendanceReviewFragment.newInstance()) }
+        // Attendance Approvals tile removed — not needed in the app library.
+        binding.itemHrAttendanceReview.visibility = View.GONE
+        binding.dividerHrAttendanceReview.visibility = View.GONE
 
         // ── Project ───────────────────────────────────────────────────────
         bindIamEntry(
@@ -533,23 +526,26 @@ class AppLibraryFragment : Fragment() {
         // ── Post Sales ────────────────────────────────────────────────────
         bindIamEntry(
             row = binding.itemSalesCollections,
-            allowed = true,
+            allowed = session.hasPermission("postSales.collections.create"),
         ) { openScreen(CollectionsFragment()) }
         bindIamEntry(
             row = binding.itemSalesLoanDesk,
-            allowed = true,
+            allowed = session.hasPermission("postSales.loanDesk.manage"),
         ) { openScreen(LoanDeskFragment()) }
 
         // ── Accounts ───────────────────────────────────────────────────────
+        // Accounts section — the collections verification / payment queue.
+        // Shows for the Accounts-module "Requests" permission (accounts.requests.view)
+        // OR the Post-Sales verify permission, so granting either reveals it.
         bindIamEntry(
             row = binding.itemAccountsPostSalesVerification,
-            allowed = true,
+            allowed = hasAny(listOf("accounts.requests.view", "postSales.accounts.verify")),
         ) { openScreen(PostSalesVerificationFragment()) }
 
         // ── Front Desk ──────────────────────────────────────────────────────
         bindIamEntry(
             row = binding.itemFrontDeskQR,
-            allowed = true,
+            allowed = hasAny(listOf("frontdesk.view", "frontdesk.checkin", "frontdesk.invite")),
         ) { checkCameraPermissionAndOpen() }
     }
 
@@ -657,7 +653,6 @@ class AppLibraryFragment : Fragment() {
                     R.id.itemHrLeave,
                     R.id.itemHrPermissions,
                     R.id.itemHrLoans,
-                    R.id.itemHrAttendanceReview,
                 ),
             ),
             Triple(
