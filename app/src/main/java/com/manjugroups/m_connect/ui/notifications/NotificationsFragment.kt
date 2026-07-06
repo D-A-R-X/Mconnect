@@ -39,8 +39,7 @@ import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.telecaller.MyLeadsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
-import com.manjugroups.m_connect.ui.tasks.TaskDetailFragment
-import com.manjugroups.m_connect.ui.tasks.TasksFragment
+import com.manjugroups.m_connect.ui.tasks.TaskManagerFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -343,9 +342,10 @@ class NotificationsFragment : Fragment() {
                 // project-task detail, which would 500 on the wrong id type.
                 "landProperty", "landInspection", "land-inspection" ->
                     com.manjugroups.m_connect.ui.library.land.LandInspectionFragment()
-                "dailyTask" -> notification.referenceId?.let { id ->
-                    TaskDetailFragment.newInstance(id)
-                } ?: TasksFragment()
+                // A "Task assigned" notification is a daily-task — open the
+                // Task Manager queue (the referenceId is a dailyTasks id, not a
+                // project-task id, so the project TaskDetail screen can't show it).
+                "dailyTask" -> TaskManagerFragment.newInstance()
                 else -> null
             }
 
@@ -403,7 +403,9 @@ class NotificationsFragment : Fragment() {
             "telecaller.externalLeads.viewOwn", "telecaller.externalLeads.viewAll",
         )
         "loan", "loan-skip-request" -> listOf("loans.view", "loans.manage", "loans.approve")
-        "dailyTask" -> listOf("tasks.view", "tasks.viewAll", "tasks.create")
+        // Daily tasks are the recipient's own queue (Task Manager scopes by
+        // staff id), so don't gate them behind project-task IAM permissions.
+        "dailyTask" -> null
         "landProperty", "landInspection", "land-inspection" ->
             listOf("land.view", "land.inspect", "land.inspection.view")
         else -> null // chat (channel / conversation) + unknowns: no IAM gate
