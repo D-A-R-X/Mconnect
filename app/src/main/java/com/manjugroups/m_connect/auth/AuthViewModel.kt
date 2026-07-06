@@ -83,7 +83,15 @@ class AuthViewModel : ViewModel() {
         if (error is java.net.UnknownHostException) {
             return "No internet connection. Please check your network settings."
         }
+        if (error is java.net.SocketTimeoutException) {
+            return "The server took too long to respond. Please try again."
+        }
+        if (error is java.io.IOException) {
+            // connect/read failures, TLS, no route, etc.
+            return "Couldn't reach the server. Please check your connection and try again."
+        }
         if (error is HttpException) {
+            // Prefer a structured message from the backend when the body is JSON.
             val body = error.response()?.errorBody()?.string()
             if (!body.isNullOrBlank()) {
                 runCatching {
@@ -93,7 +101,18 @@ class AuthViewModel : ViewModel() {
                     parsed.message?.takeIf { it.isNotBlank() }?.let { return it }
                 }
             }
+            // No usable JSON body (a gateway HTML page, empty body, etc.) —
+            // map the status code to a human message instead of surfacing the
+            // raw "HTTP 502".
+            return when (error.code()) {
+                500 -> "Something went wrong on our end. Please try again."
+                502, 503, 504 -> "The server is temporarily unavailable. Please try again in a moment."
+                408, 429 -> "The server is busy right now. Please try again in a moment."
+                in 400..499 -> "We couldn't process that request. Please check your details and try again."
+                else -> fallback
+            }
         }
-        return error.message ?: fallback
+        // Any other throwable — never leak a raw technical / "HTTP …" message.
+        return fallback
     }
 }

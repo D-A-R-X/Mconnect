@@ -90,9 +90,17 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
                 it.outlineProvider = null
 
                 val behavior = BottomSheetBehavior.from(it)
-                behavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                // Open at full height so the entire review — map, playback, and
+                // the full journey timeline at the bottom — is reachable by
+                // scrolling the inner list. Collapsed at 60% the timeline sat
+                // below the fold, and dragging to expand fought the full-mode
+                // map's touch gestures, so the timeline never fully showed.
+                it.layoutParams = it.layoutParams.apply {
+                    height = ViewGroup.LayoutParams.MATCH_PARENT
+                }
+                behavior.skipCollapsed = true
                 behavior.peekHeight = (resources.displayMetrics.heightPixels * 0.6).toInt()
-                behavior.skipCollapsed = false
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
             }
         }
         return dialog
@@ -128,6 +136,11 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
             map.uiSettings.isMapToolbarEnabled = false
+            // Disable map panning so a vertical drag over the map scrolls the
+            // sheet's list (reaching the journey timeline below) instead of
+            // being swallowed by the map. The route is auto-framed to bounds,
+            // so pan isn't needed; zoom buttons still work.
+            map.uiSettings.isScrollGesturesEnabled = false
             routeMap = map
             loadRoute(map)
         }

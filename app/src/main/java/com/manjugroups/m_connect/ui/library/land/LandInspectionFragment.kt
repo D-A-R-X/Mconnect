@@ -234,8 +234,32 @@ class LandInspectionFragment : Fragment() {
      * inspectionAcceptanceStatus to "accepted"; we reload so the card
      * swaps its Accept/Reschedule controls for the open-form arrow.
      */
-    private fun acceptInspection(propertyId: String) {
-        if (!session.isLoggedIn) return
+    // Guards against a double-accept while the request is in flight, and a
+    // debounce timestamp so rapid taps can't stack multiple form sheets.
+    private var isAccepting = false
+    private var lastFormOpenMs = 0L
+
+    /**
+     * Open the site-inspection form once. Rapid taps (while the card is still
+     * loading / the sheet is animating in) previously stacked several copies;
+     * we now dedupe on the fragment tag AND an 800ms debounce.
+     */
+    private fun openInspectionForm(propertyId: String, title: String) {
+        if (!isAdded || _binding == null) return
+        val now = System.currentTimeMillis()
+        if (now - lastFormOpenMs < 800L) return
+        if (parentFragmentManager.findFragmentByTag("site_inspection") != null) return
+        lastFormOpenMs = now
+        SiteInspectionBottomSheet
+            .newInstance(propertyId, title)
+            .show(parentFragmentManager, "site_inspection")
+    }
+
+    private fun acceptInspection(propertyId: String, title: String) {
+        // Ignore taps while an accept is already running so the inspector can't
+        // fire it twice (which would also pop the form twice on success).
+        if (!session.isLoggedIn || isAccepting) return
+        isAccepting = true
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.acceptInspection(
@@ -246,12 +270,17 @@ class LandInspectionFragment : Fragment() {
                         requireContext(), "Inspection accepted",
                         android.widget.Toast.LENGTH_SHORT,
                     ).show()
+                    // Open the form immediately on acceptance (once), then
+                    // refresh the list underneath so the card flips to Accepted.
+                    openInspectionForm(propertyId, title)
                     loadInspections()
                 } else {
                     showError(resp.error ?: "Failed to accept inspection")
                 }
             } catch (err: Exception) {
                 showError(err.message ?: "Network error")
+            } finally {
+                isAccepting = false
             }
         }
     }
@@ -584,9 +613,7 @@ class LandInspectionFragment : Fragment() {
                     rescheduleBtn.visibility = View.GONE
                     arrowBtn.visibility = View.VISIBLE
                     val openForm = View.OnClickListener {
-                        SiteInspectionBottomSheet
-                            .newInstance(item.propertyId, item.title)
-                            .show(parentFragmentManager, "site_inspection")
+                        openInspectionForm(item.propertyId, item.title)
                     }
                     card.setOnClickListener(openForm)
                     arrowBtn.setOnClickListener(openForm)
@@ -634,9 +661,7 @@ class LandInspectionFragment : Fragment() {
                         acceptBtn.layoutParams = lp
                     }
                     val openForm = View.OnClickListener {
-                        SiteInspectionBottomSheet
-                            .newInstance(item.propertyId, item.title)
-                            .show(parentFragmentManager, "site_inspection")
+                        openInspectionForm(item.propertyId, item.title)
                     }
                     acceptBtn.setOnClickListener(openForm)
                     card.setOnClickListener(openForm)
@@ -655,15 +680,13 @@ class LandInspectionFragment : Fragment() {
                     if (item.status == Status.IN_PROGRESS || item.acceptanceStatus == "accepted" || item.acceptanceStatus == "approved" || item.acceptanceStatus == "date_change_approved") {
                         // Already accepted or in progress: clicking accept or card opens the form
                         val openForm = View.OnClickListener {
-                            SiteInspectionBottomSheet
-                                .newInstance(item.propertyId, item.title)
-                                .show(parentFragmentManager, "site_inspection")
+                            openInspectionForm(item.propertyId, item.title)
                         }
                         acceptBtn.setOnClickListener(openForm)
                         card.setOnClickListener(openForm)
                     } else {
                         // Pending acceptance: click accept accepts, click card shows warning toast
-                        acceptBtn.setOnClickListener { acceptInspection(item.propertyId) }
+                        acceptBtn.setOnClickListener { acceptInspection(item.propertyId, item.title) }
                         card.setOnClickListener {
                             android.widget.Toast.makeText(
                                 requireContext(),

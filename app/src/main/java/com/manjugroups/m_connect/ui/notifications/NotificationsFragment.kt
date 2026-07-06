@@ -341,21 +341,60 @@ class NotificationsFragment : Fragment() {
                 else -> null
             }
 
-            if (fragment != null) {
-                parentFragmentManager.beginTransaction()
-                    .applySmoothTransitions()
-                    .replace(R.id.fragmentContainer, fragment)
-                    .addToBackStack(null)
-                    .commit()
-            } else {
-                Toast.makeText(
-                    requireContext(),
-                    "Open the related screen from the menu to view this update.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                loadNotifications()
+            // IAM gate: a notification can point at a screen the recipient no
+            // longer has access to (permissions changed, wrong-audience push,
+            // etc.). Rather than navigate into a screen they can't use, surface
+            // a clear message. Admins and un-gated targets (chat) pass through.
+            val required = requiredPermissionsFor(notification.referenceType)
+            val hasAccess = required == null || required.any { session.hasPermission(it) }
+            when {
+                fragment != null && hasAccess -> {
+                    parentFragmentManager.beginTransaction()
+                        .applySmoothTransitions()
+                        .replace(R.id.fragmentContainer, fragment)
+                        .addToBackStack(null)
+                        .commit()
+                }
+                fragment != null -> {
+                    Toast.makeText(
+                        requireContext(),
+                        "You don't have access to this page.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadNotifications()
+                }
+                else -> {
+                    Toast.makeText(
+                        requireContext(),
+                        "Open the related screen from the menu to view this update.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadNotifications()
+                }
             }
         }
+    }
+
+    /**
+     * IAM permission(s) required to open the screen a notification points at.
+     * Any one grants access (viewer OR approver, etc.); null = un-gated (chat,
+     * or an unmapped type that already falls through to the menu hint). Keys
+     * mirror the App Library / web gating and SessionManager.hasPermission
+     * already treats admins as allowed.
+     */
+    private fun requiredPermissionsFor(referenceType: String?): List<String>? = when (referenceType) {
+        "leave" -> listOf("leaves.view", "leaves.viewAll", "leaves.approve")
+        "permission" -> listOf("permissions.view", "permissions.viewAll", "permissions.approve")
+        "staff-attendance" -> listOf("attendance.approve")
+        "site-visit" -> listOf("marketing.siteVisits.view")
+        "clientPlaceVisit" -> listOf("marketing.cpVisits.view")
+        "booking", "booking_cancellation" -> listOf("marketing.bookings.view", "marketing.bookings.create")
+        "telecallerLeads" -> listOf(
+            "telecaller.externalLeads.viewOwn", "telecaller.externalLeads.viewAll",
+        )
+        "loan", "loan-skip-request" -> listOf("loans.view", "loans.manage", "loans.approve")
+        "dailyTask" -> listOf("tasks.view", "tasks.viewAll", "tasks.create")
+        else -> null // chat (channel / conversation) + unknowns: no IAM gate
     }
 
     private fun applyGradientToTextView(textView: TextView, startColor: String, endColor: String) {
