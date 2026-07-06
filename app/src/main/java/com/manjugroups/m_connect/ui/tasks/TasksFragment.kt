@@ -90,10 +90,9 @@ class TasksFragment : Fragment() {
         tabInProgress = view.findViewById(R.id.tabInProgress)
         tabCompleted = view.findViewById(R.id.tabCompleted)
 
-        // Pull-to-refresh — same load path as initial open + tab returns.
-        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
-            R.id.tasksRefresh
-        ).setupPullToRefresh { loadTasks() }
+        val tasksRefresh = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.tasksRefresh)
+        tasksRefresh.isNestedScrollingEnabled = true
+        tasksRefresh.setupPullToRefresh { loadTasks() }
         // The redesigned layout dropped the skeleton + summary header — left
         // the fields nullable so existing call-sites (`?.text`, `?: return`)
         // silently no-op. Re-introduce the views if the summary returns.

@@ -1,206 +1,223 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8"
-    android:orientation="vertical">
+    android:background="#F1F3F8">
 
-    <!-- Blue Header with Illustration -->
-    <FrameLayout
-        android:id="@+id/headerContainer"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="156dp"
-        android:background="#0B61CA">
+        android:layout_height="wrap_content"
+        android:background="#0B61CA"
+        app:elevation="0dp">
 
-        <ImageView
-            android:layout_width="140dp"
-            android:layout_height="96dp"
-            android:layout_gravity="end|top"
-            android:layout_marginTop="22dp"
-            android:layout_marginEnd="8dp"
-            android:adjustViewBounds="true"
-            android:scaleType="fitCenter"
-            android:src="@drawable/img_tasks_header"
-            android:contentDescription="@null" />
-
-        <LinearLayout
+        <com.google.android.material.appbar.CollapsingToolbarLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp">
+            app:layout_scrollFlags="scroll|exitUntilCollapsed"
+            app:titleEnabled="false">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="36dp"
-                android:fontFamily="@font/inter_bold"
-                android:text="My Tasks"
-                android:textColor="#FFFFFF"
-                android:textSize="24sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="Manage and track all tasks"
-                android:textColor="#D9D6FE"
-                android:textSize="13sp" />
-        </LinearLayout>
-    </FrameLayout>
-
-    <!-- Scrollable container for the content area overlapping the header -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="-20dp">
-
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/tasksRefresh"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <androidx.core.widget.NestedScrollView
+            <!-- Blue Header with Illustration (Adjusted height to 116dp) -->
+            <FrameLayout
+                android:id="@+id/headerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:fillViewport="true">
+                android:layout_height="116dp"
+                android:background="#0B61CA"
+                app:layout_collapseMode="parallax">
+
+                <ImageView
+                    android:layout_width="140dp"
+                    android:layout_height="96dp"
+                    android:layout_gravity="end|top"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/img_tasks_header"
+                    android:contentDescription="@null" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_tasks_sheet"
                     android:orientation="vertical"
-                    android:paddingBottom="40dp">
+                    android:paddingHorizontal="20dp">
 
-                    <!-- Search Bar — same reusable component as the CP Visits search
-                         (bg_cpv_search_bar + ic_cpv_search), magnifier on the right. -->
-                    <FrameLayout
-                        android:layout_width="match_parent"
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginHorizontal="20dp"
-                        android:layout_marginTop="14dp">
+                        android:layout_marginTop="32dp"
+                        android:fontFamily="@font/inter_bold"
+                        android:text="My Tasks"
+                        android:textColor="#FFFFFF"
+                        android:textSize="24sp" />
 
-                        <EditText
-                            android:id="@+id/etSearchTasks"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:background="@drawable/bg_cpv_search_bar"
-                            android:fontFamily="@font/inter_regular"
-                            android:hint="Search Tasks"
-                            android:imeOptions="actionSearch"
-                            android:includeFontPadding="false"
-                            android:inputType="text"
-                            android:maxLines="1"
-                            android:paddingStart="16dp"
-                            android:paddingEnd="46dp"
-                            android:textColor="#101828"
-                            android:textColorHint="#9CA3AF"
-                            android:textSize="14sp" />
-
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:layout_gravity="end|center_vertical"
-                            android:layout_marginEnd="16dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_cpv_search" />
-                    </FrameLayout>
-
-                    <!-- Filter Pills -->
-                    <HorizontalScrollView
-                        android:layout_width="match_parent"
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:scrollbars="none">
-
-                        <com.google.android.material.chip.ChipGroup
-                            android:id="@+id/categoryPills"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:paddingHorizontal="20dp"
-                            app:chipSpacingHorizontal="8dp"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/tabAll"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                android:text="All"
-                                android:textColor="@color/chip_filter_text"
-                                app:chipBackgroundColor="@color/chip_tasks_bg"
-                                app:chipStrokeWidth="0dp"
-                                app:checkedIconVisible="false" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/tabInProgress"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="In progress"
-                                android:textColor="@color/chip_filter_text"
-                                app:chipBackgroundColor="@color/chip_tasks_bg"
-                                app:chipStrokeWidth="0dp"
-                                app:checkedIconVisible="false" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/tabPending"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Pending"
-                                android:textColor="@color/chip_filter_text"
-                                app:chipBackgroundColor="@color/chip_tasks_bg"
-                                app:chipStrokeWidth="0dp"
-                                app:checkedIconVisible="false" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/tabCompleted"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Completed"
-                                android:textColor="@color/chip_filter_text"
-                                app:chipBackgroundColor="@color/chip_tasks_bg"
-                                app:chipStrokeWidth="0dp"
-                                app:checkedIconVisible="false" />
-                        </com.google.android.material.chip.ChipGroup>
-                    </HorizontalScrollView>
-
-                    <LinearLayout
-                        android:id="@+id/taskList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingHorizontal="20dp"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="40dp" />
-
-                    <com.manjugroups.m_connect.ui.common.EmptyStateView
-                        android:id="@+id/emptyState"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="60dp"
-                        android:visibility="gone"
-                        app:es_image="@drawable/ic_home_empty_trips"
-                        app:es_title="No Tasks Available"
-                        app:es_description="It looks like you don't have any tasks scheduled at the moment." />
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Manage and track all tasks"
+                        android:textColor="#D9D6FE"
+                        android:textSize="13sp" />
                 </LinearLayout>
-            </androidx.core.widget.NestedScrollView>
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            </FrameLayout>
+        </com.google.android.material.appbar.CollapsingToolbarLayout>
 
-        <!-- Bottom fade overlay -->
-        <View
+        <!-- Pinned Header section (Search and Pills) inside the white sheet background -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_gravity="bottom"
-            android:background="@drawable/bg_bottom_nav_fade_grey"
-            android:clickable="false"
-            android:focusable="false" />
-    </FrameLayout>
-</LinearLayout>
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_tasks_sheet"
+            android:orientation="vertical"
+            android:paddingTop="14dp"
+            android:paddingBottom="8dp">
+
+            <!-- Search Bar — same reusable component as the CP Visits search
+                 (bg_cpv_search_bar + ic_cpv_search), magnifier on the right. -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="20dp">
+
+                <EditText
+                    android:id="@+id/etSearchTasks"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_cpv_search_bar"
+                    android:fontFamily="@font/inter_regular"
+                    android:hint="Search Tasks"
+                    android:imeOptions="actionSearch"
+                    android:includeFontPadding="false"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="46dp"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cpv_search" />
+            </FrameLayout>
+
+            <!-- Filter Pills -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/categoryPills"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="20dp"
+                    app:chipSpacingHorizontal="8dp"
+                    app:singleSelection="true"
+                    app:selectionRequired="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/tabAll"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="All"
+                        android:textColor="@color/chip_filter_text"
+                        app:chipBackgroundColor="@color/chip_tasks_bg"
+                        app:chipStrokeWidth="0dp"
+                        app:checkedIconVisible="false" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/tabInProgress"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="In progress"
+                        android:textColor="@color/chip_filter_text"
+                        app:chipBackgroundColor="@color/chip_tasks_bg"
+                        app:chipStrokeWidth="0dp"
+                        app:checkedIconVisible="false" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/tabPending"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Pending"
+                        android:textColor="@color/chip_filter_text"
+                        app:chipBackgroundColor="@color/chip_tasks_bg"
+                        app:chipStrokeWidth="0dp"
+                        app:checkedIconVisible="false" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/tabCompleted"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Completed"
+                        android:textColor="@color/chip_filter_text"
+                        app:chipBackgroundColor="@color/chip_tasks_bg"
+                        app:chipStrokeWidth="0dp"
+                        app:checkedIconVisible="false" />
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+        </LinearLayout>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- Scrollable container for the tasks list (Enabling nested scrolling) -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/tasksRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#F1F3F8"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/taskList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="40dp" />
+
+                <com.manjugroups.m_connect.ui.common.EmptyStateView
+                    android:id="@+id/emptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="60dp"
+                    android:visibility="gone"
+                    app:es_image="@drawable/ic_home_empty_trips"
+                    app:es_title="No Tasks Available"
+                    app:es_description="It looks like you don't have any tasks scheduled at the moment." />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <!-- Bottom fade overlay -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_bottom_nav_fade_grey"
+        android:clickable="false"
+        android:focusable="false" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
