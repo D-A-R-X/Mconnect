@@ -1516,6 +1516,8 @@ data class LeaveData(
     val approverPhotoUrl: String? = null,
     /** ISO datetime — approvedOn / rejectedOn / fallback updatedAt. */
     val decidedAt: String? = null,
+    val isHalfDay: Boolean? = null,
+    val halfDaySession: String? = null
 )
 data class ApplyLeaveRequest(
     val leaveType: String,
@@ -1524,6 +1526,7 @@ data class ApplyLeaveRequest(
     val reason: String,
     val reportingToId: String? = null,
     val reportingToName: String? = null,
+    val isHalfDay: Boolean? = null,
     val halfDaySession: String? = null,
     val halfDayType: String? = null
 )

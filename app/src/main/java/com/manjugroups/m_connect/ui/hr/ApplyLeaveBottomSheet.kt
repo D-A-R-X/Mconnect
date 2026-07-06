@@ -264,12 +264,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.applyLeave(
                     session.bearerToken,
                     ApplyLeaveRequest(
-                        leaveType = selectedLeaveType,
+                        leaveType = if (selectedLeaveType == "half_day") "casual" else selectedLeaveType,
                         fromDate = from,
                         toDate = to,
                         reason = if (selectedLeaveType == "half_day") "[$selectedSession] $reason".trim() else reason,
                         reportingToId = session.reportingToId,
                         reportingToName = session.reportingToName,
+                        isHalfDay = if (selectedLeaveType == "half_day") true else null,
                         halfDaySession = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null,
                         halfDayType = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null
                     )
