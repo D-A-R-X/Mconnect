@@ -87,6 +87,75 @@
                 app:tint="#667085" />
         </LinearLayout>
 
+        <!-- Half Day Session Selection (shown only for half day leave) -->
+        <LinearLayout
+            android:id="@+id/layoutHalfDaySession"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Half Day Session"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <!-- Morning Option -->
+                <LinearLayout
+                    android:id="@+id/btnSessionMorning"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_leave_sheet_option_selected"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/tvSessionMorning"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Morning"
+                        android:textColor="#1D4ED8"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <!-- Afternoon Option -->
+                <LinearLayout
+                    android:id="@+id/btnSessionAfternoon"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_leave_sheet_option"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/tvSessionAfternoon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Afternoon"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Leave Duration -->
         <TextView
             android:layout_width="wrap_content"
