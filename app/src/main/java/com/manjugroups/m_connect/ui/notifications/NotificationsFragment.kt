@@ -335,6 +335,11 @@ class NotificationsFragment : Fragment() {
                 "booking", "booking_cancellation" -> BookingsFragment.newInstance()
                 "telecallerLeads" -> MyLeadsFragment.newInstance()
                 "loan", "loan-skip-request" -> LoansFragment()
+                // Land procurement notifications point at a landProperty — open
+                // the Land Inspection screen (the related page) rather than the
+                // project-task detail, which would 500 on the wrong id type.
+                "landProperty", "landInspection", "land-inspection" ->
+                    com.manjugroups.m_connect.ui.library.land.LandInspectionFragment()
                 "dailyTask" -> notification.referenceId?.let { id ->
                     TaskDetailFragment.newInstance(id)
                 } ?: TasksFragment()
@@ -394,6 +399,8 @@ class NotificationsFragment : Fragment() {
         )
         "loan", "loan-skip-request" -> listOf("loans.view", "loans.manage", "loans.approve")
         "dailyTask" -> listOf("tasks.view", "tasks.viewAll", "tasks.create")
+        "landProperty", "landInspection", "land-inspection" ->
+            listOf("land.view", "land.inspect", "land.inspection.view")
         else -> null // chat (channel / conversation) + unknowns: no IAM gate
     }
 
