@@ -336,13 +336,22 @@ class LeavesFragment : Fragment() {
 
             card.findViewById<TextView>(R.id.tvLeaveDate).text = dateHeadingText
             card.findViewById<TextView>(R.id.tvLeaveType).text = rangeText
-            card.findViewById<TextView>(R.id.tvLeaveStatus).text = "$days Day${if (days > 1) "s" else ""}"
+            val isHalfDay = leave.isHalfDay == true || leave.leaveType?.lowercase(Locale.getDefault())?.contains("half_day") == true
+            card.findViewById<TextView>(R.id.tvLeaveStatus).text = if (isHalfDay) "0.5 Day" else "$days Day${if (days > 1) "s" else ""}"
 
             // Dynamic labels matching Figma: reason as left label, leave type as right label
             val reasonLabel = card.findViewById<TextView>(R.id.tvLeaveReasonLabel)
             val typeLabel = card.findViewById<TextView>(R.id.tvLeaveTypeLabel)
             reasonLabel.text = leave.reason?.trim()?.takeIf { it.isNotBlank() } ?: "Leave Date"
-            val leaveTypeDisplay = leave.leaveType?.replaceFirstChar { it.uppercaseChar() }?.let { "$it Leave" } ?: "Total Leave"
+            val rawType = leave.leaveType?.replace('_', ' ')?.split(" ")?.joinToString(" ") {
+                it.replaceFirstChar { c -> if (c.isLowerCase()) c.titlecase(Locale.getDefault()) else c.toString() }
+            } ?: "Total"
+            val leaveTypeDisplay = if (isHalfDay) {
+                val sessionText = leave.halfDaySession?.replaceFirstChar { it.uppercaseChar() } ?: ""
+                if (sessionText.isNotEmpty()) "$rawType Half-day ($sessionText) Leave" else "$rawType Half-day Leave"
+            } else {
+                if (rawType.lowercase().contains("leave")) rawType else "$rawType Leave"
+            }
             typeLabel.text = leaveTypeDisplay
 
             val reasonText = card.findViewById<TextView>(R.id.tvLeaveReason)

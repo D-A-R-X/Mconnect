@@ -44,10 +44,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private val gson = Gson()
 
-    private var leaveTypes = listOf("casual", "sick", "earned")
+    // Fallback used only when the HR policy can't be fetched; the live list
+    // comes from the policy (see loadLeaveTypes) and mirrors the web default.
+    private var leaveTypes = listOf("casual", "sick", "earned", "unpaid", "compensatory")
     private var selectedLeaveType: String = "casual"
     private var selectedFromMillis: Long? = null
     private var selectedToMillis: Long? = null
+    private var selectedSession: String = "Morning"
 
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val labelDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
@@ -88,6 +91,35 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         fieldLeaveDuration.setOnClickListener { showDurationSheet() }
         btnSubmit.setOnClickListener { promptSubmitConfirmation() }
 
+        // Setup session buttons for Half Day
+        val btnSessionMorning = view.findViewById<View>(R.id.btnSessionMorning)
+        val btnSessionAfternoon = view.findViewById<View>(R.id.btnSessionAfternoon)
+        val tvSessionMorning = view.findViewById<TextView>(R.id.tvSessionMorning)
+        val tvSessionAfternoon = view.findViewById<TextView>(R.id.tvSessionAfternoon)
+
+        fun updateSessionUi() {
+            if (selectedSession == "Morning") {
+                btnSessionMorning?.setBackgroundResource(R.drawable.bg_leave_sheet_option_selected)
+                tvSessionMorning?.setTextColor(Color.parseColor("#1D4ED8"))
+                btnSessionAfternoon?.setBackgroundResource(R.drawable.bg_leave_sheet_option)
+                tvSessionAfternoon?.setTextColor(Color.parseColor("#344054"))
+            } else {
+                btnSessionMorning?.setBackgroundResource(R.drawable.bg_leave_sheet_option)
+                tvSessionMorning?.setTextColor(Color.parseColor("#344054"))
+                btnSessionAfternoon?.setBackgroundResource(R.drawable.bg_leave_sheet_option_selected)
+                tvSessionAfternoon?.setTextColor(Color.parseColor("#1D4ED8"))
+            }
+        }
+
+        btnSessionMorning?.setOnClickListener {
+            selectedSession = "Morning"
+            updateSessionUi()
+        }
+        btnSessionAfternoon?.setOnClickListener {
+            selectedSession = "Afternoon"
+            updateSessionUi()
+        }
+
         // Setup real-time validation text watcher on reason input
         etReason.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -116,6 +148,8 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
         updateDurationLabel()
         loadLeaveTypes()
+        updateHalfDayVisibility()
+        updateSessionUi()
         updateSubmitButtonState() // Initial disable
     }
 
@@ -131,6 +165,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         } else {
             btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_disabled)
             btnSubmit.isEnabled = false
+        }
+    }
+
+    private fun updateHalfDayVisibility() {
+        val view = view ?: return
+        val layoutHalfDaySession = view.findViewById<View>(R.id.layoutHalfDaySession) ?: return
+        if (selectedLeaveType == "half_day") {
+            layoutHalfDaySession.visibility = View.VISIBLE
+        } else {
+            layoutHalfDaySession.visibility = View.GONE
         }
     }
 
@@ -161,13 +205,15 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val policy = api.getPolicy(session.bearerToken)
-                val types = mutableListOf<String>()
                 val lp = policy.policy?.leave
-                if ((lp?.casualPerYear ?: 1) > 0) types.add("casual")
-                if ((lp?.sickPerYear ?: 1) > 0) types.add("sick")
-                if ((lp?.earnedPerYear ?: 1) > 0) types.add("earned")
-                lp?.types?.forEach { t ->
-                    if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
+                // Leave types are defined by HR policy — the same source the web
+                // dropdown uses — consumed verbatim so enabling/disabling a type
+                // in HR settings reflects on mobile too, in the same order as web.
+                // The half_day option is always appended for the half-day flow.
+                val types = lp?.types?.map { it.trim() }?.filter { it.isNotEmpty() }
+                    ?.toMutableList() ?: mutableListOf()
+                if (!types.contains("half_day")) {
+                    types.add("half_day")
                 }
                 if (types.isNotEmpty()) {
                     leaveTypes = types
@@ -176,10 +222,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 throw ce
             } catch (_: Exception) {
                 // Keep defaults when policy isn't available.
+                leaveTypes = listOf("casual", "sick", "earned", "half_day")
             }
 
             selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
             view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selectedLeaveType)
+            updateHalfDayVisibility()
             updateSubmitButtonState()
         }
     }
@@ -216,12 +264,15 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.applyLeave(
                     session.bearerToken,
                     ApplyLeaveRequest(
-                        leaveType = selectedLeaveType,
+                        leaveType = if (selectedLeaveType == "half_day") "casual" else selectedLeaveType,
                         fromDate = from,
                         toDate = to,
-                        reason = reason,
+                        reason = if (selectedLeaveType == "half_day") "[$selectedSession] $reason".trim() else reason,
                         reportingToId = session.reportingToId,
                         reportingToName = session.reportingToName,
+                        isHalfDay = if (selectedLeaveType == "half_day") true else null,
+                        halfDaySession = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null,
+                        halfDayType = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null
                     )
                 )
                 if (resp.success) {
@@ -307,7 +358,15 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val selected = leaveTypes[selectedIndex]
                 selectedLeaveType = selected
                 view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selected)
+                
+                // If switching to half_day and we had a multi-day range, collapse it to a single day
+                if (selected == "half_day" && selectedFromMillis != null && selectedToMillis != null && selectedFromMillis != selectedToMillis) {
+                    selectedToMillis = selectedFromMillis
+                    updateDurationLabel()
+                }
+                
                 dialog.dismiss()
+                updateHalfDayVisibility()
                 updateSubmitButtonState()
             }
         }
@@ -396,14 +455,19 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
             if (inCurrentMonth) {
                 cell.setOnClickListener {
-                    if (tempFrom == null || tempTo != null) {
+                    if (selectedLeaveType == "half_day") {
                         tempFrom = dayMillis
-                        tempTo = null
-                    } else if (dayMillis < tempFrom!!) {
-                        tempTo = tempFrom
-                        tempFrom = dayMillis
-                    } else {
                         tempTo = dayMillis
+                    } else {
+                        if (tempFrom == null || tempTo != null) {
+                            tempFrom = dayMillis
+                            tempTo = null
+                        } else if (dayMillis < tempFrom!!) {
+                            tempTo = tempFrom
+                            tempFrom = dayMillis
+                        } else {
+                            tempTo = dayMillis
+                        }
                     }
                     renderCalendar()
                 }
@@ -486,6 +550,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun prettyType(value: String): String {
+        // Explicit labels mirroring the web leave-type dropdown so the two
+        // stay in lockstep. Unknown/custom policy types fall through to the
+        // generic title-case formatter below.
+        when (value.lowercase(Locale.getDefault())) {
+            "casual" -> return "Casual Leave"
+            "sick" -> return "Sick Leave"
+            "earned" -> return "Earned Leave"
+            "unpaid" -> return "Unpaid Leave"
+            "compensatory" -> return "Compensatory Off"
+        }
         val base = value
             .replace('_', ' ')
             .split(" ")

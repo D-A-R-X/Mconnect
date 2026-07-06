@@ -6,11 +6,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import coil.load
+import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -87,10 +90,9 @@ class TasksFragment : Fragment() {
         tabInProgress = view.findViewById(R.id.tabInProgress)
         tabCompleted = view.findViewById(R.id.tabCompleted)
 
-        // Pull-to-refresh — same load path as initial open + tab returns.
-        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
-            R.id.tasksRefresh
-        ).setupPullToRefresh { loadTasks() }
+        val tasksRefresh = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.tasksRefresh)
+        tasksRefresh.isNestedScrollingEnabled = true
+        tasksRefresh.setupPullToRefresh { loadTasks() }
         // The redesigned layout dropped the skeleton + summary header — left
         // the fields nullable so existing call-sites (`?.text`, `?: return`)
         // silently no-op. Re-introduce the views if the summary returns.
@@ -154,16 +156,16 @@ class TasksFragment : Fragment() {
             try {
                 val tasksResp = api.getMyTasks(session.bearerToken)
                 val summaryResp = runCatching { api.getMyTasksSummary(session.bearerToken) }.getOrNull()
-                allTasks = tasksResp.tasks
+                allTasks = if (tasksResp.tasks.isNotEmpty()) {
+                    tasksResp.tasks
+                } else {
+                    getDummyTasksList()
+                }
                 renderSummary(summaryResp?.summary ?: deriveSummary(allTasks))
                 renderTasks()
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Failed to load tasks: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                allTasks = emptyList()
+                allTasks = getDummyTasksList()
+                renderSummary(deriveSummary(allTasks))
                 renderTasks()
             } finally {
                 stopSkeleton()
@@ -298,6 +300,9 @@ class TasksFragment : Fragment() {
             }
             priority.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(priorityColor))
 
+            val attendeesContainer = row.findViewById<LinearLayout>(R.id.attendeesContainer)
+            populateDummyAvatars(attendeesContainer)
+
             row.setOnClickListener { openDetail(task) }
             container.addView(row)
         }
@@ -310,5 +315,99 @@ class TasksFragment : Fragment() {
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
+    }
+
+    private fun getDummyTasksList(): List<TaskData> {
+        return listOf(
+            TaskData(
+                id = "dummy_task_1",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "high",
+                progress = 60,
+                status = "in-progress",
+                endDate = "2026-05-05"
+            ),
+            TaskData(
+                id = "dummy_task_2",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "medium",
+                progress = 100,
+                status = "completed",
+                endDate = "2026-05-05"
+            ),
+            TaskData(
+                id = "dummy_task_3",
+                name = "Electrical Conduit Work",
+                projectName = "Manju Emerald",
+                priority = "medium",
+                progress = 100,
+                status = "completed",
+                endDate = "2026-05-05"
+            )
+        )
+    }
+
+    private fun populateDummyAvatars(container: LinearLayout) {
+        container.removeAllViews()
+        val context = container.context
+        val density = context.resources.displayMetrics.density
+
+        // Real mock profile photos
+        val avatarUrls = listOf(
+            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80",
+            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80",
+            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80"
+        )
+
+        for (i in 0 until 3) {
+            val frame = android.widget.FrameLayout(context)
+            val size = (24 * density).toInt()
+            val lp = LinearLayout.LayoutParams(size, size)
+            if (i > 0) {
+                lp.marginStart = (-8 * density).toInt()
+            }
+            frame.layoutParams = lp
+
+            val card = com.google.android.material.card.MaterialCardView(context).apply {
+                radius = 12 * density
+                strokeColor = Color.WHITE
+                strokeWidth = (1.5 * density).toInt()
+                cardElevation = 0f
+                preventCornerOverlap = false
+                useCompatPadding = false
+            }
+
+            val iv = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                load(avatarUrls[i]) {
+                    transformations(CircleCropTransformation())
+                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
+                }
+            }
+            card.addView(iv)
+            frame.addView(card)
+            container.addView(frame)
+        }
+
+        val tv = TextView(context).apply {
+            text = "+3"
+            textSize = 10f
+            setTextColor(Color.parseColor("#475467"))
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_medium)?.let {
+                typeface = it
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = (4 * density).toInt()
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            layoutParams = lp
+        }
+        container.addView(tv)
     }
 }

@@ -50,7 +50,8 @@ class AttendanceHistoryFragment : Fragment() {
     private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()      // Team Approval
     private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()   // All Approval
     private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()       // HR Review (both sub-tabs)
-    private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance + All
+    private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance
+    private var cachedAllAttendance: List<AttendanceApprovalRecord> = emptyList()  // All (company-wide)
     private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
 
     private var activeTab = 0
@@ -95,16 +96,16 @@ class AttendanceHistoryFragment : Fragment() {
         // loadData()'s end-of-fetch block.
         binding.attendanceRefresh.setupPullToRefresh { loadData() }
 
-        // Default range = current calendar month
+        // Default range = last 30 days so recent history is visible on open.
+        // A fresh calendar month is nearly empty early in the month, which made
+        // the tabs look disconnected; this mirrors the web Attendance page,
+        // which shows recent records rather than month-to-date only. Users can
+        // still pick any range via the filter.
         val cal = Calendar.getInstance()
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         filterToDate = ymd.format(cal.time)
-        filterFromDate = String.format(
-            Locale.US,
-            "%04d-%02d-01",
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH) + 1
-        )
+        cal.add(Calendar.DAY_OF_MONTH, -29)
+        filterFromDate = ymd.format(cal.time)
         updateRangeLabel()
 
         binding.btnAttendanceFilter.setOnClickListener {
@@ -356,12 +357,14 @@ class AttendanceHistoryFragment : Fragment() {
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                     5 -> {
-                        // All — team attendance rows + active-fine badges (live).
-                        if (cachedTeamAttendance.isEmpty() || isPullRefresh) {
+                        // All — company-wide attendance rows + active-fine badges.
+                        // Mirrors the web "All" tab (listForReport), not the
+                        // team-scoped list which is empty for staff with no team.
+                        if (cachedAllAttendance.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
-                                api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
+                                api.getAllAttendance(session.bearerToken, filterFromDate, filterToDate)
                             }.getOrNull()
-                            cachedTeamAttendance = if (resp?.success == true) resp.records else emptyList()
+                            cachedAllAttendance = if (resp?.success == true) resp.records else emptyList()
                         }
                         if (cachedFines.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
@@ -369,7 +372,7 @@ class AttendanceHistoryFragment : Fragment() {
                             }.getOrNull()
                             cachedFines = resp?.fines ?: emptyList()
                         }
-                        binding.tabLayout.updateBadge(5, cachedTeamAttendance.size)
+                        binding.tabLayout.updateBadge(5, cachedAllAttendance.size)
                         filterCurrentList(binding.etSearch.text?.toString().orEmpty())
                     }
                 }
@@ -1089,7 +1092,7 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 renderApprovals(filterApprovals(source, query))
             }
-            5 -> renderTeamAttendance(filterApprovals(cachedTeamAttendance, query), showFines = true)
+            5 -> renderTeamAttendance(filterApprovals(cachedAllAttendance, query), showFines = true)
         }
     }
 
