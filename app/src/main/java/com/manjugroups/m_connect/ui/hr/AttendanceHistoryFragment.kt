@@ -282,7 +282,7 @@ class AttendanceHistoryFragment : Fragment() {
                 }
 
                 viewLifecycleOwner.lifecycleScope.launch {
-                    kotlinx.coroutines.delay(1000)
+                    kotlinx.coroutines.delay(2000)
                     if (isAdded) {
                         preRenderAllTabs()
                     }
@@ -1128,23 +1128,28 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
-    private fun preRenderAllTabs() {
+    private suspend fun preRenderAllTabs() {
         if (!viewCache.containsKey("team_attendance")) {
             preRenderTeamAttendance(cachedTeamAttendance, showFines = false, "team_attendance")
+            kotlinx.coroutines.delay(150)
         }
         if (!viewCache.containsKey("team_approval")) {
             preRenderApprovals(cachedApprovals, "team_approval")
+            kotlinx.coroutines.delay(150)
         }
         if (!viewCache.containsKey("all_approval")) {
             preRenderApprovals(cachedAllApprovals, "all_approval")
+            kotlinx.coroutines.delay(150)
         }
         if (!viewCache.containsKey("hr_review_0")) {
             val source0 = cachedHrReview.filter { it.requestType != "remarks" }
             preRenderApprovals(source0, "hr_review_0")
+            kotlinx.coroutines.delay(150)
         }
         if (!viewCache.containsKey("hr_review_1")) {
             val source1 = cachedHrReview.filter { it.requestType == "remarks" }
             preRenderApprovals(source1, "hr_review_1")
+            kotlinx.coroutines.delay(150)
         }
         if (!viewCache.containsKey("all_fines")) {
             preRenderTeamAttendance(cachedTeamAttendance, showFines = true, "all_fines")
