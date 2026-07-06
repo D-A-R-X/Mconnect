@@ -1523,7 +1523,9 @@ data class ApplyLeaveRequest(
     val toDate: String,
     val reason: String,
     val reportingToId: String? = null,
-    val reportingToName: String? = null
+    val reportingToName: String? = null,
+    val halfDaySession: String? = null,
+    val halfDayType: String? = null
 )
 data class ApplyLeaveResponse(val success: Boolean, val leaveId: String?, val error: String? = null)
 
