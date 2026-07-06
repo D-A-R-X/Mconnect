@@ -86,7 +86,7 @@ class AttendanceHistoryFragment : Fragment() {
         binding.etSearch.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                filterCurrentList(s?.toString().orEmpty())
+                filterCurrentListOnTyping(s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
@@ -228,34 +228,56 @@ class AttendanceHistoryFragment : Fragment() {
     private fun loadBadgeCounts() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // My Attendance (0)
-                val myResp = runCatching {
-                    api.getMyAttendance(session.bearerToken, filterFromDate, filterToDate)
-                }.getOrNull()
+                val token = session.bearerToken
+                if (token.isBlank()) return@launch
+
+                val myDeferred = kotlinx.coroutines.async {
+                    runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                }
+                val teamDeferred = kotlinx.coroutines.async {
+                    runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                }
+                val approvalsDeferred = kotlinx.coroutines.async {
+                    runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
+                }
+                val allApprovalsDeferred = kotlinx.coroutines.async {
+                    runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
+                }
+                val hrReviewDeferred = kotlinx.coroutines.async {
+                    runCatching { api.getHrReview(token, filterFromDate, filterToDate) }.getOrNull()
+                }
+
+                val myResp = myDeferred.await()
                 if (myResp?.success == true) {
+                    cachedMyRecords = myResp.records
                     binding.tabLayout.updateBadge(0, myResp.records.size)
                 }
 
-                // Team Attendance (1) + All (5) share the subtree records
-                val teamResp = runCatching {
-                    api.getTeamAttendance(session.bearerToken, filterFromDate, filterToDate)
-                }.getOrNull()
+                val teamResp = teamDeferred.await()
                 if (teamResp?.success == true) {
                     cachedTeamAttendance = teamResp.records
                     binding.tabLayout.updateBadge(1, teamResp.records.size)
                     binding.tabLayout.updateBadge(5, teamResp.records.size)
                 }
 
-                // Team Approval (2)
-                val approvalsResp = runCatching {
-                    api.getPendingAttendanceApprovals(session.bearerToken)
-                }.getOrNull()
+                val approvalsResp = approvalsDeferred.await()
                 if (approvalsResp?.success == true) {
                     cachedApprovals = approvalsResp.records
                     binding.tabLayout.updateBadge(2, approvalsResp.records.size)
                 }
-                // All Approval (3) / HR Review (4) badges update on tab open
-                // (permission-gated).
+
+                val allApprovalsResp = allApprovalsDeferred.await()
+                if (allApprovalsResp?.success == true) {
+                    cachedAllApprovals = allApprovalsResp.records
+                    binding.tabLayout.updateBadge(3, allApprovalsResp.records.size)
+                }
+
+                val hrReviewResp = hrReviewDeferred.await()
+                if (hrReviewResp?.success == true) {
+                    cachedHrReview = hrReviewResp.records
+                    binding.tabLayout.updateBadge(4, hrReviewResp.records.size)
+                    updateSubTabStyles()
+                }
             } catch (_: Exception) {}
         }
     }
@@ -441,6 +463,13 @@ class AttendanceHistoryFragment : Fragment() {
         records.forEach { record ->
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_attendance_history_card, binding.attendanceList, false)
+
+            val searchParts = listOf(
+                record.date ?: "",
+                record.approvedAttendance ?: "",
+                if (record.id == null) "absent" else ""
+            )
+            card.tag = searchParts.joinToString(" ").lowercase(Locale.US)
 
             val parsed = record.date?.let { runCatching { parseFmt.parse(it) }.getOrNull() }
             card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
@@ -914,6 +943,16 @@ class AttendanceHistoryFragment : Fragment() {
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_team_approval_card, binding.attendanceList, false)
 
+            val searchParts = listOf(
+                record.staffName ?: "",
+                record.designation ?: "",
+                record.employeeId ?: "",
+                record.source ?: "",
+                record.date ?: "",
+                record.approvedAttendance ?: ""
+            )
+            card.tag = searchParts.joinToString(" ").lowercase(Locale.US)
+
             val staffName = record.staffName?.trim().orEmpty().ifBlank { "Staff" }
             card.findViewById<TextView>(R.id.tvAttStaffName).text = staffName
 
@@ -1093,6 +1132,38 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
+    private fun filterCurrentListOnTyping(query: String) {
+        val queryLower = query.trim().lowercase(Locale.US)
+        var visibleCount = 0
+
+        for (i in 0 until binding.attendanceList.childCount) {
+            val child = binding.attendanceList.getChildAt(i)
+            val tag = child.tag as? String
+            if (tag == null) {
+                child.visibility = View.VISIBLE
+                continue
+            }
+
+            if (queryLower.isEmpty() || tag.contains(queryLower)) {
+                child.visibility = View.VISIBLE
+                visibleCount++
+            } else {
+                child.visibility = View.GONE
+            }
+        }
+
+        if (visibleCount == 0 && binding.attendanceList.childCount > 0) {
+            binding.emptyState.visibility = View.VISIBLE
+            binding.emptyState.setEmptyState(
+                R.drawable.ic_leave_empty,
+                "No search results",
+                "Try refining your search query."
+            )
+        } else {
+            binding.emptyState.visibility = View.GONE
+        }
+    }
+
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean) {
         binding.attendanceList.removeAllViews()
         if (records.isEmpty()) {
@@ -1108,6 +1179,16 @@ class AttendanceHistoryFragment : Fragment() {
         records.forEach { record ->
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
+
+            val searchParts = listOf(
+                record.staffName ?: "",
+                record.designation ?: "",
+                record.employeeId ?: "",
+                record.source ?: "",
+                record.date ?: "",
+                record.approvedAttendance ?: ""
+            )
+            card.tag = searchParts.joinToString(" ").lowercase(Locale.US)
 
             card.findViewById<TextView>(R.id.tvHistoryItemDate).text =
                 formatDateLabel(record.date) ?: (record.date ?: "—")
