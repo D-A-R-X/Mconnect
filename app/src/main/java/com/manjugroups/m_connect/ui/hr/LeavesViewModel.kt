@@ -60,18 +60,23 @@ class LeavesViewModel : ViewModel() {
                     if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
                 }
 
-                // Only show balance for types that have >0 allocation in policy
-                val casualAlloc = policy?.casualPerYear ?: 0
-                val sickAlloc = policy?.sickPerYear ?: 0
-                val earnedAlloc = policy?.earnedPerYear ?: 0
+                // Allocation (total) comes straight from HR policy — the source
+                // of truth — so changing casual/sick/earned per-year in HR
+                // settings updates the Available card on the next load. The
+                // balance record only supplies how much has been *used*. Fall
+                // back to the balance's policy-corrected total if the policy
+                // fetch itself failed, so a transient error doesn't zero the card.
+                val casualAlloc = policy?.casualPerYear ?: (b?.casual ?: 0)
+                val sickAlloc = policy?.sickPerYear ?: (b?.sick ?: 0)
+                val earnedAlloc = policy?.earnedPerYear ?: (b?.earned ?: 0)
 
                 _uiState.value = _uiState.value.copy(
-                    casualLeft = if (casualAlloc > 0) (b?.casual ?: 0) - (b?.casualUsed ?: 0) else 0,
-                    sickLeft = if (sickAlloc > 0) (b?.sick ?: 0) - (b?.sickUsed ?: 0) else 0,
-                    earnedLeft = if (earnedAlloc > 0) (b?.earned ?: 0) - (b?.earnedUsed ?: 0) else 0,
-                    casualTotal = if (casualAlloc > 0) b?.casual ?: 0 else 0,
-                    sickTotal = if (sickAlloc > 0) b?.sick ?: 0 else 0,
-                    earnedTotal = if (earnedAlloc > 0) b?.earned ?: 0 else 0,
+                    casualLeft = (casualAlloc - (b?.casualUsed ?: 0)).coerceAtLeast(0),
+                    sickLeft = (sickAlloc - (b?.sickUsed ?: 0)).coerceAtLeast(0),
+                    earnedLeft = (earnedAlloc - (b?.earnedUsed ?: 0)).coerceAtLeast(0),
+                    casualTotal = casualAlloc,
+                    sickTotal = sickAlloc,
+                    earnedTotal = earnedAlloc,
                     myLeaves = history?.leaves ?: emptyList(),
                     pendingApprovals = pending?.leaves ?: emptyList(),
                     leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")

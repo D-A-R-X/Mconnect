@@ -44,7 +44,9 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private val gson = Gson()
 
-    private var leaveTypes = listOf("casual", "sick", "earned")
+    // Fallback used only when the HR policy can't be fetched; the live list
+    // comes from the policy (see loadLeaveTypes) and mirrors the web default.
+    private var leaveTypes = listOf("casual", "sick", "earned", "unpaid", "compensatory")
     private var selectedLeaveType: String = "casual"
     private var selectedFromMillis: Long? = null
     private var selectedToMillis: Long? = null
@@ -203,14 +205,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val policy = api.getPolicy(session.bearerToken)
-                val types = mutableListOf<String>()
                 val lp = policy.policy?.leave
-                if ((lp?.casualPerYear ?: 1) > 0) types.add("casual")
-                if ((lp?.sickPerYear ?: 1) > 0) types.add("sick")
-                if ((lp?.earnedPerYear ?: 1) > 0) types.add("earned")
-                lp?.types?.forEach { t ->
-                    if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
-                }
+                // Leave types are defined by HR policy — the same source the web
+                // dropdown uses — consumed verbatim so enabling/disabling a type
+                // in HR settings reflects on mobile too, in the same order as web.
+                // The half_day option is always appended for the half-day flow.
+                val types = lp?.types?.map { it.trim() }?.filter { it.isNotEmpty() }
+                    ?.toMutableList() ?: mutableListOf()
                 if (!types.contains("half_day")) {
                     types.add("half_day")
                 }
@@ -548,6 +549,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun prettyType(value: String): String {
+        // Explicit labels mirroring the web leave-type dropdown so the two
+        // stay in lockstep. Unknown/custom policy types fall through to the
+        // generic title-case formatter below.
+        when (value.lowercase(Locale.getDefault())) {
+            "casual" -> return "Casual Leave"
+            "sick" -> return "Sick Leave"
+            "earned" -> return "Earned Leave"
+            "unpaid" -> return "Unpaid Leave"
+            "compensatory" -> return "Compensatory Off"
+        }
         val base = value
             .replace('_', ' ')
             .split(" ")
