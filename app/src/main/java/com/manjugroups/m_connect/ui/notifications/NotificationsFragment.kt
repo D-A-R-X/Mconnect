@@ -31,7 +31,7 @@ import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
-import com.manjugroups.m_connect.ui.hr.AttendanceReviewFragment
+import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.library.loans.LoansFragment
@@ -329,7 +329,10 @@ class NotificationsFragment : Fragment() {
                         name = notification.title ?: "Chat"
                     )
                 }
-                "staff-attendance" -> AttendanceReviewFragment.newInstance()
+                // The standalone Attendance Approvals screen was removed. Open
+                // My Attendance instead — it shows the user's own records and,
+                // for reviewers, the approval tabs are gated inside it by IAM.
+                "staff-attendance" -> AttendanceHistoryFragment()
                 "site-visit" -> SiteVisitsFragment()
                 "clientPlaceVisit" -> CpVisitsFragment()
                 "booking", "booking_cancellation" -> BookingsFragment.newInstance()
@@ -390,7 +393,9 @@ class NotificationsFragment : Fragment() {
     private fun requiredPermissionsFor(referenceType: String?): List<String>? = when (referenceType) {
         "leave" -> listOf("leaves.view", "leaves.viewAll", "leaves.approve")
         "permission" -> listOf("permissions.view", "permissions.viewAll", "permissions.approve")
-        "staff-attendance" -> listOf("attendance.approve")
+        // My Attendance is a personal screen everyone can open; approval tabs
+        // inside it are gated separately, so don't block the notification here.
+        "staff-attendance" -> null
         "site-visit" -> listOf("marketing.siteVisits.view")
         "clientPlaceVisit" -> listOf("marketing.cpVisits.view")
         "booking", "booking_cancellation" -> listOf("marketing.bookings.view", "marketing.bookings.create")
