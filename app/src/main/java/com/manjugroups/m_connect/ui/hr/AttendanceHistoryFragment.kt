@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -231,19 +232,19 @@ class AttendanceHistoryFragment : Fragment() {
                 val token = session.bearerToken
                 if (token.isBlank()) return@launch
 
-                val myDeferred = kotlinx.coroutines.async {
+                val myDeferred = async {
                     runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
-                val teamDeferred = kotlinx.coroutines.async {
+                val teamDeferred = async {
                     runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
-                val approvalsDeferred = kotlinx.coroutines.async {
+                val approvalsDeferred = async {
                     runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
                 }
-                val allApprovalsDeferred = kotlinx.coroutines.async {
+                val allApprovalsDeferred = async {
                     runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
-                val hrReviewDeferred = kotlinx.coroutines.async {
+                val hrReviewDeferred = async {
                     runCatching { api.getHrReview(token, filterFromDate, filterToDate) }.getOrNull()
                 }
 
