@@ -1163,7 +1163,6 @@ class AttendanceHistoryFragment : Fragment() {
 
         private inner class SimpleViewHolder(view: View) : RecyclerView.ViewHolder(view)
     }
-    }
 
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
         if (records.isEmpty()) {
