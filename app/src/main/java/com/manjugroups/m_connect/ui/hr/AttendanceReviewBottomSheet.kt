@@ -222,10 +222,14 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         }
 
         // No qualifying trips — fall back to the raw GPS timeline, but only when
-        // it too represents ≥ 1 km of actual travel.
+        // it too represents ≥ 1 km of actual travel. Qualification uses the
+        // BACKEND's distanceMeters, which excludes movement inside the office
+        // geofence (100 m around the day's punch-in) — pacing around the office
+        // must never put a route on the approval map. The raw path sum here
+        // would wrongly count that wandering.
         if (!drewRoute && data.timeline.size >= 2) {
             val timelinePath = data.timeline.map { LatLng(it.lat, it.lng) }
-            if (pathDistanceMeters(timelinePath) > minMeters) {
+            if (data.distanceMeters > minMeters) {
                 drawTripLine(map, timelinePath, Color.parseColor("#2563EB"))
                 timelinePath.forEach { boundsBuilder.include(it); hasBounds = true }
                 drewRoute = true
@@ -351,12 +355,6 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         }
         data.timeline.lastOrNull()?.let { return LatLng(it.lat, it.lng) }
         return null
-    }
-
-    private fun pathDistanceMeters(path: List<LatLng>): Double {
-        var m = 0.0
-        for (i in 1 until path.size) m += distMeters(path[i - 1], path[i])
-        return m
     }
 
     // ── Journey timeline — real logs derived from the day's GPS stream,

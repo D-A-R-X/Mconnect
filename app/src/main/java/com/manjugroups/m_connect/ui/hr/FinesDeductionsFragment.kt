@@ -18,6 +18,7 @@ import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentFinesDeductionsBinding
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import java.util.Locale
 
 class FinesDeductionsFragment : Fragment() {
@@ -151,8 +152,9 @@ class FinesDeductionsFragment : Fragment() {
                                 .filter { it.isNotBlank() }
                                 .joinToString(" "),
                             status = statusLabel,
-                            photoUrl = null,
+                            photoUrl = f.staffPhotoUrl,
                             finePhotoUrl = f.photoUrl,
+                            reason = f.notes,
                             photoResId = null,
                         )
                     }
@@ -201,56 +203,54 @@ class FinesDeductionsFragment : Fragment() {
                 itemView.findViewById<TextView>(R.id.tvFineStatus).text = record.status
                 itemView.findViewById<TextView>(R.id.tvFineDate).text = record.date
 
-                val avatarView = itemView.findViewById<ImageView>(R.id.ivEmployeeAvatar)
+                // Card avatar: the staff member's profile photo, or a coloured
+                // first-letter avatar when they have none.
+                itemView.findViewById<ImageView>(R.id.ivEmployeeAvatar).loadUserAvatar(
+                    com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.photoUrl),
+                    record.name,
+                )
 
-                if (!canViewAll) {
-                    val resolvedFinePhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.finePhotoUrl)
-                    if (!resolvedFinePhoto.isNullOrEmpty()) {
-                        // Load camera fine picture instead of profile avatar
-                        avatarView.load(resolvedFinePhoto) {
-                            crossfade(true)
-                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                            error(R.drawable.bg_attendance_avatar_placeholder)
-                            transformations(CircleCropTransformation())
-                        }
-                        // Click to preview full size image
-                        avatarView.setOnClickListener {
-                            showImagePreview(resolvedFinePhoto)
-                        }
-                    } else {
-                        // Fallback: show default camera placeholder
-                        avatarView.load(R.drawable.ic_header_camera_outline) {
-                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                            error(R.drawable.bg_attendance_avatar_placeholder)
-                            transformations(CircleCropTransformation())
-                        }
-                        avatarView.setOnClickListener(null)
-                    }
-                } else {
-                    // Admin mode: Load employee profile picture
-                    avatarView.setOnClickListener(null)
-                    val resolvedUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.photoUrl)
-                    if (record.photoResId != null) {
-                        avatarView.load(record.photoResId) {
-                            transformations(CircleCropTransformation())
-                        }
-                    } else if (!resolvedUrl.isNullOrEmpty()) {
-                        avatarView.load(resolvedUrl) {
-                            crossfade(true)
-                            placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                            error(R.drawable.bg_attendance_avatar_placeholder)
-                            transformations(CircleCropTransformation())
-                        }
-                    } else {
-                        avatarView.load(R.drawable.bg_attendance_avatar_placeholder) {
-                            transformations(CircleCropTransformation())
-                        }
-                    }
-                }
+                // Tapping the card opens the fine's detail — captured picture + reason.
+                itemView.setOnClickListener { showFineDetail(record) }
 
                 binding.llFinesList.addView(itemView)
             }
         }
+    }
+
+    /** Bottom sheet for a fine row: the captured picture + the reason. */
+    private fun showFineDetail(record: FineRecord) {
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        val content = layoutInflater.inflate(R.layout.sheet_fine_detail, null)
+
+        content.findViewById<TextView>(R.id.tvFineDetailName).text = record.name
+        content.findViewById<TextView>(R.id.tvFineDetailMeta).text =
+            listOf(
+                record.fineType,
+                String.format(Locale.getDefault(), "₹ %.0f", record.amount),
+                record.status,
+                record.date,
+            ).filter { it.isNotBlank() }.joinToString("  ·  ")
+
+        val photo = content.findViewById<ImageView>(R.id.ivFineDetailPhoto)
+        val noPhoto = content.findViewById<TextView>(R.id.tvFineDetailNoPhoto)
+        val finePhoto = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(record.finePhotoUrl)
+        if (!finePhoto.isNullOrEmpty()) {
+            photo.visibility = View.VISIBLE
+            noPhoto.visibility = View.GONE
+            photo.load(finePhoto) { crossfade(true) }
+            // Tap the picture to view it full-screen.
+            photo.setOnClickListener { showImagePreview(finePhoto) }
+        } else {
+            photo.visibility = View.GONE
+            noPhoto.visibility = View.VISIBLE
+        }
+
+        content.findViewById<TextView>(R.id.tvFineDetailReason).text =
+            record.reason?.takeIf { it.isNotBlank() } ?: "No reason provided"
+
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     private fun showImagePreview(imageUrl: String) {
@@ -296,8 +296,9 @@ class FinesDeductionsFragment : Fragment() {
         val amount: Double,
         val date: String,
         val status: String,
-        val photoUrl: String?,
-        val finePhotoUrl: String?,
+        val photoUrl: String?,        // staff profile photo
+        val finePhotoUrl: String?,    // the fine's captured picture
+        val reason: String?,          // why the fine was applied (notes)
         val photoResId: Int? = null
     )
 }

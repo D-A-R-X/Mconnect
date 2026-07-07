@@ -105,6 +105,16 @@ class LoansFragment : Fragment() {
         binding.rvRequestedLoans.adapter = requestedLoansAdapter
         binding.rvRequestedLoans.itemAnimator = null
 
+        // Result from the reuse of LoanDeskRejectBottomSheet — submit the
+        // rejection with the entered remarks.
+        childFragmentManager.setFragmentResultListener(
+            LoanDeskRejectBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        ) { _, bundle ->
+            val id = bundle.getString("itemId").orEmpty()
+            val remarks = bundle.getString("remarks").orEmpty()
+            if (id.isNotBlank() && remarks.isNotBlank()) performRejectLoan(id, remarks)
+        }
+
         // Role dropdown removed. The backend's pending-approvals endpoint
         // returns exactly the loans THIS user can act on (resolved by their
         // role + each loan's stage), so the screen always shows My Loans
@@ -819,13 +829,30 @@ class LoansFragment : Fragment() {
     }
 
     private fun rejectLoanRequest(loan: com.manjugroups.m_connect.network.LoanData) {
-        val session = SessionManager(requireContext())
-        val token = session.bearerToken
+        val id = loan.id ?: return
+        // Reuse the shared reject-with-reason sheet (the same one the Loan Desk
+        // uses). It collects the required remarks and returns them via a
+        // fragment result; performRejectLoan() then submits the rejection.
+        LoanDeskRejectBottomSheet.newInstance(id)
+            .show(childFragmentManager, "LoanRejectBottomSheet")
+    }
+
+    private fun performRejectLoan(loanId: String, reason: String) {
+        val token = SessionManager(requireContext()).bearerToken
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { api.rejectLoan(token, com.manjugroups.m_connect.network.RejectRequest(loan.id!!, reason = "Rejected")) }
+            runCatching {
+                api.rejectLoan(
+                    token,
+                    com.manjugroups.m_connect.network.RejectRequest(loanId, reason = reason),
+                )
+            }
                 .onSuccess {
                     android.widget.Toast.makeText(requireContext(), "Loan rejected", android.widget.Toast.LENGTH_SHORT).show()
+                    // Refresh both the approvals queue AND My Loans, so the
+                    // rejected request reappears under Previous with its
+                    // Rejected tag instead of vanishing.
                     loadPendingApprovals()
+                    loadFromApi()
                 }
                 .onFailure { err ->
                     android.widget.Toast.makeText(
