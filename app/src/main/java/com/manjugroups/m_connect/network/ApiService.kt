@@ -1459,6 +1459,9 @@ data class AttendanceApprovalRecord(
     val department: String? = null,
     val designation: String? = null,
     val employeeId: String? = null,
+    // Resolved profile-photo URL for the staff member (null when they have no
+    // photo). Used to show the avatar on Team/All attendance cards.
+    val staffPhotoUrl: String? = null,
     // "remarks" = employee-submitted correction/leave request; "attendance" =
     // normal punch record. Drives the HR Review Attendance/Request sub-tabs.
     val requestType: String? = null

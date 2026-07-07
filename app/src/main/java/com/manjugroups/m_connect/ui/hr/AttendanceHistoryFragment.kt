@@ -45,6 +45,13 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    // The "All" tab shows the entire attendance log, so it queries from an
+    // all-time start date instead of the current filter window.
+    private val ALL_TAB_FROM_DATE = "2000-01-01"
+    // Badge counts for the non-visible tabs are warmed once, after the first
+    // visible tab has rendered — so the initial paint isn't competing with a
+    // fistful of full-list requests.
+    private var badgesRequested = false
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
@@ -167,7 +174,9 @@ class AttendanceHistoryFragment : Fragment() {
             }
         })
         setupSubTabs()
-        loadBadgeCounts()
+        // Badge counts are loaded lazily after the first tab renders (see the
+        // end of loadData) so the visible content shows without waiting on the
+        // other tabs' fetches.
 
         applyGreenGradient(binding.tvTotalDays)
         applyGreenGradient(binding.tvTotalHours)
@@ -234,53 +243,45 @@ class AttendanceHistoryFragment : Fragment() {
                 val token = session.bearerToken
                 if (token.isBlank()) return@launch
 
+                // Reuse anything the visible tab already fetched — only hit the
+                // network for the counts we don't have yet, so warming badges
+                // never re-runs the current tab's request.
                 val myDeferred = async {
-                    runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedMyRecords.isNotEmpty()) null
+                    else runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
                 val teamDeferred = async {
-                    runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedTeamAttendance.isNotEmpty()) null
+                    else runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
                 val approvalsDeferred = async {
-                    runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
+                    if (cachedApprovals.isNotEmpty()) null
+                    else runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
                 }
                 val allApprovalsDeferred = async {
-                    runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
+                    if (cachedAllApprovals.isNotEmpty()) null
+                    else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
                 val hrReviewDeferred = async {
-                    runCatching { api.getHrReview(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedHrReview.isNotEmpty()) null
+                    else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
                 }
 
-                val myResp = myDeferred.await()
-                if (myResp?.success == true) {
-                    cachedMyRecords = myResp.records
-                    binding.tabLayout.updateBadge(0, myResp.records.size)
-                }
+                myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
+                binding.tabLayout.updateBadge(0, cachedMyRecords.size)
 
-                val teamResp = teamDeferred.await()
-                if (teamResp?.success == true) {
-                    cachedTeamAttendance = teamResp.records
-                    binding.tabLayout.updateBadge(1, teamResp.records.size)
-                    binding.tabLayout.updateBadge(5, teamResp.records.size)
-                }
+                teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
+                binding.tabLayout.updateBadge(1, cachedTeamAttendance.size)
 
-                val approvalsResp = approvalsDeferred.await()
-                if (approvalsResp?.success == true) {
-                    cachedApprovals = approvalsResp.records
-                    binding.tabLayout.updateBadge(2, approvalsResp.records.size)
-                }
+                approvalsDeferred.await()?.let { if (it.success) cachedApprovals = it.records }
+                binding.tabLayout.updateBadge(2, cachedApprovals.size)
 
-                val allApprovalsResp = allApprovalsDeferred.await()
-                if (allApprovalsResp?.success == true) {
-                    cachedAllApprovals = allApprovalsResp.records
-                    binding.tabLayout.updateBadge(3, allApprovalsResp.records.size)
-                }
+                allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
+                binding.tabLayout.updateBadge(3, cachedAllApprovals.size)
 
-                val hrReviewResp = hrReviewDeferred.await()
-                if (hrReviewResp?.success == true) {
-                    cachedHrReview = hrReviewResp.records
-                    binding.tabLayout.updateBadge(4, hrReviewResp.records.size)
-                    updateSubTabStyles()
-                }
+                hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
+                binding.tabLayout.updateBadge(4, cachedHrReview.size)
+                updateSubTabStyles()
 
                 viewLifecycleOwner.lifecycleScope.launch {
                     kotlinx.coroutines.delay(2000)
@@ -304,7 +305,12 @@ class AttendanceHistoryFragment : Fragment() {
         if (isPullRefresh) {
             viewCache.remove(cacheKey)
         } else {
-            if (viewCache.containsKey(cacheKey)) {
+            // Only reuse a NON-EMPTY cache. An empty cached list can be a stale
+            // pre-render made before this tab's data was fetched (e.g. the All
+            // tab, whose data only loads when opened) — trusting it would show a
+            // blank tab until a manual pull-to-refresh. Falling through re-fetches.
+            val cached = viewCache[cacheKey]
+            if (!cached.isNullOrEmpty()) {
                 renderCurrentTabFromCache(cacheKey)
                 // Filter the cached list immediately if there is text in the search bar
                 filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
@@ -384,8 +390,13 @@ class AttendanceHistoryFragment : Fragment() {
                     }
                     4 -> {
                         if (cachedHrReview.isEmpty() || isPullRefresh) {
+                            // HR Review is an all-time review queue on the web
+                            // (it isn't bound to the current date window), so
+                            // query from an all-time start rather than the
+                            // 30-day filter — otherwise older items awaiting
+                            // review are hidden.
                             val resp = runCatching {
-                                api.getHrReview(session.bearerToken, filterFromDate, filterToDate)
+                                api.getHrReview(session.bearerToken, ALL_TAB_FROM_DATE, filterToDate)
                             }.getOrNull()
                             cachedHrReview = if (resp?.success == true) resp.records else emptyList()
                         }
@@ -399,12 +410,14 @@ class AttendanceHistoryFragment : Fragment() {
                         renderApprovals(source, cacheKey)
                     }
                     5 -> {
-                        // All — company-wide attendance rows + active-fine badges.
-                        // Mirrors the web "All" tab (listForReport), not the
-                        // team-scoped list which is empty for staff with no team.
+                        // All — the whole company attendance log + active-fine
+                        // badges. Unlike the other tabs, this is NOT limited to
+                        // the current filter window: it queries from an all-time
+                        // start so every record shows (the backend caps at the
+                        // most recent 750). Mirrors the web "All" tab.
                         if (cachedAllAttendance.isEmpty() || isPullRefresh) {
                             val resp = runCatching {
-                                api.getAllAttendance(session.bearerToken, filterFromDate, filterToDate)
+                                api.getAllAttendance(session.bearerToken, ALL_TAB_FROM_DATE, filterToDate)
                             }.getOrNull()
                             cachedAllAttendance = if (resp?.success == true) resp.records else emptyList()
                         }
@@ -423,6 +436,12 @@ class AttendanceHistoryFragment : Fragment() {
             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
             binding.attendanceScroll.visibility = View.VISIBLE
             binding.attendanceRefresh.isRefreshing = false
+            // Visible tab is on screen — now warm the other tabs' badge counts
+            // (once) in the background instead of racing the first paint.
+            if (!badgesRequested) {
+                badgesRequested = true
+                loadBadgeCounts()
+            }
         }
     }
 
@@ -1312,8 +1331,17 @@ class AttendanceHistoryFragment : Fragment() {
 
             card.findViewById<TextView>(R.id.tvStaffName).text =
                 record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
-            card.findViewById<ImageView>(R.id.ivStaffAvatar)
-                .setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            val avatar = card.findViewById<ImageView>(R.id.ivStaffAvatar)
+            val photoUrl = record.staffPhotoUrl?.takeIf { it.isNotBlank() }
+            if (photoUrl != null) {
+                avatar.load(photoUrl) {
+                    transformations(CircleCropTransformation())
+                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
+                }
+            } else {
+                avatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            }
     }
 
     /** Colour + label the status pill from the record's approved bucket
