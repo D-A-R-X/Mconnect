@@ -98,7 +98,7 @@ class AttendanceHistoryFragment : Fragment() {
         })
 
         // Pull-to-refresh runs refreshAllData without showing skeleton.
-        binding.attendanceRefresh.setupPullToRefresh { refreshAllData(showSkeleton = false) }
+        binding.attendanceRefresh.setupPullToRefresh { refreshAllData(showSkeleton = false, forceRefresh = true) }
 
         // Default range = last 30 days so recent history is visible on open.
         // A fresh calendar month is nearly empty early in the month, which made
@@ -122,7 +122,7 @@ class AttendanceHistoryFragment : Fragment() {
             filterFromDate = bundle.getString(AttendanceFilterSheet.KEY_FROM).orEmpty()
             filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
             updateRangeLabel()
-            refreshAllData(showSkeleton = true)
+            refreshAllData(showSkeleton = true, forceRefresh = true)
         }
 
         // A submitted correction/remark request reloads the list so any
@@ -133,7 +133,7 @@ class AttendanceHistoryFragment : Fragment() {
                 if (date != null) {
                     submittedRemarkDates.add(date)
                 }
-                refreshAllData(showSkeleton = false)
+                refreshAllData(showSkeleton = false, forceRefresh = true)
             }
         }
 
@@ -229,7 +229,17 @@ class AttendanceHistoryFragment : Fragment() {
         binding.subTabRequest.text = String.format(Locale.US, "Request (%02d)", reqCount)
     }
 
-    private fun refreshAllData(showSkeleton: Boolean = true) {
+    private fun refreshAllData(showSkeleton: Boolean = true, forceRefresh: Boolean = false) {
+        if (forceRefresh) {
+            cachedMyRecords = emptyList()
+            cachedTeamAttendance = emptyList()
+            cachedApprovals = emptyList()
+            cachedAllApprovals = emptyList()
+            cachedHrReview = emptyList()
+            cachedAllAttendance = emptyList()
+            cachedFines = emptyList()
+        }
+
         if (showSkeleton) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             binding.attendanceScroll.visibility = View.GONE
@@ -1053,7 +1063,7 @@ class AttendanceHistoryFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Approved successfully", Toast.LENGTH_SHORT).show()
-                    refreshAllData(showSkeleton = false)
+                    refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
                     Toast.makeText(requireContext(), "Failed to approve", Toast.LENGTH_SHORT).show()
                 }
@@ -1072,7 +1082,7 @@ class AttendanceHistoryFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Rejected successfully", Toast.LENGTH_SHORT).show()
-                    refreshAllData(showSkeleton = false)
+                    refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
                     Toast.makeText(requireContext(), "Failed to reject", Toast.LENGTH_SHORT).show()
                 }
