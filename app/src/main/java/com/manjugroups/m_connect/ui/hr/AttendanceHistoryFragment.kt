@@ -98,7 +98,7 @@ class AttendanceHistoryFragment : Fragment() {
         })
 
         // Pull-to-refresh runs refreshAllData without showing skeleton.
-        binding.attendanceRefresh.setupPullToRefresh { refreshAllData(showSkeleton = false) }
+        binding.attendanceRefresh.setupPullToRefresh { refreshAllData(showSkeleton = false, forceRefresh = true) }
 
         // Default range = last 30 days so recent history is visible on open.
         // A fresh calendar month is nearly empty early in the month, which made
@@ -122,7 +122,7 @@ class AttendanceHistoryFragment : Fragment() {
             filterFromDate = bundle.getString(AttendanceFilterSheet.KEY_FROM).orEmpty()
             filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
             updateRangeLabel()
-            refreshAllData(showSkeleton = true)
+            refreshAllData(showSkeleton = true, forceRefresh = true)
         }
 
         // A submitted correction/remark request reloads the list so any
@@ -133,7 +133,7 @@ class AttendanceHistoryFragment : Fragment() {
                 if (date != null) {
                     submittedRemarkDates.add(date)
                 }
-                refreshAllData(showSkeleton = false)
+                refreshAllData(showSkeleton = false, forceRefresh = true)
             }
         }
 
@@ -229,7 +229,18 @@ class AttendanceHistoryFragment : Fragment() {
         binding.subTabRequest.text = String.format(Locale.US, "Request (%02d)", reqCount)
     }
 
-    private fun refreshAllData(showSkeleton: Boolean = true) {
+    private fun refreshAllData(showSkeleton: Boolean = true, forceRefresh: Boolean = false) {
+        if (forceRefresh) {
+            binding.attendanceList.removeAllViews()
+            cachedMyRecords = emptyList()
+            cachedTeamAttendance = emptyList()
+            cachedApprovals = emptyList()
+            cachedAllApprovals = emptyList()
+            cachedHrReview = emptyList()
+            cachedAllAttendance = emptyList()
+            cachedFines = emptyList()
+        }
+
         if (showSkeleton) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             binding.attendanceScroll.visibility = View.GONE
@@ -423,7 +434,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderRecords(records: List<AttendanceRecord>, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (records.isEmpty()) {
             showEmptyState(
                 title = "No attendance records",
@@ -914,8 +927,10 @@ class AttendanceHistoryFragment : Fragment() {
         val childViews = mutableListOf<View>()
         records.forEach { record ->
             val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_approval_card, null, false)
+                .inflate(R.layout.item_team_approval_card, binding.attendanceList, false)
             bindApprovalCard(card, record)
+            card.visibility = View.GONE
+            binding.attendanceList.addView(card)
             childViews.add(card)
         }
         viewCache[cacheKey] = childViews
@@ -923,7 +938,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderApprovals(approvals: List<AttendanceApprovalRecord>, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (approvals.isEmpty()) {
             showEmptyState(
                 title = "No attendance to review",
@@ -1053,7 +1070,7 @@ class AttendanceHistoryFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Approved successfully", Toast.LENGTH_SHORT).show()
-                    refreshAllData(showSkeleton = false)
+                    refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
                     Toast.makeText(requireContext(), "Failed to approve", Toast.LENGTH_SHORT).show()
                 }
@@ -1072,7 +1089,7 @@ class AttendanceHistoryFragment : Fragment() {
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Rejected successfully", Toast.LENGTH_SHORT).show()
-                    refreshAllData(showSkeleton = false)
+                    refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
                     Toast.makeText(requireContext(), "Failed to reject", Toast.LENGTH_SHORT).show()
                 }
@@ -1124,7 +1141,9 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun renderCurrentTabFromCache(cacheKey: String) {
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         val cached = viewCache[cacheKey].orEmpty()
         if (cached.isEmpty()) {
             val title = when (activeTab) {
@@ -1142,9 +1161,11 @@ class AttendanceHistoryFragment : Fragment() {
             showEmptyState(title, desc, R.drawable.ic_leave_empty)
         } else {
             binding.emptyState.visibility = View.GONE
-            cached.forEach {
-                it.visibility = View.VISIBLE
-                binding.attendanceList.addView(it)
+            cached.forEach { view ->
+                if (view.parent == null) {
+                    binding.attendanceList.addView(view)
+                }
+                view.visibility = View.VISIBLE
             }
         }
         binding.attendanceScroll.visibility = View.VISIBLE
@@ -1188,8 +1209,10 @@ class AttendanceHistoryFragment : Fragment() {
         val childViews = mutableListOf<View>()
         records.forEach { record ->
             val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_attendance_card, null, false)
+                .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
             bindTeamAttendanceCard(card, record, showFines)
+            card.visibility = View.GONE
+            binding.attendanceList.addView(card)
             childViews.add(card)
         }
         viewCache[cacheKey] = childViews
@@ -1197,7 +1220,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (records.isEmpty()) {
             showEmptyState(
                 title = "No team attendance",

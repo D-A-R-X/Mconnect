@@ -22,7 +22,7 @@ class EmptyStateView @JvmOverloads constructor(
 
     init {
         orientation = VERTICAL
-        gravity = Gravity.CENTER_HORIZONTAL
+        gravity = Gravity.CENTER
 
         LayoutInflater.from(context).inflate(R.layout.view_empty_state, this, true)
 
