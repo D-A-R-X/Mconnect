@@ -84,6 +84,24 @@ class TasksFragment : Fragment() {
         }
         androidx.core.view.ViewCompat.requestApplyInsets(headerContainer)
 
+        // White panel: rounded TOP corners + white bg. The panel overlaps the
+        // fixed blue header by -28dp (see the layout) and, because every
+        // ancestor sets clipChildren=false, its rounded top draws OVER the blue
+        // and slides up over it as the content scrolls — the same "panel slides
+        // up over a fixed header" effect as the Attendance page.
+        val panelRadius = 30f * resources.displayMetrics.density
+        view.findViewById<View>(R.id.tasksWhitePanel).background =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(android.graphics.Color.WHITE)
+                cornerRadii = floatArrayOf(
+                    panelRadius, panelRadius, // top-left
+                    panelRadius, panelRadius, // top-right
+                    0f, 0f,                   // bottom-right
+                    0f, 0f,                   // bottom-left
+                )
+            }
+
         taskListContainer = view.findViewById(R.id.taskList)
         emptyState = view.findViewById(R.id.emptyState)
         tabAll = view.findViewById(R.id.tabAll)

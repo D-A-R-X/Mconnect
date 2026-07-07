@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
@@ -931,8 +932,8 @@ class AttendanceHistoryFragment : Fragment() {
             card.findViewById<TextView>(R.id.tvAttDuration).text =
                 record.totalMinutes?.let { formatDuration(it) } ?: "—"
 
-            val ivAvatar = card.findViewById<ImageView>(R.id.ivAttStaffAvatar)
-            ivAvatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            card.findViewById<ImageView>(R.id.ivAttStaffAvatar)
+                .loadUserAvatar(record.staffPhotoUrl, record.staffName)
 
             val btnReject = card.findViewById<View>(R.id.btnRejectAttendance)
             val btnApprove = card.findViewById<View>(R.id.btnApproveAttendance)
@@ -1223,17 +1224,8 @@ class AttendanceHistoryFragment : Fragment() {
 
             card.findViewById<TextView>(R.id.tvStaffName).text =
                 record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
-            val avatar = card.findViewById<ImageView>(R.id.ivStaffAvatar)
-            val photoUrl = record.staffPhotoUrl?.takeIf { it.isNotBlank() }
-            if (photoUrl != null) {
-                avatar.load(photoUrl) {
-                    transformations(CircleCropTransformation())
-                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
-                    error(R.drawable.bg_attendance_avatar_placeholder)
-                }
-            } else {
-                avatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
-            }
+            card.findViewById<ImageView>(R.id.ivStaffAvatar)
+                .loadUserAvatar(record.staffPhotoUrl, record.staffName)
     }
 
     /** Colour + label the status pill from the record's approved bucket
