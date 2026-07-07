@@ -45,6 +45,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    // The "All" tab shows the entire attendance log, so it queries from an
+    // all-time start date instead of the current filter window.
+    private val ALL_TAB_FROM_DATE = "2000-01-01"
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
@@ -238,58 +241,52 @@ class AttendanceHistoryFragment : Fragment() {
                 val token = session.bearerToken
                 if (token.isBlank()) return@launch
 
+                // Reuse anything the visible tab already fetched — only hit the
+                // network for the counts we don't have yet, so warming badges
+                // never re-runs the current tab's request.
                 val myDeferred = async {
-                    runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedMyRecords.isNotEmpty()) null
+                    else runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
                 val teamDeferred = async {
-                    runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedTeamAttendance.isNotEmpty()) null
+                    else runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
                 }
                 val approvalsDeferred = async {
-                    runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
+                    if (cachedApprovals.isNotEmpty()) null
+                    else runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
                 }
                 val allApprovalsDeferred = async {
-                    runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
+                    if (cachedAllApprovals.isNotEmpty()) null
+                    else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
                 val hrReviewDeferred = async {
-                    runCatching { api.getHrReview(token, filterFromDate, filterToDate) }.getOrNull()
+                    if (cachedHrReview.isNotEmpty()) null
+                    else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
                 }
                 val allDeferred = async {
-                    runCatching { api.getAllAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    // The All tab shows the whole log, not the 30-day window.
+                    runCatching { api.getAllAttendance(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
                 }
                 val finesDeferred = async {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
                 }
 
-                val myResp = myDeferred.await()
-                if (myResp?.success == true) {
-                    cachedMyRecords = myResp.records
-                    binding.tabLayout.updateBadge(0, myResp.records.size)
-                }
+                myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
+                binding.tabLayout.updateBadge(0, cachedMyRecords.size)
 
-                val teamResp = teamDeferred.await()
-                if (teamResp?.success == true) {
-                    cachedTeamAttendance = teamResp.records
-                    binding.tabLayout.updateBadge(1, teamResp.records.size)
-                }
+                teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
+                binding.tabLayout.updateBadge(1, cachedTeamAttendance.size)
 
-                val approvalsResp = approvalsDeferred.await()
-                if (approvalsResp?.success == true) {
-                    cachedApprovals = approvalsResp.records
-                    binding.tabLayout.updateBadge(2, approvalsResp.records.size)
-                }
+                approvalsDeferred.await()?.let { if (it.success) cachedApprovals = it.records }
+                binding.tabLayout.updateBadge(2, cachedApprovals.size)
 
-                val allApprovalsResp = allApprovalsDeferred.await()
-                if (allApprovalsResp?.success == true) {
-                    cachedAllApprovals = allApprovalsResp.records
-                    binding.tabLayout.updateBadge(3, allApprovalsResp.records.size)
-                }
+                allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
+                binding.tabLayout.updateBadge(3, cachedAllApprovals.size)
 
-                val hrReviewResp = hrReviewDeferred.await()
-                if (hrReviewResp?.success == true) {
-                    cachedHrReview = hrReviewResp.records
-                    binding.tabLayout.updateBadge(4, hrReviewResp.records.size)
-                    updateSubTabStyles()
-                }
+                hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
+                binding.tabLayout.updateBadge(4, cachedHrReview.size)
+                updateSubTabStyles()
 
                 val allResp = allDeferred.await()
                 if (allResp?.success == true) {
@@ -1265,8 +1262,17 @@ class AttendanceHistoryFragment : Fragment() {
 
             card.findViewById<TextView>(R.id.tvStaffName).text =
                 record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
-            card.findViewById<ImageView>(R.id.ivStaffAvatar)
-                .setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            val avatar = card.findViewById<ImageView>(R.id.ivStaffAvatar)
+            val photoUrl = record.staffPhotoUrl?.takeIf { it.isNotBlank() }
+            if (photoUrl != null) {
+                avatar.load(photoUrl) {
+                    transformations(CircleCropTransformation())
+                    placeholder(R.drawable.bg_attendance_avatar_placeholder)
+                    error(R.drawable.bg_attendance_avatar_placeholder)
+                }
+            } else {
+                avatar.setImageResource(R.drawable.bg_attendance_avatar_placeholder)
+            }
     }
 
     /** Colour + label the status pill from the record's approved bucket
