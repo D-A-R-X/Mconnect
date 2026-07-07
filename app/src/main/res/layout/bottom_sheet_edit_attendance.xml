@@ -208,7 +208,7 @@
             android:textSize="14sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <com.google.android.material.button.MaterialButton
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnSubmitEdit"
         android:layout_width="match_parent"
         android:layout_height="54dp"
@@ -218,9 +218,6 @@
         android:text="Submit Now"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        app:backgroundTint="@null"
-        app:cornerRadius="27dp"
-        app:elevation="0dp" />
+        android:textSize="14sp" />
 
 </LinearLayout>
