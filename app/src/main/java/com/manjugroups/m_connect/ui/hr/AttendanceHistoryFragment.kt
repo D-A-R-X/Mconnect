@@ -231,6 +231,7 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun refreshAllData(showSkeleton: Boolean = true, forceRefresh: Boolean = false) {
         if (forceRefresh) {
+            binding.attendanceList.removeAllViews()
             cachedMyRecords = emptyList()
             cachedTeamAttendance = emptyList()
             cachedApprovals = emptyList()
@@ -433,7 +434,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderRecords(records: List<AttendanceRecord>, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (records.isEmpty()) {
             showEmptyState(
                 title = "No attendance records",
@@ -924,8 +927,10 @@ class AttendanceHistoryFragment : Fragment() {
         val childViews = mutableListOf<View>()
         records.forEach { record ->
             val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_approval_card, null, false)
+                .inflate(R.layout.item_team_approval_card, binding.attendanceList, false)
             bindApprovalCard(card, record)
+            card.visibility = View.GONE
+            binding.attendanceList.addView(card)
             childViews.add(card)
         }
         viewCache[cacheKey] = childViews
@@ -933,7 +938,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderApprovals(approvals: List<AttendanceApprovalRecord>, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (approvals.isEmpty()) {
             showEmptyState(
                 title = "No attendance to review",
@@ -1134,7 +1141,9 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun renderCurrentTabFromCache(cacheKey: String) {
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         val cached = viewCache[cacheKey].orEmpty()
         if (cached.isEmpty()) {
             val title = when (activeTab) {
@@ -1152,9 +1161,11 @@ class AttendanceHistoryFragment : Fragment() {
             showEmptyState(title, desc, R.drawable.ic_leave_empty)
         } else {
             binding.emptyState.visibility = View.GONE
-            cached.forEach {
-                it.visibility = View.VISIBLE
-                binding.attendanceList.addView(it)
+            cached.forEach { view ->
+                if (view.parent == null) {
+                    binding.attendanceList.addView(view)
+                }
+                view.visibility = View.VISIBLE
             }
         }
         binding.attendanceScroll.visibility = View.VISIBLE
@@ -1198,8 +1209,10 @@ class AttendanceHistoryFragment : Fragment() {
         val childViews = mutableListOf<View>()
         records.forEach { record ->
             val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_attendance_card, null, false)
+                .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
             bindTeamAttendanceCard(card, record, showFines)
+            card.visibility = View.GONE
+            binding.attendanceList.addView(card)
             childViews.add(card)
         }
         viewCache[cacheKey] = childViews
@@ -1207,7 +1220,9 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
         val childViews = mutableListOf<View>()
-        binding.attendanceList.removeAllViews()
+        for (i in 0 until binding.attendanceList.childCount) {
+            binding.attendanceList.getChildAt(i).visibility = View.GONE
+        }
         if (records.isEmpty()) {
             showEmptyState(
                 title = "No team attendance",
