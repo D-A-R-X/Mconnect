@@ -515,12 +515,19 @@ data class HeartbeatRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
     val batteryPct: Int,
-    val appVersion: String
+    val appVersion: String,
+    // Client tick time (ms epoch). The server stores this as the heartbeat
+    // timestamp so offline-queued heartbeats backfill the web battery/uptime
+    // history at their ORIGINAL time instead of the replay time.
+    val recordedAt: Long? = null,
 )
 
 data class TamperReportRequest(
     val eventType: String,
-    val metadata: Map<String, Any?> = emptyMap()
+    val metadata: Map<String, Any?> = emptyMap(),
+    // Original occurrence time (ms epoch) for offline-queued events, so a
+    // replayed GPS_DISABLED/REBOOT surfaces in the feed when it HAPPENED.
+    val detectedAt: Long? = null,
 )
 
 data class ConsentRequest(

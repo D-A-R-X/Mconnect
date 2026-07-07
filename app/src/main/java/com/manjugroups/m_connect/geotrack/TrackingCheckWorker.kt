@@ -35,6 +35,18 @@ class TrackingCheckWorker(
                 Log.i(TAG, "GeoTrack session active — synced via periodic check")
             }
 
+            // Safety net: with no service running, drain any buffered
+            // points/events left behind (offline clock-out tail, dead-zone
+            // backlog) so the web timeline backfills within 15 minutes even
+            // if the teardown flush worker never got to run.
+            runCatching {
+                val flushed = GeoTrackPointFlusher.flush(applicationContext, session = session)
+                val events = GeoTrackEventQueue.flush(applicationContext, session = session)
+                if (flushed.flushedPoints > 0 || events > 0) {
+                    Log.i(TAG, "Leftover flush: ${flushed.flushedPoints} points, $events events")
+                }
+            }
+
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "TrackingCheckWorker failed: ${e.message}")

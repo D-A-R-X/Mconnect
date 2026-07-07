@@ -67,10 +67,20 @@ object GeoTrackEventQueue {
         if (pending.isEmpty()) return 0
 
         val sentIds = mutableListOf<Long>()
+        // A single permanently-rejected event must not block everything
+        // queued behind it (head-of-line). Per-event rejections are skipped
+        // and retried next flush; only a run of consecutive failures — which
+        // means the network itself is down — aborts the pass.
+        var consecutiveFailures = 0
         for (event in pending) {
             val metadata = runCatching {
                 gson.fromJson<Map<String, Any?>>(event.metadataJson, metadataType)
             }.getOrDefault(mapOf("ts" to event.occurredAt))
+            // Original occurrence time: prefer the metadata "ts" stamp,
+            // fall back to the row's occurredAt. Sent to the server so a
+            // replayed heartbeat/tamper event backfills the timeline at the
+            // moment it HAPPENED, not the moment connectivity returned.
+            val occurredAt = (metadata["ts"] as? Number)?.toLong() ?: event.occurredAt
 
             // Heartbeats reuse this queue (no separate Room table) but
             // need to hit the heartbeat endpoint, not the tamper one.
@@ -93,6 +103,7 @@ object GeoTrackEventQueue {
                             // unknown app version.
                             batteryPct = (metadata["batteryPct"] as? Number)?.toInt() ?: -1,
                             appVersion = (metadata["appVersion"] as? String) ?: "unknown",
+                            recordedAt = occurredAt,
                         ),
                     )
                     resp.success
@@ -101,12 +112,17 @@ object GeoTrackEventQueue {
                 runCatching {
                     api.reportTamper(
                         session.bearerToken,
-                        TamperReportRequest(event.eventType, metadata),
+                        TamperReportRequest(event.eventType, metadata, detectedAt = occurredAt),
                     ).success
                 }.getOrDefault(false)
             }
-            if (!ok) break
-            sentIds.add(event.id)
+            if (ok) {
+                sentIds.add(event.id)
+                consecutiveFailures = 0
+            } else {
+                consecutiveFailures++
+                if (consecutiveFailures >= 3) break
+            }
         }
         if (sentIds.isNotEmpty()) dao.deleteByIds(sentIds)
         return sentIds.size
