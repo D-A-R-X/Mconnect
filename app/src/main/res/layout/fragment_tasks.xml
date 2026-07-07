@@ -1,29 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  My Tasks. Mirrors the App Library scroll model: a STICKY blue header +
-  search + filter-pill strip pinned at the top (outside the scroll view),
-  and only the task list below scrolls. The header no longer collapses/
-  scrolls away — it stays put, exactly like fragment_app_library.xml.
--->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F1F3F8"
     android:orientation="vertical">
 
-    <!-- STICKY blue header: title + illustration. Pinned at the top. -->
+    <!-- Blue Header with Illustration -->
     <FrameLayout
         android:id="@+id/headerContainer"
         android:layout_width="match_parent"
-        android:layout_height="116dp"
+        android:layout_height="156dp"
         android:background="#0B61CA">
 
         <ImageView
             android:layout_width="140dp"
             android:layout_height="96dp"
             android:layout_gravity="end|top"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="22dp"
             android:layout_marginEnd="8dp"
             android:adjustViewBounds="true"
             android:scaleType="fitCenter"
@@ -39,7 +34,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="36dp"
                 android:fontFamily="@font/inter_bold"
                 android:text="My Tasks"
                 android:textColor="#FFFFFF"
@@ -56,21 +51,21 @@
         </LinearLayout>
     </FrameLayout>
 
-    <!-- STICKY white sheet: search + filter pills. Pinned below the header. -->
+    <!-- Content Area overlapping header -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_marginTop="-20dp"
         android:background="@drawable/bg_tasks_sheet"
-        android:orientation="vertical"
-        android:paddingTop="14dp"
-        android:paddingBottom="8dp">
+        android:orientation="vertical">
 
         <!-- Search Bar — same reusable component as the CP Visits search
              (bg_cpv_search_bar + ic_cpv_search), magnifier on the right. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="20dp">
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="14dp">
 
             <EditText
                 android:id="@+id/etSearchTasks"
@@ -160,24 +155,19 @@
                     app:checkedIconVisible="false" />
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
-    </LinearLayout>
 
-    <!-- Scrolling content area (fills the remaining space). The bottom fade
-         sits on top of the list as an overlay. -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/tasksRefresh"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent">
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/tasksRefresh"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
             <androidx.core.widget.NestedScrollView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#F1F3F8"
                 android:fillViewport="true">
 
                 <LinearLayout
@@ -205,15 +195,15 @@
                         app:es_description="It looks like you don't have any tasks scheduled at the moment." />
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-        <!-- Bottom fade overlay -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_gravity="bottom"
-            android:background="@drawable/bg_bottom_nav_fade_grey"
-            android:clickable="false"
-            android:focusable="false" />
-    </FrameLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_bottom_nav_fade_grey"
+                android:clickable="false"
+                android:focusable="false" />
+        </FrameLayout>
+    </LinearLayout>
 </LinearLayout>
