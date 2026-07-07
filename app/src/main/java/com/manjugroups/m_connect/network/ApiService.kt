@@ -213,6 +213,16 @@ interface ApiService {
         @Query("toDate") toDate: String,
     ): AttendanceApprovalsResponse
 
+    // Company-wide attendance for the "All" tab — mirrors the web Attendance
+    // page's "All" view (staffAttendance.listForReport). Gated on
+    // attendance.viewAll server-side.
+    @GET("api/hr/attendance/all")
+    suspend fun getAllAttendance(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String,
+        @Query("toDate") toDate: String,
+    ): AttendanceApprovalsResponse
+
     // HR Review tab — company-wide rows awaiting HR action (needs permission).
     @GET("api/hr/attendance/hr-review")
     suspend fun getHrReview(
@@ -766,6 +776,20 @@ interface ApiService {
     suspend fun getMyTasksSummary(
         @Header("Authorization") token: String
     ): MyTaskSummaryResponse
+
+    // ── Task Manager (daily tasks) — mirrors web app/task-manager/page.tsx ──
+
+    @GET("api/dailyTasks/listForTaskManager")
+    suspend fun getTaskManagerTasks(
+        @Header("Authorization") token: String,
+        @Query("today") today: String? = null
+    ): TaskManagerResponse
+
+    @POST("api/dailyTasks/updateStatus")
+    suspend fun updateDailyTaskStatus(
+        @Header("Authorization") token: String,
+        @Body body: UpdateDailyTaskStatusRequest
+    ): DailyTaskStatusResponse
 
     @GET("api/projects/tasks/get")
     suspend fun getTaskDetail(
@@ -2179,6 +2203,45 @@ data class TaskSummaryData(
 data class MyTaskSummaryResponse(
     val success: Boolean,
     val summary: TaskSummaryData? = null,
+    val error: String? = null
+)
+
+// ── Task Manager (daily tasks) ──────────────────────────────────────────────
+// Shape mirrors the web `dailyTasks.listForTaskManager` enriched task; only
+// the fields the mobile Task Manager row needs are declared here.
+data class DailyTaskData(
+    @SerializedName("_id") val id: String,
+    val title: String? = null,
+    val taskName: String? = null,
+    val label: String? = null,
+    val priority: String? = null,
+    val description: String? = null,
+    val deadline: String? = null,
+    val assignedToName: String? = null,
+    val assignedByName: String? = null,
+    val taskCategory: String? = null,
+    val status: String? = null,
+    val sourceReferenceType: String? = null,
+    val sourceReferenceId: String? = null,
+    val actionUrl: String? = null,
+    @SerializedName("_creationTime") val creationTime: Double? = null
+)
+
+data class TaskManagerResponse(
+    val success: Boolean,
+    val tasks: List<DailyTaskData> = emptyList(),
+    val teamIds: List<String> = emptyList(),
+    val scope: String? = null,
+    val error: String? = null
+)
+
+data class UpdateDailyTaskStatusRequest(
+    val id: String,
+    val status: String
+)
+
+data class DailyTaskStatusResponse(
+    val success: Boolean,
     val error: String? = null
 )
 
