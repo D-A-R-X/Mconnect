@@ -255,10 +255,10 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
     }
 
     private suspend fun uploadOdometerPhoto(file: File): String {
-        val body = file.asRequestBody("image/jpeg".toMediaType())
-        val response = api.uploadStorageFile(session.bearerToken, body)
-        return response.storageId
-            ?: throw IllegalStateException(response.error ?: "Failed to upload odometer photo")
+        val result = com.manjugroups.m_connect.network.StorageUploader
+            .upload(api, session.bearerToken, file)
+        return result.storageId
+            ?: throw IllegalStateException(result.errorMessage ?: "Failed to upload odometer photo")
     }
 
     private fun readApiError(error: Throwable): String {

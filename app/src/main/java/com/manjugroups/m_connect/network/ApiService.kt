@@ -223,6 +223,13 @@ interface ApiService {
         @Query("toDate") toDate: String,
     ): AttendanceApprovalsResponse
 
+    // Whether the caller has a team (direct reports) — drives which attendance
+    // tabs show + the "No team members" empty state, mirroring the web.
+    @GET("api/hr/attendance/team-scope")
+    suspend fun getAttendanceTeamScope(
+        @Header("Authorization") token: String,
+    ): TeamScopeResponse
+
     // HR Review tab — company-wide rows awaiting HR action (needs permission).
     @GET("api/hr/attendance/hr-review")
     suspend fun getHrReview(
@@ -1127,6 +1134,11 @@ interface ApiService {
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
+                // OkHttp's default write timeout is only 10s — a punch selfie
+                // (~200-300KB) on a weak field uplink can't finish the body in
+                // time, so uploads died with SocketTimeoutException. 60s only
+                // bites on large request bodies; normal JSON calls are unaffected.
+                .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)
@@ -2235,6 +2247,13 @@ data class TaskManagerResponse(
     val tasks: List<DailyTaskData> = emptyList(),
     val teamIds: List<String> = emptyList(),
     val scope: String? = null,
+    val error: String? = null
+)
+
+data class TeamScopeResponse(
+    val success: Boolean = false,
+    val teamCount: Int = 0,
+    val hasTeam: Boolean = false,
     val error: String? = null
 )
 
@@ -3485,6 +3504,7 @@ data class FineDeductionItem(
     val status: String = "active",
     val notes: String? = null,
     val photoUrl: String? = null,
+    val staffPhotoUrl: String? = null,
     val createdAt: String? = null,
 )
 

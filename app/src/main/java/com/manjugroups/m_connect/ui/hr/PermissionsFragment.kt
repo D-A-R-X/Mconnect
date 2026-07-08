@@ -376,13 +376,16 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun filterHistoryPermissions(items: List<PermissionData>): List<PermissionData> {
-        return items.filter { perm ->
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> bucketForStatus(perm.status) == StatusBucket.REVIEW
-                HistoryFilter.APPROVED -> bucketForStatus(perm.status) == StatusBucket.APPROVED
-                HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
+        return items
+            // Cancelled permissions are not a category — never show them.
+            .filterNot { it.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled" }
+            .filter { perm ->
+                when (historyFilter) {
+                    HistoryFilter.REVIEW -> bucketForStatus(perm.status) == StatusBucket.REVIEW
+                    HistoryFilter.APPROVED -> bucketForStatus(perm.status) == StatusBucket.APPROVED
+                    HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
+                }
             }
-        }
     }
 
     private fun renderPermissions(items: List<PermissionData>, approvalMode: Boolean) {
@@ -473,9 +476,10 @@ class PermissionsFragment : Fragment() {
             staffName.text = displayName
             staffInitial.text = initial
 
-            if (approvalMode && perm.staffName != null) {
-                // Only show approve/reject if this is a team permission (has staffName).
-                // My own permissions shouldn't be approvable by me.
+            if (approvalMode && perm.staffName != null && bucket == StatusBucket.REVIEW) {
+                // Approve/Reject only for a team member's request that is still
+                // PENDING. Already-decided (approved/rejected) rows must show
+                // their status, not the action buttons — even in Team/All scope.
                 actionRow.visibility = View.VISIBLE
                 approveButton.setOnClickListener {
                     perm.id?.let { id ->

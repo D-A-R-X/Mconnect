@@ -164,10 +164,13 @@ class LeavesFragment : Fragment() {
             binding.dotScopeBadge.visibility = if (state.pendingApprovals.isNotEmpty()) View.VISIBLE else View.GONE
         }
 
+        // Team Leaves AND All Leaves both render the approvals dataset —
+        // the backend scopes it (hierarchy for approvers, everything for
+        // super admins / leaves.viewAll). Only My Leaves shows own history.
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else {
-            if (canApprove && activeScope == LeaveScope.TEAM) {
+            if (canApprove && activeScope != LeaveScope.MY) {
                 filterHistoryLeaves(state.pendingApprovals)
             } else {
                 filterHistoryLeaves(state.myLeaves)
@@ -177,7 +180,11 @@ class LeavesFragment : Fragment() {
 
         if (screenMode == MODE_HISTORY) {
             binding.filterRow.visibility = View.VISIBLE
-            val listForCounts = if (canApprove && activeScope == LeaveScope.TEAM) state.pendingApprovals else state.myLeaves
+            // Cancelled leaves are dropped entirely — only Review / Approved /
+            // Rejected are surfaced (matching the web).
+            val listForCounts =
+                (if (canApprove && activeScope != LeaveScope.MY) state.pendingApprovals else state.myLeaves)
+                    .filterNot { it.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled" }
             val reviewCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.REVIEW }
             val approvedCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.APPROVED }
             val rejectedCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.REJECTED }
@@ -225,7 +232,7 @@ class LeavesFragment : Fragment() {
         stopSkeletonPulse()
         if (!isLoading) hasRenderedLeavesOnce = true
         setEmptyCopy(displayLeaves.isEmpty())
-        val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope == LeaveScope.TEAM)
+        val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope != LeaveScope.MY)
         renderLeaves(displayLeaves, isApprovalForRender)
     }
 
@@ -233,7 +240,7 @@ class LeavesFragment : Fragment() {
 
     private fun setEmptyCopy(isEmpty: Boolean) {
         if (!isEmpty) return
-        val isTeam = screenMode == MODE_APPROVAL || (session.hasPermission("leaves.approve") && activeScope == LeaveScope.TEAM)
+        val isTeam = screenMode == MODE_APPROVAL || (session.hasPermission("leaves.approve") && activeScope != LeaveScope.MY)
         if (isTeam) {
             binding.emptyState.setTitle("No Leave Approvals")
             binding.emptyState.setDescription("There are no pending leave requests in review right now.")
@@ -256,13 +263,16 @@ class LeavesFragment : Fragment() {
     }
 
     private fun filterHistoryLeaves(leaves: List<LeaveData>): List<LeaveData> {
-        return leaves.filter { leave ->
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> bucketForStatus(leave.status) == StatusBucket.REVIEW
-                HistoryFilter.APPROVED -> bucketForStatus(leave.status) == StatusBucket.APPROVED
-                HistoryFilter.REJECTED -> bucketForStatus(leave.status) == StatusBucket.REJECTED
+        return leaves
+            // Cancelled leaves are not a category — never show them.
+            .filterNot { it.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled" }
+            .filter { leave ->
+                when (historyFilter) {
+                    HistoryFilter.REVIEW -> bucketForStatus(leave.status) == StatusBucket.REVIEW
+                    HistoryFilter.APPROVED -> bucketForStatus(leave.status) == StatusBucket.APPROVED
+                    HistoryFilter.REJECTED -> bucketForStatus(leave.status) == StatusBucket.REJECTED
+                }
             }
-        }
     }
 
     private fun renderLeaves(leaves: List<LeaveData>, approvalMode: Boolean) {

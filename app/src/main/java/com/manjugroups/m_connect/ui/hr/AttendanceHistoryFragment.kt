@@ -52,6 +52,13 @@ class AttendanceHistoryFragment : Fragment() {
     // The "All" tab shows the entire attendance log, so it queries from an
     // all-time start date instead of the current filter window.
     private val ALL_TAB_FROM_DATE = "2000-01-01"
+    // Role/hierarchy-based tab visibility (mirrors the web). Logical tab ids:
+    // 0=My Attendance, 1=Team Attendance, 2=Team Approval, 3=All Approval,
+    // 4=HR Review, 5=All. `visibleLogicalTabs` is the subset actually shown, in
+    // order, so the visible tab position maps back to a logical id.
+    private var isReportingOfficer = false
+    private var teamCount = 0
+    private var visibleLogicalTabs: List<Int> = listOf(0, 1, 2, 3, 4, 5)
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
@@ -107,15 +114,13 @@ class AttendanceHistoryFragment : Fragment() {
         // Pull-to-refresh runs refreshAllData without showing skeleton.
         binding.attendanceRefresh.setupPullToRefresh { refreshAllData(showSkeleton = false, forceRefresh = true) }
 
-        // Default range = last 30 days so recent history is visible on open.
-        // A fresh calendar month is nearly empty early in the month, which made
-        // the tabs look disconnected; this mirrors the web Attendance page,
-        // which shows recent records rather than month-to-date only. Users can
-        // still pick any range via the filter.
+        // Default range = current calendar month (1st → today), so My
+        // Attendance opens on month-to-date only and the header label reads
+        // like "July 2026". Users can still pick any range via the filter.
         val cal = Calendar.getInstance()
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         filterToDate = ymd.format(cal.time)
-        cal.add(Calendar.DAY_OF_MONTH, -29)
+        cal.set(Calendar.DAY_OF_MONTH, 1)
         filterFromDate = ymd.format(cal.time)
         updateRangeLabel()
 
@@ -144,15 +149,47 @@ class AttendanceHistoryFragment : Fragment() {
             }
         }
 
-        val tabs = listOf(
-            HorizontalTabLayout.Tab("My Attendance"),
-            HorizontalTabLayout.Tab("Team Attendance"),
-            HorizontalTabLayout.Tab("Team Approval"),
-            HorizontalTabLayout.Tab("All Approval"),
-            HorizontalTabLayout.Tab("HR Review"),
-            HorizontalTabLayout.Tab("All")
+        // Tabs are role/hierarchy based (mirrors the web). Fetch whether the
+        // caller is a reporting officer first so a manager who has a team but
+        // no explicit approve permission still gets the Team tabs.
+        applyGreenGradient(binding.tvTotalDays)
+        applyGreenGradient(binding.tvTotalHours)
+        viewLifecycleOwner.lifecycleScope.launch {
+            isReportingOfficer = try {
+                val resp = api.getAttendanceTeamScope(session.bearerToken)
+                teamCount = resp.teamCount
+                resp.hasTeam
+            } catch (_: Exception) {
+                false
+            }
+            if (_binding != null) buildAttendanceTabs()
+        }
+    }
+
+    private fun buildAttendanceTabs() {
+        val canApprove = session.hasPermission("attendance.approve")
+        val canViewAllAppr = session.hasPermission("attendance.viewAllApprovals")
+        val canViewAll = session.hasPermission("attendance.viewAll")
+
+        // (logical id, label). Order mirrors the existing screen.
+        val logical = mutableListOf<Pair<Int, String>>()
+        logical.add(0 to "My Attendance")
+        if (canApprove || isReportingOfficer) {
+            logical.add(1 to "Team Attendance")
+            logical.add(2 to "Team Approval")
+        }
+        if (canViewAllAppr) logical.add(3 to "All Approval")
+        if (canApprove) logical.add(4 to "HR Review")
+        if (canViewAll) logical.add(5 to "All")
+
+        visibleLogicalTabs = logical.map { it.first }
+        if (activeTab !in visibleLogicalTabs) activeTab = 0
+        val defaultPos = visibleLogicalTabs.indexOf(activeTab).coerceAtLeast(0)
+
+        binding.tabLayout.setTabs(
+            logical.map { HorizontalTabLayout.Tab(it.second) },
+            defaultSelection = defaultPos,
         )
-        binding.tabLayout.setTabs(tabs, defaultSelection = activeTab)
         if (activeTab == 4) {
             binding.layoutSubTabs.visibility = View.VISIBLE
             updateSubTabStyles()
@@ -162,10 +199,10 @@ class AttendanceHistoryFragment : Fragment() {
         }
         binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
-                activeTab = index
+                activeTab = visibleLogicalTabs.getOrElse(index) { 0 }
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
-                if (index == 4) {
+                if (activeTab == 4) {
                     binding.layoutSubTabs.visibility = View.VISIBLE
                     updateSubTabStyles()
                 } else {
@@ -177,9 +214,12 @@ class AttendanceHistoryFragment : Fragment() {
         })
         setupSubTabs()
         refreshAllData(showSkeleton = true)
+    }
 
-        applyGreenGradient(binding.tvTotalDays)
-        applyGreenGradient(binding.tvTotalHours)
+    /** Update the badge for a LOGICAL tab id, only if that tab is visible. */
+    private fun updateBadgeFor(logical: Int, count: Int) {
+        val pos = visibleLogicalTabs.indexOf(logical)
+        if (pos >= 0) binding.tabLayout.updateBadge(pos, count)
     }
 
     private fun updateRangeLabel() {
@@ -286,25 +326,25 @@ class AttendanceHistoryFragment : Fragment() {
                 }
 
                 myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
-                binding.tabLayout.updateBadge(0, cachedMyRecords.size)
+                updateBadgeFor(0, cachedMyRecords.size)
 
                 teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
-                binding.tabLayout.updateBadge(1, cachedTeamAttendance.size)
+                updateBadgeFor(1, cachedTeamAttendance.size)
 
                 approvalsDeferred.await()?.let { if (it.success) cachedApprovals = it.records }
-                binding.tabLayout.updateBadge(2, cachedApprovals.size)
+                updateBadgeFor(2, cachedApprovals.size)
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
-                binding.tabLayout.updateBadge(3, cachedAllApprovals.size)
+                updateBadgeFor(3, cachedAllApprovals.size)
 
                 hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
-                binding.tabLayout.updateBadge(4, cachedHrReview.size)
+                updateBadgeFor(4, cachedHrReview.size)
                 updateSubTabStyles()
 
                 val allResp = allDeferred.await()
                 if (allResp?.success == true) {
                     cachedAllAttendance = allResp.records
-                    binding.tabLayout.updateBadge(5, allResp.records.size)
+                    updateBadgeFor(5, cachedAllAttendance.size)
                 }
 
                 val finesResp = finesDeferred.await()
@@ -894,9 +934,11 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderApprovals(approvals: List<AttendanceApprovalRecord>, cacheKey: String) {
         if (approvals.isEmpty()) {
+            val noTeam = teamCount == 0 && activeTab == 2
             showEmptyState(
-                title = "No attendance to review",
-                desc = "Pending punches from your team will land here.",
+                title = if (noTeam) "No team members" else "No attendance to review",
+                desc = if (noTeam) "You don't have any team members reporting to you yet."
+                else "Pending punches from your team will land here.",
                 imageRes = R.drawable.ic_leave_empty
             )
             binding.rvAttendance.visibility = View.GONE
@@ -1167,9 +1209,11 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
         if (records.isEmpty()) {
+            val noTeam = teamCount == 0 && activeTab == 1
             showEmptyState(
-                title = "No team attendance",
-                desc = "No team attendance records for this period.",
+                title = if (noTeam) "No team members" else "No team attendance",
+                desc = if (noTeam) "You don't have any team members reporting to you yet."
+                else "No team attendance records for this period.",
                 imageRes = R.drawable.ic_leave_empty
             )
             binding.rvAttendance.visibility = View.GONE

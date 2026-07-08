@@ -23,6 +23,8 @@ import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
+import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
+import com.manjugroups.m_connect.geotrack.GeoTrackPointFlusher
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.LocationPointEntity
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -298,6 +300,20 @@ class GeoTrackService : Service() {
             } catch (e: Exception) {
                 Log.w(TAG, "Final sync failed: ${e.message}")
             }
+            // Anything still unsent (offline at clock-out, mid-teardown
+            // failure) is handed to WorkManager: it survives this process
+            // and flushes the tail the moment connectivity returns, so the
+            // web timeline backfills without waiting for the next clock-in.
+            try {
+                val leftoverPoints = db.locationPointDao().getUnsentCount()
+                val leftoverEvents = db.pendingGeoTrackEventDao().getPendingCount()
+                if (leftoverPoints > 0 || leftoverEvents > 0) {
+                    Log.i(TAG, "Teardown leftovers: $leftoverPoints points, $leftoverEvents events — scheduling flush worker")
+                    GeoTrackFlushWorker.enqueue(this@GeoTrackService)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Leftover check failed: ${e.message}")
+            }
         }
 
         syncJob?.cancel()
@@ -445,19 +461,38 @@ class GeoTrackService : Service() {
                 Log.i(TAG, "Last location: ${loc?.latitude},${loc?.longitude} (null=${loc == null})")
                 serviceScope.launch {
                     // Send immediate heartbeat so battery shows up right away
+                    val battery = getBatteryLevel()
+                    val tickAt = System.currentTimeMillis()
                     try {
                         api.heartbeat(
                             session.bearerToken,
                             HeartbeatRequest(
                                 sessionId = session.activeTrackingSessionId,
                                 deviceId = session.trackingDeviceId,
-                                batteryPct = getBatteryLevel(),
+                                batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
+                                recordedAt = tickAt,
                             )
                         )
                         Log.i(TAG, "Initial heartbeat sent")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Initial heartbeat failed: ${e.message}")
+                        // Queue for replay like the periodic loop — the shift's
+                        // very first battery/uptime tick must not vanish just
+                        // because clock-in happened in a dead zone.
+                        Log.w(TAG, "Initial heartbeat failed: ${e.message} — queueing for replay")
+                        runCatching {
+                            GeoTrackEventQueue.enqueue(
+                                context = this@GeoTrackService,
+                                eventType = GeoTrackEventQueue.HEARTBEAT_EVENT_TYPE,
+                                metadata = buildMap {
+                                    session.activeTrackingSessionId?.let { put("sessionId", it) }
+                                    session.trackingDeviceId?.let { put("deviceId", it) }
+                                    if (battery != null) put("batteryPct", battery)
+                                    put("appVersion", BuildConfig.VERSION_NAME)
+                                },
+                                occurredAt = tickAt,
+                            )
+                        }
                     }
                 }
             }
@@ -488,7 +523,11 @@ class GeoTrackService : Service() {
         if (isMock) reportTamper("MOCK_LOCATION")
 
         // ── Smart dedup: different rules for moving vs stationary ──
-        if (lastStoredLat != 0.0) {
+        // An activity transition (still→vehicle, vehicle→still, …) forces the
+        // next fix through the dedup so the mode change is visible on the
+        // timeline even when the device hasn't moved far enough to store.
+        val forceForTransition = ActivityRecognitionReceiver.consumeTransitionPending()
+        if (lastStoredLat != 0.0 && !forceForTransition) {
             val distFromLast = distanceMeters(
                 lastStoredLat, lastStoredLng,
                 location.latitude, location.longitude
@@ -538,7 +577,8 @@ class GeoTrackService : Service() {
             networkType = getNetworkType(),
             gpsEnabled = isGpsEnabled(),
             airplaneMode = isAirplaneModeOn(),
-            recordedAt = System.currentTimeMillis()
+            recordedAt = System.currentTimeMillis(),
+            sessionId = session.activeTrackingSessionId,
         )
 
         db.locationPointDao().insert(entity)
@@ -696,88 +736,31 @@ class GeoTrackService : Service() {
     }
 
     private suspend fun syncPoints() {
-        try {
-            val activeSessionId = session.activeTrackingSessionId
-            if (activeSessionId.isNullOrBlank()) {
-                Log.d(TAG, "Sync skipped: no active tracking session id")
-                return
-            }
-            val dao = db.locationPointDao()
-            // Drain the entire backlog in batches of 200, not just the
-            // first 200. After a long offline period (a 6-hour outage
-            // at 10s intervals = 2160 points) the old single-batch
-            // sync would leave 90% of the journey stuck on-device for
-            // hours until enough 30s ticks fired.
-            var batchesFlushed = 0
-            var pointsThisCycle = 0
-            // Bounded loop: exits on empty queue or MAX_BATCHES_PER_SYNC
-            // cap. No cancellation check needed — the surrounding
-            // coroutine's own cancellation will short-circuit the next
-            // suspending dao/api call.
-            while (true) {
-                val unsent = dao.getUnsent(BATCH_SIZE)
-                if (unsent.isEmpty()) {
-                    if (batchesFlushed == 0) Log.d(TAG, "Sync: no pending points")
-                    break
-                }
-
-                Log.d(TAG, "Sync: pushing ${unsent.size} points (batch ${batchesFlushed + 1})...")
-
-                val points = unsent.map { e ->
-                    LocationPoint(
-                        lat = e.lat, lng = e.lng, accuracy = e.accuracy,
-                        speed = e.speed, bearing = e.bearing, altitude = e.altitude,
-                        activity = e.activity, activityConfidence = e.activityConfidence,
-                        isMock = e.isMock, batteryPct = e.batteryPct,
-                        networkType = e.networkType, gpsEnabled = e.gpsEnabled,
-                        airplaneMode = e.airplaneMode, recordedAt = e.recordedAt
-                    )
-                }
-
-                val resp = api.pushBatch(
-                    session.bearerToken,
-                    PushBatchRequest(
-                        sessionId = activeSessionId,
-                        deviceId = session.trackingDeviceId,
-                        points = points
-                    )
-                )
-
-                if (resp.success) {
-                    dao.deleteByIds(unsent.map { it.id })
-                    val inserted = resp.inserted ?: unsent.size
-                    pointsSynced.addAndGet(inserted)
-                    pointsThisCycle += inserted
-                    batchesFlushed++
-                    consecutiveSyncFailures = 0
-                    // Safety cap: bail after this many batches per
-                    // cycle so we don't monopolise the service scope
-                    // when a giant backlog is finally draining.
-                    if (batchesFlushed >= MAX_BATCHES_PER_SYNC) {
-                        Log.i(TAG, "Sync: hit max batches per cycle ($MAX_BATCHES_PER_SYNC); resuming next tick")
-                        break
-                    }
-                    // If we got fewer points than we asked for, the
-                    // queue is empty — done.
-                    if (unsent.size < BATCH_SIZE) break
-                } else {
-                    consecutiveSyncFailures++
-                    Log.e(TAG, "Sync FAILED — server said: ${resp.error} (failures=$consecutiveSyncFailures)")
-                    if (resp.error?.contains("Tracking session not active", ignoreCase = true) == true) {
-                        session.shouldTrackNow = false
-                        session.activeTrackingSessionId = null
-                        stopSelf()
-                    }
-                    return
-                }
-            }
-            if (batchesFlushed > 0) {
-                Log.i(TAG, "Sync OK: $pointsThisCycle points across $batchesFlushed batches (total saved: ${pointsSynced.get()})")
-            }
-            return
-        } catch (e: Exception) {
+        val result = GeoTrackPointFlusher.flush(
+            context = this,
+            api = api,
+            session = session,
+            maxBatches = MAX_BATCHES_PER_SYNC,
+        )
+        if (result.flushedPoints > 0) {
+            pointsSynced.addAndGet(result.flushedPoints)
+            Log.i(TAG, "Sync OK: ${result.flushedPoints} points across ${result.batches} batches (total saved: ${pointsSynced.get()})")
+        }
+        if (result.hadFailure) {
             consecutiveSyncFailures++
-            Log.e(TAG, "Sync EXCEPTION: ${e.javaClass.simpleName}: ${e.message} (failures=$consecutiveSyncFailures)", e)
+            Log.e(TAG, "Sync FAILED: ${result.lastError} (failures=$consecutiveSyncFailures)")
+        } else if (result.flushedPoints > 0 || result.batches > 0) {
+            consecutiveSyncFailures = 0
+        }
+        // The ACTIVE session id being unknown to the server means tracking is
+        // genuinely broken (deleted doc / foreign deployment) — stop, exactly
+        // like the old behaviour. Stale-session batches failing must NOT kill
+        // live tracking; the flusher keeps them buffered and moves on.
+        if (result.activeSessionInvalid) {
+            Log.e(TAG, "Active tracking session rejected by server — stopping")
+            session.shouldTrackNow = false
+            session.activeTrackingSessionId = null
+            stopSelf()
         }
     }
 
@@ -790,6 +773,7 @@ class GeoTrackService : Service() {
                 val battery = getBatteryLevel()
                 val sessionId = session.activeTrackingSessionId
                 val deviceId = session.trackingDeviceId
+                val tickAt = System.currentTimeMillis()
                 try {
                     runWithSyncWakeLock {
                         api.heartbeat(
@@ -799,6 +783,7 @@ class GeoTrackService : Service() {
                                 deviceId = deviceId,
                                 batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
+                                recordedAt = tickAt,
                             )
                         )
                     }
@@ -821,6 +806,7 @@ class GeoTrackService : Service() {
                                 if (battery != null) put("batteryPct", battery)
                                 put("appVersion", BuildConfig.VERSION_NAME)
                             },
+                            occurredAt = tickAt,
                         )
                     }
                 }
@@ -846,7 +832,11 @@ class GeoTrackService : Service() {
                     // genuinely abandoned local DBs from growing
                     // unbounded if the device is never recovered.
                     db.locationPointDao().deleteUnsentOlderThan(now - MAX_UNSENT_POINT_AGE_MS)
-                    db.pendingGeoTrackEventDao().deleteOlderThan(now - MAX_POINT_AGE_MS)
+                    // Pending events (queued heartbeats/tamper) get the same
+                    // 30-day retention as unsent points — they're the battery
+                    // and uptime history of the exact same offline window, so
+                    // purging them at 7 days lost part of the journey record.
+                    db.pendingGeoTrackEventDao().deleteOlderThan(now - MAX_UNSENT_POINT_AGE_MS)
                     Log.d(TAG, "Cleanup: purged sent>${MAX_POINT_AGE_MS / 86_400_000L}d, unsent>${MAX_UNSENT_POINT_AGE_MS / 86_400_000L}d")
                 } catch (e: Exception) {
                     Log.w(TAG, "Cleanup failed: ${e.message}")

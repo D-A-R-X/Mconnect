@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
@@ -787,11 +788,9 @@ class HomeViewModel : ViewModel() {
     }
 
     private suspend fun uploadPhoto(bearerToken: String, file: File): String? {
-        return try {
-            val requestBody = file.asRequestBody("image/jpeg".toMediaType())
-            val response = api.uploadStorageFile(bearerToken, requestBody)
-            response.storageId
-        } catch (_: Exception) { null }
+        // Retries transient failures; punch selfies from field locations
+        // regularly hit flaky networks and a single attempt loses the punch.
+        return StorageUploader.upload(api, bearerToken, file).storageId
     }
 
     private fun applyTrackingBootstrap(

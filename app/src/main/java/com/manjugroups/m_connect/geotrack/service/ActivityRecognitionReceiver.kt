@@ -15,6 +15,18 @@ class ActivityRecognitionReceiver : BroadcastReceiver() {
 
         @Volatile var currentActivity: String = "STILL"
         @Volatile var currentConfidence: Int = 0
+
+        // Set on every ENTER transition; the service consumes it to bypass
+        // the stationary/moving dedup for ONE point, so a transition that
+        // happens between stored points (e.g. vehicle→still while parked)
+        // still lands on the timeline instead of being collapsed away.
+        @Volatile private var transitionPending: Boolean = false
+
+        fun consumeTransitionPending(): Boolean {
+            val was = transitionPending
+            transitionPending = false
+            return was
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -26,6 +38,7 @@ class ActivityRecognitionReceiver : BroadcastReceiver() {
                     val name = activityName(event.activityType)
                     currentActivity = name
                     currentConfidence = 80 // Transition events don't provide confidence, use high default
+                    transitionPending = true
                     Log.i(TAG, "Activity transition: $name")
                 }
             }
