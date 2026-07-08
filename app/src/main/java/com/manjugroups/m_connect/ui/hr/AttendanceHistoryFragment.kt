@@ -1221,15 +1221,28 @@ class AttendanceHistoryFragment : Fragment() {
 
     private fun filterCurrentListOnTyping(query: String) {
         val queryLower = query.trim().lowercase(Locale.US)
+        // Every tab's cards live in the SAME list container — other tabs'
+        // pre-rendered cards sit in it as GONE children. Only the ACTIVE
+        // tab's views (the ones in its viewCache entry) may be toggled here;
+        // the old blanket "show everything on an empty query" resurrected
+        // the hidden cards and bled My Attendance rows into the Team /
+        // Approval tabs.
+        val currentViews = viewCache[getCacheKeyForCurrentTab()]?.toHashSet()
         var visibleCount = 0
+        var currentTabCards = 0
 
         for (i in 0 until binding.attendanceList.childCount) {
             val child = binding.attendanceList.getChildAt(i)
+            if (currentViews != null && child !in currentViews) {
+                child.visibility = View.GONE
+                continue
+            }
             val tag = child.tag as? String
             if (tag == null) {
                 child.visibility = View.VISIBLE
                 continue
             }
+            currentTabCards++
 
             if (queryLower.isEmpty() || tag.contains(queryLower)) {
                 child.visibility = View.VISIBLE
@@ -1239,16 +1252,19 @@ class AttendanceHistoryFragment : Fragment() {
             }
         }
 
-        if (visibleCount == 0 && binding.attendanceList.childCount > 0) {
+        if (visibleCount == 0 && currentTabCards > 0) {
             binding.emptyState.visibility = View.VISIBLE
             binding.emptyState.setEmptyState(
                 R.drawable.ic_leave_empty,
                 "No search results",
                 "Try refining your search query."
             )
-        } else {
+        } else if (visibleCount > 0) {
             binding.emptyState.visibility = View.GONE
         }
+        // currentTabCards == 0 → the tab is genuinely empty; keep whatever
+        // empty state the render function already showed ("No team members",
+        // "No attendance to review", …) instead of overwriting or hiding it.
     }
 
     private fun preRenderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
