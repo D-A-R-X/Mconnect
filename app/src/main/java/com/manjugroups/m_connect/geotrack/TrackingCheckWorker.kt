@@ -26,7 +26,33 @@ class TrackingCheckWorker(
     override suspend fun doWork(): Result {
         val session = SessionManager(applicationContext)
 
-        if (!session.isLoggedIn) return Result.success()
+        if (!session.isLoggedIn) {
+            com.manjugroups.m_connect.notifications.TasksNotification.clear(applicationContext)
+            return Result.success()
+        }
+
+        // Keep the pending-tasks notification fresh in the background — runs
+        // even while GeoTrack is active (before the early-return below), so the
+        // system-pane reminder updates/clears without the app being opened.
+        runCatching {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(java.util.Date())
+            val open = com.manjugroups.m_connect.network.ApiService.create()
+                .getTaskManagerTasks(session.bearerToken, today)
+                .tasks.filter { it.status == "pending" || it.status == "in-progress" }
+            val dueSoon = open.count { t ->
+                val d = t.deadline?.trim().orEmpty()
+                d.isNotEmpty() && d <= today
+            }
+            val top = open.maxByOrNull { it.creationTime ?: 0.0 }
+            com.manjugroups.m_connect.notifications.TasksNotification.update(
+                applicationContext,
+                open.size,
+                dueSoon,
+                top?.let { it.title ?: it.taskName },
+            )
+        }
+
         if (GeoTrackService.isRunning) return Result.success()
 
         return try {

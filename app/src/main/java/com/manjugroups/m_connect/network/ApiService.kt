@@ -221,10 +221,22 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String,
         @Query("toDate") toDate: String,
+        // Server-side name/employee-id search. Without it the backend returns
+        // only the newest ~750 rows company-wide (≈ a few days), so client-side
+        // filtering silently missed a person's older records.
+        @Query("search") search: String? = null,
     ): AttendanceApprovalsResponse
 
     // Whether the caller has a team (direct reports) — drives which attendance
     // tabs show + the "No team members" empty state, mirroring the web.
+    // Put an attendance row on hold (web parity: the amber Hold action in the
+    // review dialog). Body reuses RejectRequest — {id, reason}.
+    @POST("api/hr/attendance/hold")
+    suspend fun holdAttendance(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest,
+    ): SimpleResponse
+
     @GET("api/hr/attendance/team-scope")
     suspend fun getAttendanceTeamScope(
         @Header("Authorization") token: String,
@@ -404,7 +416,12 @@ interface ApiService {
     ): MyPermissionsResponse
 
     @GET("api/hr/permissions/pending-approvals")
-    suspend fun getPendingPermissionApprovals(@Header("Authorization") token: String): MyPermissionsResponse
+    suspend fun getPendingPermissionApprovals(
+        @Header("Authorization") token: String,
+        // all=true → every request company-wide (All Permission scope, admins
+        // only). Omitted/false → hierarchy-scoped Team Permission.
+        @Query("all") all: Boolean? = null,
+    ): MyPermissionsResponse
 
     @POST("api/hr/permissions/apply")
     suspend fun applyPermission(
@@ -1476,7 +1493,13 @@ data class AttendanceApprovalRecord(
     val staffPhotoUrl: String? = null,
     // "remarks" = employee-submitted correction/leave request; "attendance" =
     // normal punch record. Drives the HR Review Attendance/Request sub-tabs.
-    val requestType: String? = null
+    val requestType: String? = null,
+    // Correction-request payload (Requests sub-tab rows): the times the
+    // employee ASKED to be corrected to, plus their stated reason. The
+    // punchInTime/punchOutTime above stay the recorded (actual) punches.
+    val requestedPunchIn: String? = null,
+    val requestedPunchOut: String? = null,
+    val requestReason: String? = null,
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
@@ -1484,7 +1507,11 @@ data class AttendanceApprovalRecord(
 // audit logs unambiguous.
 data class ApproveAttendanceRequest(
     val id: String,
-    val approvedAttendance: String
+    val approvedAttendance: String,
+    // True when `id` is an attendanceRequests doc (HR Review → Requests row);
+    // the backend then applies the request-review mutation instead of the
+    // plain attendance approve. Omitted (null) for normal punch records.
+    val isRequest: Boolean? = null,
 )
 
 // Punch models
@@ -1541,6 +1568,9 @@ data class MyLeavesResponse(val success: Boolean, val total: Int?, val leaves: L
 data class LeaveData(
     @SerializedName("_id") val id: String?,
     val leaveId: String? = null,
+    // Applicant's staff id — lets the approval UI recognise the viewer's OWN
+    // leave and hide its Approve/Reject (no self-approval).
+    val staffId: String? = null,
     val staffName: String? = null,
     val leaveType: String?,
     val fromDate: String?,
@@ -1806,7 +1836,7 @@ data class ApproveLoanRequest(
 )
 
 data class IdRequest(val id: String)
-data class RejectRequest(val id: String, val reason: String)
+data class RejectRequest(val id: String, val reason: String, val isRequest: Boolean? = null)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
 data class PushRegisterRequest(
     val token: String,
@@ -2232,10 +2262,20 @@ data class DailyTaskData(
     val priority: String? = null,
     val description: String? = null,
     val deadline: String? = null,
+    // Staff ids — needed to compute the "My Tasks" / "My Team Tasks" /
+    // "Assigned By Me" info cards client-side, exactly like the web page.
+    val assignedTo: String? = null,
+    val assignedBy: String? = null,
     val assignedToName: String? = null,
     val assignedByName: String? = null,
     val taskCategory: String? = null,
     val status: String? = null,
+    // Module label ("HR", "Marketing", "Land Procurement", …) resolved by the
+    // backend so the mobile module tabs match the web without re-deriving it.
+    val module: String? = null,
+    // Whether a deadline-extension request is pending on this task (Extension
+    // Requests card).
+    val pendingExtensionRequest: Boolean? = null,
     val sourceReferenceType: String? = null,
     val sourceReferenceId: String? = null,
     val actionUrl: String? = null,

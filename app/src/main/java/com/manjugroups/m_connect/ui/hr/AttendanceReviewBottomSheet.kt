@@ -42,13 +42,17 @@ import java.util.*
 class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
 
     interface OnActionClickListener {
-        fun onApprove(recordId: String)
+        /** [status] is the web's "Approve as" bucket: present | half-day | absent. */
+        fun onApprove(recordId: String, status: String)
         fun onReject(recordId: String)
+        fun onHold(recordId: String)
     }
 
     private var _binding: BottomSheetAttendanceReviewBinding? = null
     private val binding get() = _binding!!
     private var record: AttendanceApprovalRecord? = null
+    // Last loaded day-route — reused by the full-screen map dialog.
+    private var lastRouteData: SessionRouteData? = null
     private var listener: OnActionClickListener? = null
 
     private var isPlaying = false
@@ -159,9 +163,9 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             if (activeMins > 0) "${activeMins / 60}h ${activeMins % 60}m" else "—"
 
         // Assume "No trips recorded" until a real route is drawn — hide the
-        // play overlay + replay controls so a no-trip person doesn't get a
-        // misleading playback UI. drawRoute() re-reveals them on hasBounds.
-        binding.btnMapPlayOverlay.visibility = View.GONE
+        // full-view button + replay controls so a no-trip person doesn't get
+        // a misleading playback UI. drawRoute() re-reveals them on hasBounds.
+        binding.btnMapFullView.visibility = View.GONE
         binding.layoutReplayControls.visibility = View.GONE
 
         val staffId = rec.staffId ?: return
@@ -188,12 +192,56 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
                 if (meters >= 1000) String.format(Locale.getDefault(), "%.1f km", meters / 1000.0)
                 else "$meters m"
 
+            lastRouteData = data
             drawRoute(map, data)
             renderJourneyTimeline(data)
         }
     }
 
     private fun drawRoute(map: GoogleMap, data: SessionRouteData) {
+        val bounds = drawRouteOnMap(map, data)
+
+        // No travelled route — hide the map + playback, leave "No trips recorded".
+        if (bounds == null) {
+            binding.btnMapFullView.visibility = View.GONE
+            binding.layoutReplayControls.visibility = View.GONE
+            return
+        }
+
+        // Real data arrived — reveal the map, hide the placeholder graphic,
+        // and bring back the playback controls for the drawn route.
+        binding.mapRoutePreview.visibility = View.VISIBLE
+        binding.imgRoutePlaceholder.visibility = View.GONE
+        binding.layoutRoutePlaceholderText.visibility = View.GONE
+        binding.btnMapFullView.visibility = View.VISIBLE
+        binding.layoutReplayControls.visibility = View.VISIBLE
+
+        val mapView = binding.mapRoutePreview
+        mapView.post {
+            val w = mapView.width
+            val h = mapView.height
+            runCatching {
+                if (w > 0 && h > 0) {
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, w, h, dp(28)))
+                } else {
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(28)))
+                }
+            }.onFailure {
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 13f))
+            }
+        }
+
+        // Feed the real route into the replay engine (marker + seekbar).
+        preparePlayback(data)
+    }
+
+    /**
+     * Draw the day's travelled route (qualifying trips / timeline fallback,
+     * stops, start/end flags) onto [map]. Pure drawing — no preview-card
+     * side effects — so the inline preview and the full-screen map share it.
+     * Returns the route bounds, or null when nothing qualified to draw.
+     */
+    private fun drawRouteOnMap(map: GoogleMap, data: SessionRouteData): LatLngBounds? {
         val boundsBuilder = LatLngBounds.Builder()
         var hasBounds = false
         // ── Only travel that qualifies for the allowance is shown on the map:
@@ -268,39 +316,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
-        // No travelled route — hide the map + playback, leave "No trips recorded".
-        if (!hasBounds) {
-            binding.btnMapPlayOverlay.visibility = View.GONE
-            binding.layoutReplayControls.visibility = View.GONE
-            return
-        }
-
-        // Real data arrived — reveal the map, hide the placeholder graphic,
-        // and bring back the playback controls for the drawn route.
-        binding.mapRoutePreview.visibility = View.VISIBLE
-        binding.imgRoutePlaceholder.visibility = View.GONE
-        binding.layoutRoutePlaceholderText.visibility = View.GONE
-        binding.btnMapPlayOverlay.visibility = View.VISIBLE
-        binding.layoutReplayControls.visibility = View.VISIBLE
-
-        val bounds = boundsBuilder.build()
-        val mapView = binding.mapRoutePreview
-        mapView.post {
-            val w = mapView.width
-            val h = mapView.height
-            runCatching {
-                if (w > 0 && h > 0) {
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, w, h, dp(28)))
-                } else {
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(28)))
-                }
-            }.onFailure {
-                map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 13f))
-            }
-        }
-
-        // Feed the real route into the replay engine (marker + seekbar).
-        preparePlayback(data)
+        return if (hasBounds) boundsBuilder.build() else null
     }
 
     /** Line colour by trip kind — mirrors web: on-duty amber, field-visit
@@ -581,16 +597,78 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             binding.nestedScrollView.smoothScrollTo(0, binding.layoutPunchTimeline.top)
         }
 
-        binding.btnMapPlayOverlay.setOnClickListener {
-            updateTabStyles(1)
-            binding.nestedScrollView.smoothScrollTo(0, binding.layoutLiveRoutePreview.top)
-            // Start the replay — drives the vehicle marker along the route so
-            // the reviewer sees the staff's position move through their journey.
-            if (playbackPath.size >= 2 && !isPlaying) {
-                if (playbackIdx >= playbackPath.size - 1) { playbackIdx = 0; playbackProgress = 0f }
-                startPlayback()
+        binding.btnMapFullView.setOnClickListener { showFullMapDialog() }
+    }
+
+    // ── Full-screen route map ──
+    //
+    // Opens the same travelled route in an edge-to-edge dialog with gestures
+    // enabled, so the reviewer can pan/zoom the journey. Playback stays on
+    // the inline preview's replay controls.
+    private var fullMapDialog: Dialog? = null
+    private var fullMapView: com.google.android.gms.maps.MapView? = null
+
+    private fun showFullMapDialog() {
+        val data = lastRouteData ?: return
+        if (fullMapDialog != null) return
+        val ctx = requireContext()
+
+        val root = android.widget.FrameLayout(ctx)
+        val mapView = com.google.android.gms.maps.MapView(ctx)
+        root.addView(
+            mapView,
+            android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        val close = android.widget.ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_sheet_close)
+            background = ContextCompat.getDrawable(ctx, R.drawable.bg_attach_tile_circle_white)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            elevation = dp(4).toFloat()
+            contentDescription = "Close full map"
+            setOnClickListener { fullMapDialog?.dismiss() }
+        }
+        root.addView(
+            close,
+            android.widget.FrameLayout.LayoutParams(dp(40), dp(40)).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.END
+                topMargin = dp(20)
+                rightMargin = dp(16)
+            },
+        )
+
+        val dialog = Dialog(ctx, android.R.style.Theme_Light_NoTitleBar_Fullscreen)
+        dialog.setContentView(root)
+        // The dialog owns this MapView's lifecycle: created on show,
+        // destroyed on dismiss (and force-dismissed in onDestroyView).
+        mapView.onCreate(null)
+        mapView.onResume()
+        mapView.getMapAsync { map ->
+            map.uiSettings.isZoomControlsEnabled = true
+            val bounds = drawRouteOnMap(map, data)
+            if (bounds != null) {
+                mapView.post {
+                    runCatching {
+                        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(48)))
+                    }.onFailure {
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 13f))
+                    }
+                }
             }
         }
+        dialog.setOnDismissListener {
+            runCatching {
+                fullMapView?.onPause()
+                fullMapView?.onDestroy()
+            }
+            fullMapView = null
+            fullMapDialog = null
+        }
+        fullMapDialog = dialog
+        fullMapView = mapView
+        dialog.show()
     }
 
     private fun updateTabStyles(index: Int) {
@@ -795,13 +873,24 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
     private fun setupActionButtons() {
         val rec = record ?: return
 
+        binding.btnSheetPresent.setOnClickListener {
+            listener?.onApprove(rec.id.orEmpty(), "present")
+            dismiss()
+        }
+        binding.btnSheetHalfDay.setOnClickListener {
+            listener?.onApprove(rec.id.orEmpty(), "half-day")
+            dismiss()
+        }
+        binding.btnSheetAbsent.setOnClickListener {
+            listener?.onApprove(rec.id.orEmpty(), "absent")
+            dismiss()
+        }
         binding.btnSheetReject.setOnClickListener {
             listener?.onReject(rec.id.orEmpty())
             dismiss()
         }
-
-        binding.btnSheetApprove.setOnClickListener {
-            listener?.onApprove(rec.id.orEmpty())
+        binding.btnSheetHold.setOnClickListener {
+            listener?.onHold(rec.id.orEmpty())
             dismiss()
         }
     }
@@ -839,6 +928,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         playbackJob?.cancel()
+        fullMapDialog?.dismiss()
         _binding?.mapRoutePreview?.onDestroy()
         super.onDestroyView()
         _binding = null

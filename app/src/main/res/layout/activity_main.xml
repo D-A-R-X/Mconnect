@@ -51,6 +51,63 @@
             android:clipToPadding="false">
 
         <LinearLayout
+            android:id="@+id/tabBarStack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="vertical">
+
+        <!-- Wide, flat pending-tasks bar tucked BEHIND the nav pill so only the
+             top peeks out (bottom edge hidden). Side margins land just inside
+             the nav's rounded ends so the edges reach the curve. Count on the
+             left + a small Complete chip that routes the newest task.
+             Persistent — only hides when nothing is pending; not dismissable. -->
+        <LinearLayout
+            android:id="@+id/navTasksBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="52dp"
+            android:layout_marginEnd="52dp"
+            android:layout_marginBottom="-26dp"
+            android:background="@drawable/bg_nav_tasks_banner"
+            android:elevation="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="5dp"
+            android:paddingBottom="20dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvNavTasksCount"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_semibold"
+                android:maxLines="1"
+                android:text="3 pending"
+                android:textColor="#B42318"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/btnNavTasksComplete"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_nav_tasks_complete"
+                android:fontFamily="@font/inter_bold"
+                android:paddingStart="10dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="2dp"
+                android:text="Complete"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/tabBar"
             android:layout_width="match_parent"
             android:layout_height="66dp"
@@ -219,6 +276,7 @@
                         android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
+        </LinearLayout>
         </LinearLayout>
         </FrameLayout>
     </FrameLayout>

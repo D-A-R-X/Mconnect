@@ -447,6 +447,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     cell.setBackgroundResource(R.drawable.bg_leave_day_range)
                     cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_primary))
                 }
+                sameDay(dayMillis, System.currentTimeMillis()) -> {
+                    // Today — accent ring so the user can orient without it
+                    // reading as a selection.
+                    cell.setBackgroundResource(R.drawable.bg_leave_day_today)
+                    cell.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
+                }
                 else -> {
                     cell.background = null
                     cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_primary))

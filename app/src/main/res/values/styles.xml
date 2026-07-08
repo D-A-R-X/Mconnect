@@ -1,5 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Task Manager info-card (My Tasks / Team / Assigned / Extensions / Overdue) -->
+    <style name="TaskStatCard">
+        <item name="android:layout_width">124dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/bg_apps_card</item>
+        <item name="android:padding">12dp</item>
+    </style>
+    <style name="TaskStatLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">@font/inter_medium</item>
+        <item name="android:textColor">?attr/colorForegroundSecondary</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+    <style name="TaskStatValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:fontFamily">@font/inter_bold</item>
+        <item name="android:text">0</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">22sp</item>
+    </style>
+
     <!--
       Inspection-form helpers: a small "field label" caption and the
       plain (no-icon, no-trailing) version of the field-pill. Keep the

@@ -99,6 +99,13 @@ class MainActivity : AppCompatActivity() {
     )
     private lateinit var tabs: List<TabConfig>
     private lateinit var tabBarContainer: FrameLayout
+    private lateinit var navTasksBanner: android.view.View
+    private lateinit var tvNavTasksCount: android.widget.TextView
+    // Newest open task — the LIFO "top of stack" the Complete chip routes to.
+    private var topPendingTask: com.manjugroups.m_connect.network.DailyTaskData? = null
+    // Set when the pending-tasks notification is tapped — routes to the top
+    // task once the next banner refresh has loaded it.
+    private var openTasksOnNextRefresh = false
     private lateinit var fragmentContainer: FrameLayout
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
@@ -185,6 +192,19 @@ class MainActivity : AppCompatActivity() {
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
+
+        // Pending-tasks nudge docked on the nav — count of incomplete My
+        // Tasks; the Complete chip routes the newest task to where it's DONE
+        // (its mobile screen, or a "use the web app" prompt for web-only tasks).
+        navTasksBanner = findViewById(R.id.navTasksBanner)
+        tvNavTasksCount = findViewById(R.id.tvNavTasksCount)
+        findViewById<android.view.View>(R.id.btnNavTasksComplete).setOnClickListener {
+            openTaskManager()
+        }
+        // Tasks complete server-side when their underlying work is done
+        // (attendance reviewed, CP/SV visited, ...), so re-check the count on
+        // every navigation — the badge disappears as soon as the stack clears.
+        supportFragmentManager.addOnBackStackChangedListener { refreshTasksBanner() }
 
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -311,6 +331,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             selectTab(TAB_HOME)
             handleWorkflowNotificationIntent(intent)
+            handleTasksNotificationIntent(intent)
         } else {
             updateTabUi(currentTab)
             applyTopBarForTab(currentTab)
@@ -331,9 +352,76 @@ class MainActivity : AppCompatActivity() {
      * Throttled to one sync per 30 s to avoid hammering the API when the user
      * bounces between tabs or returns from a quick external app.
      */
+    /**
+     * Refresh the red pending-tasks nudge on the nav. Shows the number of
+     * incomplete My Tasks (attendance review, CP, SV, ... — same source as
+     * the web Task Manager); hides itself the moment everything is done.
+     * Safe to call from fragments after completing a task.
+     */
+    /** Open the mobile Task Manager screen (banner Complete + notification tap). */
+    fun openTaskManager() {
+        supportFragmentManager.beginTransaction()
+            .applySmoothTransitions()
+            .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
+            .addToBackStack(null)
+            .commit()
+    }
+
+    fun refreshTasksBanner() {
+        if (!session.isLoggedIn) {
+            com.manjugroups.m_connect.notifications.TasksNotification.clear(this)
+            return
+        }
+        lifecycleScope.launch {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(java.util.Date())
+            val open = runCatching {
+                api.getTaskManagerTasks(session.bearerToken, today)
+                    .tasks.filter { it.status == "pending" || it.status == "in-progress" }
+            }.getOrNull() ?: return@launch // network blip — keep current state
+            if (isFinishing || isDestroyed) return@launch
+
+            // LIFO — newest open task is the top of the stack the chip routes to.
+            topPendingTask = open.maxByOrNull { it.creationTime ?: 0.0 }
+            val pending = open.size
+            // Tasks whose deadline is today or already past — the ones to nudge.
+            val dueSoon = open.count { t ->
+                val d = t.deadline?.trim().orEmpty()
+                d.isNotEmpty() && d <= today
+            }
+
+            // System-pane notification — the companion to this banner. Shows
+            // the same count and clears itself when nothing is pending.
+            com.manjugroups.m_connect.notifications.TasksNotification.update(
+                this@MainActivity,
+                pending,
+                dueSoon,
+                topPendingTask?.let { it.title ?: it.taskName },
+            )
+
+            // A notification tap (EXTRA_OPEN_TASKS) opens the Task Manager once
+            // this refresh confirms there's still something pending.
+            if (openTasksOnNextRefresh) {
+                openTasksOnNextRefresh = false
+                if (pending > 0) openTaskManager()
+            }
+
+            if (pending > 0) {
+                tvNavTasksCount.text = when {
+                    dueSoon > 0 -> "$pending pending · $dueSoon due"
+                    else -> "$pending pending"
+                }
+                navTasksBanner.visibility = android.view.View.VISIBLE
+            } else {
+                navTasksBanner.visibility = android.view.View.GONE
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (!session.isLoggedIn) return
+        refreshTasksBanner()
         // Re-assert the background permissions gate every time we come
         // forward. Dialog is no-op when both checks already pass and
         // self-dismisses when the user returns from Settings having
@@ -748,6 +836,19 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleWorkflowNotificationIntent(intent)
+        handleTasksNotificationIntent(intent)
+    }
+
+    /** Tap on the pending-tasks notification → route the newest task. */
+    private fun handleTasksNotificationIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(
+                com.manjugroups.m_connect.notifications.TasksNotification.EXTRA_OPEN_TASKS,
+                false,
+            ) == true
+        ) {
+            openTasksOnNextRefresh = true
+            refreshTasksBanner()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
