@@ -52,6 +52,10 @@ class AttendanceHistoryFragment : Fragment() {
     // The "All" tab shows the entire attendance log, so it queries from an
     // all-time start date instead of the current filter window.
     private val ALL_TAB_FROM_DATE = "2000-01-01"
+    // Far-future upper bound for the all-time tabs (HR Review / All). Using
+    // today's date cut any future-dated rows (planned corrections, requests
+    // dated ahead) that the web's all-time view shows — this matches it.
+    private val ALL_TAB_TO_DATE = "2100-12-31"
     // Role/hierarchy-based tab visibility (mirrors the web). Logical tab ids:
     // 0=My Attendance, 1=Team Attendance, 2=Team Approval, 3=All Approval,
     // 4=HR Review, 5=All. `visibleLogicalTabs` is the subset actually shown, in
@@ -68,6 +72,14 @@ class AttendanceHistoryFragment : Fragment() {
     private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance
     private var cachedAllAttendance: List<AttendanceApprovalRecord> = emptyList()  // All (company-wide)
     private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
+
+    // True while refreshAllData's fetches are in flight. A tab whose cache
+    // is still empty shows the skeleton during this window instead of a
+    // premature "no data" empty state.
+    private var isFetchingData = false
+
+    // Debounced server-side search for the All tab (see the TextWatcher).
+    private var allTabSearchJob: kotlinx.coroutines.Job? = null
 
     private var activeTab = 0
     private var activeSubTab = 0 // 0 = Attendance, 1 = Request
@@ -107,6 +119,11 @@ class AttendanceHistoryFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 filterCurrentListOnTyping(s?.toString().orEmpty())
+                // The All tab's default feed is capped to the newest ~750 rows
+                // company-wide (a few days), so filtering it locally hides a
+                // person's older records. Ask the SERVER for the searched
+                // staff's full range instead (debounced).
+                if (activeTab == 5) scheduleAllTabServerSearch(s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
@@ -185,6 +202,10 @@ class AttendanceHistoryFragment : Fragment() {
         visibleLogicalTabs = logical.map { it.first }
         if (activeTab !in visibleLogicalTabs) activeTab = 0
         val defaultPos = visibleLogicalTabs.indexOf(activeTab).coerceAtLeast(0)
+
+        // A lone "My Attendance" tab is noise — staff with no team/approval
+        // visibility get no tab bar at all, just their records.
+        binding.tabLayout.visibility = if (logical.size > 1) View.VISIBLE else View.GONE
 
         binding.tabLayout.setTabs(
             logical.map { HorizontalTabLayout.Tab(it.second) },
@@ -287,6 +308,11 @@ class AttendanceHistoryFragment : Fragment() {
             cachedFines = emptyList()
         }
 
+        // Marks every tab whose cache is still empty as "loading" — a tab
+        // switch mid-fetch shows the skeleton instead of a premature
+        // "no data" empty state (renderCurrentTab checks this flag).
+        isFetchingData = true
+
         if (showSkeleton) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             binding.rvAttendance.visibility = View.GONE
@@ -316,10 +342,10 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 val hrReviewDeferred = async {
                     if (cachedHrReview.isNotEmpty()) null
-                    else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
+                    else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {
-                    runCatching { api.getAllAttendance(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
+                    runCatching { api.getAllAttendance(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val finesDeferred = async {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
@@ -351,18 +377,30 @@ class AttendanceHistoryFragment : Fragment() {
                 if (finesResp != null) {
                     cachedFines = finesResp.fines ?: emptyList()
                 }
-
-                // Render current active tab
-                renderCurrentTab()
             } catch (_: Exception) {} finally {
-                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                binding.rvAttendance.visibility = View.VISIBLE
-                binding.attendanceRefresh.isRefreshing = false
+                isFetchingData = false
+                if (_binding != null) {
+                    SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                    binding.attendanceRefresh.isRefreshing = false
+                    // Render whatever we have — real rows, or the tab's
+                    // empty state when the fetch came back empty/failed.
+                    renderCurrentTab()
+                }
             }
         }
     }
 
     private fun renderCurrentTab() {
+        // Tab data still on its way → skeleton, never a premature empty
+        // state. The fetch's finally block re-renders when it lands.
+        if (isFetchingData && activeTabBackingIsEmpty()) {
+            binding.rvAttendance.visibility = View.GONE
+            binding.emptyState.visibility = View.GONE
+            SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+            return
+        }
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+
         // Update My Attendance summary values
         if (activeTab == 0) {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -400,11 +438,45 @@ class AttendanceHistoryFragment : Fragment() {
         }
 
         filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
-        binding.rvAttendance.visibility = View.VISIBLE
+    }
+
+    /** Whether the ACTIVE tab's backing cache has nothing to show yet. */
+    private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
+        0 -> cachedMyRecords.isEmpty()
+        1 -> cachedTeamAttendance.isEmpty()
+        2 -> cachedApprovals.isEmpty()
+        3 -> cachedAllApprovals.isEmpty()
+        4 -> cachedHrReview.isEmpty()
+        5 -> cachedAllAttendance.isEmpty()
+        else -> true
     }
 
     private fun loadData() {
         renderCurrentTab()
+    }
+
+    /**
+     * All-tab server search: fetches the searched staff's FULL date range via
+     * the backend's per-staff index scan. The default (blank) feed is the
+     * newest ~750 rows across the whole company — a few days — so local
+     * filtering alone silently missed a person's older records.
+     */
+    private fun scheduleAllTabServerSearch(query: String) {
+        allTabSearchJob?.cancel()
+        allTabSearchJob = viewLifecycleOwner.lifecycleScope.launch {
+            kotlinx.coroutines.delay(400)
+            val resp = runCatching {
+                api.getAllAttendance(
+                    session.bearerToken,
+                    ALL_TAB_FROM_DATE,
+                    ALL_TAB_TO_DATE,
+                    search = query.trim().ifBlank { null },
+                )
+            }.getOrNull() ?: return@launch
+            if (_binding == null || !resp.success) return@launch
+            cachedAllAttendance = resp.records
+            if (activeTab == 5) renderCurrentTab()
+        }
     }
 
     private fun showEmptyState(title: String, desc: String, imageRes: Int) {
@@ -981,45 +1053,57 @@ class AttendanceHistoryFragment : Fragment() {
             val btnApprove = card.findViewById<View>(R.id.btnApproveAttendance)
             val btnHrReview = card.findViewById<View>(R.id.btnHrReviewAction)
 
-            val openSheetListener = View.OnClickListener {
-                if (activeTab == 4 && activeSubTab == 1) {
-                    val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
-                        override fun onApprove(recordId: String, status: String) {
-                            approveRecord(recordId, status)
-                        }
-                        override fun onReject(recordId: String) {
-                            showRejectDialog(recordId)
-                        }
-                    })
-                    sheet.show(parentFragmentManager, "review_attendance_request")
-                } else {
-                    val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
-                        override fun onApprove(recordId: String) {
-                            approveRecord(recordId, "present")
-                        }
-                        override fun onReject(recordId: String) {
-                            showRejectDialog(recordId)
-                        }
-                    })
-                    sheet.show(parentFragmentManager, "attendance_review")
-                }
+            // Every approval decision goes through the Review Attendance
+            // Request modal — recorded punches, the employee's requested
+            // correction + notes, and Absent / Present / Reject — exactly the
+            // web's review dialog. Rows on the Requests sub-tab are
+            // attendanceRequests docs, so their decision routes through the
+            // request mutations (isRequest).
+            val isRequestRow = activeTab == 4 && activeSubTab == 1
+            val openReviewModal = View.OnClickListener {
+                val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
+                    override fun onApprove(recordId: String, status: String) {
+                        approveRecord(recordId, status, isRequestRow)
+                    }
+                    override fun onReject(recordId: String) {
+                        showRejectDialog(recordId, isRequestRow)
+                    }
+                })
+                sheet.show(parentFragmentManager, "review_attendance_request")
+            }
+            // Card body opens the journey review (map + travel + timeline)
+            // for context; request rows have no journey, so they open the
+            // decision modal directly.
+            val openCardDetail = if (isRequestRow) openReviewModal else View.OnClickListener {
+                val sheet = AttendanceReviewBottomSheet.newInstance(record, object : AttendanceReviewBottomSheet.OnActionClickListener {
+                    override fun onApprove(recordId: String, status: String) {
+                        approveRecord(recordId, status)
+                    }
+                    override fun onReject(recordId: String) {
+                        showRejectDialog(recordId)
+                    }
+                    override fun onHold(recordId: String) {
+                        showHoldDialog(recordId)
+                    }
+                })
+                sheet.show(parentFragmentManager, "attendance_review")
             }
 
-            if (activeTab == 4 && activeSubTab == 1) {
+            if (isRequestRow) {
                 btnReject.visibility = View.GONE
                 btnApprove.visibility = View.GONE
                 btnHrReview.visibility = View.VISIBLE
-                
-                btnHrReview.setOnClickListener(openSheetListener)
-                card.setOnClickListener(openSheetListener)
+
+                btnHrReview.setOnClickListener(openReviewModal)
+                card.setOnClickListener(openCardDetail)
             } else {
                 btnReject.visibility = View.VISIBLE
                 btnApprove.visibility = View.VISIBLE
                 btnHrReview.visibility = View.GONE
-                
-                card.setOnClickListener(openSheetListener)
-                btnApprove.setOnClickListener(openSheetListener)
-                btnReject.setOnClickListener(openSheetListener)
+
+                card.setOnClickListener(openCardDetail)
+                btnApprove.setOnClickListener(openReviewModal)
+                btnReject.setOnClickListener(openReviewModal)
             }
     }
 
@@ -1033,7 +1117,7 @@ class AttendanceHistoryFragment : Fragment() {
             .show()
     }
 
-    private fun showRejectDialog(id: String) {
+    private fun showRejectDialog(id: String, isRequest: Boolean = false) {
         val input = EditText(requireContext()).apply {
             hint = "Reason for rejection"
             minLines = 3
@@ -1043,18 +1127,46 @@ class AttendanceHistoryFragment : Fragment() {
             .setView(input)
             .setPositiveButton("Reject") { _, _ ->
                 val reason = input.text?.toString()?.trim().orEmpty().ifBlank { "Rejected" }
-                rejectRecord(id, reason)
+                rejectRecord(id, reason, isRequest)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun approveRecord(id: String, approvedAttendance: String) {
+    private fun showHoldDialog(id: String) {
+        val input = EditText(requireContext()).apply {
+            hint = "Reason for holding"
+            minLines = 3
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Hold attendance")
+            .setView(input)
+            .setPositiveButton("Hold") { _, _ ->
+                val reason = input.text?.toString()?.trim().orEmpty().ifBlank { "On hold" }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        val resp = api.holdAttendance(session.bearerToken, RejectRequest(id, reason))
+                        if (resp.success) {
+                            Toast.makeText(requireContext(), "Put on hold", Toast.LENGTH_SHORT).show()
+                            refreshAllData(showSkeleton = false, forceRefresh = true)
+                        } else {
+                            Toast.makeText(requireContext(), resp.error ?: "Failed to hold", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun approveRecord(id: String, approvedAttendance: String, isRequest: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.approveAttendance(
                     session.bearerToken,
-                    ApproveAttendanceRequest(id, approvedAttendance)
+                    ApproveAttendanceRequest(id, approvedAttendance, isRequest = if (isRequest) true else null)
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Approved successfully", Toast.LENGTH_SHORT).show()
@@ -1068,12 +1180,12 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
-    private fun rejectRecord(id: String, reason: String) {
+    private fun rejectRecord(id: String, reason: String, isRequest: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.rejectAttendance(
                     session.bearerToken,
-                    RejectRequest(id, reason)
+                    RejectRequest(id, reason, isRequest = if (isRequest) true else null)
                 )
                 if (resp.success) {
                     Toast.makeText(requireContext(), "Rejected successfully", Toast.LENGTH_SHORT).show()
@@ -1108,8 +1220,13 @@ class AttendanceHistoryFragment : Fragment() {
 
         if (queryLower.isEmpty()) {
             attendanceAdapter.submitList(originalList)
-            binding.emptyState.visibility = View.GONE
-            binding.rvAttendance.visibility = View.VISIBLE
+            // Empty tab → keep the empty state the render function just
+            // showed ("No team members", "No attendance to review", …).
+            // Unconditionally hiding it here left empty tabs fully blank.
+            if (originalList.isNotEmpty()) {
+                binding.emptyState.visibility = View.GONE
+                binding.rvAttendance.visibility = View.VISIBLE
+            }
             return
         }
 

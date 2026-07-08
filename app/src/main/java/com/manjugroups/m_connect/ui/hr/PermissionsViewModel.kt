@@ -16,7 +16,10 @@ data class PermissionsState(
     val limitHours: Int = 0,
     val count: Int = 0,
     val myPermissions: List<PermissionData> = emptyList(),
+    // Team Permission scope — hierarchy-scoped pending approvals.
     val pendingApprovals: List<PermissionData> = emptyList(),
+    // All Permission scope — every request company-wide (admins / viewAll).
+    val allApprovals: List<PermissionData> = emptyList(),
     val isApplying: Boolean = false,
     val isLoading: Boolean = false,
 )
@@ -41,6 +44,13 @@ class PermissionsViewModel : ViewModel() {
                 } else {
                     null
                 }
+                // All-scope dataset (company-wide) — backend gates it to admins
+                // / permissions.viewAll and falls back to team scope otherwise.
+                val all = if (canApprove) {
+                    try { api.getPendingPermissionApprovals(bearerToken, all = true) } catch (_: Exception) { null }
+                } else {
+                    null
+                }
                 val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
 
                 val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0
@@ -50,7 +60,8 @@ class PermissionsViewModel : ViewModel() {
                     limitHours = limitFromApi,
                     count = usage?.count ?: 0,
                     myPermissions = history?.permissions ?: emptyList(),
-                    pendingApprovals = pending?.permissions ?: emptyList()
+                    pendingApprovals = pending?.permissions ?: emptyList(),
+                    allApprovals = all?.permissions ?: emptyList()
                 )
             } finally {
                 _uiState.value = _uiState.value.copy(isLoading = false)

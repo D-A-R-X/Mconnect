@@ -49,7 +49,7 @@ class AppLibraryFragment : Fragment() {
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
 
-    private enum class Filter { ALL, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
+    private enum class Filter { ALL, TASK_MANAGER, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -173,7 +173,7 @@ class AppLibraryFragment : Fragment() {
         // 4. Each pill icon scale-pops in after the strip arrives — gives the toolbar
         //    a small "items dropping into place" rhythm.
         val pillIcons = listOf(
-            binding.pillAllAppsIcon, binding.pillHrIcon, binding.pillMarketingIcon,
+            binding.pillAllAppsIcon, binding.pillTaskManagerIcon, binding.pillHrIcon, binding.pillMarketingIcon,
             binding.pillProjectIcon, binding.pillLandIcon, binding.pillFleetIcon,
             binding.pillSalesIcon, binding.pillAccountsIcon, binding.pillFrontDeskIcon,
             binding.pillSettingsIcon
@@ -266,6 +266,7 @@ class AppLibraryFragment : Fragment() {
             if (pillWidth > 0) {
                 listOf(
                     binding.pillAllApps,
+                    binding.pillTaskManager,
                     binding.pillHr,
                     binding.pillMarketing,
                     binding.pillProject,
@@ -466,6 +467,12 @@ class AppLibraryFragment : Fragment() {
         binding.itemHrAttendanceReview.visibility = View.GONE
         binding.dividerHrAttendanceReview.visibility = View.GONE
 
+        // ── Task Manager ──────────────────────────────────────────────────
+        bindIamEntry(
+            row = binding.itemTaskManagerOpen,
+            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+        ) { openScreen(com.manjugroups.m_connect.ui.tasks.TaskManagerFragment()) }
+
         // ── Project ───────────────────────────────────────────────────────
         bindIamEntry(
             row = binding.itemProjectTasks,
@@ -551,6 +558,7 @@ class AppLibraryFragment : Fragment() {
 
     private fun setupFilterPills() {
         binding.pillAllApps.setOnClickListener { applyFilter(Filter.ALL) }
+        binding.pillTaskManager.setOnClickListener { applyFilter(Filter.TASK_MANAGER) }
         binding.pillHr.setOnClickListener { applyFilter(Filter.HR) }
         binding.pillMarketing.setOnClickListener { applyFilter(Filter.MARKETING) }
         binding.pillProject.setOnClickListener { applyFilter(Filter.PROJECT) }
@@ -579,6 +587,7 @@ class AppLibraryFragment : Fragment() {
             }
             return if (anyVisible) View.VISIBLE else View.GONE
         }
+        binding.cardTaskManager.visibility = show(binding.cardTaskManager, filter == Filter.ALL || filter == Filter.TASK_MANAGER, Filter.TASK_MANAGER)
         binding.cardHr.visibility = show(binding.cardHr, filter == Filter.ALL || filter == Filter.HR, Filter.HR)
         binding.cardMarketing.visibility = show(binding.cardMarketing, filter == Filter.ALL || filter == Filter.MARKETING, Filter.MARKETING)
         binding.cardProject.visibility = show(binding.cardProject, filter == Filter.ALL || filter == Filter.PROJECT, Filter.PROJECT)
@@ -590,6 +599,13 @@ class AppLibraryFragment : Fragment() {
         binding.cardConfig.visibility = show(binding.cardConfig, filter == Filter.ALL || filter == Filter.SETTINGS, Filter.SETTINGS)
 
         styleTab(binding.pillAllAppsIcon, binding.pillAllAppsText, binding.pillAllAppsIndicator, filter == Filter.ALL)
+        styleTab(
+            binding.pillTaskManagerIcon, binding.pillTaskManagerText, binding.pillTaskManagerIndicator,
+            filter == Filter.TASK_MANAGER,
+            activeCircle = R.drawable.bg_apps_pill_circle_active_teal,
+            activeColor = "#0891B2",
+            inactiveIconColor = "#0891B2",
+        )
         styleTab(binding.pillHrIcon, binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
         styleTab(binding.pillMarketingIcon, binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
         styleTab(binding.pillProjectIcon, binding.pillProjectText, binding.pillProjectIndicator, filter == Filter.PROJECT)
@@ -609,18 +625,28 @@ class AppLibraryFragment : Fragment() {
      * - Inactive = bare grey icon (no circle, no border) + grey label
      *              + indicator hidden.
      */
-    private fun styleTab(icon: android.widget.ImageView, label: TextView, indicator: View, active: Boolean) {
+    private fun styleTab(
+        icon: android.widget.ImageView,
+        label: TextView,
+        indicator: View,
+        active: Boolean,
+        activeCircle: Int = R.drawable.bg_apps_pill_circle_active,
+        activeColor: String = "#0B61CA",
+        // Inactive icon tint — defaults to grey; Task Manager keeps its teal so
+        // it stays distinct in the strip even when not selected.
+        inactiveIconColor: String = "#6A6D78",
+    ) {
         if (active) {
-            icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_active)
+            icon.setBackgroundResource(activeCircle)
             icon.imageTintList = android.content.res.ColorStateList.valueOf(
                 Color.parseColor("#FFFFFF")
             )
-            label.setTextColor(Color.parseColor("#0B61CA"))
+            label.setTextColor(Color.parseColor(activeColor))
             indicator.visibility = View.VISIBLE
         } else {
             icon.setBackgroundResource(R.drawable.bg_apps_pill_circle_inactive)
             icon.imageTintList = android.content.res.ColorStateList.valueOf(
-                Color.parseColor("#6A6D78")
+                Color.parseColor(inactiveIconColor)
             )
             label.setTextColor(Color.parseColor("#6A6D78"))
             indicator.visibility = View.GONE
@@ -645,6 +671,10 @@ class AppLibraryFragment : Fragment() {
     // to show. Re-run on every setupClickActions / IAM bus update.
     private val sectionTileMap: List<Triple<Filter, View, List<Int>>> by lazy {
         listOf(
+            Triple(
+                Filter.TASK_MANAGER, binding.cardTaskManager,
+                listOf(R.id.itemTaskManagerOpen),
+            ),
             Triple(
                 Filter.HR, binding.cardHr,
                 listOf(
@@ -787,6 +817,7 @@ class AppLibraryFragment : Fragment() {
      */
     private fun pillRootFor(filter: Filter): View? = when (filter) {
         Filter.ALL -> null
+        Filter.TASK_MANAGER -> binding.pillTaskManager
         Filter.HR -> binding.pillHr
         Filter.MARKETING -> binding.pillMarketing
         Filter.PROJECT -> binding.pillProject

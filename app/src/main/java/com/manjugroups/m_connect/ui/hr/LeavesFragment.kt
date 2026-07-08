@@ -56,6 +56,7 @@ class LeavesFragment : Fragment() {
     companion object {
         private const val ARG_MODE = "mode"
         private const val ARG_ENTITY_ID = "entity_id"
+        private const val REJECT_RESULT_KEY = "leave_reject_reason"
         const val MODE_HISTORY = WorkflowNotificationRoute.MODE_HISTORY
         const val MODE_APPROVAL = WorkflowNotificationRoute.MODE_APPROVAL
 
@@ -87,6 +88,21 @@ class LeavesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+
+        // Reject-with-reason bottom sheet result → run the reject with the
+        // captured reason (shared component; reject only, not cancel).
+        childFragmentManager.setFragmentResultListener(REJECT_RESULT_KEY, viewLifecycleOwner) { _, bundle ->
+            val id = bundle.getString(com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.KEY_ITEM_ID).orEmpty()
+            val reason = bundle.getString(com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.KEY_REASON).orEmpty()
+            if (id.isNotEmpty()) {
+                viewModel.rejectLeave(
+                    session.bearerToken,
+                    id,
+                    reason.ifBlank { "Rejected" },
+                    session.hasPermission("leaves.approve"),
+                )
+            }
+        }
 
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
@@ -426,22 +442,31 @@ class LeavesFragment : Fragment() {
 
             if (approvalMode) {
                 actionRow.visibility = View.VISIBLE
+                // A person can never approve/reject their OWN leave — even a
+                // super admin. Their own row stays visible (so they see it's in
+                // review) but carries no action buttons; someone else acts on it.
+                val isOwnLeave = !leave.staffId.isNullOrBlank() &&
+                    leave.staffId == session.staffId
                 when (bucket) {
                     StatusBucket.REVIEW -> {
-                        layoutTeamReviewActions.visibility = View.VISIBLE
-                        btnTeamAccepted.visibility = View.GONE
-                        btnTeamRejected.visibility = View.GONE
-                        approveButton.setOnClickListener {
-                            leave.id?.let { id ->
-                                viewModel.approveLeave(
-                                    session.bearerToken,
-                                    id,
-                                    session.hasPermission("leaves.approve")
-                                )
+                        if (isOwnLeave) {
+                            actionRow.visibility = View.GONE
+                        } else {
+                            layoutTeamReviewActions.visibility = View.VISIBLE
+                            btnTeamAccepted.visibility = View.GONE
+                            btnTeamRejected.visibility = View.GONE
+                            approveButton.setOnClickListener {
+                                leave.id?.let { id ->
+                                    viewModel.approveLeave(
+                                        session.bearerToken,
+                                        id,
+                                        session.hasPermission("leaves.approve")
+                                    )
+                                }
                             }
-                        }
-                        rejectButton.setOnClickListener {
-                            leave.id?.let { id -> showRejectDialog(id) }
+                            rejectButton.setOnClickListener {
+                                leave.id?.let { id -> showRejectDialog(id) }
+                            }
                         }
                     }
                     StatusBucket.APPROVED -> {
@@ -549,23 +574,12 @@ class LeavesFragment : Fragment() {
     }
 
     private fun showRejectDialog(leaveId: String) {
-        val input = EditText(requireContext()).apply {
-            hint = "Reason for rejection"
-            minLines = 3
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Reject leave request")
-            .setView(input)
-            .setPositiveButton("Reject") { _, _ ->
-                viewModel.rejectLeave(
-                    session.bearerToken,
-                    leaveId,
-                    input.text?.toString()?.trim().orEmpty().ifBlank { "Rejected" },
-                    session.hasPermission("leaves.approve")
-                )
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.newInstance(
+            itemId = leaveId,
+            resultKey = REJECT_RESULT_KEY,
+            title = "Reject leave request",
+            buttonText = "Reject Leave",
+        ).show(childFragmentManager, "reject_leave")
     }
 
     private fun showCancelLeaveDialog(leaveId: String) {

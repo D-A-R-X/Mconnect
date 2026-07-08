@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pending-tasks nudge tucked BEHIND the nav bar: a rectangle with lightly
+     rounded top corners (bottom is square and hidden behind the nav, so it
+     reads as a tab peeking out). Peach fill + red outline. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFEDEA" />
+    <stroke android:width="1.5dp" android:color="#F04438" />
+    <corners
+        android:topLeftRadius="10dp"
+        android:topRightRadius="10dp"
+        android:bottomLeftRadius="0dp"
+        android:bottomRightRadius="0dp" />
+</shape>

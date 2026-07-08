@@ -174,15 +174,18 @@ class TasksFragment : Fragment() {
             try {
                 val tasksResp = api.getMyTasks(session.bearerToken)
                 val summaryResp = runCatching { api.getMyTasksSummary(session.bearerToken) }.getOrNull()
-                allTasks = if (tasksResp.tasks.isNotEmpty()) {
-                    tasksResp.tasks
-                } else {
-                    getDummyTasksList()
-                }
+                // LIFO — newest task first, so the nav banner's "Complete"
+                // lands the user on the top of the stack. Live data only:
+                // an empty response shows the empty state, never dummy rows.
+                allTasks = tasksResp.tasks.sortedByDescending { it.startDate ?: it.endDate ?: "" }
                 renderSummary(summaryResp?.summary ?: deriveSummary(allTasks))
                 renderTasks()
             } catch (e: Exception) {
-                allTasks = getDummyTasksList()
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Couldn't load tasks: ${e.message ?: "network error"}",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
                 renderSummary(deriveSummary(allTasks))
                 renderTasks()
             } finally {
