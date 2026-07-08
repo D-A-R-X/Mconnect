@@ -28,6 +28,8 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
 import com.manjugroups.m_connect.network.ApproveAttendanceRequest
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.network.RejectRequest
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
@@ -43,6 +45,7 @@ class AttendanceHistoryFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+    private lateinit var attendanceAdapter: AttendanceAdapter
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
@@ -65,7 +68,6 @@ class AttendanceHistoryFragment : Fragment() {
     private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance
     private var cachedAllAttendance: List<AttendanceApprovalRecord> = emptyList()  // All (company-wide)
     private var cachedFines: List<com.manjugroups.m_connect.network.FineDeductionItem> = emptyList()
-    private val viewCache = mutableMapOf<String, List<View>>()
 
     private var activeTab = 0
     private var activeSubTab = 0 // 0 = Attendance, 1 = Request
@@ -80,6 +82,10 @@ class AttendanceHistoryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+
+        attendanceAdapter = AttendanceAdapter()
+        binding.rvAttendance.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvAttendance.adapter = attendanceAdapter
 
         binding.btnBack.setOnClickListener { navigateUp() }
 
@@ -264,15 +270,14 @@ class AttendanceHistoryFragment : Fragment() {
         binding.subTabRequest.background = if (activeSubTab == 1) activeBg else inactiveBg
         binding.subTabRequest.setTextColor(if (activeSubTab == 1) activeColor else inactiveColor)
 
-        val attCount = cachedHrReview.count { it.requestType != "remarks" }
-        val reqCount = cachedHrReview.count { it.requestType == "remarks" }
+        val attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
+        val reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
         binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
-        binding.subTabRequest.text = String.format(Locale.US, "Request (%02d)", reqCount)
+        binding.subTabRequest.text = String.format(Locale.US, "Requests (%02d)", reqCount)
     }
 
     private fun refreshAllData(showSkeleton: Boolean = true, forceRefresh: Boolean = false) {
         if (forceRefresh) {
-            binding.attendanceList.removeAllViews()
             cachedMyRecords = emptyList()
             cachedTeamAttendance = emptyList()
             cachedApprovals = emptyList()
@@ -284,7 +289,7 @@ class AttendanceHistoryFragment : Fragment() {
 
         if (showSkeleton) {
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-            binding.attendanceScroll.visibility = View.GONE
+            binding.rvAttendance.visibility = View.GONE
             binding.emptyState.visibility = View.GONE
         }
 
@@ -293,9 +298,6 @@ class AttendanceHistoryFragment : Fragment() {
                 val token = session.bearerToken
                 if (token.isBlank()) return@launch
 
-                // Reuse anything the visible tab already fetched — only hit the
-                // network for the counts we don't have yet, so warming badges
-                // never re-runs the current tab's request.
                 val myDeferred = async {
                     if (cachedMyRecords.isNotEmpty()) null
                     else runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
@@ -317,7 +319,6 @@ class AttendanceHistoryFragment : Fragment() {
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
                 }
                 val allDeferred = async {
-                    // The All tab shows the whole log, not the 30-day window.
                     runCatching { api.getAllAttendance(token, ALL_TAB_FROM_DATE, filterToDate) }.getOrNull()
                 }
                 val finesDeferred = async {
@@ -351,30 +352,17 @@ class AttendanceHistoryFragment : Fragment() {
                     cachedFines = finesResp.fines ?: emptyList()
                 }
 
-                // Clear view cache because we have fresh data
-                viewCache.clear()
-
                 // Render current active tab
                 renderCurrentTab()
-
-                // Post delayed pre-rendering for other tabs
-                viewLifecycleOwner.lifecycleScope.launch {
-                    kotlinx.coroutines.delay(2000)
-                    if (isAdded) {
-                        preRenderAllTabs()
-                    }
-                }
             } catch (_: Exception) {} finally {
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                binding.attendanceScroll.visibility = View.VISIBLE
+                binding.rvAttendance.visibility = View.VISIBLE
                 binding.attendanceRefresh.isRefreshing = false
             }
         }
     }
 
     private fun renderCurrentTab() {
-        val cacheKey = getCacheKeyForCurrentTab()
-
         // Update My Attendance summary values
         if (activeTab == 0) {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -395,30 +383,24 @@ class AttendanceHistoryFragment : Fragment() {
             binding.tvTotalHours.text = String.format(Locale.getDefault(), "%02d:%02d Hrs", totalHours, remainingMins)
         }
 
-        if (viewCache.containsKey(cacheKey)) {
-            renderCurrentTabFromCache(cacheKey)
-            filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
-            return
-        }
-
         when (activeTab) {
-            0 -> renderRecords(fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate), cacheKey)
-            1 -> renderTeamAttendance(cachedTeamAttendance, showFines = false, cacheKey)
-            2 -> renderApprovals(cachedApprovals, cacheKey)
-            3 -> renderApprovals(cachedAllApprovals, cacheKey)
+            0 -> renderRecords(fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate), "")
+            1 -> renderTeamAttendance(cachedTeamAttendance, showFines = false, "")
+            2 -> renderApprovals(cachedApprovals, "")
+            3 -> renderApprovals(cachedAllApprovals, "")
             4 -> {
                 val source = if (activeSubTab == 0) {
-                    cachedHrReview.filter { it.requestType != "remarks" }
+                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
                 } else {
-                    cachedHrReview.filter { it.requestType == "remarks" }
+                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
                 }
-                renderApprovals(source, cacheKey)
+                renderApprovals(source, "")
             }
-            5 -> renderTeamAttendance(cachedAllAttendance, showFines = true, cacheKey)
+            5 -> renderTeamAttendance(cachedAllAttendance, showFines = true, "")
         }
 
         filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
-        binding.attendanceScroll.visibility = View.VISIBLE
+        binding.rvAttendance.visibility = View.VISIBLE
     }
 
     private fun loadData() {
@@ -474,32 +456,19 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun renderRecords(records: List<AttendanceRecord>, cacheKey: String) {
-        val childViews = mutableListOf<View>()
-        for (i in 0 until binding.attendanceList.childCount) {
-            binding.attendanceList.getChildAt(i).visibility = View.GONE
-        }
         if (records.isEmpty()) {
             showEmptyState(
                 title = "No attendance records",
                 desc = "Your attendance history for this period is empty.",
                 imageRes = R.drawable.ic_leave_empty
             )
-            viewCache[cacheKey] = emptyList()
+            binding.rvAttendance.visibility = View.GONE
+            attendanceAdapter.submitList(emptyList())
             return
         }
         binding.emptyState.visibility = View.GONE
-
-        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val dateFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
-
-        records.forEach { record ->
-            val card = LayoutInflater.from(requireContext())
-                .inflate(R.layout.item_attendance_history_card, binding.attendanceList, false)
-            bindRecordCard(card, record, parseFmt, dateFmt)
-            binding.attendanceList.addView(card)
-            childViews.add(card)
-        }
-        viewCache[cacheKey] = childViews
+        binding.rvAttendance.visibility = View.VISIBLE
+        attendanceAdapter.submitList(records)
     }
 
     private fun bindRecordCard(card: View, record: AttendanceRecord, parseFmt: SimpleDateFormat, dateFmt: SimpleDateFormat) {
@@ -963,25 +932,7 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
-    private fun preRenderApprovals(records: List<AttendanceApprovalRecord>, cacheKey: String) {
-        val context = context ?: return
-        val childViews = mutableListOf<View>()
-        records.forEach { record ->
-            val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_approval_card, binding.attendanceList, false)
-            bindApprovalCard(card, record)
-            card.visibility = View.GONE
-            binding.attendanceList.addView(card)
-            childViews.add(card)
-        }
-        viewCache[cacheKey] = childViews
-    }
-
     private fun renderApprovals(approvals: List<AttendanceApprovalRecord>, cacheKey: String) {
-        val childViews = mutableListOf<View>()
-        for (i in 0 until binding.attendanceList.childCount) {
-            binding.attendanceList.getChildAt(i).visibility = View.GONE
-        }
         if (approvals.isEmpty()) {
             val noTeam = teamCount == 0 && activeTab == 2
             showEmptyState(
@@ -990,19 +941,13 @@ class AttendanceHistoryFragment : Fragment() {
                 else "Pending punches from your team will land here.",
                 imageRes = R.drawable.ic_leave_empty
             )
-            viewCache[cacheKey] = emptyList()
+            binding.rvAttendance.visibility = View.GONE
+            attendanceAdapter.submitList(emptyList())
             return
         }
         binding.emptyState.visibility = View.GONE
-
-        approvals.forEach { record ->
-            val card = LayoutInflater.from(requireContext())
-                .inflate(R.layout.item_team_approval_card, binding.attendanceList, false)
-            bindApprovalCard(card, record)
-            binding.attendanceList.addView(card)
-            childViews.add(card)
-        }
-        viewCache[cacheKey] = childViews
+        binding.rvAttendance.visibility = View.VISIBLE
+        attendanceAdapter.submitList(approvals)
     }
 
     private fun bindApprovalCard(card: View, record: AttendanceApprovalRecord) {
@@ -1142,150 +1087,127 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
-    private suspend fun preRenderAllTabs() {
-        if (!viewCache.containsKey("team_attendance")) {
-            preRenderTeamAttendance(cachedTeamAttendance, showFines = false, "team_attendance")
-            kotlinx.coroutines.delay(150)
-        }
-        if (!viewCache.containsKey("team_approval")) {
-            preRenderApprovals(cachedApprovals, "team_approval")
-            kotlinx.coroutines.delay(150)
-        }
-        if (!viewCache.containsKey("all_approval")) {
-            preRenderApprovals(cachedAllApprovals, "all_approval")
-            kotlinx.coroutines.delay(150)
-        }
-        if (!viewCache.containsKey("hr_review_0")) {
-            val source0 = cachedHrReview.filter { it.requestType != "remarks" }
-            preRenderApprovals(source0, "hr_review_0")
-            kotlinx.coroutines.delay(150)
-        }
-        if (!viewCache.containsKey("hr_review_1")) {
-            val source1 = cachedHrReview.filter { it.requestType == "remarks" }
-            preRenderApprovals(source1, "hr_review_1")
-            kotlinx.coroutines.delay(150)
-        }
-        if (!viewCache.containsKey("all_fines")) {
-            // The "All" tab is company-wide (cachedAllAttendance), not team-scoped.
-            preRenderTeamAttendance(cachedAllAttendance, showFines = true, "all_fines")
-        }
-    }
-
-    private fun getCacheKeyForCurrentTab(): String {
-        return when (activeTab) {
-            0 -> "my_attendance"
-            1 -> "team_attendance"
-            2 -> "team_approval"
-            3 -> "all_approval"
-            4 -> "hr_review_$activeSubTab"
-            5 -> "all_fines"
-            else -> "unknown"
-        }
-    }
-
-    private fun renderCurrentTabFromCache(cacheKey: String) {
-        for (i in 0 until binding.attendanceList.childCount) {
-            binding.attendanceList.getChildAt(i).visibility = View.GONE
-        }
-        val cached = viewCache[cacheKey].orEmpty()
-        if (cached.isEmpty()) {
-            // Team tabs with no direct reports → "No team members", not the
-            // generic "nothing to review" copy (mirrors the web's hasNoTeam).
-            val noTeam = teamCount == 0 && (activeTab == 1 || activeTab == 2)
-            val title = if (noTeam) "No team members" else when (activeTab) {
-                0 -> "No attendance records"
-                1 -> "No team attendance"
-                2, 3 -> "No attendance to review"
-                4 -> "No attendance to review"
-                else -> "No team attendance"
-            }
-            val desc = if (noTeam) "You don't have any team members reporting to you yet."
-            else when (activeTab) {
-                0 -> "Your attendance history for this period is empty."
-                1, 5 -> "No team attendance records for this period."
-                else -> "Pending punches from your team will land here."
-            }
-            showEmptyState(title, desc, R.drawable.ic_leave_empty)
-        } else {
-            binding.emptyState.visibility = View.GONE
-            cached.forEach { view ->
-                if (view.parent == null) {
-                    binding.attendanceList.addView(view)
-                }
-                view.visibility = View.VISIBLE
-            }
-        }
-        binding.attendanceScroll.visibility = View.VISIBLE
-        binding.attendanceRefresh.isRefreshing = false
-    }
-
     private fun filterCurrentListOnTyping(query: String) {
         val queryLower = query.trim().lowercase(Locale.US)
-        // Every tab's cards live in the SAME list container — other tabs'
-        // pre-rendered cards sit in it as GONE children. Only the ACTIVE
-        // tab's views (the ones in its viewCache entry) may be toggled here;
-        // the old blanket "show everything on an empty query" resurrected
-        // the hidden cards and bled My Attendance rows into the Team /
-        // Approval tabs.
-        val currentViews = viewCache[getCacheKeyForCurrentTab()]?.toHashSet()
-        var visibleCount = 0
-        var currentTabCards = 0
 
-        for (i in 0 until binding.attendanceList.childCount) {
-            val child = binding.attendanceList.getChildAt(i)
-            if (currentViews != null && child !in currentViews) {
-                child.visibility = View.GONE
-                continue
+        val originalList: List<Any> = when (activeTab) {
+            0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
+            1 -> cachedTeamAttendance
+            2 -> cachedApprovals
+            3 -> cachedAllApprovals
+            4 -> {
+                if (activeSubTab == 0) {
+                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
+                } else {
+                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
+                }
             }
-            val tag = child.tag as? String
-            if (tag == null) {
-                child.visibility = View.VISIBLE
-                continue
-            }
-            currentTabCards++
-
-            if (queryLower.isEmpty() || tag.contains(queryLower)) {
-                child.visibility = View.VISIBLE
-                visibleCount++
-            } else {
-                child.visibility = View.GONE
-            }
+            5 -> cachedAllAttendance
+            else -> emptyList()
         }
 
-        if (visibleCount == 0 && currentTabCards > 0) {
-            binding.emptyState.visibility = View.VISIBLE
-            binding.emptyState.setEmptyState(
-                R.drawable.ic_leave_empty,
-                "No search results",
-                "Try refining your search query."
-            )
-        } else if (visibleCount > 0) {
+        if (queryLower.isEmpty()) {
+            attendanceAdapter.submitList(originalList)
             binding.emptyState.visibility = View.GONE
+            binding.rvAttendance.visibility = View.VISIBLE
+            return
         }
-        // currentTabCards == 0 → the tab is genuinely empty; keep whatever
-        // empty state the render function already showed ("No team members",
-        // "No attendance to review", …) instead of overwriting or hiding it.
+
+        val filtered = originalList.filter { item ->
+            when (item) {
+                is AttendanceRecord -> {
+                    val searchParts = listOf(
+                        item.date ?: "",
+                        item.approvedAttendance ?: "",
+                        if (item.id == null) "absent" else ""
+                    )
+                    searchParts.joinToString(" ").lowercase(Locale.US).contains(queryLower)
+                }
+                is AttendanceApprovalRecord -> {
+                    val searchParts = listOf(
+                        item.staffName ?: "",
+                        item.designation ?: "",
+                        item.employeeId ?: "",
+                        item.source ?: "",
+                        item.date ?: "",
+                        item.approvedAttendance ?: ""
+                    )
+                    searchParts.joinToString(" ").lowercase(Locale.US).contains(queryLower)
+                }
+                else -> false
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            binding.rvAttendance.visibility = View.GONE
+            showEmptyState(
+                title = "No search results",
+                desc = "Try refining your search query.",
+                imageRes = R.drawable.ic_leave_empty
+            )
+        } else {
+            binding.emptyState.visibility = View.GONE
+            binding.rvAttendance.visibility = View.VISIBLE
+            attendanceAdapter.submitList(filtered)
+        }
     }
 
-    private fun preRenderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
-        val context = context ?: return
-        val childViews = mutableListOf<View>()
-        records.forEach { record ->
-            val card = LayoutInflater.from(context)
-                .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
-            bindTeamAttendanceCard(card, record, showFines)
-            card.visibility = View.GONE
-            binding.attendanceList.addView(card)
-            childViews.add(card)
+    private inner class AttendanceAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+        private var items: List<Any> = emptyList()
+
+        fun submitList(newItems: List<Any>) {
+            items = newItems
+            notifyDataSetChanged()
         }
-        viewCache[cacheKey] = childViews
+
+        override fun getItemViewType(position: Int): Int {
+            val item = items[position]
+            return when (item) {
+                is AttendanceRecord -> 0
+                is AttendanceApprovalRecord -> {
+                    if (activeTab == 1 || activeTab == 5) 1 else 2
+                }
+                else -> 0
+            }
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val inflater = LayoutInflater.from(parent.context)
+            val view = when (viewType) {
+                0 -> inflater.inflate(R.layout.item_attendance_history_card, parent, false)
+                1 -> inflater.inflate(R.layout.item_team_attendance_card, parent, false)
+                else -> inflater.inflate(R.layout.item_team_approval_card, parent, false)
+            }
+            return SimpleViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            val item = items[position]
+            val card = holder.itemView
+            when (item) {
+                is AttendanceRecord -> {
+                    val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    val dateFmt = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
+                    bindRecordCard(card, item, parseFmt, dateFmt)
+                }
+                is AttendanceApprovalRecord -> {
+                    if (getItemViewType(position) == 1) {
+                        val showFines = (activeTab == 5)
+                        bindTeamAttendanceCard(card, item, showFines)
+                    } else {
+                        bindApprovalCard(card, item)
+                    }
+                }
+            }
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        private inner class SimpleViewHolder(view: View) : RecyclerView.ViewHolder(view)
     }
 
     private fun renderTeamAttendance(records: List<AttendanceApprovalRecord>, showFines: Boolean, cacheKey: String) {
-        val childViews = mutableListOf<View>()
-        for (i in 0 until binding.attendanceList.childCount) {
-            binding.attendanceList.getChildAt(i).visibility = View.GONE
-        }
         if (records.isEmpty()) {
             val noTeam = teamCount == 0 && activeTab == 1
             showEmptyState(
@@ -1294,19 +1216,13 @@ class AttendanceHistoryFragment : Fragment() {
                 else "No team attendance records for this period.",
                 imageRes = R.drawable.ic_leave_empty
             )
-            viewCache[cacheKey] = emptyList()
+            binding.rvAttendance.visibility = View.GONE
+            attendanceAdapter.submitList(emptyList())
             return
         }
         binding.emptyState.visibility = View.GONE
-
-        records.forEach { record ->
-            val card = LayoutInflater.from(requireContext())
-                .inflate(R.layout.item_team_attendance_card, binding.attendanceList, false)
-            bindTeamAttendanceCard(card, record, showFines)
-            binding.attendanceList.addView(card)
-            childViews.add(card)
-        }
-        viewCache[cacheKey] = childViews
+        binding.rvAttendance.visibility = View.VISIBLE
+        attendanceAdapter.submitList(records)
     }
 
     private fun bindTeamAttendanceCard(card: View, record: AttendanceApprovalRecord, showFines: Boolean) {

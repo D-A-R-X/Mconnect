@@ -271,20 +271,13 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <ScrollView
-                android:id="@+id/attendanceScroll"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAttendance"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/attendanceList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="20dp"
-                    android:paddingBottom="40dp" />
-            </ScrollView>
+                android:clipToPadding="false"
+                android:paddingHorizontal="20dp"
+                android:paddingBottom="40dp" />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <com.manjugroups.m_connect.ui.common.EmptyStateView
