@@ -131,7 +131,8 @@
                         android:layout_height="29dp"
                         android:background="#F3F3F5" />
 
-                    <!-- Task Manager tab (distinct teal). -->
+                    <!-- Task Manager tab — styled like every other tab
+                         (grey icon when idle, blue when selected). -->
                     <LinearLayout
                         android:id="@+id/pillTaskManager"
                         android:layout_width="0dp"
@@ -151,7 +152,7 @@
                             android:contentDescription="@null"
                             android:padding="8dp"
                             android:src="@drawable/ic_custom_clipboard_check"
-                            app:tint="#0891B2" />
+                            app:tint="#6A6D78" />
 
                         <TextView
                             android:id="@+id/pillTaskManagerText"
@@ -177,7 +178,7 @@
                             android:layout_width="24dp"
                             android:layout_height="2dp"
                             android:layout_marginTop="3dp"
-                            android:background="@drawable/bg_apps_tab_indicator_teal"
+                            android:background="@drawable/bg_apps_tab_indicator"
                             android:visibility="invisible" />
                     </LinearLayout>
 
@@ -718,6 +719,9 @@
                 android:paddingTop="12dp">
 
                 <!-- ============= TASK MANAGER CARD ============= -->
+                <!-- Single header tile: the whole row opens the Task Manager
+                     screen. `itemTaskManagerOpen` stays the clickable/IAM-gated
+                     view so applyFilter + sectionTileMap keep working. -->
                 <LinearLayout
                     android:id="@+id/cardTaskManager"
                     android:layout_width="match_parent"
@@ -728,19 +732,21 @@
                     android:padding="16dp">
 
                     <LinearLayout
+                        android:id="@+id/itemTaskManagerOpen"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
                         <ImageView
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:background="@drawable/bg_task_cat_circle_teal"
                             android:contentDescription="@null"
-                            android:padding="9dp"
-                            android:src="@drawable/ic_custom_clipboard_check"
-                            app:tint="#FFFFFF" />
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_task" />
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -768,36 +774,6 @@
                                 android:textColor="#6B7280"
                                 android:textSize="12sp" />
                         </LinearLayout>
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/itemTaskManagerOpen"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingVertical="10dp">
-
-                        <ImageView
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_custom_clipboard_check"
-                            app:tint="#0891B2" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="My Tasks"
-                            android:textColor="#111111"
-                            android:textSize="14sp" />
 
                         <ImageView
                             android:layout_width="16dp"

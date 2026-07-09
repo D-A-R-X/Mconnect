@@ -602,9 +602,6 @@ class AppLibraryFragment : Fragment() {
         styleTab(
             binding.pillTaskManagerIcon, binding.pillTaskManagerText, binding.pillTaskManagerIndicator,
             filter == Filter.TASK_MANAGER,
-            activeCircle = R.drawable.bg_apps_pill_circle_active_teal,
-            activeColor = "#0891B2",
-            inactiveIconColor = "#0891B2",
         )
         styleTab(binding.pillHrIcon, binding.pillHrText, binding.pillHrIndicator, filter == Filter.HR)
         styleTab(binding.pillMarketingIcon, binding.pillMarketingText, binding.pillMarketingIndicator, filter == Filter.MARKETING)
@@ -632,8 +629,7 @@ class AppLibraryFragment : Fragment() {
         active: Boolean,
         activeCircle: Int = R.drawable.bg_apps_pill_circle_active,
         activeColor: String = "#0B61CA",
-        // Inactive icon tint — defaults to grey; Task Manager keeps its teal so
-        // it stays distinct in the strip even when not selected.
+        // Inactive icon tint — grey for every tab.
         inactiveIconColor: String = "#6A6D78",
     ) {
         if (active) {
