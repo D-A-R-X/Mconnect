@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -63,6 +65,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
     private var weather: String? = null
     private var condition: String? = null
     private var submitting = false
+    private var submitted = false
 
     private val weathers = listOf("sunny", "cloudy", "rainy", "windy", "stormy")
     private val conditions = listOf("good", "fair", "poor")
@@ -109,6 +112,15 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
     private var materialsCache: List<MaterialCatalogItem>? = null
     private var materialsLoading = false
 
+    // Draft auto-save so a crash / accidental close while filling isn't lost.
+    private val gson = com.google.gson.Gson()
+    private var restoring = false
+    private val draftWatcher = object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+        override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+        override fun afterTextChanged(s: Editable?) { if (!restoring) view?.let { saveDraft(it) } }
+    }
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
         dialog.setOnShowListener { di ->
@@ -151,40 +163,117 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             pickFromList("Weather", weathers) { w ->
                 weather = w
                 view.findViewById<TextView>(R.id.tvWeatherValue).text = w.replaceFirstChar(Char::uppercase)
+                saveDraft(view)
             }
         }
         view.findViewById<View>(R.id.fieldSiteCondition).setOnClickListener {
             pickFromList("Site Conditions", conditions) { c ->
                 condition = c
                 view.findViewById<TextView>(R.id.tvSiteConditionValue).text = c.replaceFirstChar(Char::uppercase)
+                saveDraft(view)
             }
         }
         view.findViewById<View>(R.id.btnAddMaterial).setOnClickListener { pickMaterial(view) }
-        view.findViewById<View>(R.id.btnAddEquipment).setOnClickListener {
-            view.findViewById<LinearLayout>(R.id.equipmentContainer).addView(buildRow(listOf("Equipment" to 2f, "Hours" to 1f)))
-        }
+        view.findViewById<View>(R.id.btnAddEquipment).setOnClickListener { addEquipmentRow(view) }
         view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener { showMediaSourceChooser() }
         view.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).setOnClickListener { submit(view) }
 
+        // Auto-save a draft as the main fields change (crash-safe filling).
+        listOf(R.id.etWorkSummary, R.id.etLabourCount, R.id.etLabourHours, R.id.etIssues, R.id.etSafety, R.id.etSupervisor)
+            .forEach { view.findViewById<EditText>(it).addTextChangedListener(draftWatcher) }
+
         renderAttachments(view)
+        restoreDraft(view)
         loadProjects()
-        loadMaterials()
     }
 
-    /** Camera (photo/video) or the gallery picker — the app's receipt pattern. */
+    override fun onPause() {
+        super.onPause()
+        // Capture everything (incl. material/equipment rows) before the app
+        // can be backgrounded + killed. Skip once submitted (draft is cleared).
+        view?.let { if (!submitting && !submitted) saveDraft(it) }
+    }
+
+    private fun showLoadingOverlay(label: String) {
+        val v = view ?: return
+        v.findViewById<TextView>(R.id.tvLoadingLabel).text = label
+        v.findViewById<View>(R.id.loadingOverlay).visibility = View.VISIBLE
+    }
+
+    private fun hideLoadingOverlay() {
+        view?.findViewById<View>(R.id.loadingOverlay)?.visibility = View.GONE
+    }
+
+    /** Camera (photo/video) or the gallery picker, as a styled bottom sheet. */
     private fun showMediaSourceChooser() {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Add photo or video")
-            .setItems(arrayOf("Take photo", "Record video", "Choose from gallery")) { _, which ->
-                when (which) {
-                    0 -> requestCameraThen(video = false)
-                    1 -> requestCameraThen(video = true)
-                    2 -> pickMedia.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
-                    )
-                }
+        val ctx = requireContext()
+        val sheet = BottomSheetDialog(ctx)
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_bottom_sheet)
+            setPadding(dp(8), dp(10), dp(8), dp(16))
+        }
+        root.addView(View(ctx).apply {
+            setBackgroundResource(R.drawable.bg_chat_sheet_handle)
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(8)
             }
-            .show()
+        })
+        root.addView(TextView(ctx).apply {
+            text = "Add photo or video"
+            textSize = 16f
+            setTextColor(Color.parseColor("#101828"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(dp(12), dp(4), dp(12), dp(8))
+        })
+        root.addView(chooserRow(ctx, "📷", "Take photo", "Capture with the camera") {
+            sheet.dismiss(); requestCameraThen(video = false)
+        })
+        root.addView(chooserRow(ctx, "🎥", "Record video", "Capture a short clip") {
+            sheet.dismiss(); requestCameraThen(video = true)
+        })
+        root.addView(chooserRow(ctx, "🖼️", "Choose from gallery", "Pick existing photos or videos") {
+            sheet.dismiss()
+            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        })
+        sheet.setContentView(root)
+        sheet.show()
+    }
+
+    private fun chooserRow(ctx: Context, emoji: String, title: String, subtitle: String, onClick: () -> Unit): View {
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            foreground = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
+                .let { ta -> ta.getDrawable(0).also { ta.recycle() } }
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setOnClickListener { onClick() }
+        }
+        row.addView(TextView(ctx).apply {
+            text = emoji
+            textSize = 19f
+            gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.parseColor("#F2F4F7"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+        })
+        val col = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), 0, 0, 0)
+        }
+        col.addView(TextView(ctx).apply {
+            text = title; textSize = 15f; setTextColor(Color.parseColor("#101828"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        col.addView(TextView(ctx).apply {
+            text = subtitle; textSize = 12f; setTextColor(Color.parseColor("#667085")); setPadding(0, dp(1), 0, 0)
+        })
+        row.addView(col)
+        return row
     }
 
     private fun requestCameraThen(video: Boolean) {
@@ -247,11 +336,16 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 text = "✕"
                 textSize = 12f
                 setTextColor(Color.WHITE)
-                setBackgroundResource(R.drawable.bg_attn_action_reject)
-                setPadding(dp(5), dp(1), dp(5), dp(2))
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END,
-                ).apply { topMargin = dp(3); marginEnd = dp(3) }
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Color.parseColor("#E6111827"))
+                    setStroke(dp(2), Color.WHITE)
+                }
+                layoutParams = FrameLayout.LayoutParams(dp(24), dp(24), Gravity.TOP or Gravity.END).apply {
+                    topMargin = dp(4); marginEnd = dp(4)
+                }
                 setOnClickListener { pickedMedia.remove(m); renderAttachments(root) }
             })
             c.addView(frame)
@@ -297,6 +391,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             if (view == null) return@show
             selectedProject = p
             root.findViewById<TextView>(R.id.tvProjectValue).text = p.name ?: "Project"
+            saveDraft(root)
         }
     }
 
@@ -316,7 +411,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 Locale.US, "%04d-%02d-%02d",
                 c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH),
             )
-            if (view != null) root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(date)
+            if (view != null) { root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(date); saveDraft(root) }
         }
         picker.show(childFragmentManager, "daily_log_date")
     }
@@ -344,38 +439,46 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 setHintTextColor(Color.parseColor("#98A2B3"))
                 if (hint == "Qty" || hint == "Hours") inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight).apply { marginEnd = dp(6) }
+                addTextChangedListener(draftWatcher)
             })
         }
         row.addView(TextView(ctx).apply {
             text = "✕"; textSize = 16f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(8), dp(8), dp(4), dp(8))
-            setOnClickListener { (parent as? ViewGroup)?.removeView(row) }
+            setOnClickListener { (parent as? ViewGroup)?.removeView(row); view?.let { saveDraft(it) } }
         })
         return row
     }
 
-    private fun loadMaterials() {
-        if (materialsLoading || materialsCache != null) return
-        materialsLoading = true
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMaterials(session.bearerToken) }.getOrNull()
-            materialsLoading = false
-            if (view == null) return@launch
-            materialsCache = resp?.materials?.filter { !it.name.isNullOrBlank() } ?: emptyList()
-        }
+    private fun addEquipmentRow(root: View, name: String = "", hours: String = "") {
+        val row = buildRow(listOf("Equipment" to 2f, "Hours" to 1f))
+        (row.getChildAt(0) as? EditText)?.setText(name)
+        (row.getChildAt(1) as? EditText)?.setText(hours)
+        root.findViewById<LinearLayout>(R.id.equipmentContainer).addView(row)
+        if (!restoring) saveDraft(root)
     }
 
     /** Pick a material from the master catalog; adds a row with a qty field. */
     private fun pickMaterial(root: View) {
-        val cached = materialsCache
-        if (cached == null) {
-            if (materialsLoading) context?.let { Toast.makeText(it, "Loading materials…", Toast.LENGTH_SHORT).show() }
-            else loadMaterials()
-            return
+        materialsCache?.let { showMaterialPicker(root, it); return }
+        if (materialsLoading) return
+        materialsLoading = true
+        showLoadingOverlay("Loading materials…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching { api.getMaterials(session.bearerToken) }.getOrNull()
+            materialsLoading = false
+            if (view == null) return@launch
+            hideLoadingOverlay()
+            val mats = resp?.materials?.filter { !it.name.isNullOrBlank() } ?: emptyList()
+            materialsCache = mats
+            if (mats.isEmpty()) {
+                context?.let { Toast.makeText(it, "No materials in the catalog", Toast.LENGTH_SHORT).show() }
+                return@launch
+            }
+            showMaterialPicker(root, mats)
         }
-        if (cached.isEmpty()) {
-            context?.let { Toast.makeText(it, "No materials in the catalog", Toast.LENGTH_SHORT).show() }
-            return
-        }
+    }
+
+    private fun showMaterialPicker(root: View, cached: List<MaterialCatalogItem>) {
         val options = cached.map {
             SearchableOption(it, it.name ?: "Material", listOfNotNull(it.category, it.unit, it.brand).joinToString(" · "))
         }
@@ -385,7 +488,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun addCatalogMaterialRow(root: View, name: String, unit: String) {
+    private fun addCatalogMaterialRow(root: View, name: String, unit: String, qty: String = "") {
         val ctx = requireContext()
         val container = root.findViewById<LinearLayout>(R.id.materialsContainer)
         val row = LinearLayout(ctx).apply {
@@ -410,6 +513,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         row.addView(info)
         row.addView(EditText(ctx).apply {
             hint = "Qty"
+            setText(qty)
             setBackgroundResource(R.drawable.bg_input)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             textSize = 13f
@@ -418,12 +522,14 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 .apply { marginStart = dp(8); marginEnd = dp(6) }
+            addTextChangedListener(draftWatcher)
         })
         row.addView(TextView(ctx).apply {
             text = "✕"; textSize = 16f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(8), dp(8), dp(4), dp(8))
-            setOnClickListener { container.removeView(row) }
+            setOnClickListener { container.removeView(row); view?.let { saveDraft(it) } }
         })
         container.addView(row)
+        if (!restoring) saveDraft(root)
     }
 
     private fun collectMaterials(root: View): List<DailyLogMaterial> {
@@ -505,6 +611,8 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             btn.isEnabled = true
             btn.text = "Save Daily Log"
             if (resp?.success == true) {
+                submitted = true
+                clearDraft()
                 setFragmentResult(RESULT_KEY, bundleOf(KEY_PROJECT_ID to project.id))
                 Toast.makeText(appCtx, "Daily log saved", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()
@@ -547,7 +655,99 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
+    // ── Draft persistence (crash-safe filling) ──
+
+    private fun saveDraft(root: View) {
+        if (restoring) return
+        val prefs = context?.getSharedPreferences(DRAFT_PREFS, Context.MODE_PRIVATE) ?: return
+        val draft = DailyLogDraft(
+            projectId = selectedProject?.id,
+            projectName = selectedProject?.name,
+            date = date,
+            weather = weather,
+            condition = condition,
+            workSummary = root.findViewById<EditText>(R.id.etWorkSummary).text?.toString(),
+            labourCount = root.findViewById<EditText>(R.id.etLabourCount).text?.toString(),
+            labourHours = root.findViewById<EditText>(R.id.etLabourHours).text?.toString(),
+            issues = root.findViewById<EditText>(R.id.etIssues).text?.toString(),
+            safety = root.findViewById<EditText>(R.id.etSafety).text?.toString(),
+            supervisor = root.findViewById<EditText>(R.id.etSupervisor).text?.toString(),
+            materials = draftMaterials(root),
+            equipment = draftEquipment(root),
+        )
+        val hasContent = !draft.workSummary.isNullOrBlank() || draft.projectId != null ||
+            !draft.labourCount.isNullOrBlank() || !draft.labourHours.isNullOrBlank() ||
+            !draft.issues.isNullOrBlank() || !draft.safety.isNullOrBlank() ||
+            draft.materials.isNotEmpty() || draft.equipment.isNotEmpty()
+        runCatching {
+            if (hasContent) prefs.edit().putString(DRAFT_KEY, gson.toJson(draft)).apply()
+            else prefs.edit().remove(DRAFT_KEY).apply()
+        }
+    }
+
+    private fun draftMaterials(root: View): List<DraftMaterial> {
+        val c = root.findViewById<LinearLayout>(R.id.materialsContainer)
+        val out = mutableListOf<DraftMaterial>()
+        for (i in 0 until c.childCount) {
+            val r = c.getChildAt(i) as? LinearLayout ?: continue
+            val tag = r.tag as? Array<*>
+            val name = (tag?.getOrNull(0) as? String).orEmpty()
+            val unit = (tag?.getOrNull(1) as? String).orEmpty()
+            val qty = (r.getChildAt(1) as? EditText)?.text?.toString().orEmpty()
+            if (name.isNotBlank()) out.add(DraftMaterial(name, unit, qty))
+        }
+        return out
+    }
+
+    private fun draftEquipment(root: View): List<DraftEquipment> {
+        val c = root.findViewById<LinearLayout>(R.id.equipmentContainer)
+        val out = mutableListOf<DraftEquipment>()
+        for (i in 0 until c.childCount) {
+            val r = c.getChildAt(i) as? LinearLayout ?: continue
+            val name = (r.getChildAt(0) as? EditText)?.text?.toString().orEmpty()
+            val hours = (r.getChildAt(1) as? EditText)?.text?.toString().orEmpty()
+            if (name.isNotBlank() || hours.isNotBlank()) out.add(DraftEquipment(name, hours))
+        }
+        return out
+    }
+
+    private fun restoreDraft(root: View) {
+        val prefs = context?.getSharedPreferences(DRAFT_PREFS, Context.MODE_PRIVATE) ?: return
+        val json = prefs.getString(DRAFT_KEY, null) ?: return
+        val draft = runCatching { gson.fromJson(json, DailyLogDraft::class.java) }.getOrNull() ?: return
+        restoring = true
+        if (selectedProject == null && !draft.projectId.isNullOrBlank()) {
+            selectedProject = ProjectSummary(id = draft.projectId, name = draft.projectName)
+            root.findViewById<TextView>(R.id.tvProjectValue).text = draft.projectName ?: "Project"
+        }
+        draft.date?.takeIf { it.isNotBlank() }?.let {
+            date = it; root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(it)
+        }
+        draft.weather?.takeIf { it.isNotBlank() }?.let {
+            weather = it; root.findViewById<TextView>(R.id.tvWeatherValue).text = it.replaceFirstChar(Char::uppercase)
+        }
+        draft.condition?.takeIf { it.isNotBlank() }?.let {
+            condition = it; root.findViewById<TextView>(R.id.tvSiteConditionValue).text = it.replaceFirstChar(Char::uppercase)
+        }
+        root.findViewById<EditText>(R.id.etWorkSummary).setText(draft.workSummary.orEmpty())
+        root.findViewById<EditText>(R.id.etLabourCount).setText(draft.labourCount.orEmpty())
+        root.findViewById<EditText>(R.id.etLabourHours).setText(draft.labourHours.orEmpty())
+        root.findViewById<EditText>(R.id.etIssues).setText(draft.issues.orEmpty())
+        root.findViewById<EditText>(R.id.etSafety).setText(draft.safety.orEmpty())
+        if (!draft.supervisor.isNullOrBlank()) root.findViewById<EditText>(R.id.etSupervisor).setText(draft.supervisor)
+        draft.materials.forEach { addCatalogMaterialRow(root, it.name, it.unit, it.qty) }
+        draft.equipment.forEach { addEquipmentRow(root, it.name, it.hours) }
+        restoring = false
+        context?.let { Toast.makeText(it, "Draft restored", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun clearDraft() {
+        context?.getSharedPreferences(DRAFT_PREFS, Context.MODE_PRIVATE)?.edit()?.remove(DRAFT_KEY)?.apply()
+    }
+
     companion object {
+        private const val DRAFT_PREFS = "daily_log_draft"
+        private const val DRAFT_KEY = "new_entry"
         const val RESULT_KEY = "daily_log_created"
         const val KEY_PROJECT_ID = "projectId"
         private const val ARG_PROJECT_ID = "arg_project_id"
@@ -558,3 +758,22 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         }
     }
 }
+
+private data class DailyLogDraft(
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val date: String? = null,
+    val weather: String? = null,
+    val condition: String? = null,
+    val workSummary: String? = null,
+    val labourCount: String? = null,
+    val labourHours: String? = null,
+    val issues: String? = null,
+    val safety: String? = null,
+    val supervisor: String? = null,
+    val materials: List<DraftMaterial> = emptyList(),
+    val equipment: List<DraftEquipment> = emptyList(),
+)
+
+private data class DraftMaterial(val name: String, val unit: String, val qty: String)
+private data class DraftEquipment(val name: String, val hours: String)
