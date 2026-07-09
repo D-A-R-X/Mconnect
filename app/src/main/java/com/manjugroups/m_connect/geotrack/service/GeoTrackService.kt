@@ -863,6 +863,10 @@ class GeoTrackService : Service() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
                 delay(HEARTBEAT_INTERVAL_MS)
+                // Self-heal the ongoing permission alert every tick: clears it
+                // the moment the staff grants the last missing permission, and
+                // re-posts it if the OS dropped it (Android 14+ can).
+                runCatching { refreshPermissionNotification() }
                 val battery = getBatteryLevel()
                 val sessionId = session.activeTrackingSessionId
                 val deviceId = session.trackingDeviceId
@@ -984,12 +988,10 @@ class GeoTrackService : Service() {
         if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
 
         // Immediate, offline-capable heads-up to the staff so they can fix it
-        // and resume normal signal transfer. Battery-optimization is a softer
-        // setting (not a runtime permission) — keep it in the synced event for
-        // the reporting officer, but leave it out of the staff nag toast.
-        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(
-            this, missing.filter { it != "battery_optimization" },
-        )
+        // and resume normal signal transfer. Posts the ongoing red alert for
+        // the full missing set (same set the in-app gate enforces) so the
+        // notification and the gate agree and clear together.
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
         if (missing.isEmpty()) return
 
         val missingKey = missing.sorted().joinToString("_")
@@ -1000,6 +1002,26 @@ class GeoTrackService : Service() {
             signature = "permission_missing_$missingKey",
         )
         if (queued && hasNetwork()) syncEvents()
+    }
+
+    /**
+     * Post-or-clear ONLY the ongoing permission alert, cheaply and idempotently
+     * (a few permission reads + one notify/cancel; no DB, no network, no event
+     * enqueue). Called each heartbeat so the red alert self-heals: it comes
+     * back if the OS drops it and, crucially, disappears the moment the staff
+     * grants the last missing permission mid-shift.
+     */
+    private fun refreshPermissionNotification() {
+        val missing = mutableListOf<String>()
+        val hasFine = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val hasCoarse = checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) missing.add("fine_location")
+        if (!hasBackgroundLocationPermission()) missing.add("background_location")
+        if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
+        if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
     }
 
     private suspend fun buildEventMetadata(): Map<String, Any?> {

@@ -485,6 +485,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun maybeShowBackgroundPermissionsGate() {
         if (!session.geoTrackingEnabled) return
+        // Foregrounding is the most reliable moment to reconcile the ongoing
+        // red permission alert with reality: clear it the instant every
+        // tracking permission is present, (re)post it while any is missing —
+        // even outside the tracking window when the service isn't running.
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(
+            this,
+            com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+                .missingPermissionKeys(this),
+        )
         com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
             .showIfNeeded(supportFragmentManager, this)
     }

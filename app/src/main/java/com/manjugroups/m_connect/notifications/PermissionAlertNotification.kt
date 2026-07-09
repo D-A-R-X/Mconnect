@@ -18,6 +18,13 @@ import com.manjugroups.m_connect.R
  * GeoTrackService's permission-health check — it does NOT depend on the
  * network (the backend also notifies the reporting officer once the buffered
  * PERMISSION_MISSING event syncs, but this reaches the staff immediately).
+ *
+ * It is an ONGOING (non-dismissible) red alert: the staff can't swipe it away,
+ * and it is only removed by [clear] once every tracking permission is present
+ * (the service re-checks each heartbeat and MainActivity re-checks on every
+ * foreground, so granting the permission — via the gate or system settings —
+ * takes the notification down within seconds). Tapping it opens the in-app
+ * permission gate without dismissing it.
  */
 object PermissionAlertNotification {
 
@@ -56,7 +63,7 @@ object PermissionAlertNotification {
         ensureChannel(appCtx)
 
         val friendly = missing.map { LABELS[it] ?: it.replace('_', ' ') }
-        val body = "Grant: ${friendly.joinToString(", ")}. Tracking can't work fully until you do — tap to fix."
+        val body = "Grant: ${friendly.joinToString(", ")}. Tracking can't work fully until you do — tap to fix. This alert stays until every permission is on."
 
         val intent = Intent(appCtx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -76,9 +83,15 @@ object PermissionAlertNotification {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setColor(0xFFDC2626.toInt())
+            .setColorized(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
-            .setAutoCancel(true)
+            // Non-closable: can't be swiped away, and tapping doesn't clear it.
+            // Only clear() (all permissions granted) removes it. The service
+            // heartbeat + MainActivity.onResume re-post it so it self-heals
+            // even if the OS drops it on Android 14+.
+            .setOngoing(true)
+            .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .setContentIntent(pi)
             .build()
