@@ -83,10 +83,12 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
         if (projectsLoading) return
         projectsLoading = true
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
+            val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
             projectsLoading = false
             if (view == null) return@launch
-            projects = resp?.projects ?: emptyList()
+            projects = resp?.projects
+                ?.map { com.manjugroups.m_connect.network.ProjectSummary(id = it.id, name = it.name, status = it.status) }
+                ?: emptyList()
             if (pendingProjectPick && projects.isNotEmpty()) {
                 pendingProjectPick = false
                 view?.let { pickProject(it) }

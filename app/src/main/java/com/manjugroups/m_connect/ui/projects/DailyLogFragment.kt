@@ -133,10 +133,15 @@ class DailyLogFragment : Fragment() {
         if (projectsLoading) return
         projectsLoading = true
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
+            // Marketing/projects returns all projects the caller can access
+            // (viewAll admins get everything) so the send-DPR + fallback pickers
+            // aren't limited to the scoped /api/projects set.
+            val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
             projectsLoading = false
             if (_binding == null) return@launch
-            projects = resp?.projects ?: emptyList()
+            projects = resp?.projects
+                ?.map { ProjectSummary(id = it.id, name = it.name, status = it.status) }
+                ?: emptyList()
         }
     }
 
@@ -173,8 +178,8 @@ class DailyLogFragment : Fragment() {
     /** Load projects once (the picker pre-warm may already have them). */
     private suspend fun ensureProjects(): List<ProjectSummary> {
         if (projects.isNotEmpty()) return projects
-        val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
-        projects = resp?.projects ?: projects
+        val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
+        projects = resp?.projects?.map { ProjectSummary(id = it.id, name = it.name, status = it.status) } ?: projects
         return projects
     }
 
@@ -232,6 +237,11 @@ class DailyLogFragment : Fragment() {
             })
             val atts = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
             if (atts.isNotEmpty()) card.addView(buildAttachmentStrip(ctx, atts))
+            card.isClickable = true
+            card.foreground = ctx.obtainStyledAttributes(
+                intArrayOf(android.R.attr.selectableItemBackground),
+            ).let { ta -> ta.getDrawable(0).also { ta.recycle() } }
+            card.setOnClickListener { openLogDetail(log) }
             c.addView(card)
         }
     }
@@ -430,6 +440,11 @@ class DailyLogFragment : Fragment() {
     private fun openMedia(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             .onFailure { toast("Can't open this file") }
+    }
+
+    private fun openLogDetail(log: DailyLogEntry) {
+        val json = runCatching { com.google.gson.Gson().toJson(log) }.getOrNull() ?: return
+        DailyLogDetailBottomSheet.newInstance(json).show(childFragmentManager, "daily_log_detail")
     }
 
     private fun displayDate(iso: String?): String {

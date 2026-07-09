@@ -1,8 +1,9 @@
 package com.manjugroups.m_connect.ui.projects
 
-import android.app.DatePickerDialog
+import android.Manifest
 import android.app.Dialog
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +19,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +37,7 @@ import com.manjugroups.m_connect.network.DailyLogApi
 import com.manjugroups.m_connect.network.DailyLogAttachment
 import com.manjugroups.m_connect.network.DailyLogEquipment
 import com.manjugroups.m_connect.network.DailyLogMaterial
+import com.manjugroups.m_connect.network.MaterialCatalogItem
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.ui.common.SearchableOption
@@ -79,6 +83,32 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         view?.let { renderAttachments(it) }
     }
 
+    // Camera capture (photo / video) into a FileProvider URI.
+    private var cameraCaptureUri: Uri? = null
+    private var pendingCameraVideo = false
+    private val takePhotoLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { ok ->
+        val uri = cameraCaptureUri
+        if (ok && uri != null) { pickedMedia.add(PickedMedia(uri, false)); view?.let { renderAttachments(it) } }
+    }
+    private val takeVideoLauncher = registerForActivityResult(
+        ActivityResultContracts.CaptureVideo(),
+    ) { ok ->
+        val uri = cameraCaptureUri
+        if (ok && uri != null) { pickedMedia.add(PickedMedia(uri, true)); view?.let { renderAttachments(it) } }
+    }
+    private val cameraPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) launchCamera(pendingCameraVideo)
+        else context?.let { Toast.makeText(it, "Camera permission is required", Toast.LENGTH_SHORT).show() }
+    }
+
+    // Material catalog (Library > Material Catalog); fetched once, cached.
+    private var materialsCache: List<MaterialCatalogItem>? = null
+    private var materialsLoading = false
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
         dialog.setOnShowListener { di ->
@@ -118,26 +148,70 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.fieldProject).setOnClickListener { pickProject(view) }
         view.findViewById<View>(R.id.fieldDate).setOnClickListener { pickDate(view) }
         view.findViewById<View>(R.id.fieldWeather).setOnClickListener {
-            pickOption("Weather", weathers) { weather = it; view.findViewById<TextView>(R.id.tvWeatherValue).text = it.replaceFirstChar(Char::uppercase) }
+            pickFromList("Weather", weathers) { w ->
+                weather = w
+                view.findViewById<TextView>(R.id.tvWeatherValue).text = w.replaceFirstChar(Char::uppercase)
+            }
         }
         view.findViewById<View>(R.id.fieldSiteCondition).setOnClickListener {
-            pickOption("Site Conditions", conditions) { condition = it; view.findViewById<TextView>(R.id.tvSiteConditionValue).text = it.replaceFirstChar(Char::uppercase) }
+            pickFromList("Site Conditions", conditions) { c ->
+                condition = c
+                view.findViewById<TextView>(R.id.tvSiteConditionValue).text = c.replaceFirstChar(Char::uppercase)
+            }
         }
-        view.findViewById<View>(R.id.btnAddMaterial).setOnClickListener {
-            view.findViewById<LinearLayout>(R.id.materialsContainer).addView(buildRow(listOf("Material" to 2f, "Qty" to 1f, "Unit" to 1f)))
-        }
+        view.findViewById<View>(R.id.btnAddMaterial).setOnClickListener { pickMaterial(view) }
         view.findViewById<View>(R.id.btnAddEquipment).setOnClickListener {
             view.findViewById<LinearLayout>(R.id.equipmentContainer).addView(buildRow(listOf("Equipment" to 2f, "Hours" to 1f)))
         }
-        view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener {
-            pickMedia.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
-            )
-        }
+        view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener { showMediaSourceChooser() }
         view.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).setOnClickListener { submit(view) }
 
         renderAttachments(view)
         loadProjects()
+        loadMaterials()
+    }
+
+    /** Camera (photo/video) or the gallery picker — the app's receipt pattern. */
+    private fun showMediaSourceChooser() {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Add photo or video")
+            .setItems(arrayOf("Take photo", "Record video", "Choose from gallery")) { _, which ->
+                when (which) {
+                    0 -> requestCameraThen(video = false)
+                    1 -> requestCameraThen(video = true)
+                    2 -> pickMedia.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                    )
+                }
+            }
+            .show()
+    }
+
+    private fun requestCameraThen(video: Boolean) {
+        pendingCameraVideo = video
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            launchCamera(video)
+        } else {
+            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun launchCamera(video: Boolean) {
+        val ctx = context ?: return
+        val f = runCatching {
+            File.createTempFile(if (video) "dpr_vid_" else "dpr_img_", if (video) ".mp4" else ".jpg", ctx.cacheDir)
+        }.getOrNull() ?: run {
+            Toast.makeText(ctx, "Unable to create file", Toast.LENGTH_SHORT).show(); return
+        }
+        val uri = runCatching {
+            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
+        }.getOrNull() ?: run {
+            Toast.makeText(ctx, "Unable to create file", Toast.LENGTH_SHORT).show(); return
+        }
+        cameraCaptureUri = uri
+        if (video) takeVideoLauncher.launch(uri) else takePhotoLauncher.launch(uri)
     }
 
     private fun renderAttachments(root: View) {
@@ -188,10 +262,15 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         if (projectsLoading) return
         projectsLoading = true
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
+            // Marketing/projects returns EVERY project the caller can access
+            // (admins with projects.viewAll get all of them) — unlike the
+            // scoped /api/projects, so the picker isn't limited to a handful.
+            val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
             projectsLoading = false
             if (view == null) return@launch
-            projects = resp?.projects ?: emptyList()
+            projects = resp?.projects
+                ?.map { ProjectSummary(id = it.id, name = it.name, status = it.status) }
+                ?: emptyList()
             if (pendingProjectPick && projects.isNotEmpty()) {
                 pendingProjectPick = false
                 view?.let { pickProject(it) }
@@ -219,19 +298,30 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickDate(root: View) {
-        val cal = Calendar.getInstance()
-        runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date) }.getOrNull()?.let { cal.time = it }
-        DatePickerDialog(requireContext(), { _, y, m, d ->
-            date = String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
-            root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(date)
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+        val startMs = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.parse(date)?.time
+        }.getOrNull() ?: com.google.android.material.datepicker.MaterialDatePicker.todayInUtcMilliseconds()
+        val picker = com.google.android.material.datepicker.MaterialDatePicker.Builder.datePicker()
+            .setTitleText("Select date")
+            .setSelection(startMs)
+            .build()
+        picker.addOnPositiveButtonClickListener { sel ->
+            val c = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = sel }
+            date = String.format(
+                Locale.US, "%04d-%02d-%02d",
+                c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH),
+            )
+            if (view != null) root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(date)
+        }
+        picker.show(childFragmentManager, "daily_log_date")
     }
 
-    private fun pickOption(title: String, opts: List<String>, onPick: (String) -> Unit) {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setItems(opts.map { it.replaceFirstChar(Char::uppercase) }.toTypedArray()) { _, i -> onPick(opts[i]) }
-            .show()
+    /** Bottom-sheet list picker (the app's shared searchable selector). */
+    private fun pickFromList(title: String, opts: List<String>, onPick: (String) -> Unit) {
+        val options = opts.map { SearchableOption(it, it.replaceFirstChar(Char::uppercase)) }
+        SearchableSelectionDialog.show(requireContext(), title, options) { onPick(it) }
     }
 
     private fun buildRow(fields: List<Pair<String, Float>>): LinearLayout {
@@ -260,15 +350,89 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         return row
     }
 
+    private fun loadMaterials() {
+        if (materialsLoading || materialsCache != null) return
+        materialsLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching { api.getMaterials(session.bearerToken) }.getOrNull()
+            materialsLoading = false
+            if (view == null) return@launch
+            materialsCache = resp?.materials?.filter { !it.name.isNullOrBlank() } ?: emptyList()
+        }
+    }
+
+    /** Pick a material from the master catalog; adds a row with a qty field. */
+    private fun pickMaterial(root: View) {
+        val cached = materialsCache
+        if (cached == null) {
+            if (materialsLoading) context?.let { Toast.makeText(it, "Loading materials…", Toast.LENGTH_SHORT).show() }
+            else loadMaterials()
+            return
+        }
+        if (cached.isEmpty()) {
+            context?.let { Toast.makeText(it, "No materials in the catalog", Toast.LENGTH_SHORT).show() }
+            return
+        }
+        val options = cached.map {
+            SearchableOption(it, it.name ?: "Material", listOfNotNull(it.category, it.unit, it.brand).joinToString(" · "))
+        }
+        SearchableSelectionDialog.show(requireContext(), "Select material", options) { m ->
+            if (view == null) return@show
+            addCatalogMaterialRow(root, m.name ?: "Material", m.unit ?: "")
+        }
+    }
+
+    private fun addCatalogMaterialRow(root: View, name: String, unit: String) {
+        val ctx = requireContext()
+        val container = root.findViewById<LinearLayout>(R.id.materialsContainer)
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            tag = arrayOf(name, unit) // name + unit read back in collectMaterials
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) }
+        }
+        val info = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f)
+        }
+        info.addView(TextView(ctx).apply {
+            text = name; textSize = 13f; setTextColor(Color.parseColor("#101828")); maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        if (unit.isNotBlank()) info.addView(TextView(ctx).apply {
+            text = unit; textSize = 11f; setTextColor(Color.parseColor("#98A2B3"))
+        })
+        row.addView(info)
+        row.addView(EditText(ctx).apply {
+            hint = "Qty"
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            textSize = 13f
+            setTextColor(Color.parseColor("#101828"))
+            setHintTextColor(Color.parseColor("#98A2B3"))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = dp(8); marginEnd = dp(6) }
+        })
+        row.addView(TextView(ctx).apply {
+            text = "✕"; textSize = 16f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(8), dp(8), dp(4), dp(8))
+            setOnClickListener { container.removeView(row) }
+        })
+        container.addView(row)
+    }
+
     private fun collectMaterials(root: View): List<DailyLogMaterial> {
         val c = root.findViewById<LinearLayout>(R.id.materialsContainer)
         val out = mutableListOf<DailyLogMaterial>()
         for (i in 0 until c.childCount) {
             val r = c.getChildAt(i) as? LinearLayout ?: continue
-            val n = (r.getChildAt(0) as? EditText)?.text?.toString()?.trim().orEmpty()
-            val q = (r.getChildAt(1) as? EditText)?.text?.toString()?.trim()?.toDoubleOrNull() ?: 0.0
-            val u = (r.getChildAt(2) as? EditText)?.text?.toString()?.trim().orEmpty()
-            if (n.isNotEmpty() && q > 0) out.add(DailyLogMaterial(n, q, u.ifBlank { null }))
+            val tag = r.tag as? Array<*>
+            val name = (tag?.getOrNull(0) as? String)?.trim().orEmpty()
+            val unit = (tag?.getOrNull(1) as? String)?.trim().orEmpty()
+            val qty = (r.getChildAt(1) as? EditText)?.text?.toString()?.trim()?.toDoubleOrNull() ?: 0.0
+            if (name.isNotEmpty() && qty > 0) out.add(DailyLogMaterial(name, qty, unit.ifBlank { null }))
         }
         return out
     }

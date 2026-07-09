@@ -943,6 +943,12 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MarketingProjectsResponse
 
+    // Master material catalog (Project Management > Library > Material Catalog).
+    @GET("api/materials")
+    suspend fun getMaterials(
+        @Header("Authorization") token: String,
+    ): MaterialsResponse
+
     @GET("api/marketing/inventory-units")
     suspend fun listInventoryUnits(
         @Header("Authorization") token: String,
@@ -2789,6 +2795,22 @@ data class MarketingProject(
 data class MarketingProjectsResponse(
     val success: Boolean,
     val projects: List<MarketingProject> = emptyList(),
+    val error: String? = null,
+)
+
+data class MaterialCatalogItem(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val unit: String? = null,
+    val category: String? = null,
+    val itemCode: String? = null,
+    val brand: String? = null,
+)
+
+data class MaterialsResponse(
+    val success: Boolean = false,
+    val total: Int? = null,
+    val materials: List<MaterialCatalogItem> = emptyList(),
     val error: String? = null,
 )
 
