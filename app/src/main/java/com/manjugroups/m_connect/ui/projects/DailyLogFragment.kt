@@ -31,6 +31,9 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.network.UpdateDprRecipientRequest
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -155,10 +158,38 @@ class DailyLogFragment : Fragment() {
 
     private fun loadLogs() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { dprApi.listMyDailyLogs(session.bearerToken) }.getOrNull()
+            // Prefer the one-shot aggregate route; if the backend predates it
+            // (older prod returns 404 → null), fall back to aggregating the
+            // still-deployed per-project route client-side so entries show
+            // without waiting on a backend deploy.
+            val mine = runCatching { dprApi.listMyDailyLogs(session.bearerToken) }.getOrNull()
+            val logs = mine?.logs ?: aggregateLogs()
             if (_binding == null) return@launch
-            renderLogs(resp?.logs ?: emptyList())
+            renderLogs(logs)
         }
+    }
+
+    /** Client-side "my logs" — one per-project call each, run in parallel. */
+    private suspend fun aggregateLogs(): List<DailyLogEntry> = coroutineScope {
+        val projs = ensureProjects().take(AGG_PROJECT_CAP)
+        if (projs.isEmpty()) return@coroutineScope emptyList()
+        projs.map { p ->
+            async {
+                runCatching { dprApi.listDailyLogs(session.bearerToken, p.id) }
+                    .getOrNull()?.logs.orEmpty()
+                    .map { it.copy(projectName = it.projectName ?: p.name) }
+            }
+        }.awaitAll().flatten()
+            .sortedByDescending { it.date ?: "" }
+            .take(100)
+    }
+
+    /** Load projects once (the picker pre-warm may already have them). */
+    private suspend fun ensureProjects(): List<ProjectSummary> {
+        if (projects.isNotEmpty()) return projects
+        val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
+        projects = resp?.projects ?: projects
+        return projects
     }
 
     private fun renderLogs(logs: List<DailyLogEntry>) {
@@ -221,11 +252,48 @@ class DailyLogFragment : Fragment() {
 
     private fun loadDpr() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { dprApi.getMyDpr(session.bearerToken) }.getOrNull()
+            // Same graceful-degradation as loadLogs: aggregate route first,
+            // else fan out over the deployed per-project recipient/report routes.
+            val mine = runCatching { dprApi.getMyDpr(session.bearerToken) }.getOrNull()
+            val recipients: List<DprRecipient>
+            val reports: List<DprReport>
+            if (mine != null) {
+                recipients = mine.recipients
+                reports = mine.reports
+            } else {
+                val agg = aggregateDpr()
+                recipients = agg.first
+                reports = agg.second
+            }
             if (_binding == null) return@launch
-            renderRecipients(resp?.recipients ?: emptyList())
-            renderReports(resp?.reports ?: emptyList())
+            renderRecipients(recipients)
+            renderReports(reports)
         }
+    }
+
+    /** Client-side DPR aggregate over the deployed per-project routes. */
+    private suspend fun aggregateDpr(): Pair<List<DprRecipient>, List<DprReport>> = coroutineScope {
+        val projs = ensureProjects().take(AGG_PROJECT_CAP)
+        if (projs.isEmpty()) return@coroutineScope emptyList<DprRecipient>() to emptyList()
+        val recipJobs = projs.map { p ->
+            async {
+                runCatching { dprApi.listDprRecipients(session.bearerToken, p.id) }
+                    .getOrNull()?.recipients.orEmpty()
+                    .map { it.copy(projectName = it.projectName ?: p.name) }
+            }
+        }
+        val reportJobs = projs.map { p ->
+            async {
+                runCatching { dprApi.listDprReports(session.bearerToken, p.id) }
+                    .getOrNull()?.reports.orEmpty()
+                    .map { it.copy(projectName = it.projectName ?: p.name) }
+            }
+        }
+        val recips = recipJobs.awaitAll().flatten()
+        val reps = reportJobs.awaitAll().flatten()
+            .sortedByDescending { it.date ?: "" }
+            .take(30)
+        recips to reps
     }
 
     private fun renderRecipients(list: List<DprRecipient>) {
@@ -429,5 +497,12 @@ class DailyLogFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        // Client-side fallback fans out one call per project; bound it to the
+        // same window the server-side /mine aggregate uses so a big project
+        // list can't spawn hundreds of parallel requests.
+        private const val AGG_PROJECT_CAP = 30
     }
 }
