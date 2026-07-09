@@ -210,6 +210,8 @@ class DailyLogFragment : Fragment() {
         val c = binding.recipientsContainer
         c.removeAllViews()
         binding.emptyRecipients.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        // No recipients → hide Send + history; the tab is just an add prompt.
+        binding.dprManageSection.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
         binding.tvRecipientsCount.text = "${list.count { it.isActive }} active"
         list.forEach { r ->
             val ctx = requireContext()

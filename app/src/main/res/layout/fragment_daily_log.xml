@@ -251,48 +251,59 @@
                         app:es_title="No Recipients Yet"
                         app:es_description="Tap + to add a WhatsApp recipient. Active recipients get the DPR PDF at 7:00 PM IST." />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSendDpr"
-                        android:layout_width="match_parent"
-                        android:layout_height="54dp"
-                        android:layout_marginHorizontal="16dp"
-                        android:layout_marginTop="20dp"
-                        android:backgroundTint="#16A34A"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="Send today's DPR now"
-                        android:textAllCaps="false"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        app:cornerRadius="27dp"
-                        app:elevation="0dp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginHorizontal="16dp"
-                        android:layout_marginTop="24dp"
-                        android:fontFamily="@font/inter_semibold"
-                        android:text="Recent DPR History"
-                        android:textColor="#101828"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/tvHistoryEmpty"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginHorizontal="16dp"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="@font/inter_regular"
-                        android:text="No DPR send history yet."
-                        android:textColor="#98A2B3"
-                        android:textSize="13sp" />
-
+                    <!-- Send + history only make sense once a recipient exists;
+                         hidden on the empty state so it reads as a clean prompt
+                         to add one via "+". -->
                     <LinearLayout
-                        android:id="@+id/historyContainer"
+                        android:id="@+id/dprManageSection"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingHorizontal="16dp" />
+                        android:visibility="gone">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSendDpr"
+                            android:layout_width="match_parent"
+                            android:layout_height="54dp"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="20dp"
+                            android:backgroundTint="#16A34A"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Send today's DPR now"
+                            android:textAllCaps="false"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            app:cornerRadius="27dp"
+                            app:elevation="0dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="24dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Recent DPR History"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryEmpty"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:text="No DPR send history yet."
+                            android:textColor="#98A2B3"
+                            android:textSize="13sp" />
+
+                        <LinearLayout
+                            android:id="@+id/historyContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="16dp" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
