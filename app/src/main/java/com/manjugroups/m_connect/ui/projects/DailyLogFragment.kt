@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.network.SendDprRequest
 import com.manjugroups.m_connect.network.UpdateDprRecipientRequest
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.SkeletonLoader
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -63,6 +64,10 @@ class DailyLogFragment : Fragment() {
     private var projects: List<ProjectSummary> = emptyList()
     private var projectsLoading = false
     private var onNewEntryTab = true
+
+    // Skeleton pulse animators, cancelled once real data renders.
+    private var logsSkeleton: android.animation.ObjectAnimator? = null
+    private var dprSkeleton: android.animation.ObjectAnimator? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, s: Bundle?): View {
         _binding = FragmentDailyLogBinding.inflate(inflater, container, false)
@@ -148,6 +153,13 @@ class DailyLogFragment : Fragment() {
     // ── New Entry: my recent logs across projects ──
 
     private fun loadLogs() {
+        // Skeleton only on a cold load (empty list); silent refresh otherwise.
+        if (binding.logsContainer.childCount == 0) {
+            binding.emptyLogs.visibility = View.GONE
+            binding.tvEntriesTitle.visibility = View.VISIBLE
+            logsSkeleton?.cancel()
+            logsSkeleton = SkeletonLoader.show(binding.logsContainer, 3)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             // Prefer the one-shot aggregate route; if the backend predates it
             // (older prod returns 404 → null), fall back to aggregating the
@@ -184,7 +196,9 @@ class DailyLogFragment : Fragment() {
     }
 
     private fun renderLogs(logs: List<DailyLogEntry>) {
+        logsSkeleton?.cancel(); logsSkeleton = null
         val c = binding.logsContainer
+        c.alpha = 1f
         c.removeAllViews()
         binding.emptyLogs.visibility = if (logs.isEmpty()) View.VISIBLE else View.GONE
         binding.tvEntriesTitle.visibility = if (logs.isEmpty()) View.GONE else View.VISIBLE
@@ -295,6 +309,10 @@ class DailyLogFragment : Fragment() {
     // ── DPR: recipients + history across projects ──
 
     private fun loadDpr() {
+        if (binding.recipientsContainer.childCount == 0) {
+            dprSkeleton?.cancel()
+            dprSkeleton = SkeletonLoader.show(binding.recipientsContainer, 3)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             // Same graceful-degradation as loadLogs: aggregate route first,
             // else fan out over the deployed per-project recipient/report routes.
@@ -341,7 +359,9 @@ class DailyLogFragment : Fragment() {
     }
 
     private fun renderRecipients(list: List<DprRecipient>) {
+        dprSkeleton?.cancel(); dprSkeleton = null
         val c = binding.recipientsContainer
+        c.alpha = 1f
         c.removeAllViews()
         binding.tvRecipientsEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         // No recipients → hide Send + history (the add form above stays).
@@ -505,6 +525,8 @@ class DailyLogFragment : Fragment() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroyView() {
+        logsSkeleton?.cancel(); logsSkeleton = null
+        dprSkeleton?.cancel(); dprSkeleton = null
         super.onDestroyView()
         _binding = null
     }
