@@ -565,6 +565,9 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         if (work.isEmpty()) { root.findViewById<EditText>(R.id.etWorkSummary).error = "Required"; return }
         if (submitting) return
         submitting = true
+        // Lock the sheet shut while uploading/saving so a swipe/back/tap-outside
+        // can't abandon an in-flight photo upload or a half-saved entry.
+        isCancelable = false
         val btn = root.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).apply { isEnabled = false }
         val appCtx = requireContext().applicationContext
         val labourCount = root.findViewById<EditText>(R.id.etLabourCount).text?.toString()?.trim()?.toIntOrNull()
@@ -584,6 +587,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             if (view == null) return@launch
             if (attachments == null) {
                 submitting = false
+                isCancelable = true
                 btn.isEnabled = true
                 btn.text = "Save Daily Log"
                 Toast.makeText(appCtx, "Couldn't upload media. Check your connection and try again.", Toast.LENGTH_LONG).show()
@@ -617,6 +621,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 Toast.makeText(appCtx, "Daily log saved", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()
             } else {
+                isCancelable = true
                 Toast.makeText(appCtx, resp?.error ?: "Couldn't save", Toast.LENGTH_LONG).show()
             }
         }
