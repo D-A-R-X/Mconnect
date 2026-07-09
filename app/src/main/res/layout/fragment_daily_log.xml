@@ -7,7 +7,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8">
+    android:background="#FEFEFE">
 
     <androidx.core.widget.NestedScrollView
         android:id="@+id/dailyLogScroll"
@@ -192,20 +192,87 @@
                         android:id="@+id/emptyLogs"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingTop="28dp"
+                        android:paddingTop="56dp"
+                        android:paddingBottom="32dp"
                         android:visibility="gone"
                         app:es_image="@drawable/img_issues_empty"
                         app:es_title="No Daily Logs Yet"
                         app:es_description="Tap + to record today's site progress, labour, materials and observations." />
                 </LinearLayout>
 
-                <!-- ── DPR WhatsApp: recipients + send + history ── -->
+                <!-- ── DPR WhatsApp: add form + recipients + send + history
+                     (mirrors the web DPR modal — the add fields live inline
+                     here so the tab is a complete DPR manager). ── -->
                 <LinearLayout
                     android:id="@+id/dprContent"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:visibility="gone">
+
+                    <!-- Add Recipient (always visible, like the web form) -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="18dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Add Recipient"
+                        android:textColor="#101828"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="Active recipients get today's DPR PDF at 7:00 PM IST."
+                        android:textColor="#667085"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/DailyLogLabel" android:text="Project *" />
+                        <LinearLayout android:id="@+id/fieldDprProjectInline" style="@style/DailyLogSelectField">
+                            <TextView android:id="@+id/tvDprProjectValueInline" style="@style/DailyLogSelectText" android:text="Select project" />
+                            <ImageView style="@style/DailyLogSelectChevron" />
+                        </LinearLayout>
+
+                        <TextView style="@style/DailyLogLabel" android:text="Staff" />
+                        <LinearLayout android:id="@+id/fieldDprStaffInline" style="@style/DailyLogSelectField">
+                            <TextView android:id="@+id/tvDprStaffValueInline" style="@style/DailyLogSelectText" android:text="Select staff…" />
+                            <ImageView style="@style/DailyLogSelectChevron" />
+                        </LinearLayout>
+
+                        <TextView style="@style/DailyLogLabel" android:text="WhatsApp number" />
+                        <EditText android:id="@+id/etDprPhoneInline" style="@style/DailyLogInput" android:hint="9876543210" android:inputType="phone" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnAddRecipientInline"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="16dp"
+                            android:backgroundTint="#16A34A"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Add Recipient"
+                            android:textAllCaps="false"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            app:cornerRadius="26dp"
+                            app:elevation="0dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="22dp"
+                        android:background="#EEF0F4" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -241,15 +308,17 @@
                         android:orientation="vertical"
                         android:paddingHorizontal="16dp" />
 
-                    <com.manjugroups.m_connect.ui.common.EmptyStateView
-                        android:id="@+id/emptyRecipients"
+                    <TextView
+                        android:id="@+id/tvRecipientsEmpty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingTop="28dp"
-                        android:visibility="gone"
-                        app:es_image="@drawable/img_qr_history_empty"
-                        app:es_title="No Recipients Yet"
-                        app:es_description="Tap + to add a WhatsApp recipient. Active recipients get the DPR PDF at 7:00 PM IST." />
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="No recipients yet — add one above."
+                        android:textColor="#98A2B3"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
 
                     <!-- Send + history only make sense once a recipient exists;
                          hidden on the empty state so it reads as a clean prompt
