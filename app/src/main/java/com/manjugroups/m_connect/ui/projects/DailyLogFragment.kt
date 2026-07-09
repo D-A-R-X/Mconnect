@@ -18,7 +18,6 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentDailyLogBinding
-import com.manjugroups.m_connect.network.AddDprRecipientRequest
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyLogApi
 import com.manjugroups.m_connect.network.DailyLogEntry
@@ -27,7 +26,6 @@ import com.manjugroups.m_connect.network.DprReport
 import com.manjugroups.m_connect.network.IdOnlyRequest
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.network.SendDprRequest
-import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.network.UpdateDprRecipientRequest
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
@@ -53,17 +51,10 @@ class DailyLogFragment : Fragment() {
     private val dprApi = DailyLogApi.create()
     private val session by lazy { SessionManager(requireContext()) }
 
-    // Projects power both the send-DPR picker and the inline add-recipient form.
+    // Projects power the send-DPR picker.
     private var projects: List<ProjectSummary> = emptyList()
     private var projectsLoading = false
     private var onNewEntryTab = true
-
-    // Inline DPR "Add Recipient" form state (mirrors the web modal).
-    private var staffCache: List<StaffData>? = null
-    private var staffLoading = false
-    private var pendingInlineProjectPick = false
-    private var dprProjectId: String = ""
-    private var dprStaffId: String? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, s: Bundle?): View {
         _binding = FragmentDailyLogBinding.inflate(inflater, container, false)
@@ -89,11 +80,6 @@ class DailyLogFragment : Fragment() {
         binding.tabDpr.setOnClickListener { showTab(false) }
         binding.btnSendDpr.setOnClickListener { sendDpr() }
 
-        // Inline DPR add form (the DPR tab is a full manager — no "+" needed).
-        binding.fieldDprProjectInline.setOnClickListener { pickDprProject() }
-        binding.fieldDprStaffInline.setOnClickListener { pickDprStaff() }
-        binding.btnAddRecipientInline.setOnClickListener { addRecipientInline() }
-
         childFragmentManager.setFragmentResultListener(CreateDailyLogBottomSheet.RESULT_KEY, viewLifecycleOwner) { _, _ -> loadLogs() }
         childFragmentManager.setFragmentResultListener(DprAddRecipientBottomSheet.RESULT_KEY, viewLifecycleOwner) { _, _ -> loadDpr() }
 
@@ -116,9 +102,6 @@ class DailyLogFragment : Fragment() {
         onNewEntryTab = newEntry
         binding.newEntryContent.visibility = if (newEntry) View.VISIBLE else View.GONE
         binding.dprContent.visibility = if (newEntry) View.GONE else View.VISIBLE
-        // DPR tab carries its own inline add form, so the "+" only applies to
-        // New Entry (whose form is a full-screen sheet).
-        binding.btnDailyLogAdd.visibility = if (newEntry) View.VISIBLE else View.GONE
         styleTab(binding.tabNewEntry, newEntry)
         styleTab(binding.tabDpr, !newEntry)
     }
@@ -146,11 +129,6 @@ class DailyLogFragment : Fragment() {
             projectsLoading = false
             if (_binding == null) return@launch
             projects = resp?.projects ?: emptyList()
-            // A tap that arrived while the list was still loading opens now.
-            if (pendingInlineProjectPick && projects.isNotEmpty()) {
-                pendingInlineProjectPick = false
-                pickDprProject()
-            }
         }
     }
 
@@ -373,87 +351,6 @@ class DailyLogFragment : Fragment() {
             runCatching { dprApi.removeDprRecipient(session.bearerToken, IdOnlyRequest(id)) }
             if (_binding == null) return@launch
             loadDpr()
-        }
-    }
-
-    // ── Inline DPR "Add Recipient" (mirrors the web modal) ──
-
-    private fun pickDprProject() {
-        if (projects.isEmpty()) {
-            if (projectsLoading) {
-                pendingInlineProjectPick = true
-                binding.tvDprProjectValueInline.text = "Loading projects…"
-            } else {
-                toast("No projects available")
-                loadProjects()
-            }
-            return
-        }
-        val options = projects.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
-        SearchableSelectionDialog.show(requireContext(), "Select project", options) { p ->
-            if (_binding == null) return@show
-            dprProjectId = p.id
-            binding.tvDprProjectValueInline.text = p.name ?: "Project"
-        }
-    }
-
-    private fun pickDprStaff() {
-        // Cached → open instantly; in-flight → ignore extra taps (no dupes).
-        staffCache?.let { showDprStaffDialog(it); return }
-        if (staffLoading) return
-        staffLoading = true
-        val label = binding.tvDprStaffValueInline
-        val prev = label.text
-        label.text = "Loading staff…"
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getStaff(session.bearerToken) }.getOrNull()
-            staffLoading = false
-            if (_binding == null) return@launch
-            label.text = prev
-            val staff = resp?.staff ?: emptyList()
-            if (staff.isEmpty()) { toast("Couldn't load staff"); return@launch }
-            staffCache = staff
-            showDprStaffDialog(staff)
-        }
-    }
-
-    private fun showDprStaffDialog(staff: List<StaffData>) {
-        val options = staff.map {
-            SearchableOption(it, it.name ?: "Staff", listOfNotNull(it.designation, it.phone).joinToString(" · "))
-        }
-        SearchableSelectionDialog.show(requireContext(), "Select staff", options) { s ->
-            if (_binding == null) return@show
-            dprStaffId = s.id
-            binding.tvDprStaffValueInline.text = s.name ?: "Staff"
-            if (!s.phone.isNullOrBlank()) binding.etDprPhoneInline.setText(s.phone)
-        }
-    }
-
-    private fun addRecipientInline() {
-        val phone = binding.etDprPhoneInline.text?.toString()?.trim().orEmpty()
-        val name = binding.tvDprStaffValueInline.text?.toString()
-            ?.takeUnless { it == "Select staff…" }.orEmpty()
-        if (dprProjectId.isBlank()) { toast("Select a project"); return }
-        if (phone.isEmpty()) { binding.etDprPhoneInline.error = "Enter a number"; return }
-        binding.btnAddRecipientInline.isEnabled = false
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
-                dprApi.addDprRecipient(
-                    session.bearerToken,
-                    AddDprRecipientRequest(dprProjectId, dprStaffId, name.ifBlank { phone }, phone),
-                )
-            }.getOrNull()
-            if (_binding == null) return@launch
-            binding.btnAddRecipientInline.isEnabled = true
-            if (resp?.success == true) {
-                binding.etDprPhoneInline.setText("")
-                binding.tvDprStaffValueInline.text = "Select staff…"
-                dprStaffId = null
-                toast("Recipient added")
-                loadDpr()
-            } else {
-                toast(resp?.error ?: "Couldn't add recipient")
-            }
         }
     }
 
