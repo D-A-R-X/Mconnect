@@ -332,6 +332,7 @@ class MainActivity : AppCompatActivity() {
             selectTab(TAB_HOME)
             handleWorkflowNotificationIntent(intent)
             handleTasksNotificationIntent(intent)
+            handleTrackingNotificationIntent(intent)
         } else {
             updateTabUi(currentTab)
             applyTopBarForTab(currentTab)
@@ -791,11 +792,13 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 fragment?.let {
+                    // Notification intents can arrive after onSaveInstanceState;
+                    // a plain commit() would throw IllegalStateException.
                     supportFragmentManager.beginTransaction()
                         .applySmoothTransitions()
                         .replace(R.id.fragmentContainer, it)
                         .addToBackStack(null)
-                        .commit()
+                        .commitAllowingStateLoss()
                 }
             }
             WorkflowNotificationRoute.TAB_CHAT -> {
@@ -825,7 +828,7 @@ class MainActivity : AppCompatActivity() {
                         .applySmoothTransitions()
                         .replace(R.id.fragmentContainer, it)
                         .addToBackStack(null)
-                        .commit()
+                        .commitAllowingStateLoss()
                 }
             }
             else -> selectTab(TAB_HOME)
@@ -837,6 +840,48 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handleWorkflowNotificationIntent(intent)
         handleTasksNotificationIntent(intent)
+        handleTrackingNotificationIntent(intent)
+    }
+
+    /**
+     * Taps on the GeoTrack notifications land where the staff can ACT:
+     *  - permission alert → the background-permissions gate sheet (or the
+     *    app's system settings page when the gate has nothing left to fix —
+     *    e.g. only Physical activity is missing, which the gate doesn't cover)
+     *  - tracking notification during a field activity → On Duty ends on the
+     *    HR dashboard; CP / SV / Fleet trips end from Home's today-trips list.
+     */
+    private fun handleTrackingNotificationIntent(intent: Intent?) {
+        intent ?: return
+        if (intent.getBooleanExtra(
+                com.manjugroups.m_connect.notifications.PermissionAlertNotification.EXTRA_FIX_PERMISSIONS,
+                false,
+            )
+        ) {
+            intent.removeExtra(
+                com.manjugroups.m_connect.notifications.PermissionAlertNotification.EXTRA_FIX_PERMISSIONS,
+            )
+            if (!com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog.allGranted(this)) {
+                com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+                    .showIfNeeded(supportFragmentManager, this)
+            } else {
+                runCatching {
+                    startActivity(
+                        Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.fromParts("package", packageName, null),
+                        ),
+                    )
+                }
+            }
+            return
+        }
+        when (intent.getStringExtra(
+            com.manjugroups.m_connect.geotrack.service.TrackingNotification.EXTRA_OPEN_ACTIVITY_KIND,
+        )) {
+            "onduty" -> selectTab(TAB_HR)
+            "cp", "sv", "fleet" -> selectTab(TAB_HOME)
+        }
     }
 
     /** Tap on the pending-tasks notification → route the newest task. */

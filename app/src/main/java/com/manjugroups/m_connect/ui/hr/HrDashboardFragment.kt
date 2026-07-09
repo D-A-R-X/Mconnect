@@ -363,7 +363,7 @@ class HrDashboardFragment : Fragment() {
         binding.hrRefresh.setupPullToRefresh {
             flowViewModel.loadTodayAttendance(session.bearerToken)
             loadRecentHistoryCards()
-            binding.hrRefresh.postDelayed({ binding.hrRefresh.dismissRefresh() }, 800)
+            binding.hrRefresh.postDelayed({ _binding?.hrRefresh?.dismissRefresh() }, 800)
         }
 
         // Header pieces start hidden — content pieces are wired to enter once their

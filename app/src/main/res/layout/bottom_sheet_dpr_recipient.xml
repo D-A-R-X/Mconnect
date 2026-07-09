@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add a DPR WhatsApp recipient, opened from the "+" on the DPR tab. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="24dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Add DPR Recipient"
+        android:textColor="#101828"
+        android:textSize="19sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Active recipients get today's DPR PDF at 7:00 PM IST."
+        android:textColor="#667085"
+        android:textSize="12sp" />
+
+    <TextView style="@style/DailyLogLabel" android:text="Project *" />
+    <LinearLayout android:id="@+id/fieldDprProject" style="@style/DailyLogSelectField">
+        <TextView android:id="@+id/tvDprProjectValue" style="@style/DailyLogSelectText" android:text="Select project" />
+        <ImageView style="@style/DailyLogSelectChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/DailyLogLabel" android:text="Staff" />
+    <LinearLayout android:id="@+id/fieldDprStaff" style="@style/DailyLogSelectField">
+        <TextView android:id="@+id/tvDprStaffValue" style="@style/DailyLogSelectText" android:text="Select staff…" />
+        <ImageView style="@style/DailyLogSelectChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/DailyLogLabel" android:text="WhatsApp number" />
+    <EditText android:id="@+id/etDprPhone" style="@style/DailyLogInput" android:hint="9876543210" android:inputType="phone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAddRecipient"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="20dp"
+        android:backgroundTint="#16A34A"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Add Recipient"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        app:cornerRadius="27dp"
+        app:elevation="0dp" />
+</LinearLayout>

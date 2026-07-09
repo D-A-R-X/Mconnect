@@ -445,9 +445,17 @@ interface GeoTrackApi {
     ): TripsResponse
 
     companion object {
-        fun create(): GeoTrackApi {
+        // Single shared client (see ApiService.create() — same rationale):
+        // build once, reuse the connection pool across every trip/visit call
+        // instead of rebuilding an OkHttpClient per call site.
+        private val instance: GeoTrackApi by lazy { buildService() }
+
+        fun create(): GeoTrackApi = instance
+
+        private fun buildService(): GeoTrackApi {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
             }
             // Same auto-logout-on-401 watchdog as ApiService.create() —
             // GeoTrack endpoints also need it because every trip /

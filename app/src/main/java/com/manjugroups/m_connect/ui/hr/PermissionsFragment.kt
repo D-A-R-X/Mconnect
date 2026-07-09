@@ -403,7 +403,11 @@ class PermissionsFragment : Fragment() {
             }
     }
 
+    // Cancels an in-flight chunked render when a newer pass starts.
+    private var renderGen = 0
+
     private fun renderPermissions(items: List<PermissionData>, approvalMode: Boolean) {
+        renderGen++
         binding.permissionList.removeAllViews()
         binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
 
@@ -411,7 +415,7 @@ class PermissionsFragment : Fragment() {
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-        items.forEach { perm ->
+        fun bindCard(perm: PermissionData): View {
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_permission, binding.permissionList, false)
 
@@ -548,8 +552,20 @@ class PermissionsFragment : Fragment() {
                 card.alpha = 1f
             }
 
-            binding.permissionList.addView(card)
+            return card
         }
+
+        // Chunked render — see renderLeaves: hundreds of admin-scope rows in
+        // one main-thread inflate pass froze mid-range phones.
+        val gen = renderGen
+        val chunk = 24
+        fun renderChunk(start: Int) {
+            if (gen != renderGen || _binding == null) return
+            val end = minOf(start + chunk, items.size)
+            for (i in start until end) binding.permissionList.addView(bindCard(items[i]))
+            if (end < items.size) binding.permissionList.post { renderChunk(end) }
+        }
+        renderChunk(0)
     }
 
     private fun showCancelPermissionDialog(permissionId: String) {

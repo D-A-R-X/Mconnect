@@ -64,7 +64,7 @@ class AdminFleetTripsFragment : Fragment() {
         binding.homeHeader.setOnProfileClickListener {
             (parentFragment as? AdminFleetContainerFragment)?.openTab(3)
         }
-        binding.homeHeader.post { binding.homeHeader.playEntryAnimation() }
+        binding.homeHeader.post { _binding?.homeHeader?.playEntryAnimation() }
         setupRecyclerView()
         setupFilters()
 

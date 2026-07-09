@@ -412,7 +412,11 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                         ).show()
                         resetSubmitButton()
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    // Sheet dismissed mid-create → view gone; skip the toast/reset.
+                    if (_binding == null) return@launch
                     Toast.makeText(
                         requireContext(),
                         "Couldn't create fine: ${e.message ?: "network error"}",

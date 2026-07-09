@@ -117,7 +117,7 @@ class AppLibraryFragment : Fragment() {
         // visibly "refresh" without any unnecessary network noise.
         binding.libraryRefresh.setupPullToRefresh {
             binding.sectionsContainer.post { playLibraryEntryAnimation() }
-            binding.libraryRefresh.postDelayed({ binding.libraryRefresh.dismissRefresh() }, 600)
+            binding.libraryRefresh.postDelayed({ _binding?.libraryRefresh?.dismissRefresh() }, 600)
         }
 
         binding.sectionsContainer.post { playLibraryEntryAnimation() }
@@ -478,6 +478,10 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemProjectTasks,
             allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
         ) { openScreen(TasksFragment()) }
+        bindIamEntry(
+            row = binding.itemProjectDailyLog,
+            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+        ) { openScreen(com.manjugroups.m_connect.ui.projects.DailyLogFragment()) }
         bindIamEntry(
             row = binding.itemProjectIssues,
             allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),

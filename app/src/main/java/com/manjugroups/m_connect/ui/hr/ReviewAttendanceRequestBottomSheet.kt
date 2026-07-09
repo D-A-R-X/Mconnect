@@ -88,12 +88,18 @@ class ReviewAttendanceRequestBottomSheet : BottomSheetDialogFragment() {
         // Plain review rows keep the rejection-reason input instead.
         val requestedIn = formatTime(rec.requestedPunchIn)
         val requestedOut = formatTime(rec.requestedPunchOut)
-        val hasCorrection = requestedIn != null || requestedOut != null ||
-            !rec.requestReason.isNullOrBlank()
-        if (hasCorrection) {
+        // A real time-correction request carries requested punch times. A plain
+        // remark only carries a reason — for those, drop the "Requested
+        // Correction" punch fields (they'd just read "--") and show the note
+        // under a "Remark" heading instead.
+        val hasRealCorrection = requestedIn != null || requestedOut != null
+        val hasRemark = !rec.requestReason.isNullOrBlank()
+        if (hasRealCorrection || hasRemark) {
             binding.layoutCorrectionUI.visibility = View.VISIBLE
             binding.layoutRejectionUI.visibility = View.GONE
 
+            binding.tvCorrectionTitle.text = if (hasRealCorrection) "Requested Correction" else "Remark"
+            binding.layoutCorrectionTimes.visibility = if (hasRealCorrection) View.VISIBLE else View.GONE
             binding.tvApprovedIn.text = requestedIn ?: "--"
             binding.tvApprovedOut.text = requestedOut ?: "--"
             binding.tvCorrectionReason.text =

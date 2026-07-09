@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- New Daily Log entry form, opened from the "+" on the Daily Log list. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:maxHeight="640dp"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:background="@drawable/bg_chat_sheet_handle" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_bold"
+            android:text="New Daily Log"
+            android:textColor="#101828"
+            android:textSize="19sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Record today's site progress, labour and observations."
+            android:textColor="#667085"
+            android:textSize="12sp" />
+
+        <TextView style="@style/DailyLogLabel" android:text="Project *" />
+        <LinearLayout android:id="@+id/fieldProject" style="@style/DailyLogSelectField">
+            <TextView android:id="@+id/tvProjectValue" style="@style/DailyLogSelectText" android:text="Select project" />
+            <ImageView style="@style/DailyLogSelectChevron" />
+        </LinearLayout>
+
+        <TextView style="@style/DailyLogLabel" android:text="Date *" />
+        <LinearLayout android:id="@+id/fieldDate" style="@style/DailyLogSelectField">
+            <TextView android:id="@+id/tvDateValue" style="@style/DailyLogSelectText" android:text="Select date" />
+            <ImageView style="@style/DailyLogSelectChevron" android:src="@drawable/ic_clock" />
+        </LinearLayout>
+
+        <TextView style="@style/DailyLogLabel" android:text="Weather" />
+        <LinearLayout android:id="@+id/fieldWeather" style="@style/DailyLogSelectField">
+            <TextView android:id="@+id/tvWeatherValue" style="@style/DailyLogSelectText" android:text="Select weather" />
+            <ImageView style="@style/DailyLogSelectChevron" />
+        </LinearLayout>
+
+        <TextView style="@style/DailyLogLabel" android:text="Site Conditions" />
+        <LinearLayout android:id="@+id/fieldSiteCondition" style="@style/DailyLogSelectField">
+            <TextView android:id="@+id/tvSiteConditionValue" style="@style/DailyLogSelectText" android:text="Select condition" />
+            <ImageView style="@style/DailyLogSelectChevron" />
+        </LinearLayout>
+
+        <TextView style="@style/DailyLogLabel" android:text="Work Done Description *" />
+        <EditText android:id="@+id/etWorkSummary" style="@style/DailyLogMultiline" android:hint="Describe the work done today…" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="6dp" android:layout_weight="1" android:orientation="vertical">
+                <TextView style="@style/DailyLogLabel" android:text="Labour Count" />
+                <EditText android:id="@+id/etLabourCount" style="@style/DailyLogInput" android:hint="Labourers" android:inputType="number" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:orientation="vertical">
+                <TextView style="@style/DailyLogLabel" android:text="Labour Hours" />
+                <EditText android:id="@+id/etLabourHours" style="@style/DailyLogInput" android:hint="Hours" android:inputType="numberDecimal" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout style="@style/DailyLogSectionHeader">
+            <TextView style="@style/DailyLogSectionTitle" android:text="Materials Used" />
+            <TextView android:id="@+id/btnAddMaterial" style="@style/DailyLogAddChip" android:text="+ Add" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/materialsContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+
+        <LinearLayout style="@style/DailyLogSectionHeader">
+            <TextView style="@style/DailyLogSectionTitle" android:text="Equipment Used" />
+            <TextView android:id="@+id/btnAddEquipment" style="@style/DailyLogAddChip" android:text="+ Add" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/equipmentContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+
+        <TextView style="@style/DailyLogLabel" android:text="Issues Encountered" />
+        <EditText android:id="@+id/etIssues" style="@style/DailyLogMultiline" android:hint="Weather delays, supply issues…" android:minHeight="72dp" />
+
+        <TextView style="@style/DailyLogLabel" android:text="Safety Observations" />
+        <EditText android:id="@+id/etSafety" style="@style/DailyLogMultiline" android:hint="Near-miss incidents, PPE compliance…" android:minHeight="72dp" />
+
+        <TextView style="@style/DailyLogLabel" android:text="Supervisor Name" />
+        <EditText android:id="@+id/etSupervisor" style="@style/DailyLogInput" android:hint="Supervisor name" android:inputType="textCapWords" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmitDailyLog"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#16A34A"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Save Daily Log"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

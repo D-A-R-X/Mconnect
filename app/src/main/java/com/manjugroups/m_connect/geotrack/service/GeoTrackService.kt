@@ -778,19 +778,30 @@ class GeoTrackService : Service() {
             if (!enforceClockInGate()) return@launch
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
-                // Cheap re-check (a pref read + flag compare) each cycle: relax
-                // or restore the GPS request as the shift goes idle/active.
-                reevaluateLocationMode()
-                if (hasNetwork()) {
-                    markNetworkOnlineIfNeeded()
-                    if (!enforceClockInGate()) break
-                    runWithSyncWakeLock {
-                        syncPoints()
-                        syncEvents()
+                try {
+                    // Cheap re-check (a pref read + flag compare) each cycle: relax
+                    // or restore the GPS request as the shift goes idle/active.
+                    reevaluateLocationMode()
+                    if (hasNetwork()) {
+                        markNetworkOnlineIfNeeded()
+                        if (!enforceClockInGate()) break
+                        runWithSyncWakeLock {
+                            syncPoints()
+                            syncEvents()
+                        }
+                    } else {
+                        markNetworkOfflineIfNeeded()
+                        Log.d(TAG, "Sync: no network, skipping")
                     }
-                } else {
-                    markNetworkOfflineIfNeeded()
-                    Log.d(TAG, "Sync: no network, skipping")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Never let an unexpected error kill the loop — local buffering
+                    // keeps running and we retry next cycle. Store-and-forward must
+                    // survive ANY single-cycle failure (permission, network, DB…);
+                    // the data stays queued locally until a cycle succeeds.
+                    consecutiveSyncFailures++
+                    Log.e(TAG, "Sync cycle error (continuing): ${e.message}", e)
                 }
                 // Adaptive delay: back off hard while sync is failing, ease off
                 // during an idle+still shift, otherwise the normal cadence.
@@ -971,6 +982,14 @@ class GeoTrackService : Service() {
         if (!hasBackground) missing.add("background_location")
         if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
         if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+
+        // Immediate, offline-capable heads-up to the staff so they can fix it
+        // and resume normal signal transfer. Battery-optimization is a softer
+        // setting (not a runtime permission) — keep it in the synced event for
+        // the reporting officer, but leave it out of the staff nag toast.
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(
+            this, missing.filter { it != "battery_optimization" },
+        )
         if (missing.isEmpty()) return
 
         val missingKey = missing.sorted().joinToString("_")

@@ -202,12 +202,17 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
                         Toast.LENGTH_LONG,
                     ).show()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Toast.makeText(
-                    context,
-                    extractHttpErrorMessage(e) ?: e.message ?: "Network error",
-                    Toast.LENGTH_LONG,
-                ).show()
+                // Sheet dismissed mid-submit → context is null; Toast(null,…) NPEs.
+                context?.let { ctx ->
+                    Toast.makeText(
+                        ctx,
+                        extractHttpErrorMessage(e) ?: e.message ?: "Network error",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             } finally {
                 submitting = false
                 _binding?.let { validateForm() }

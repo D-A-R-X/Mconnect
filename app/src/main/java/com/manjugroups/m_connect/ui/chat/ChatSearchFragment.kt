@@ -114,7 +114,8 @@ class ChatSearchFragment : Fragment() {
         hint: TextView,
         list: LinearLayout
     ) {
-        val skeletonContainer = requireView().findViewById<View>(R.id.skeletonContainer)
+        // Detached (Back pressed / view torn down mid-search) → bail.
+        val skeletonContainer = (view ?: return).findViewById<View>(R.id.skeletonContainer)
         hint.visibility = View.GONE
         SkeletonUtils.startSkeletonPulse(skeletonContainer)
         list.removeAllViews()
@@ -127,11 +128,9 @@ class ChatSearchFragment : Fragment() {
             )
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
             if (!resp.success) {
-                Toast.makeText(
-                    requireContext(),
-                    resp.error ?: "Search failed",
-                    Toast.LENGTH_SHORT
-                ).show()
+                context?.let {
+                    Toast.makeText(it, resp.error ?: "Search failed", Toast.LENGTH_SHORT).show()
+                }
                 return
             }
             if (resp.messages.isEmpty()) {
@@ -150,13 +149,13 @@ class ChatSearchFragment : Fragment() {
                     msg.body?.takeIf { it.isNotBlank() } ?: ""
                 list.addView(row)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-            Toast.makeText(
-                requireContext(),
-                "Network error: ${e.message ?: "unknown"}",
-                Toast.LENGTH_LONG
-            ).show()
+            context?.let {
+                Toast.makeText(it, "Network error: ${e.message ?: "unknown"}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 

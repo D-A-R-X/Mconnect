@@ -291,7 +291,11 @@ class LeavesFragment : Fragment() {
             }
     }
 
+    // Cancels an in-flight chunked render when a newer pass starts.
+    private var renderGen = 0
+
     private fun renderLeaves(leaves: List<LeaveData>, approvalMode: Boolean) {
+        renderGen++
         binding.leaveList.removeAllViews()
         binding.emptyState.visibility = if (leaves.isEmpty()) View.VISIBLE else View.GONE
 
@@ -300,7 +304,7 @@ class LeavesFragment : Fragment() {
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-        leaves.forEach { leave ->
+        fun bindCard(leave: LeaveData): View {
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_leave, binding.leaveList, false)
 
@@ -507,8 +511,22 @@ class LeavesFragment : Fragment() {
                 card.alpha = 1f
             }
 
-            binding.leaveList.addView(card)
+            return card
         }
+
+        // Chunked render — the admin "All" scope can carry hundreds of rows;
+        // one synchronous inflate pass froze mid-range phones. ~24 per frame,
+        // with the generation token abandoning stale passes on re-render or
+        // view teardown.
+        val gen = renderGen
+        val chunk = 24
+        fun renderChunk(start: Int) {
+            if (gen != renderGen || _binding == null) return
+            val end = minOf(start + chunk, leaves.size)
+            for (i in start until end) binding.leaveList.addView(bindCard(leaves[i]))
+            if (end < leaves.size) binding.leaveList.post { renderChunk(end) }
+        }
+        renderChunk(0)
     }
 
     private fun parseServerDate(parseFmt: SimpleDateFormat, raw: String?): Date? {

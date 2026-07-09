@@ -39,6 +39,9 @@ object TrackingNotification {
 
     const val CHANNEL_ID = "geotrack_channel"
     const val NOTIFICATION_ID = 9001
+    /** Tap-routing extra: the running field-activity kind (onduty/cp/sv/fleet). */
+    const val EXTRA_OPEN_ACTIVITY_KIND = "open_field_activity_kind"
+    private const val REQUEST_CODE = 41
 
     // A field activity older than this is treated as stale (process killed
     // mid-activity without a clean stop) → fall back to the neutral line so a
@@ -66,8 +69,18 @@ object TrackingNotification {
             it.startMs <= 0L || System.currentTimeMillis() - it.startMs < STALE_MS
         }
 
+        // Tap lands where the staff can END the running activity: On Duty →
+        // the HR dashboard (Complete On Duty), CP/SV/Fleet → Home's trips.
+        // Distinct requestCode: with requestCode 0 this PendingIntent would
+        // be the SAME PendingIntent as the tasks/permission notifications
+        // (extras are ignored by Intent.filterEquals), and each posting would
+        // clobber the others' routing extras.
+        val tapIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            activity?.let { putExtra(EXTRA_OPEN_ACTIVITY_KIND, it.kind) }
+        }
         val pi = PendingIntent.getActivity(
-            context, 0, Intent(context, MainActivity::class.java),
+            context, REQUEST_CODE, tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
@@ -128,10 +141,10 @@ object TrackingNotification {
     }
 
     private fun colorFor(kind: String): Int = when (kind) {
-        "onduty" -> 0xFFF59E0B.toInt() // amber
+        "onduty" -> 0xFF0B61CA.toInt() // app-theme blue
         "cp" -> 0xFF7C3AED.toInt()     // violet
         "sv" -> 0xFF0891B2.toInt()     // teal
         "fleet" -> 0xFF2563EB.toInt()  // blue
-        else -> 0xFF2563EB.toInt()
+        else -> 0xFF0B61CA.toInt()
     }
 }

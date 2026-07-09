@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Web-only task link sheet. A task with no mobile home is finished on the
+     web app; this sheet shows the deep link and offers Open / Copy so the
+     staff lands straight on the approval sheet / detail the task points to. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="24dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="18dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
+    <ImageView
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_pill_white"
+        android:contentDescription="@null"
+        android:padding="10dp"
+        android:src="@drawable/ic_language_globe"
+        app:tint="?attr/colorAccentPrimary" />
+
+    <TextView
+        android:id="@+id/tvWebTaskTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="@font/inter_bold"
+        android:gravity="center"
+        android:text="Open on the web app"
+        android:textColor="#101828"
+        android:textSize="19sp" />
+
+    <TextView
+        android:id="@+id/tvWebTaskSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:text="This task is completed on the web app. Open the link to go straight to it, or copy it."
+        android:textColor="#667085"
+        android:textSize="13sp" />
+
+    <!-- Deep link preview -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_input"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="14dp">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_link_generic"
+            app:tint="#667085" />
+
+        <TextView
+            android:id="@+id/tvWebTaskUrl"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="middle"
+            android:fontFamily="@font/geist_mono_regular"
+            android:maxLines="1"
+            android:text="https://mg.theairix.com"
+            android:textColor="#344054"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnWebTaskOpen"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="20dp"
+        app:backgroundTint="?attr/colorAccentPrimary"
+        android:fontFamily="@font/inter_medium"
+        android:text="Open Link"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        app:cornerRadius="27dp"
+        app:elevation="0dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnWebTaskCopy"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="Copy Link"
+        android:textAllCaps="false"
+        android:textColor="#344054"
+        android:textSize="15sp"
+        app:cornerRadius="27dp"
+        app:strokeColor="#D0D5DD" />
+
+</LinearLayout>

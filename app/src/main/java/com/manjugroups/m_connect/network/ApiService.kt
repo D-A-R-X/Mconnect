@@ -1117,9 +1117,21 @@ interface ApiService {
     ): InspectionActionResponse
 
     companion object {
-        fun create(): ApiService {
+        // Single shared client for the whole app. Previously every one of the
+        // ~114 create() call sites built a fresh OkHttpClient (its own
+        // connection + thread pools), so no TLS/keep-alive reuse across screens
+        // — a real per-navigation latency hit. Now built once, lazily.
+        private val instance: ApiService by lazy { buildService() }
+
+        fun create(): ApiService = instance
+
+        private fun buildService(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                // BODY logging buffers + logs full request/response bodies —
+                // fine in debug, but pure overhead (and a data-leak risk) in
+                // release. Gate it to debug builds only.
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
             }
             // Auto-logout on 401. Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
