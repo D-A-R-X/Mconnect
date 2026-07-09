@@ -201,7 +201,10 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
     private fun launchCamera(video: Boolean) {
         val ctx = context ?: return
         val f = runCatching {
-            File.createTempFile(if (video) "dpr_vid_" else "dpr_img_", if (video) ".mp4" else ".jpg", ctx.cacheDir)
+            // Must live under a directory declared in res/xml/file_paths.xml,
+            // else FileProvider.getUriForFile throws "failed to find root".
+            val dir = File(ctx.cacheDir, "daily_log_media").apply { if (!exists()) mkdirs() }
+            File.createTempFile(if (video) "dpr_vid_" else "dpr_img_", if (video) ".mp4" else ".jpg", dir)
         }.getOrNull() ?: run {
             Toast.makeText(ctx, "Unable to create file", Toast.LENGTH_SHORT).show(); return
         }

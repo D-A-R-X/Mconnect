@@ -190,61 +190,107 @@ class DailyLogFragment : Fragment() {
         binding.tvEntriesTitle.visibility = if (logs.isEmpty()) View.GONE else View.VISIBLE
         logs.forEach { log ->
             val ctx = requireContext()
-            val card = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                setBackgroundResource(R.drawable.bg_input)
-                setPadding(dp(14), dp(12), dp(14), dp(12))
+            val cardView = com.google.android.material.card.MaterialCardView(ctx).apply {
+                radius = dp(16).toFloat()
+                cardElevation = 0f
+                strokeColor = Color.parseColor("#EAECF0")
+                strokeWidth = dp(1)
+                setCardBackgroundColor(Color.WHITE)
+                isClickable = true
+                isFocusable = true
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = dp(10) }
+                setOnClickListener { openLogDetail(log) }
             }
+            val content = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(14), dp(14), dp(14))
+            }
+
             val header = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
             header.addView(TextView(ctx).apply {
-                text = displayDate(log.date)
-                textSize = 13f
+                text = (weatherEmoji(log.weather)?.let { "$it  " } ?: "") + displayDate(log.date)
+                textSize = 14f
                 setTextColor(Color.parseColor("#101828"))
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
-            log.projectName?.takeIf { it.isNotBlank() }?.let { pn ->
-                header.addView(TextView(ctx).apply {
-                    text = pn
-                    textSize = 11f
-                    setTextColor(Color.parseColor("#0B61CA"))
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                })
-            }
-            card.addView(header)
-            card.addView(TextView(ctx).apply {
+            log.projectName?.takeIf { it.isNotBlank() }?.let { header.addView(projectChip(ctx, it)) }
+            content.addView(header)
+
+            content.addView(TextView(ctx).apply {
                 text = log.workSummary?.trim().takeUnless { it.isNullOrBlank() } ?: "—"
                 textSize = 13f
                 setTextColor(Color.parseColor("#475467"))
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, dp(3), 0, 0)
+                setPadding(0, dp(7), 0, 0)
             })
-            val meta = buildString {
-                log.labourCount?.let { append("$it labour") }
-                log.labourHours?.let { if (isNotEmpty()) append(" · "); append("${it.toInt()} hrs") }
-                log.weather?.let { if (isNotEmpty()) append(" · "); append(it.replaceFirstChar(Char::uppercase)) }
+
+            val pills = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(10), 0, 0)
             }
-            if (meta.isNotEmpty()) card.addView(TextView(ctx).apply {
-                text = meta; textSize = 11f; setTextColor(Color.parseColor("#98A2B3")); setPadding(0, dp(4), 0, 0)
-            })
+            var hasPill = false
+            log.labourCount?.let { pills.addView(pill(ctx, "👷 $it")); hasPill = true }
+            log.labourHours?.let { pills.addView(pill(ctx, "⏱ ${trimNum(it)} hrs")); hasPill = true }
+            log.siteConditions?.takeIf { it.isNotBlank() }?.let {
+                pills.addView(pill(ctx, it.replaceFirstChar(Char::uppercase))); hasPill = true
+            }
+            val attCount = log.attachments.orEmpty().count { it.storageId.isNotBlank() }
+            if (attCount > 0) { pills.addView(pill(ctx, "🖼 $attCount")); hasPill = true }
+            if (hasPill) content.addView(pills)
+
             val atts = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
-            if (atts.isNotEmpty()) card.addView(buildAttachmentStrip(ctx, atts))
-            card.isClickable = true
-            card.foreground = ctx.obtainStyledAttributes(
-                intArrayOf(android.R.attr.selectableItemBackground),
-            ).let { ta -> ta.getDrawable(0).also { ta.recycle() } }
-            card.setOnClickListener { openLogDetail(log) }
-            c.addView(card)
+            if (atts.isNotEmpty()) content.addView(buildAttachmentStrip(ctx, atts))
+
+            cardView.addView(content)
+            c.addView(cardView)
         }
     }
+
+    private fun weatherEmoji(w: String?): String? = when (w?.lowercase(Locale.US)) {
+        "sunny" -> "☀️"
+        "cloudy" -> "☁️"
+        "rainy" -> "🌧️"
+        "windy" -> "💨"
+        "stormy" -> "⛈️"
+        else -> null
+    }
+
+    private fun pill(ctx: android.content.Context, text: String): TextView = TextView(ctx).apply {
+        this.text = text
+        textSize = 11f
+        setTextColor(Color.parseColor("#475467"))
+        setPadding(dp(9), dp(4), dp(9), dp(5))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(9).toFloat()
+            setColor(Color.parseColor("#F2F4F7"))
+        }
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { marginEnd = dp(6) }
+    }
+
+    private fun projectChip(ctx: android.content.Context, name: String): TextView = TextView(ctx).apply {
+        text = name
+        textSize = 11f
+        setTextColor(Color.parseColor("#0B61CA"))
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setPadding(dp(9), dp(4), dp(9), dp(5))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(9).toFloat()
+            setColor(Color.parseColor("#EAF2FE"))
+        }
+    }
+
+    private fun trimNum(v: Double): String =
+        if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 
     // ── DPR: recipients + history across projects ──
 

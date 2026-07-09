@@ -77,15 +77,29 @@ class DailyLogDetailBottomSheet : BottomSheetDialogFragment() {
         })
         log.projectName?.takeIf { it.isNotBlank() }?.let {
             root.addView(TextView(ctx).apply {
-                text = it; textSize = 13f; setTextColor(Color.parseColor("#0B61CA")); setPadding(0, dp(2), 0, 0)
+                text = it; textSize = 12f; setTextColor(Color.parseColor("#0B61CA"))
+                setPadding(dp(10), dp(4), dp(10), dp(5))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(9).toFloat(); setColor(Color.parseColor("#EAF2FE"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(6) }
             })
         }
         val chips = listOfNotNull(
-            log.weather?.takeIf { it.isNotBlank() }?.replaceFirstChar(Char::uppercase),
+            log.weather?.takeIf { it.isNotBlank() }?.let { "${weatherEmoji(it) ?: ""} ${it.replaceFirstChar(Char::uppercase)}".trim() },
             log.siteConditions?.takeIf { it.isNotBlank() }?.replaceFirstChar(Char::uppercase),
-        ).joinToString("  ·  ")
+        ).joinToString("   ·   ")
         if (chips.isNotEmpty()) root.addView(TextView(ctx).apply {
-            text = chips; textSize = 12f; setTextColor(Color.parseColor("#667085")); setPadding(0, dp(6), 0, 0)
+            text = chips; textSize = 12f; setTextColor(Color.parseColor("#667085")); setPadding(0, dp(8), 0, 0)
+        })
+
+        root.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#EEF0F4"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1),
+            ).apply { topMargin = dp(14) }
         })
 
         section(ctx, root, "Work Done", log.workSummary)
@@ -184,6 +198,15 @@ class DailyLogDetailBottomSheet : BottomSheetDialogFragment() {
 
     private fun trimNum(v: Double): String =
         if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
+    private fun weatherEmoji(w: String?): String? = when (w?.lowercase(Locale.US)) {
+        "sunny" -> "☀️"
+        "cloudy" -> "☁️"
+        "rainy" -> "🌧️"
+        "windy" -> "💨"
+        "stormy" -> "⛈️"
+        else -> null
+    }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 

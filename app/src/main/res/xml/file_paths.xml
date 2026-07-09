@@ -10,4 +10,5 @@
     <cache-path name="chat_documents" path="chat_documents/" />
     <cache-path name="collections" path="collections/" />
     <cache-path name="loandesk" path="loandesk/" />
+    <cache-path name="daily_log_media" path="daily_log_media/" />
 </paths>
