@@ -2,19 +2,26 @@ package com.manjugroups.m_connect.ui.projects
 
 import android.app.DatePickerDialog
 import android.app.Dialog
+import android.content.Context
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -24,12 +31,17 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateDailyLogRequest
 import com.manjugroups.m_connect.network.DailyLogApi
+import com.manjugroups.m_connect.network.DailyLogAttachment
 import com.manjugroups.m_connect.network.DailyLogEquipment
 import com.manjugroups.m_connect.network.DailyLogMaterial
 import com.manjugroups.m_connect.network.ProjectSummary
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -50,6 +62,22 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
 
     private val weathers = listOf("sunny", "cloudy", "rainy", "windy", "stormy")
     private val conditions = listOf("good", "fair", "poor")
+
+    private data class PickedMedia(val uri: Uri, val isVideo: Boolean)
+    private val pickedMedia = mutableListOf<PickedMedia>()
+
+    // Photo Picker (no storage permission needed); images + videos, up to 10.
+    private val pickMedia = registerForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(10),
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        val cr = context?.contentResolver
+        uris.forEach { uri ->
+            val isVideo = cr?.getType(uri)?.startsWith("video") == true
+            pickedMedia.add(PickedMedia(uri, isVideo))
+        }
+        view?.let { renderAttachments(it) }
+    }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -101,9 +129,56 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.btnAddEquipment).setOnClickListener {
             view.findViewById<LinearLayout>(R.id.equipmentContainer).addView(buildRow(listOf("Equipment" to 2f, "Hours" to 1f)))
         }
+        view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener {
+            pickMedia.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+            )
+        }
         view.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).setOnClickListener { submit(view) }
 
+        renderAttachments(view)
         loadProjects()
+    }
+
+    private fun renderAttachments(root: View) {
+        val c = root.findViewById<LinearLayout>(R.id.attachmentsContainer)
+        c.removeAllViews()
+        val ctx = context ?: return
+        pickedMedia.forEach { m ->
+            val frame = FrameLayout(ctx).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply { marginEnd = dp(8) }
+            }
+            val iv = ImageView(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(dp(72), dp(72))
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundResource(R.drawable.bg_input)
+                clipToOutline = true
+                load(m.uri)
+            }
+            frame.addView(iv)
+            if (m.isVideo) {
+                frame.addView(TextView(ctx).apply {
+                    text = "▶"
+                    textSize = 20f
+                    setTextColor(Color.WHITE)
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
+                    )
+                })
+            }
+            frame.addView(TextView(ctx).apply {
+                text = "✕"
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                setBackgroundResource(R.drawable.bg_attn_action_reject)
+                setPadding(dp(5), dp(1), dp(5), dp(2))
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END,
+                ).apply { topMargin = dp(3); marginEnd = dp(3) }
+                setOnClickListener { pickedMedia.remove(m); renderAttachments(root) }
+            })
+            c.addView(frame)
+        }
     }
 
     private var projectsLoading = false
@@ -218,34 +293,86 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         if (submitting) return
         submitting = true
         val btn = root.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).apply { isEnabled = false }
-        val req = CreateDailyLogRequest(
-            projectId = project.id,
-            date = date,
-            weather = weather,
-            siteConditions = condition,
-            workSummary = work,
-            labourCount = root.findViewById<EditText>(R.id.etLabourCount).text?.toString()?.trim()?.toIntOrNull(),
-            labourHours = root.findViewById<EditText>(R.id.etLabourHours).text?.toString()?.trim()?.toDoubleOrNull(),
-            materialsUsed = collectMaterials(root).ifEmpty { null },
-            equipmentUsed = collectEquipment(root).ifEmpty { null },
-            issuesEncountered = root.findViewById<EditText>(R.id.etIssues).text?.toString()?.trim()?.ifBlank { null },
-            safetyObservations = root.findViewById<EditText>(R.id.etSafety).text?.toString()?.trim()?.ifBlank { null },
-            supervisorName = root.findViewById<EditText>(R.id.etSupervisor).text?.toString()?.trim()?.ifBlank { null },
-        )
+        val appCtx = requireContext().applicationContext
+        val labourCount = root.findViewById<EditText>(R.id.etLabourCount).text?.toString()?.trim()?.toIntOrNull()
+        val labourHours = root.findViewById<EditText>(R.id.etLabourHours).text?.toString()?.trim()?.toDoubleOrNull()
+        val materials = collectMaterials(root).ifEmpty { null }
+        val equipment = collectEquipment(root).ifEmpty { null }
+        val issues = root.findViewById<EditText>(R.id.etIssues).text?.toString()?.trim()?.ifBlank { null }
+        val safety = root.findViewById<EditText>(R.id.etSafety).text?.toString()?.trim()?.ifBlank { null }
+        val supervisor = root.findViewById<EditText>(R.id.etSupervisor).text?.toString()?.trim()?.ifBlank { null }
+
         viewLifecycleOwner.lifecycleScope.launch {
+            // Upload any picked photos/videos first, then create the log with
+            // their storage IDs. A failed upload aborts the save so the entry
+            // never lands without its attachments.
+            if (pickedMedia.isNotEmpty()) btn.text = "Uploading media…"
+            val attachments = uploadPickedMedia(appCtx)
+            if (view == null) return@launch
+            if (attachments == null) {
+                submitting = false
+                btn.isEnabled = true
+                btn.text = "Save Daily Log"
+                Toast.makeText(appCtx, "Couldn't upload media. Check your connection and try again.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            btn.text = "Saving…"
+            val req = CreateDailyLogRequest(
+                projectId = project.id,
+                date = date,
+                weather = weather,
+                siteConditions = condition,
+                workSummary = work,
+                labourCount = labourCount,
+                labourHours = labourHours,
+                materialsUsed = materials,
+                equipmentUsed = equipment,
+                issuesEncountered = issues,
+                safetyObservations = safety,
+                supervisorName = supervisor,
+                attachments = attachments.ifEmpty { null },
+            )
             val resp = runCatching { dprApi.createDailyLog(session.bearerToken, req) }.getOrNull()
             submitting = false
             if (view == null) return@launch
             btn.isEnabled = true
+            btn.text = "Save Daily Log"
             if (resp?.success == true) {
                 setFragmentResult(RESULT_KEY, bundleOf(KEY_PROJECT_ID to project.id))
-                context?.let { Toast.makeText(it, "Daily log saved", Toast.LENGTH_SHORT).show() }
+                Toast.makeText(appCtx, "Daily log saved", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()
             } else {
-                context?.let { Toast.makeText(it, resp?.error ?: "Couldn't save", Toast.LENGTH_LONG).show() }
+                Toast.makeText(appCtx, resp?.error ?: "Couldn't save", Toast.LENGTH_LONG).show()
             }
         }
     }
+
+    /**
+     * Copy each picked media to a temp file and upload it to storage. Returns
+     * the attachment list, or null if any upload failed (so the caller aborts).
+     */
+    private suspend fun uploadPickedMedia(ctx: Context): List<DailyLogAttachment>? =
+        withContext(Dispatchers.IO) {
+            if (pickedMedia.isEmpty()) return@withContext emptyList()
+            val cr = ctx.contentResolver
+            val out = mutableListOf<DailyLogAttachment>()
+            for (m in pickedMedia.toList()) {
+                val mime = cr.getType(m.uri) ?: if (m.isVideo) "video/mp4" else "image/jpeg"
+                val ext = if (m.isVideo) "mp4" else "jpg"
+                val tmp = runCatching {
+                    val f = File.createTempFile("dpr_", ".$ext", ctx.cacheDir)
+                    val copied = cr.openInputStream(m.uri)?.use { inp ->
+                        f.outputStream().use { inp.copyTo(it) }; true
+                    } ?: false
+                    if (!copied) { f.delete(); null } else f
+                }.getOrNull() ?: return@withContext null
+                val result = StorageUploader.upload(api, session.bearerToken, tmp, contentType = mime)
+                tmp.delete()
+                val id = result.storageId ?: return@withContext null
+                out.add(DailyLogAttachment(storageId = id, type = if (m.isVideo) "video" else "image"))
+            }
+            out
+        }
 
     private fun displayDate(iso: String): String = runCatching {
         SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)!!)

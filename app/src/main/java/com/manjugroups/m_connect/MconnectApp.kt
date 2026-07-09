@@ -11,6 +11,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import coil.decode.VideoFrameDecoder
 
 class MconnectApp : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader {
@@ -21,6 +22,9 @@ class MconnectApp : Application(), ImageLoaderFactory {
                 } else {
                     add(GifDecoder.Factory())
                 }
+                // Render a frame from video attachments (daily-log media, etc.)
+                // so they get a real thumbnail instead of a blank box.
+                add(VideoFrameDecoder.Factory())
             }
             .memoryCache {
                 coil.memory.MemoryCache.Builder(this)

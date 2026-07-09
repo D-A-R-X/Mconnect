@@ -1,14 +1,21 @@
 package com.manjugroups.m_connect.ui.projects
 
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import coil.load
+import com.manjugroups.m_connect.BuildConfig
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -20,6 +27,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentDailyLogBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyLogApi
+import com.manjugroups.m_connect.network.DailyLogAttachment
 import com.manjugroups.m_connect.network.DailyLogEntry
 import com.manjugroups.m_connect.network.DprRecipient
 import com.manjugroups.m_connect.network.DprReport
@@ -222,6 +230,8 @@ class DailyLogFragment : Fragment() {
             if (meta.isNotEmpty()) card.addView(TextView(ctx).apply {
                 text = meta; textSize = 11f; setTextColor(Color.parseColor("#98A2B3")); setPadding(0, dp(4), 0, 0)
             })
+            val atts = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
+            if (atts.isNotEmpty()) card.addView(buildAttachmentStrip(ctx, atts))
             c.addView(card)
         }
     }
@@ -378,6 +388,48 @@ class DailyLogFragment : Fragment() {
                 loadDpr()
             }
         }
+    }
+
+    /** Horizontal strip of attachment thumbnails; tap opens the media. */
+    private fun buildAttachmentStrip(ctx: android.content.Context, atts: List<DailyLogAttachment>): View {
+        val scroll = HorizontalScrollView(ctx).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+        }
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        atts.take(12).forEach { a ->
+            val url = a.url?.takeIf { it.isNotBlank() }
+                ?: (BuildConfig.BASE_URL + "api/storage/serve?storageId=" + a.storageId)
+            val frame = FrameLayout(ctx).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(64), dp(64)).apply { marginEnd = dp(8) }
+            }
+            frame.addView(ImageView(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(dp(64), dp(64))
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundResource(R.drawable.bg_input)
+                clipToOutline = true
+                load(url)
+            })
+            if (a.type == "video") {
+                frame.addView(TextView(ctx).apply {
+                    text = "▶"; textSize = 18f; setTextColor(Color.WHITE)
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
+                    )
+                })
+            }
+            frame.setOnClickListener { openMedia(url) }
+            row.addView(frame)
+        }
+        scroll.addView(row)
+        return scroll
+    }
+
+    private fun openMedia(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { toast("Can't open this file") }
     }
 
     private fun displayDate(iso: String?): String {

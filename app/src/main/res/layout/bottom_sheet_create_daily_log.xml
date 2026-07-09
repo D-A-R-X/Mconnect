@@ -103,6 +103,23 @@
         <TextView style="@style/DailyLogLabel" android:text="Supervisor Name" />
         <EditText android:id="@+id/etSupervisor" style="@style/DailyLogInput" android:hint="Supervisor name" android:inputType="textCapWords" />
 
+        <LinearLayout style="@style/DailyLogSectionHeader">
+            <TextView style="@style/DailyLogSectionTitle" android:text="Photos &amp; Videos" />
+            <TextView android:id="@+id/btnAddAttachment" style="@style/DailyLogAddChip" android:text="+ Add" />
+        </LinearLayout>
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/attachmentsContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubmitDailyLog"
             android:layout_width="match_parent"

@@ -131,6 +131,14 @@ data class DailyLogEquipment(
     val hours: Double,
 )
 
+/** A photo/video attachment on a daily log. [type] is "image" or "video". */
+data class DailyLogAttachment(
+    val storageId: String,
+    val url: String? = null,
+    val type: String? = null,
+    val name: String? = null,
+)
+
 data class CreateDailyLogRequest(
     val projectId: String,
     val date: String,
@@ -144,6 +152,7 @@ data class CreateDailyLogRequest(
     val issuesEncountered: String? = null,
     val safetyObservations: String? = null,
     val supervisorName: String? = null,
+    val attachments: List<DailyLogAttachment>? = null,
 )
 
 data class CreateDailyLogResponse(
@@ -164,6 +173,7 @@ data class DailyLogEntry(
     val createdBy: String? = null,
     val projectId: String? = null,
     val projectName: String? = null,
+    val attachments: List<DailyLogAttachment>? = null,
 )
 
 data class DailyLogListResponse(
