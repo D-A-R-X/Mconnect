@@ -24,6 +24,15 @@ object DailyLogAttachmentCache {
     private val gson = Gson()
     private val mapType = object : TypeToken<MutableMap<String, List<DailyLogAttachment>>>() {}.type
 
+    /**
+     * Content signature used as the cache key. The created-log id from the
+     * old prod create route can't be relied on, so we key on fields present
+     * on both sides: project + date + work summary. Reconstructable at render
+     * time from the log the list returns.
+     */
+    fun key(projectId: String?, date: String?, workSummary: String?): String =
+        "${projectId.orEmpty()}|${date.orEmpty()}|${workSummary?.trim().orEmpty()}"
+
     private fun readAll(ctx: Context): MutableMap<String, List<DailyLogAttachment>> {
         val json = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
             ?: return mutableMapOf()

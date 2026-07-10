@@ -509,8 +509,7 @@ class DailyLogFragment : Fragment() {
 
     private fun openLogDetail(log: DailyLogEntry) {
         // Fold in device-cached media when the server has none (pre-deploy).
-        val merged = if (log.attachments.orEmpty().any { it.storageId.isNotBlank() }) log
-            else log.copy(attachments = DailyLogAttachmentCache.get(requireContext(), log.id))
+        val merged = log.copy(attachments = mergedAttachments(requireContext(), log))
         val json = runCatching { com.google.gson.Gson().toJson(merged) }.getOrNull() ?: return
         DailyLogDetailBottomSheet.newInstance(json).show(childFragmentManager, "daily_log_detail")
     }
@@ -518,9 +517,12 @@ class DailyLogFragment : Fragment() {
     /** Server attachments if present, else the device-local cache for this log. */
     private fun mergedAttachments(ctx: android.content.Context, log: DailyLogEntry): List<DailyLogAttachment> {
         val server = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
-        return server.ifEmpty {
-            DailyLogAttachmentCache.get(ctx, log.id).filter { it.storageId.isNotBlank() }
-        }
+        if (server.isNotEmpty()) return server
+        val bySig = DailyLogAttachmentCache.get(
+            ctx, DailyLogAttachmentCache.key(log.projectId, log.date, log.workSummary),
+        )
+        return bySig.ifEmpty { DailyLogAttachmentCache.get(ctx, log.id) }
+            .filter { it.storageId.isNotBlank() }
     }
 
     private fun displayDate(iso: String?): String {

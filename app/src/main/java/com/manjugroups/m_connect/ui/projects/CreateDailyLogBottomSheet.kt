@@ -619,7 +619,15 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 clearDraft()
                 // Remember this log's uploaded media locally so it renders even
                 // before the backend `attachments` field is deployed to prod.
-                if (attachments.isNotEmpty()) DailyLogAttachmentCache.put(appCtx, resp.id, attachments)
+                // Key on content (project+date+summary — always reconstructable
+                // when the list reloads) and also on the id if the route
+                // returned one.
+                if (attachments.isNotEmpty()) {
+                    DailyLogAttachmentCache.put(
+                        appCtx, DailyLogAttachmentCache.key(project.id, date, work), attachments,
+                    )
+                    DailyLogAttachmentCache.put(appCtx, resp.id, attachments)
+                }
                 setFragmentResult(RESULT_KEY, bundleOf(KEY_PROJECT_ID to project.id))
                 Toast.makeText(appCtx, "Daily log saved", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()
