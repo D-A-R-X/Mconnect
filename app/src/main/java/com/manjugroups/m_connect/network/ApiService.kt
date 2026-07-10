@@ -67,6 +67,26 @@ interface ApiService {
         @Query("year") year: Int? = null,
     ): FinesListResponse
 
+    // ── VP / Management Dashboard ──
+    @GET("api/dashboard/vp")
+    suspend fun getVpDashboard(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+    ): VpDashboardResponse
+
+    @GET("api/dashboard/calls")
+    suspend fun getDashboardCalls(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+        @Query("direction") direction: String? = null,
+    ): DashboardCallsResponse
+
+    @GET("api/dashboard/registrations")
+    suspend fun getDashboardRegistrations(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+    ): DashboardRegistrationsResponse
+
     @POST("api/hr/fines/create")
     suspend fun createFine(
         @Header("Authorization") token: String,
@@ -3580,6 +3600,61 @@ data class FineDeductionItem(
     val photoUrl: String? = null,
     val staffPhotoUrl: String? = null,
     val createdAt: String? = null,
+)
+
+// ── VP / Management Dashboard models ──
+data class VpDashboardResponse(
+    val success: Boolean = false,
+    val date: String? = null,
+    val present: Int = 0,
+    val absent: Int = 0,
+    val totalStaff: Int = 0,
+    val notPunchedIn: Int = 0,
+    val incomingCalls: Int = 0,
+    val outboundCalls: Int = 0,
+    val totalCalls: Int = 0,
+    val cpVisitsFixed: Int = 0,
+    val cpVisitsCompleted: Int = 0,
+    val svVisitsFixed: Int = 0,
+    val svVisitsCompleted: Int = 0,
+    val collectionTotal: Double = 0.0,
+    val collectionCount: Int = 0,
+    val bookingCount: Int = 0,
+    val registrationCount: Int = 0,
+    val error: String? = null,
+)
+
+data class DashboardCallRow(
+    val id: String,
+    val phoneNumber: String? = null,
+    val callType: String? = null,
+    val status: String? = null,
+    val agent: String? = null,
+    val duration: String? = null,
+    val talkTime: String? = null,
+    val time: String? = null,
+)
+
+data class DashboardCallsResponse(
+    val success: Boolean = false,
+    val calls: List<DashboardCallRow> = emptyList(),
+    val error: String? = null,
+)
+
+data class DashboardRegistrationRow(
+    val id: String,
+    val clientName: String? = null,
+    val ownerName: String? = null,
+    val status: String? = null,
+    val completedDate: String? = null,
+    val scheduledDate: String? = null,
+    val notes: String? = null,
+)
+
+data class DashboardRegistrationsResponse(
+    val success: Boolean = false,
+    val registrations: List<DashboardRegistrationRow> = emptyList(),
+    val error: String? = null,
 )
 
 data class CreateFineRequest(

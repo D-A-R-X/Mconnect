@@ -93,6 +93,14 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
 
+        // Resize the sheet when the keyboard opens so the focused input (the
+        // Remarks / search field) and the pinned Next/Submit button stay above
+        // it instead of being covered. App convention — see CreateIssueBottomSheet.
+        // Pairs with the weighted NestedScrollView in sheet_on_duty_form.xml.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
+
         // Intercept the system back gesture / hardware back button so it
         // walks the multi-step sheet back one step at a time instead of
         // dismissing outright.

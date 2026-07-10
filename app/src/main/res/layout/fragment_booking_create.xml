@@ -44,8 +44,10 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="#F5F6F8"
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
+            android:paddingTop="12dp"
             android:paddingBottom="24dp">
 
             <TextView

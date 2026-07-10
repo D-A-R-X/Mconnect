@@ -53,7 +53,8 @@ class DailyLogDetailBottomSheet : BottomSheetDialogFragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             )
             isFillViewport = false
-            setPadding(dp(20), dp(14), dp(20), dp(28))
+            setBackgroundColor(Color.parseColor("#F7F8FA"))
+            setPadding(dp(16), dp(14), dp(16), dp(28))
         }
         val root = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(root)
@@ -95,61 +96,112 @@ class DailyLogDetailBottomSheet : BottomSheetDialogFragment() {
             text = chips; textSize = 12f; setTextColor(Color.parseColor("#667085")); setPadding(0, dp(8), 0, 0)
         })
 
-        root.addView(View(ctx).apply {
-            setBackgroundColor(Color.parseColor("#EEF0F4"))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(1),
-            ).apply { topMargin = dp(14) }
-        })
-
-        section(ctx, root, "Work Done", log.workSummary)
-
+        // ── Details card (work / labour / materials / equipment / issues / safety) ──
+        val details = card(ctx)
+        var firstSection = true
+        fun addSection(title: String, body: String?) {
+            if (body.isNullOrBlank()) return
+            if (!firstSection) details.addView(cardDivider(ctx))
+            firstSection = false
+            details.addView(label(ctx, title))
+            details.addView(bodyText(ctx, body))
+        }
+        addSection("Work Done", log.workSummary)
         val labour = buildString {
             log.labourCount?.let { append("$it labourers") }
             log.labourHours?.let { if (isNotEmpty()) append(" · "); append("${trimNum(it)} hrs") }
         }
-        if (labour.isNotBlank()) section(ctx, root, "Labour", labour)
-
+        addSection("Labour", labour.ifBlank { null })
         log.materialsUsed?.takeIf { it.isNotEmpty() }?.let { mats ->
-            section(ctx, root, "Materials Used", mats.joinToString("\n") { m ->
+            addSection("Materials Used", mats.joinToString("\n") { m ->
                 "•  ${m.name} — ${trimNum(m.quantity)}${m.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""}"
             })
         }
         log.equipmentUsed?.takeIf { it.isNotEmpty() }?.let { eq ->
-            section(ctx, root, "Equipment Used", eq.joinToString("\n") { e -> "•  ${e.name} — ${trimNum(e.hours)} hrs" })
+            addSection("Equipment Used", eq.joinToString("\n") { e -> "•  ${e.name} — ${trimNum(e.hours)} hrs" })
         }
-        log.issuesEncountered?.takeIf { it.isNotBlank() }?.let { section(ctx, root, "Issues Encountered", it) }
-        log.safetyObservations?.takeIf { it.isNotBlank() }?.let { section(ctx, root, "Safety Observations", it) }
+        addSection("Issues Encountered", log.issuesEncountered?.takeIf { it.isNotBlank() })
+        addSection("Safety Observations", log.safetyObservations?.takeIf { it.isNotBlank() })
+        if (details.childCount > 0) root.addView(details)
 
+        // ── Sign-off card ──
         val signoff = listOfNotNull(
             log.supervisorName?.takeIf { it.isNotBlank() }?.let { "Supervisor: $it" },
             log.createdBy?.takeIf { it.isNotBlank() }?.let { "Created by: $it" },
         ).joinToString("  ·  ")
-        if (signoff.isNotEmpty()) section(ctx, root, "Sign-off", signoff)
-
-        val atts = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
-        if (atts.isNotEmpty()) {
-            root.addView(label(ctx, "Photos & Videos"))
-            root.addView(buildAttachmentStrip(ctx, atts))
+        if (signoff.isNotEmpty()) {
+            val sc = card(ctx)
+            sc.addView(label(ctx, "Sign-off"))
+            sc.addView(bodyText(ctx, signoff))
+            root.addView(sc)
         }
+
+        // ── Photos & Videos card ──
+        val atts = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
+        val media = card(ctx)
+        media.addView(label(ctx, "Photos & Videos"))
+        if (atts.isNotEmpty()) media.addView(buildAttachmentStrip(ctx, atts))
+        else media.addView(buildMediaEmptyState(ctx))
+        root.addView(media)
         return scroll
     }
 
-    private fun section(ctx: Context, root: LinearLayout, title: String, body: String?) {
-        if (body.isNullOrBlank()) return
-        root.addView(label(ctx, title))
-        root.addView(bodyText(ctx, body))
+    /** White rounded card container on the grey page. */
+    private fun card(ctx: Context): LinearLayout = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat()
+            setColor(Color.WHITE)
+            setStroke(dp(1), Color.parseColor("#EDEFF3"))
+        }
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(12) }
+    }
+
+    private fun cardDivider(ctx: Context): View = View(ctx).apply {
+        setBackgroundColor(Color.parseColor("#F2F4F7"))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(1),
+        ).apply { topMargin = dp(13); bottomMargin = dp(13) }
     }
 
     private fun label(ctx: Context, text: String) = TextView(ctx).apply {
-        this.text = text; textSize = 12f
+        this.text = text.uppercase(Locale.getDefault()); textSize = 11f
         setTextColor(Color.parseColor("#98A2B3")); typeface = Typeface.DEFAULT_BOLD
-        setPadding(0, dp(16), 0, dp(4))
+        letterSpacing = 0.04f
+        setPadding(0, 0, 0, dp(5))
     }
 
     private fun bodyText(ctx: Context, text: String) = TextView(ctx).apply {
         this.text = text; textSize = 14f
         setTextColor(Color.parseColor("#344054")); setLineSpacing(dp(2).toFloat(), 1f)
+    }
+
+    /** Placeholder shown in the media holder when the log has no photos/videos. */
+    private fun buildMediaEmptyState(ctx: Context): View {
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(22), dp(16), dp(22))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(6) }
+            addView(TextView(ctx).apply {
+                text = "🖼️"; textSize = 22f; gravity = Gravity.CENTER
+            })
+            addView(TextView(ctx).apply {
+                text = "No photos or videos"; textSize = 13f
+                setTextColor(Color.parseColor("#98A2B3")); gravity = Gravity.CENTER
+                setPadding(0, dp(6), 0, 0)
+            })
+        }
     }
 
     private fun buildAttachmentStrip(ctx: Context, atts: List<DailyLogAttachment>): View {

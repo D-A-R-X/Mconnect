@@ -543,26 +543,20 @@ class HrDashboardFragment : Fragment() {
                     binding.btnClockInNow.isEnabled = !state.isLoading && !state.isSubmitting
                     binding.btnClockOut.isEnabled = !state.isLoading && !state.isSubmitting
 
-                    // Three-state button logic now respects the "day stays
-                    // editable until midnight" rule the user asked for:
-                    //
-                    //   1. Not punched in yet today → "Clock In Now"
-                    //   2. Currently clocked in (open session) → "Clock Out"
-                    //   3. Already clocked out today but day not finalized
-                    //      → "Clock In" (re-opens a session on the same
-                    //      attendance row; first-punch-in stays canonical,
-                    //      and the last touch becomes the effective
-                    //      punch-out at midnight or next manual close).
-                    //
-                    // This handles two real cases: a user who punched out
-                    // for a break and wants to resume, and a user who
-                    // accidentally tapped Clock Out and just wants to keep
-                    // their day going. The old behaviour greyed out the
-                    // button and forced them to wait for midnight.
-                    val hasClockedOutToday =
-                        !state.isClockedIn && !state.firstPunchInIso.isNullOrBlank()
-
-                    if (state.isClockedIn) {
+                    // Mobile clock button — three states driven by
+                    // clockedOutOnMobile (the person's LATEST attendance event
+                    // is a *mobile* clock-out):
+                    //   1. No punch today → "Clock In Now" (mobile clock-in).
+                    //   2. On the clock (punched in via biometric OR mobile, and
+                    //      no mobile clock-out is the latest event) → enabled
+                    //      "Clock Out". Internal biometric gate punches keep it
+                    //      here (a gate punch-out never clocks him out).
+                    //   3. Latest event IS a mobile clock-out → disabled
+                    //      "Clocked Out" (tracking stopped). A later biometric
+                    //      gate punch (in OR out) becomes the latest event and
+                    //      returns to state 2 — so he can clock out again
+                    //      whenever he wants.
+                    if (state.hasClockedInToday && !state.clockedOutOnMobile) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnOnDuty.visibility = View.VISIBLE
@@ -577,8 +571,12 @@ class HrDashboardFragment : Fragment() {
                         updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
                         updateHeaderTexts(true)
-                    } else if (hasClockedOutToday) {
-                        // Once clocked out today, hide On Duty and show full-width Clocked Out button (disabled green gradient, alpha 0.5f)
+                    } else if (state.clockedOutOnMobile) {
+                        // Clocked out on mobile → dead "Clocked Out" until a
+                        // later punch. Only a mobile clock-out lands here (a
+                        // biometric gate punch-out never does), so tracking
+                        // stops exactly when the person ends their day here; a
+                        // later gate punch flips back to the enabled Clock Out.
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnOnDuty.visibility = View.GONE

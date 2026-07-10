@@ -42,6 +42,10 @@ class HomeFragment : Fragment() {
     private val viewModel: HomeViewModel by viewModels()
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+    // VP / Management dashboard (replaces Today's Trip for vpDashboard.view holders).
+    private var vpDashboardData: com.manjugroups.m_connect.network.VpDashboardResponse? = null
+    private var vpDashboardLoading = false
+    private var lastDashSignature: String? = null
     private val visitEmptySubtitle =
         "It looks like you don’t have any meetings scheduled at the moment. " +
             "This space will be updated as new meetings are added!"
@@ -86,6 +90,7 @@ class HomeFragment : Fragment() {
             }
         })
         setupPullToRefresh()
+        if (session.hasPermission("vpDashboard.view")) loadVpDashboard()
         setupHomeScrollAnimation()
         collectState()
         collectEvents()
@@ -426,6 +431,18 @@ class HomeFragment : Fragment() {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
         setVisitSkeletonVisible(false)
+        // VP / Management dashboard replaces the Today's Trip list for anyone
+        // with vpDashboard.view (super-admins included). Its numbers come from
+        // the dashboard endpoint, not the visits flow, so short-circuit here
+        // before any trip rendering / empty-state logic.
+        if (session.hasPermission("vpDashboard.view")) {
+            binding.tvVisitSectionTitle.text = "Today's Overview"
+            binding.tvVisitCountBadge.visibility = View.GONE
+            binding.visitListContent.visibility = View.VISIBLE
+            binding.visitEmptyContent.visibility = View.GONE
+            renderVpDashboard()
+            return
+        }
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
@@ -558,6 +575,167 @@ class HomeFragment : Fragment() {
     }
 
     private fun dpx(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    // ── VP / Management Dashboard ───────────────────────────────────────────
+
+    private fun loadVpDashboard() {
+        if (vpDashboardLoading) return
+        vpDashboardLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching { api.getVpDashboard(session.bearerToken, null) }.getOrNull()
+            vpDashboardLoading = false
+            if (view == null) return@launch
+            if (resp?.success == true) {
+                vpDashboardData = resp
+                renderVpDashboard()
+            }
+        }
+    }
+
+    private data class DashTile(
+        val iconRes: Int, val label: String, val primary: String, val secondary: String?,
+        val colorHex: String, val onTap: () -> Unit,
+    )
+
+    /** Grid of KPI tiles (2 per row) driven by the dashboard endpoint. Each
+     *  tile shows a count and opens its detail screen. Guarded by a value
+     *  signature so the ~7 render flows don't rebuild it on every emit. */
+    private fun renderVpDashboard() {
+        val ctx = context ?: return
+        val d = vpDashboardData
+        val signature = if (d == null) "loading" else buildString {
+            append("vp|").append(d.present).append('|').append(d.absent).append('|')
+                .append(d.cpVisitsFixed).append('|').append(d.cpVisitsCompleted).append('|')
+                .append(d.svVisitsFixed).append('|').append(d.svVisitsCompleted).append('|')
+                .append(d.incomingCalls).append('|').append(d.outboundCalls).append('|')
+                .append(d.collectionTotal).append('|').append(d.bookingCount).append('|')
+                .append(d.registrationCount)
+        }
+        if (signature == lastDashSignature && binding.visitListContent.childCount > 0) return
+        lastDashSignature = signature
+
+        val tiles = if (d == null) {
+            listOf(
+                DashTile(R.drawable.ic_chat_users, "Present", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_cp_staff, "CP Visits", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_map_pin, "Site Visits", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_cash_bills, "Collections", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_booking_calendar, "Bookings", "–", null, "#98A2B3") {},
+                DashTile(R.drawable.ic_loan_document, "Registrations", "–", null, "#98A2B3") {},
+            )
+        } else {
+            val inr = java.text.NumberFormat.getIntegerInstance(java.util.Locale("en", "IN"))
+            listOf(
+                DashTile(R.drawable.ic_chat_users, "Present", d.present.toString(), "${d.absent} absent", "#059669") {
+                    openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
+                },
+                DashTile(R.drawable.ic_cp_staff, "CP Visits", d.cpVisitsFixed.toString(), "${d.cpVisitsCompleted} completed", "#0B61CA") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
+                },
+                DashTile(R.drawable.ic_map_pin, "Site Visits", d.svVisitsFixed.toString(), "${d.svVisitsCompleted} completed", "#7C3AED") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
+                },
+                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", d.incomingCalls.toString(), null, "#0E9384") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
+                },
+                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", d.outboundCalls.toString(), null, "#4F46E5") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
+                },
+                DashTile(R.drawable.ic_cash_bills, "Collections", "₹${inr.format(d.collectionTotal.toLong())}", "${d.collectionCount} today", "#059669") {
+                    openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
+                },
+                DashTile(R.drawable.ic_booking_calendar, "Bookings", d.bookingCount.toString(), null, "#D97706") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment())
+                },
+                DashTile(R.drawable.ic_loan_document, "Registrations", d.registrationCount.toString(), null, "#E11D48") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.RegistrationsFragment.newInstance())
+                },
+            )
+        }
+
+        binding.visitListContent.removeAllViews()
+        var i = 0
+        while (i < tiles.size) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { if (i > 0) topMargin = dpx(8) }
+            }
+            row.addView(dashTile(ctx, tiles[i], 0))
+            if (i + 1 < tiles.size) row.addView(dashTile(ctx, tiles[i + 1], dpx(8)))
+            binding.visitListContent.addView(row)
+            i += 2
+        }
+    }
+
+    private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {
+        val accent = Color.parseColor(t.colorHex)
+        val card = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            minimumHeight = dpx(98)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dpx(16).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dpx(1), Color.parseColor("#EEF0F4"))
+            }
+            setPadding(dpx(14), dpx(14), dpx(14), dpx(14))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = startMargin }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { t.onTap() }
+        }
+        // Tinted circular chip holding a vector icon.
+        val chip = android.widget.FrameLayout(ctx).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 30))
+            }
+            layoutParams = LinearLayout.LayoutParams(dpx(36), dpx(36))
+        }
+        chip.addView(android.widget.ImageView(ctx).apply {
+            setImageResource(t.iconRes)
+            setColorFilter(accent)
+            layoutParams = android.widget.FrameLayout.LayoutParams(dpx(18), dpx(18), android.view.Gravity.CENTER)
+        })
+        card.addView(chip)
+        card.addView(TextView(ctx).apply {
+            text = t.primary
+            textSize = 24f
+            setTextColor(accent)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, dpx(9), 0, 0)
+        })
+        card.addView(TextView(ctx).apply {
+            text = t.label
+            textSize = 12f
+            setTextColor(Color.parseColor("#475467"))
+            typeface = interFontOrDefault()
+            setPadding(0, dpx(2), 0, 0)
+        })
+        t.secondary?.let { sec ->
+            card.addView(TextView(ctx).apply {
+                text = sec; textSize = 11f
+                setTextColor(Color.parseColor("#98A2B3")); setPadding(0, dpx(1), 0, 0)
+            })
+        }
+        return card
+    }
+
+    private fun interFontOrDefault(): android.graphics.Typeface =
+        runCatching { androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium) }
+            .getOrNull() ?: android.graphics.Typeface.DEFAULT
+
+    private fun openScreen(fragment: androidx.fragment.app.Fragment) {
+        parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
 
     private fun createVisitItem(
         visit: TodayVisit,

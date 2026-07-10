@@ -74,14 +74,30 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Resize the sheet when the keyboard opens so edited fields (Client /
+        // Booking / Payment tabs in edit mode) stay above the IME instead of
+        // being covered — the sheet was previously unresponsive to typing.
+        dialog.window?.let { window ->
+            window.setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            )
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+        }
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
+                // Rounded top corners + full-height like the app's other sheets;
+                // without the rounded background the sheet showed square corners.
+                it.setBackgroundResource(R.drawable.bg_bottom_sheet)
                 val behavior = BottomSheetBehavior.from(it)
+                behavior.peekHeight = (resources.displayMetrics.heightPixels * 0.92f).toInt()
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
-                behavior.isDraggable = false
+                // Pullable — the content is a NestedScrollView, so pulling the
+                // header/handle drags the sheet while scrolling the body scrolls
+                // the content (handed off correctly, no accidental dismiss).
+                behavior.isDraggable = true
             }
         }
         return dialog
@@ -105,7 +121,9 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     private fun buildView(): View {
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            // Transparent so the sheet's rounded bg_bottom_sheet shows (rounded
+            // top corners); a solid white root painted square corners over it.
+            setBackgroundColor(Color.TRANSPARENT)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -166,6 +184,12 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         }
         scroller.addView(tabRow)
         root.addView(scroller)
+        root.addView(View(requireContext()).apply {
+            setBackgroundColor(Color.parseColor("#EDEFF3"))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1),
+            ).apply { topMargin = dp(10) }
+        })
 
         progress = TextView(requireContext()).apply {
             text = "Loading booking..."
@@ -185,7 +209,9 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         }
         content = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(20))
+            // Light-grey page so the white summary / timeline / field cards pop.
+            setBackgroundColor(Color.parseColor("#F7F8FA"))
+            setPadding(dp(16), dp(16), dp(16), dp(20))
         }
         nested.addView(content)
         root.addView(nested)
@@ -443,12 +469,12 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     private fun addSummaryCard(items: List<Pair<String, String?>>) {
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(16), dp(14), dp(16), dp(14))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(10).toFloat()
-                setColor(Color.parseColor("#F9FAFB"))
-                setStroke(dp(1), Color.parseColor("#E2E8F0"))
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#EDEFF3"))
             }
         }
         items.chunked(2).forEach { rowItems ->
@@ -510,11 +536,12 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             includeFontPadding = false
             typeface = interFont(R.font.inter_medium)
             setTextColor(Color.parseColor("#344054"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(12), dp(11), dp(12), dp(11))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(10).toFloat()
-                setColor(Color.parseColor("#F2F4F7"))
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#EDEFF3"))
             }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
