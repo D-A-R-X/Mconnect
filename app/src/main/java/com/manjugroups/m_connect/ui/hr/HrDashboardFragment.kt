@@ -524,7 +524,13 @@ class HrDashboardFragment : Fragment() {
                     isTodayLoading = state.isLoading && !hasShownAttendanceContentOnce
                     updateAttendanceLoadingUi()
                     if (!state.isLoading) hasShownAttendanceContentOnce = true
-                    binding.tvTodayHours.text = state.todayHours
+                    // While clocked in, show the LIVE elapsed (now - firstPunchIn)
+                    // right here — not the server's todayHours, which only sums
+                    // closed sessions and lags the live ticker. Setting the stale
+                    // server value on every emit was flashing an old number (e.g.
+                    // "07:46") on each refresh until the ticker's next tick (up to
+                    // 1s later) corrected it. Now the emit already matches the tick.
+                    binding.tvTodayHours.text = liveTodayHoursText(state)
                     // The old static "Today" card (cardHistory1) is permanently
                     // hidden — today's log is now injected as the FIRST item in
                     // the history list below, in the same card style as past
@@ -714,6 +720,22 @@ class HrDashboardFragment : Fragment() {
      * `now - firstPunchIn`. Falls back to the server-reported total
      * when no first-punch timestamp is available.
      */
+    /** "Today" hours for the top stat: while clocked in, the LIVE elapsed
+     *  (now - firstPunchIn) so it never flashes the server's lagging
+     *  closed-session total on refresh; once clocked out, the server total.
+     *  Matches the live ticker's value + format so an emit and a tick agree. */
+    private fun liveTodayHoursText(state: AttendanceFlowState): String {
+        val firstIso = state.firstPunchInIso
+        if (state.isClockedIn && !firstIso.isNullOrBlank()) {
+            val firstMs = parseIsoMillisOrNull(firstIso)
+            if (firstMs != null) {
+                val mins = ((System.currentTimeMillis() - firstMs).coerceAtLeast(0) / 60_000L).toInt()
+                return AttendanceFlowViewModel.formatMinutesForToday(mins)
+            }
+        }
+        return state.todayHours
+    }
+
     private fun startLiveTodayTicker(firstPunchIso: String?) {
         if (liveTickerJob?.isActive == true) return
         if (firstPunchIso.isNullOrBlank()) return
