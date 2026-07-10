@@ -53,8 +53,10 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
                 .onSuccess { resp ->
                     if (_binding == null) return@onSuccess
                     if (resp.success) {
+                        // Issues are only raised against ongoing projects
+                        // (matches the web's "Ongoing" = status == "ongoing").
                         projects.clear()
-                        projects.addAll(resp.projects)
+                        projects.addAll(resp.projects.filter { it.status?.trim()?.lowercase() == "ongoing" })
                     }
                 }
         }

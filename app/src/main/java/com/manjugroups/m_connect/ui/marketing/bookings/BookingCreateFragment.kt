@@ -219,9 +219,11 @@ class BookingCreateFragment : Fragment() {
                     toast(resp.error ?: "Failed to load projects")
                     return@launch
                 }
-                val projects = resp.projects
+                // Bookings are only made against ongoing projects (matches the
+                // web's "Ongoing" = status == "ongoing").
+                val projects = resp.projects.filter { it.status?.trim()?.lowercase() == "ongoing" }
                 if (projects.isEmpty()) {
-                    toast("No projects available")
+                    toast("No ongoing projects available")
                     return@launch
                 }
                 val names = projects.map { it.name ?: "Unnamed" }.toTypedArray()
