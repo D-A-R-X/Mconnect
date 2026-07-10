@@ -68,6 +68,9 @@ object SearchableSelectionDialog {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(context, 20), dp(context, 14), dp(context, 20), dp(context, 20))
             setBackgroundColor(Color.WHITE)
+            // Steal initial focus so the search field doesn't auto-open the
+            // keyboard — it appears only when the user taps the field.
+            isFocusableInTouchMode = true
             addView(View(context).apply {
                 setBackgroundColor(Color.parseColor("#E4E7EC"))
             }, LinearLayout.LayoutParams(dp(context, 44), dp(context, 4)).apply {
@@ -139,18 +142,19 @@ object SearchableSelectionDialog {
         renderRows("")
         dialog.setContentView(content)
         dialog.setOnShowListener {
-            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            // Keep the keyboard hidden on open; the list is what matters, and
+            // the sheet resizes only when the user chooses to type.
+            dialog.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN or
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            )
             val sheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
             }
-            search.requestFocus()
-            search.postDelayed({
-                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                imm?.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT)
-            }, 180)
+            content.requestFocus()
         }
         dialog.show()
     }

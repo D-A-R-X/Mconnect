@@ -131,6 +131,62 @@
                         android:layout_height="29dp"
                         android:background="#F3F3F5" />
 
+                    <!-- Task Manager tab — styled like every other tab
+                         (grey icon when idle, blue when selected). -->
+                    <LinearLayout
+                        android:id="@+id/pillTaskManager"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:id="@+id/pillTaskManagerIcon"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_apps_pill_circle_inactive"
+                            android:contentDescription="@null"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_custom_clipboard_check"
+                            app:tint="#6A6D78" />
+
+                        <TextView
+                            android:id="@+id/pillTaskManagerText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            app:autoSizeMaxTextSize="10sp"
+                            app:autoSizeMinTextSize="8sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform"
+                            android:text="Tasks"
+                            android:textColor="#6A6D78"
+                            android:textSize="10sp" />
+
+                        <View
+                            android:id="@+id/pillTaskManagerIndicator"
+                            android:layout_width="24dp"
+                            android:layout_height="2dp"
+                            android:layout_marginTop="3dp"
+                            android:background="@drawable/bg_apps_tab_indicator"
+                            android:visibility="invisible" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="29dp"
+                        android:background="#F3F3F5" />
+
                     <LinearLayout
                         android:id="@+id/pillHr"
                         android:layout_width="0dp"
@@ -661,6 +717,71 @@
                 android:orientation="vertical"
                 android:paddingHorizontal="12dp"
                 android:paddingTop="12dp">
+
+                <!-- ============= TASK MANAGER CARD ============= -->
+                <!-- Single header tile: the whole row opens the Task Manager
+                     screen. `itemTaskManagerOpen` stays the clickable/IAM-gated
+                     view so applyFilter + sectionTileMap keep working. -->
+                <LinearLayout
+                    android:id="@+id/cardTaskManager"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_apps_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:id="@+id/itemTaskManagerOpen"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@null"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_apps_cat_task" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Task Manager"
+                                android:textColor="#000000"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="@font/inter_regular"
+                                android:includeFontPadding="false"
+                                android:text="Tasks • Deadlines • Team"
+                                android:textColor="#6B7280"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_apps_chevron" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <!-- ============= HR CARD ============= -->
                 <LinearLayout
@@ -1923,6 +2044,47 @@
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
                                 android:text="Tasks"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
+                        <LinearLayout
+                            android:id="@+id/itemProjectDailyLog"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_daily_log" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="Daily Log"
                                 android:textColor="#111111"
                                 android:textSize="14sp" />
 

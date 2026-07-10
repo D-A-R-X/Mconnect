@@ -122,13 +122,14 @@ class TaskDetailFragment : Fragment() {
                 skeleton.visibility = View.GONE
                 scroll.visibility = View.VISIBLE
                 updateBtn.visibility = if (canUpdate(task)) View.VISIBLE else View.GONE
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Network error: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                navigateUp()
+                // Detached (Back pressed mid-load) → don't touch requireContext().
+                context?.let { ctx ->
+                    Toast.makeText(ctx, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                    navigateUp()
+                }
             }
         }
     }

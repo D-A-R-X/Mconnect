@@ -20,5 +20,11 @@ data class LocationPointEntity(
     val gpsEnabled: Boolean,
     val airplaneMode: Boolean,
     val recordedAt: Long,
-    val sent: Boolean = false
+    val sent: Boolean = false,
+    // Tracking session the point belongs to, stamped at CAPTURE time. Sync
+    // groups by this instead of the live activeTrackingSessionId, so a
+    // buffered backlog still uploads under its own session after clock-out,
+    // a service restart, or the next day — never attributed to the wrong
+    // session or stranded because the live id was cleared at teardown.
+    val sessionId: String? = null,
 )

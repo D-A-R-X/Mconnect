@@ -43,20 +43,6 @@
             android:textColor="?attr/colorForegroundPrimary"
             android:textSize="17sp" />
 
-        <TextView
-            android:id="@+id/tvTaskManagerScopeChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end|center_vertical"
-            android:layout_marginEnd="14dp"
-            android:background="@drawable/bg_chip_inactive"
-            android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
-            android:text="My tasks"
-            android:textColor="?attr/colorForegroundSecondary"
-            android:textSize="11sp"
-            android:visibility="gone" />
     </FrameLayout>
 
     <View
@@ -64,12 +50,13 @@
         android:layout_height="1dp"
         android:background="?attr/colorBorder" />
 
-    <!-- Status filter pills (All / Pending / In Progress / Completed) -->
+    <!-- Info cards (My Tasks / My Team Tasks / Assigned By Me / Extension
+         Requests / Overdue) — fixed above the scrolling list. -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp"
         android:scrollbars="none">
 
         <LinearLayout
@@ -77,58 +64,81 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/pillTaskAll"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_chip_active"
-                android:fontFamily="@font/inter_semibold"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp"
-                android:text="All"
-                android:textColor="?attr/colorForegroundInverse"
-                android:textSize="12sp" />
+            <LinearLayout style="@style/TaskStatCard">
+                <TextView style="@style/TaskStatLabel" android:text="My Tasks" />
+                <TextView android:id="@+id/tvCardMyCount" style="@style/TaskStatValue" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/pillTaskPending"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp"
-                android:text="Pending"
-                android:textColor="?attr/colorForegroundSecondary"
-                android:textSize="12sp" />
+            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+                <TextView style="@style/TaskStatLabel" android:text="My Team Tasks" />
+                <TextView android:id="@+id/tvCardTeamCount" style="@style/TaskStatValue" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/pillTaskInProgress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp"
-                android:text="In progress"
-                android:textColor="?attr/colorForegroundSecondary"
-                android:textSize="12sp" />
+            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+                <TextView style="@style/TaskStatLabel" android:text="Assigned By Me" />
+                <TextView android:id="@+id/tvCardAssignedCount" style="@style/TaskStatValue" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/pillTaskCompleted"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_chip_inactive"
-                android:fontFamily="@font/inter_medium"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp"
-                android:text="Completed"
-                android:textColor="?attr/colorForegroundSecondary"
-                android:textSize="12sp" />
+            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+                <TextView style="@style/TaskStatLabel" android:text="Extension Requests" />
+                <TextView android:id="@+id/tvCardExtCount" style="@style/TaskStatValue" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+                <TextView style="@style/TaskStatLabel" android:text="Overdue" />
+                <TextView android:id="@+id/tvCardOverdueCount" style="@style/TaskStatValue"
+                    android:textColor="#DC2626" />
+            </LinearLayout>
         </LinearLayout>
     </HorizontalScrollView>
+
+    <!-- ── Filter row 1: by task STATUS (All / Pending / Overdue / …) ──
+         Captioned + divided from the module row below so the two otherwise
+         identical pill strips read as two distinct filters, not a repeat. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="12dp"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.06"
+        android:text="Status"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="11sp" />
+
+    <com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+        android:id="@+id/taskStatusTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="16dp"
+        android:background="?attr/colorBorder" />
+
+    <!-- ── Filter row 2: by MODULE / category (All / HR / Marketing / …) ── -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.06"
+        android:text="Category"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorForegroundMuted"
+        android:textSize="11sp" />
+
+    <com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+        android:id="@+id/taskModuleTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" />
 
     <LinearLayout
         android:id="@+id/taskManagerSkeleton"
@@ -154,52 +164,56 @@
             android:background="@drawable/bg_leave_skeleton_block" />
     </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/taskManagerEmpty"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="32dp"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Inbox zero"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/tvTaskManagerEmptyHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="@font/inter_regular"
-            android:gravity="center"
-            android:text="No tasks match this filter."
-            android:textColor="?attr/colorForegroundMuted"
-            android:textSize="13sp" />
-    </LinearLayout>
-
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/taskManagerRefresh"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <ScrollView
-            android:id="@+id/taskManagerScroll"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:layout_height="match_parent">
+
+            <!-- RecyclerView: recycles task rows so a 500-row list stays smooth. -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/taskManagerRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="28dp" />
 
             <LinearLayout
-                android:id="@+id/taskManagerList"
+                android:id="@+id/taskManagerEmpty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:gravity="center"
                 android:orientation="vertical"
-                android:padding="16dp" />
-        </ScrollView>
+                android:paddingHorizontal="32dp"
+                android:paddingVertical="48dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Inbox zero"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvTaskManagerEmptyHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:gravity="center"
+                    android:text="No tasks match this filter."
+                    android:textColor="?attr/colorForegroundMuted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 </LinearLayout>

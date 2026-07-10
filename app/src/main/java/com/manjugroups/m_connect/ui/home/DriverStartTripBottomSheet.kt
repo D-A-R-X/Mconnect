@@ -245,6 +245,15 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                     startTime = timeStr
                 )
 
+                // Adaptive tracking notification: Fleet trip + live elapsed timer.
+                session.setFieldActivity(
+                    kind = "fleet",
+                    title = "Fleet Trip",
+                    sub = "Trip in progress",
+                    startMs = System.currentTimeMillis(),
+                )
+                com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
+
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
@@ -255,10 +264,10 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
     }
 
     private suspend fun uploadOdometerPhoto(file: File): String {
-        val body = file.asRequestBody("image/jpeg".toMediaType())
-        val response = api.uploadStorageFile(session.bearerToken, body)
-        return response.storageId
-            ?: throw IllegalStateException(response.error ?: "Failed to upload odometer photo")
+        val result = com.manjugroups.m_connect.network.StorageUploader
+            .upload(api, session.bearerToken, file)
+        return result.storageId
+            ?: throw IllegalStateException(result.errorMessage ?: "Failed to upload odometer photo")
     }
 
     private fun readApiError(error: Throwable): String {

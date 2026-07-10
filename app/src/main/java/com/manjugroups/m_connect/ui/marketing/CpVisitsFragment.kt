@@ -55,6 +55,14 @@ class CpVisitsFragment : Fragment() {
     private var allVisits: List<TodayVisit> = emptyList()
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    // Row cache: every visit's card is inflated ONCE per (data, clock-state)
+    // generation and pill taps / search keystrokes only toggle visibility.
+    // renderList() used to removeAllViews() + re-inflate up to 200 card
+    // layouts on the main thread on every single tab switch, which is what
+    // made switching tabs feel slow on this screen.
+    private var rowCache: List<Pair<TodayVisit, View>> = emptyList()
+    private var rowsBuiltFor: List<TodayVisit>? = null
+    private var rowsBuiltClockedIn: Boolean? = null
     private var pendingEntryAnimation = true
     // True once the first CP-visit fetch has rendered. Gates the skeleton
     // so refreshes / re-opens with data already on screen don't flash the
@@ -114,6 +122,10 @@ class CpVisitsFragment : Fragment() {
         SkeletonUtils.stopAll()
         pendingEntryAnimation = true
         rootView = null
+        // Cached rows belong to the destroyed view tree — never reattach them.
+        rowCache = emptyList()
+        rowsBuiltFor = null
+        rowsBuiltClockedIn = null
         super.onDestroyView()
     }
 
@@ -430,18 +442,36 @@ class CpVisitsFragment : Fragment() {
         val empty = root.findViewById<LinearLayout>(R.id.cpvEmptyState)
         val emptyTitle = root.findViewById<TextView>(R.id.tvCpvEmptyTitle)
         val emptySubtitle = root.findViewById<TextView>(R.id.tvCpvEmptySubtitle)
-        list.removeAllViews()
+
+        // Rebuild the row views only when the data set is replaced (new fetch)
+        // or the clock-in gate flips (row action buttons depend on it). Tab
+        // and search changes reuse the cached views below.
+        val cacheStale =
+            rowsBuiltFor !== allVisits || rowsBuiltClockedIn != isClockedIn
+        if (cacheStale) {
+            list.removeAllViews()
+            rowCache = allVisits.map { it to createRow(it, list) }
+            rowCache.forEach { (_, rowView) -> list.addView(rowView) }
+            rowsBuiltFor = allVisits
+            rowsBuiltClockedIn = isClockedIn
+        }
 
         val needle = searchQuery.lowercase(Locale.US)
-        val visible = allVisits
-            .filter { matchesFilter(it, currentFilter) }
-            .filter { v ->
-                if (needle.isBlank()) return@filter true
-                listOf(v.placeName, v.leadName, v.placeAddress)
-                    .any { it?.lowercase(Locale.US)?.contains(needle) == true }
-            }
+        fun matches(v: TodayVisit): Boolean {
+            if (!matchesFilter(v, currentFilter)) return false
+            if (needle.isBlank()) return true
+            return listOf(v.placeName, v.leadName, v.placeAddress)
+                .any { it?.lowercase(Locale.US)?.contains(needle) == true }
+        }
 
-        if (visible.isEmpty()) {
+        var visibleCount = 0
+        rowCache.forEach { (visit, rowView) ->
+            val show = matches(visit)
+            rowView.visibility = if (show) View.VISIBLE else View.GONE
+            if (show) visibleCount++
+        }
+
+        if (visibleCount == 0) {
             list.visibility = View.GONE
             empty.visibility = View.VISIBLE
             emptyTitle.text = when (currentFilter) {
@@ -460,7 +490,6 @@ class CpVisitsFragment : Fragment() {
         } else {
             empty.visibility = View.GONE
             list.visibility = View.VISIBLE
-            visible.forEach { list.addView(createRow(it, list)) }
         }
     }
 

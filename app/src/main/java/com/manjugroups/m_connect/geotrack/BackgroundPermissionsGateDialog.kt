@@ -36,11 +36,19 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         private const val TAG = "BackgroundPermissionsGateDialog"
         private const val REQUEST_BG_LOCATION = 1001
         private const val REQUEST_FG_LOCATION = 1002
+        private const val REQUEST_ACTIVITY_RECOGNITION = 1003
 
         fun hasBackgroundLocation(ctx: Context): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
             return ContextCompat.checkSelfPermission(
                 ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        fun hasActivityRecognition(ctx: Context): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+            return ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACTIVITY_RECOGNITION,
             ) == PackageManager.PERMISSION_GRANTED
         }
 
@@ -74,7 +82,26 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             isDeviceLocationEnabled(ctx) &&
                 hasForegroundLocation(ctx) &&
                 hasBackgroundLocation(ctx) &&
+                hasActivityRecognition(ctx) &&
                 hasBatteryOptIgnored(ctx)
+
+        /**
+         * The tracking permissions that are missing right now, as the same
+         * string keys the ongoing red alert and the synced PERMISSION_MISSING
+         * event use. Single source of truth so the in-app gate and the
+         * out-of-app notification always agree on "any permission missing".
+         * (Device-location-enabled is a GPS toggle, not a permission — it
+         * gates the sheet but is surfaced separately as a GPS_DISABLED signal,
+         * so it is intentionally not a key here.)
+         */
+        fun missingPermissionKeys(ctx: Context): List<String> {
+            val missing = mutableListOf<String>()
+            if (!hasForegroundLocation(ctx)) missing.add("fine_location")
+            if (!hasBackgroundLocation(ctx)) missing.add("background_location")
+            if (!hasActivityRecognition(ctx)) missing.add("activity_recognition")
+            if (!hasBatteryOptIgnored(ctx)) missing.add("battery_optimization")
+            return missing
+        }
 
         fun showIfNeeded(fm: FragmentManager, ctx: Context) {
             if (allGranted(ctx)) return
@@ -148,6 +175,15 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             }
         }
 
+        view.findViewById<View>(R.id.rowActivityRecognition).setOnClickListener {
+            val ctx = requireContext()
+            if (!hasActivityRecognition(ctx)) {
+                openActivityRecognitionSettings()
+            } else {
+                showRevokeToast()
+            }
+        }
+
         view.findViewById<View>(R.id.rowBatteryOpt).setOnClickListener {
             val ctx = requireContext()
             if (!hasBatteryOptIgnored(ctx)) {
@@ -199,6 +235,20 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             REQUEST_BG_LOCATION -> {
                 recheckAndMaybeDismiss()
             }
+            REQUEST_ACTIVITY_RECOGNITION -> {
+                if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        !shouldShowRequestPermissionRationale(Manifest.permission.ACTIVITY_RECOGNITION)
+                    ) {
+                        // Permanently denied → the runtime dialog won't show
+                        // again; send them to app settings so they're never
+                        // locked on the non-dismissible sheet.
+                        Toast.makeText(context, "Physical activity permission is required. Please enable it in Settings.", Toast.LENGTH_LONG).show()
+                        openAppDetailsSettings()
+                    }
+                }
+                recheckAndMaybeDismiss()
+            }
         }
     }
 
@@ -209,8 +259,14 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val ctx = context ?: return
         val root = view ?: return
         if (allGranted(ctx)) {
+            // Everything's on now — take the ongoing red alert down with the
+            // sheet so the two never disagree.
+            com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
             dismissAllowingStateLoss()
         } else {
+            // Keep the out-of-app alert in step with what's still missing.
+            com.manjugroups.m_connect.notifications.PermissionAlertNotification
+                .update(ctx, missingPermissionKeys(ctx))
             refreshStatus(root)
         }
     }
@@ -228,11 +284,13 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val deviceLocationOk = isDeviceLocationEnabled(ctx)
         val fgOk = hasForegroundLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
+        val activityOk = hasActivityRecognition(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         val autostartOk = isAutostartEnabled(ctx)
 
         root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk
         root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
+        root.findViewById<SwitchCompat>(R.id.switchActivityRecognition).isChecked = activityOk
         root.findViewById<SwitchCompat>(R.id.switchBatteryOpt).isChecked = batOk
         
         val autoRow = root.findViewById<View>(R.id.rowAutostart)
@@ -274,6 +332,20 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             )
         } else {
             openAppDetailsSettings()
+        }
+    }
+
+    private fun openActivityRecognitionSettings() {
+        val ctx = context ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
+            requestPermissions(
+                arrayOf(Manifest.permission.ACTIVITY_RECOGNITION),
+                REQUEST_ACTIVITY_RECOGNITION,
+            )
+        } else {
+            // Auto-granted below Q — nothing to request; reflect state.
+            recheckAndMaybeDismiss()
         }
     }
 
@@ -356,8 +428,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     private fun isAutostartEnabled(ctx: Context): Boolean {
         return ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
-            .edit() // wait, getBoolean doesn't need edit. Just use getBoolean:
-            .let { ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE).getBoolean("autostart_enabled", false) }
+            .getBoolean("autostart_enabled", false)
     }
 
     private fun setAutostartEnabled(ctx: Context, enabled: Boolean) {

@@ -662,16 +662,21 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
+                    <!-- Expand the route to a full-screen map. Replaces the old
+                         in-map play overlay (playback lives in the replay
+                         controls below the map). -->
                     <ImageView
-                        android:id="@+id/btnMapPlayOverlay"
+                        android:id="@+id/btnMapFullView"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:layout_gravity="bottom|end"
                         android:layout_margin="12dp"
-                        android:background="@drawable/bg_audio_play_circle_accent"
+                        android:background="@drawable/bg_attach_tile_circle_white"
+                        android:contentDescription="Full map view"
+                        android:elevation="4dp"
                         android:padding="10dp"
-                        android:src="@drawable/ic_home_trip_play"
-                        app:tint="#FFFFFF" />
+                        android:src="@drawable/ic_map_expand"
+                        app:tint="#101828" />
                 </FrameLayout>
 
                 <!-- Replay journey controls -->
@@ -1108,69 +1113,111 @@
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <!-- Bottom Actions Row -->
+    <!-- Bottom Actions — mirrors the web review dialog's "Approve as":
+         Present / Half-day / Absent / Reject / Hold. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#FFFFFF"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingHorizontal="24dp"
-        android:paddingVertical="16dp">
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Approve as"
+            android:textColor="#667085"
+            android:textSize="11sp" />
+
+        <!-- Uniform 2×2 grid: identical shape (10dp corners) + size (44dp),
+             colour is the only difference. -->
         <LinearLayout
-            android:id="@+id/btnSheetReject"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_btn_reject_outline_red"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:src="@drawable/ic_leave_action_x"
-                app:tint="#B42318" />
-
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:id="@+id/btnSheetPresent"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attn_action_present"
+                android:clickable="true"
+                android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Reject"
-                android:textColor="#B42318"
-                android:textSize="14sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/btnSheetApprove"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_btn_gradient_green_8dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:src="@drawable/ic_leave_action_check"
-                app:tint="#FFFFFF" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Approve"
+                android:gravity="center"
+                android:text="Present"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnSheetHalfDay"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attn_action_neutral"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="Half-day"
+                android:textColor="#344054"
+                android:textSize="14sp" />
         </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btnSheetAbsent"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attn_action_neutral"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="Absent"
+                android:textColor="#344054"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnSheetReject"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attn_action_reject"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="Reject"
+                android:textColor="#F04438"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnSheetHold"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_btn_hold_outline_amber"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="Hold"
+            android:textColor="#B54708"
+            android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>

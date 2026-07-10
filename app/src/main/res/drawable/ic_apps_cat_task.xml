@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Task Manager category tile icon. Mirrors ic_apps_cat_fleet/land:
+     a 40dp light rounded-square with a stroked glyph, so it sits
+     next to the HR/Fleet/Land tiles as one consistent family
+     instead of the old dark-teal filled circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <!-- Light teal rounded-square background. -->
+    <path
+        android:fillColor="#E0F7FA"
+        android:pathData="M16,0 L24,0 A16,16 0 0,1 40,16 L40,24 A16,16 0 0,1 24,40 L16,40 A16,16 0 0,1 0,24 L0,16 A16,16 0 0,1 16,0 Z" />
+
+    <!-- Clipboard-check glyph (24u, centred in the 40u tile). -->
+    <group
+        android:translateX="8"
+        android:translateY="8">
+        <path
+            android:strokeColor="#0891B2"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2H6a2 2 0 0 1 -2 -2V6a2 2 0 0 1 2 -2h2" />
+        <path
+            android:strokeColor="#0891B2"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M8 4a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2H8V4z" />
+        <path
+            android:strokeColor="#0891B2"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M9 14l2 2l4 -4" />
+    </group>
+</vector>

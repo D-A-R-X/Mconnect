@@ -109,6 +109,9 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                     binding.btnSubmitAdvance.alpha = 1f
                 }
             } catch (e: retrofit2.HttpException) {
+                // Dismissing the sheet mid-request cancels this coroutine; the
+                // exception then lands here with the view already torn down.
+                if (_binding == null) return@launch
                 // Surface a clean human-readable message instead of the
                 // raw JSON + convex stack trace that used to land in an
                 // AlertDialog (`{"success":false,"error":"Uncaught
@@ -121,6 +124,7 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                 binding.btnSubmitAdvance.isEnabled = true
                 binding.btnSubmitAdvance.alpha = 1f
             } catch (e: Exception) {
+                if (_binding == null) return@launch
                 Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
                 binding.btnSubmitAdvance.isEnabled = true
                 binding.btnSubmitAdvance.alpha = 1f

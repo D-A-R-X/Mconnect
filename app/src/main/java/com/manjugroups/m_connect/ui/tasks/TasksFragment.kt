@@ -41,6 +41,9 @@ class TasksFragment : Fragment() {
     private var allTasks: List<TaskData> = emptyList()
 
     private var taskListContainer: LinearLayout? = null
+    // Bumped on every render pass; posted chunk-render continuations compare
+    // against it so a newer render (or teardown) cancels the older pass.
+    private var renderGen = 0
     private var skeletonContainer: LinearLayout? = null
     private var skeletonAnimator: ObjectAnimator? = null
     private var emptyState: View? = null
@@ -83,6 +86,24 @@ class TasksFragment : Fragment() {
             insets
         }
         androidx.core.view.ViewCompat.requestApplyInsets(headerContainer)
+
+        // White panel: rounded TOP corners + white bg. The panel overlaps the
+        // fixed blue header by -28dp (see the layout) and, because every
+        // ancestor sets clipChildren=false, its rounded top draws OVER the blue
+        // and slides up over it as the content scrolls — the same "panel slides
+        // up over a fixed header" effect as the Attendance page.
+        val panelRadius = 30f * resources.displayMetrics.density
+        view.findViewById<View>(R.id.tasksWhitePanel).background =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(android.graphics.Color.WHITE)
+                cornerRadii = floatArrayOf(
+                    panelRadius, panelRadius, // top-left
+                    panelRadius, panelRadius, // top-right
+                    0f, 0f,                   // bottom-right
+                    0f, 0f,                   // bottom-left
+                )
+            }
 
         taskListContainer = view.findViewById(R.id.taskList)
         emptyState = view.findViewById(R.id.emptyState)
@@ -156,15 +177,21 @@ class TasksFragment : Fragment() {
             try {
                 val tasksResp = api.getMyTasks(session.bearerToken)
                 val summaryResp = runCatching { api.getMyTasksSummary(session.bearerToken) }.getOrNull()
-                allTasks = if (tasksResp.tasks.isNotEmpty()) {
-                    tasksResp.tasks
-                } else {
-                    getDummyTasksList()
-                }
+                // LIFO — newest task first, so the nav banner's "Complete"
+                // lands the user on the top of the stack. Live data only:
+                // an empty response shows the empty state, never dummy rows.
+                allTasks = tasksResp.tasks.sortedByDescending { it.startDate ?: it.endDate ?: "" }
                 renderSummary(summaryResp?.summary ?: deriveSummary(allTasks))
                 renderTasks()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                allTasks = getDummyTasksList()
+                val ctx = context ?: return@launch
+                android.widget.Toast.makeText(
+                    ctx,
+                    "Couldn't load tasks: ${e.message ?: "network error"}",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
                 renderSummary(deriveSummary(allTasks))
                 renderTasks()
             } finally {
@@ -235,6 +262,7 @@ class TasksFragment : Fragment() {
 
     private fun renderTasks() {
         val container = taskListContainer ?: return
+        renderGen++ // cancel any in-flight chunked pass before clearing
         container.removeAllViews()
         val visible = when (filter) {
             Filter.ALL -> allTasks
@@ -246,7 +274,8 @@ class TasksFragment : Fragment() {
 
         val dateFmt = SimpleDateFormat("d MMM", Locale.getDefault())
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        for (task in visible) {
+
+        fun bindRow(task: TaskData): View {
             val row = layoutInflater.inflate(R.layout.item_task, container, false)
             row.findViewById<TextView>(R.id.tvTaskName).text = task.name ?: "Untitled task"
             row.findViewById<TextView>(R.id.tvTaskProject).text =
@@ -304,8 +333,23 @@ class TasksFragment : Fragment() {
             populateDummyAvatars(attendeesContainer)
 
             row.setOnClickListener { openDetail(task) }
-            container.addView(row)
+            return row
         }
+
+        // Chunked render: an admin's team view can carry 500+ tasks, and
+        // inflating them all in one main-thread pass froze (ANR'd) mid-range
+        // phones. Inflate a small batch per frame instead; the generation
+        // token abandons a stale pass when the list re-renders or the view
+        // is torn down mid-chunk.
+        val gen = renderGen
+        val chunk = 24
+        fun renderChunk(start: Int) {
+            if (gen != renderGen || !isAdded || taskListContainer !== container) return
+            val end = minOf(start + chunk, visible.size)
+            for (i in start until end) container.addView(bindRow(visible[i]))
+            if (end < visible.size) container.post { renderChunk(end) }
+        }
+        renderChunk(0)
     }
 
     private fun openDetail(task: TaskData) {

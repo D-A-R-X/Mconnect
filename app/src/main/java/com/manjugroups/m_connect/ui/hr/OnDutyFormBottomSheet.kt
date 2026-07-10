@@ -573,6 +573,20 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         // start call returns.
         session.onDutyTripId = null
 
+        // Drive the adaptive tracking notification: title "On Duty · <category>"
+        // with a live elapsed timer from now.
+        val actTitle = buildString {
+            append("On Duty")
+            if (!selectedCategory.isNullOrBlank()) append(" · ").append(selectedCategory)
+        }
+        session.setFieldActivity(
+            kind = "onduty",
+            title = actTitle,
+            sub = targetName?.takeIf { it.isNotBlank() } ?: selectedVehicleType,
+            startMs = System.currentTimeMillis(),
+        )
+        com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
+
         val resultBundle = Bundle().apply {
             putBoolean(KEY_STARTED, true)
         }

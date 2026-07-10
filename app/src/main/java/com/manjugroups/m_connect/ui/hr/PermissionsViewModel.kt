@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.hr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.network.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,7 +17,10 @@ data class PermissionsState(
     val limitHours: Int = 0,
     val count: Int = 0,
     val myPermissions: List<PermissionData> = emptyList(),
+    // Team Permission scope — hierarchy-scoped pending approvals.
     val pendingApprovals: List<PermissionData> = emptyList(),
+    // All Permission scope — every request company-wide (admins / viewAll).
+    val allApprovals: List<PermissionData> = emptyList(),
     val isApplying: Boolean = false,
     val isLoading: Boolean = false,
 )
@@ -34,14 +38,24 @@ class PermissionsViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
-                val usage = try { api.getPermissionUsage(bearerToken) } catch (_: Exception) { null }
-                val history = try { api.getMyPermissions(bearerToken) } catch (_: Exception) { null }
-                val pending = if (canApprove) {
-                    try { api.getPendingPermissionApprovals(bearerToken) } catch (_: Exception) { null }
-                } else {
-                    null
+                // Independent reads fired in PARALLEL — previously serial, so the
+                // screen blocked on the SUM of up to five round-trips.
+                val usageD = async { runCatching { api.getPermissionUsage(bearerToken) }.getOrNull() }
+                val historyD = async { runCatching { api.getMyPermissions(bearerToken) }.getOrNull() }
+                val pendingD = async {
+                    if (canApprove) runCatching { api.getPendingPermissionApprovals(bearerToken) }.getOrNull() else null
                 }
-                val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
+                // All-scope dataset (company-wide) — backend gates it to admins
+                // / permissions.viewAll and falls back to team scope otherwise.
+                val allD = async {
+                    if (canApprove) runCatching { api.getPendingPermissionApprovals(bearerToken, all = true) }.getOrNull() else null
+                }
+                val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
+                val usage = usageD.await()
+                val history = historyD.await()
+                val pending = pendingD.await()
+                val all = allD.await()
+                val policyResp = policyD.await()
 
                 val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0
 
@@ -50,7 +64,8 @@ class PermissionsViewModel : ViewModel() {
                     limitHours = limitFromApi,
                     count = usage?.count ?: 0,
                     myPermissions = history?.permissions ?: emptyList(),
-                    pendingApprovals = pending?.permissions ?: emptyList()
+                    pendingApprovals = pending?.permissions ?: emptyList(),
+                    allApprovals = all?.permissions ?: emptyList()
                 )
             } finally {
                 _uiState.value = _uiState.value.copy(isLoading = false)

@@ -4,22 +4,23 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
+import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
@@ -27,30 +28,37 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
- * Mobile Task Manager — the daily-task queue that mirrors the web
- * `app/task-manager/page.tsx`. Backed by `GET /api/dailyTasks/listForTaskManager`
- * (own tasks always; team pending/in-progress for managers; everything for
- * super-admins) and the status filter pills defined in
- * [R.layout.fragment_task_manager].
- *
- * Handoff-source rows expose Complete / Cancel actions that POST to
- * `/api/dailyTasks/updateStatus`, matching the web dropdown fan-out.
+ * Mobile Task Manager — mirrors the web `app/task-manager/page.tsx` (info
+ * cards, status tabs, module tabs). The task list is a RecyclerView so a
+ * 500-row queue recycles rows instead of inflating them all at once; the
+ * expensive per-task module derivation is cached, and status counts are
+ * computed in a single pass, so tab switches never re-scan or re-inflate.
  */
 class TaskManagerFragment : Fragment() {
 
-    private enum class Filter { ALL, PENDING, IN_PROGRESS, COMPLETED }
+    private enum class Status { ALL, PENDING, OVERDUE, IN_PROGRESS, COMPLETED, CANCELLED }
 
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
-    private var filter: Filter = Filter.ALL
+    private var status: Status = Status.ALL
+    private var moduleFilter: String = "All"
+    private var moduleTabsList: List<String> = listOf("All")
     private var allTasks: List<DailyTaskData> = emptyList()
+    // Cache the module label per task id — moduleOf() parses the actionUrl,
+    // so re-deriving it on every filter switch / bind was a real cost.
+    private val moduleCache = HashMap<String, String>()
+    private var teamIds: Set<String> = emptySet()
+    private var scope: String? = null
     private var hasLoadedOnce = false
+    private var todayStr = ""
 
-    private var listContainer: LinearLayout? = null
+    private var recycler: RecyclerView? = null
+    private val adapter = TaskAdapter()
     private var skeleton: View? = null
     private var emptyState: View? = null
-    private var scopeChip: TextView? = null
+    private var statusTabs: HorizontalTabLayout? = null
+    private var moduleTabs: HorizontalTabLayout? = null
 
     private val apiDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val labelDateFmt = SimpleDateFormat("d MMM", Locale.getDefault())
@@ -65,8 +73,6 @@ class TaskManagerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
-        // The layout carries its own in-content header, so push the whole
-        // screen below the OS status bar (the top bar is transparent/full-bleed).
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             v.setPadding(v.paddingLeft, top, v.paddingRight, v.paddingBottom)
@@ -74,19 +80,39 @@ class TaskManagerFragment : Fragment() {
         }
         ViewCompat.requestApplyInsets(view)
 
-        listContainer = view.findViewById(R.id.taskManagerList)
+        recycler = view.findViewById<RecyclerView>(R.id.taskManagerRecycler).apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = this@TaskManagerFragment.adapter
+            setHasFixedSize(true)
+            itemAnimator = null // no cross-fade churn on filter switches
+        }
         skeleton = view.findViewById(R.id.taskManagerSkeleton)
         emptyState = view.findViewById(R.id.taskManagerEmpty)
-        scopeChip = view.findViewById(R.id.tvTaskManagerScopeChip)
+        statusTabs = view.findViewById(R.id.taskStatusTabs)
+        moduleTabs = view.findViewById(R.id.taskModuleTabs)
 
         view.findViewById<View>(R.id.btnTaskManagerBack).setOnClickListener {
             parentFragmentManager.popBackStack()
         }
 
-        wirePill(view.findViewById(R.id.pillTaskAll), Filter.ALL)
-        wirePill(view.findViewById(R.id.pillTaskPending), Filter.PENDING)
-        wirePill(view.findViewById(R.id.pillTaskInProgress), Filter.IN_PROGRESS)
-        wirePill(view.findViewById(R.id.pillTaskCompleted), Filter.COMPLETED)
+        val statusOrder = Status.values()
+        statusTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
+            override fun onTabSelected(index: Int) {
+                status = statusOrder.getOrElse(index) { Status.ALL }
+                render()
+            }
+        })
+        moduleTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
+            override fun onTabSelected(index: Int) {
+                moduleFilter = moduleTabsList.getOrElse(index) { "All" }
+                render()
+            }
+        })
+        statusTabs?.setTabs(
+            listOf("All", "Pending", "Overdue", "In progress", "Completed", "Cancelled")
+                .map { HorizontalTabLayout.Tab(it) },
+            defaultSelection = 0,
+        )
 
         view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
             R.id.taskManagerRefresh
@@ -103,48 +129,20 @@ class TaskManagerFragment : Fragment() {
                 Configuration.UI_MODE_NIGHT_YES
             main.setTopBarAppearance(Color.TRANSPARENT, darkStatusIcons = !isNight, fullBleed = true)
         }
-        // Refresh after returning (a status change elsewhere may have landed).
         if (hasLoadedOnce) loadTasks(showSkeleton = false)
     }
 
     override fun onDestroyView() {
         skeleton?.let { SkeletonUtils.stopSkeletonPulse(it) }
+        recycler?.adapter = null
         super.onDestroyView()
-    }
-
-    private fun wirePill(pill: TextView, target: Filter) {
-        pill.setOnClickListener {
-            if (filter != target) {
-                filter = target
-                applyPillStyles()
-                render()
-            }
-        }
-    }
-
-    private fun applyPillStyles() {
-        val view = view ?: return
-        listOf(
-            view.findViewById<TextView>(R.id.pillTaskAll) to (filter == Filter.ALL),
-            view.findViewById<TextView>(R.id.pillTaskPending) to (filter == Filter.PENDING),
-            view.findViewById<TextView>(R.id.pillTaskInProgress) to (filter == Filter.IN_PROGRESS),
-            view.findViewById<TextView>(R.id.pillTaskCompleted) to (filter == Filter.COMPLETED),
-        ).forEach { (pill, selected) ->
-            if (selected) {
-                pill.setBackgroundResource(R.drawable.bg_chip_active)
-                pill.setTextColor(themeColor(R.attr.colorForegroundInverse))
-            } else {
-                pill.setBackgroundResource(R.drawable.bg_chip_inactive)
-                pill.setTextColor(themeColor(R.attr.colorForegroundSecondary))
-            }
-        }
     }
 
     private fun loadTasks(showSkeleton: Boolean) {
         if (showSkeleton && allTasks.isEmpty()) {
             skeleton?.visibility = View.VISIBLE
             skeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
-            listContainer?.removeAllViews()
+            recycler?.visibility = View.GONE
             emptyState?.visibility = View.GONE
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -152,11 +150,19 @@ class TaskManagerFragment : Fragment() {
                 androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             >(R.id.taskManagerRefresh)
             try {
-                val today = apiDateFmt.format(System.currentTimeMillis())
-                val resp = api.getTaskManagerTasks(session.bearerToken, today)
-                allTasks = resp.tasks
-                renderScope(resp.scope)
+                todayStr = apiDateFmt.format(System.currentTimeMillis())
+                val resp = api.getTaskManagerTasks(session.bearerToken, todayStr)
+                allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
+                teamIds = resp.teamIds.toSet()
+                scope = resp.scope
+                // Rebuild the module cache once per load.
+                moduleCache.clear()
+                for (t in allTasks) moduleCache[t.id] = computeModule(t)
+
+                renderStats()
+                renderModuleTabs()
                 render()
+                recycler?.visibility = View.VISIBLE
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -173,45 +179,90 @@ class TaskManagerFragment : Fragment() {
         }
     }
 
-    private fun renderScope(scope: String?) {
-        val chip = scopeChip ?: return
-        val label = when (scope) {
-            "own" -> "My tasks"
-            "team" -> "Team"
-            "all" -> "All tasks"
-            else -> null
+    // ── Info cards + status counts (single pass) ──
+    private fun renderStats() {
+        val v = view ?: return
+        val me = session.staffId
+        var my = 0; var team = 0; var assigned = 0; var ext = 0; var overdue = 0
+        // status counts, indexed by Status.ordinal
+        val sc = IntArray(Status.values().size)
+        for (t in allTasks) {
+            if (me != null && t.assignedTo == me) my++
+            if (scope == "all" || (t.assignedTo != null && teamIds.contains(t.assignedTo))) team++
+            if (me != null && t.assignedBy == me) assigned++
+            if (t.pendingExtensionRequest == true) ext++
+            val od = isOverdue(t)
+            if (od) overdue++
+
+            sc[Status.ALL.ordinal]++
+            when (t.status) {
+                "pending" -> sc[Status.PENDING.ordinal]++
+                "in-progress" -> sc[Status.IN_PROGRESS.ordinal]++
+                "completed" -> sc[Status.COMPLETED.ordinal]++
+                "cancelled" -> sc[Status.CANCELLED.ordinal]++
+            }
+            if (od) sc[Status.OVERDUE.ordinal]++
         }
-        if (label == null) {
-            chip.visibility = View.GONE
-        } else {
-            chip.text = label
-            chip.visibility = View.VISIBLE
-        }
+        v.findViewById<TextView>(R.id.tvCardMyCount).text = my.toString()
+        v.findViewById<TextView>(R.id.tvCardTeamCount).text = team.toString()
+        v.findViewById<TextView>(R.id.tvCardAssignedCount).text = assigned.toString()
+        v.findViewById<TextView>(R.id.tvCardExtCount).text = ext.toString()
+        v.findViewById<TextView>(R.id.tvCardOverdueCount).text = overdue.toString()
+
+        statusTabs?.setTabs(
+            listOf(
+                HorizontalTabLayout.Tab("All", sc[Status.ALL.ordinal]),
+                HorizontalTabLayout.Tab("Pending", sc[Status.PENDING.ordinal]),
+                HorizontalTabLayout.Tab("Overdue", sc[Status.OVERDUE.ordinal]),
+                HorizontalTabLayout.Tab("In progress", sc[Status.IN_PROGRESS.ordinal]),
+                HorizontalTabLayout.Tab("Completed", sc[Status.COMPLETED.ordinal]),
+                HorizontalTabLayout.Tab("Cancelled", sc[Status.CANCELLED.ordinal]),
+            ),
+            defaultSelection = Status.values().indexOf(status).coerceAtLeast(0),
+        )
     }
 
-    private fun visibleTasks(): List<DailyTaskData> = when (filter) {
-        Filter.ALL -> allTasks
-        Filter.PENDING -> allTasks.filter { it.status == "pending" }
-        Filter.IN_PROGRESS -> allTasks.filter { it.status == "in-progress" }
-        Filter.COMPLETED -> allTasks.filter { it.status == "completed" }
+    private fun renderModuleTabs() {
+        val tabs = moduleTabs ?: return
+        val modules = allTasks.map { moduleOf(it) }.distinct().sorted()
+        moduleTabsList = listOf("All") + modules
+        if (moduleFilter !in moduleTabsList) moduleFilter = "All"
+        tabs.setTabs(
+            moduleTabsList.map { HorizontalTabLayout.Tab(it) },
+            defaultSelection = moduleTabsList.indexOf(moduleFilter).coerceAtLeast(0),
+        )
     }
 
+    private fun visibleTasks(): List<DailyTaskData> =
+        allTasks.filter { matchesStatus(it, status) }
+            .filter { moduleFilter == "All" || moduleOf(it) == moduleFilter }
+
+    private fun matchesStatus(t: DailyTaskData, s: Status): Boolean = when (s) {
+        Status.ALL -> true
+        Status.PENDING -> t.status == "pending"
+        Status.OVERDUE -> isOverdue(t)
+        Status.IN_PROGRESS -> t.status == "in-progress"
+        Status.COMPLETED -> t.status == "completed"
+        Status.CANCELLED -> t.status == "cancelled"
+    }
+
+    /** Mirrors the web isOverdueTask: open + deadline past, or >24h since creation. */
+    private fun isOverdue(t: DailyTaskData): Boolean {
+        if (t.status == "completed" || t.status == "cancelled") return false
+        val deadline = t.deadline?.trim().orEmpty()
+        if (deadline.isNotEmpty()) return deadline < todayStr
+        val created = t.creationTime ?: return false
+        return System.currentTimeMillis() - created >= 24L * 60 * 60 * 1000
+    }
+
+    /** Filter + push to the adapter — no re-inflation, RecyclerView recycles. */
     private fun render() {
-        val container = listContainer ?: return
-        container.removeAllViews()
-        val tasks = visibleTasks()
-        emptyState?.visibility = if (tasks.isEmpty()) View.VISIBLE else View.GONE
-        if (tasks.isEmpty()) return
-
-        val today = apiDateFmt.format(System.currentTimeMillis())
-        for (task in tasks) {
-            container.addView(buildRow(task, today, container))
-        }
+        val list = visibleTasks()
+        adapter.submit(list)
+        emptyState?.visibility = if (list.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
     }
 
-    private fun buildRow(task: DailyTaskData, today: String, parent: ViewGroup): View {
-        val row = layoutInflater.inflate(R.layout.item_daily_task, parent, false)
-
+    private fun bindRow(row: View, task: DailyTaskData) {
         row.findViewById<TextView>(R.id.tvTaskTitle).text =
             task.title?.takeIf { it.isNotBlank() } ?: task.taskName ?: "Task"
 
@@ -220,29 +271,23 @@ class TaskManagerFragment : Fragment() {
         if (subtitle != null) {
             nameView.text = subtitle
             nameView.visibility = View.VISIBLE
-        } else {
-            nameView.visibility = View.GONE
-        }
+        } else nameView.visibility = View.GONE
 
         row.findViewById<TextView>(R.id.tvTaskDeadline).text = formatDeadline(task.deadline)
         row.findViewById<TextView>(R.id.tvTaskAssignedTo).text =
             task.assignedToName?.takeIf { it.isNotBlank() } ?: "—"
 
-        applyStatusPill(row.findViewById(R.id.tvTaskStatusPill), task, today)
+        applyStatusPill(row.findViewById(R.id.tvTaskStatusPill), task)
 
-        // Category badge — prefer the human-friendly label ("Visitor Details")
-        // over the raw category slug ("frontdesk"), matching the web row.
         val categoryLabel = row.findViewById<TextView>(R.id.tvTaskCategoryLabel)
-        val category = task.label?.takeIf { it.isNotBlank() } ?: task.taskCategory?.takeIf { it.isNotBlank() }
-        if (category != null) {
-            categoryLabel.text = category
+        val badge = moduleOf(task).takeIf { it.isNotBlank() && it != "Task Manager" }
+            ?: task.label?.takeIf { it.isNotBlank() }
+            ?: task.taskCategory?.takeIf { it.isNotBlank() }
+        if (badge != null) {
+            categoryLabel.text = badge
             categoryLabel.visibility = View.VISIBLE
-        } else {
-            categoryLabel.visibility = View.GONE
-        }
+        } else categoryLabel.visibility = View.GONE
 
-        // Handoff Complete / Cancel actions — only for out-of-station handoff
-        // tasks, and only while still open. Mirrors the web dropdown.
         val actionRow = row.findViewById<View>(R.id.rowTaskHandoffActions)
         val isOpen = task.status == "pending" || task.status == "in-progress"
         if (task.sourceReferenceType == "out_of_station_handoff" && isOpen) {
@@ -253,20 +298,15 @@ class TaskManagerFragment : Fragment() {
             row.findViewById<View>(R.id.btnTaskHandoffCancel).setOnClickListener {
                 updateStatus(task.id, "cancelled")
             }
-        } else {
-            actionRow.visibility = View.GONE
-        }
+        } else actionRow.visibility = View.GONE
 
-        return row
+        // Tap → the task's mobile screen, or a "open in web" dialog for web-only.
+        row.setOnClickListener { TaskNavRouter.open(requireActivity(), task) }
     }
 
-    private fun applyStatusPill(pill: TextView, task: DailyTaskData, today: String) {
-        val isOpen = task.status == "pending" || task.status == "in-progress"
-        val deadline = task.deadline?.trim().orEmpty()
-        val isOverdue = isOpen && deadline.isNotEmpty() && deadline < today
-
+    private fun applyStatusPill(pill: TextView, task: DailyTaskData) {
         val (label, bg, fg) = when {
-            isOverdue -> Triple("Overdue", "#FEF3F2", "#B42318")
+            isOverdue(task) -> Triple("Overdue", "#FEF3F2", "#B42318")
             task.status == "completed" -> Triple("Completed", "#ECFDF3", "#16A34A")
             task.status == "in-progress" -> Triple("In Progress", "#EFF8FF", "#175CD3")
             task.status == "cancelled" -> Triple("Cancelled", "#FEF3F2", "#B42318")
@@ -291,6 +331,7 @@ class TaskManagerFragment : Fragment() {
                         Toast.LENGTH_SHORT,
                     ).show()
                     loadTasks(showSkeleton = false)
+                    (activity as? com.manjugroups.m_connect.MainActivity)?.refreshTasksBanner()
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Update failed", Toast.LENGTH_SHORT).show()
                 }
@@ -304,17 +345,68 @@ class TaskManagerFragment : Fragment() {
 
     private fun formatDeadline(raw: String?): String {
         val value = raw?.takeIf { it.isNotBlank() } ?: return "—"
-        // Deadlines are stored as yyyy-MM-dd; fall back to the raw string.
-        return runCatching { apiDateFmt.parse(value) }
-            .getOrNull()
-            ?.let { labelDateFmt.format(it) }
-            ?: value
+        return runCatching { apiDateFmt.parse(value) }.getOrNull()
+            ?.let { labelDateFmt.format(it) } ?: value
     }
 
-    private fun themeColor(attr: Int): Int {
-        val tv = TypedValue()
-        requireContext().theme.resolveAttribute(attr, tv, true)
-        return tv.data
+    private fun moduleOf(task: DailyTaskData): String =
+        moduleCache[task.id] ?: computeModule(task).also { moduleCache[task.id] = it }
+
+    // ── Module derivation — ported from web features/task-manager/utils.ts ──
+    private fun computeModule(task: DailyTaskData): String {
+        if (!task.module.isNullOrBlank()) return task.module!!
+        val path = task.actionUrl?.trim()?.let {
+            runCatching { java.net.URI(it).path ?: it }.getOrDefault(it)
+        }?.substringBefore('?')?.substringBefore('#')?.lowercase().orEmpty()
+        val source = task.sourceReferenceType?.lowercase().orEmpty()
+
+        return when {
+            path.startsWith("/telecaller") -> "Telecaller"
+            path.startsWith("/marketing/fleet") || path.startsWith("/fleet") -> "Fleets"
+            path.startsWith("/marketing") -> "Marketing"
+            path.startsWith("/post-sales") -> "Post Sales"
+            path.startsWith("/projects") || path.startsWith("/tasks") || path.startsWith("/issues") ||
+                path.startsWith("/library") || path.startsWith("/workforce") || path.startsWith("/procurement") ||
+                path.startsWith("/materials") || path.startsWith("/purchase-orders") || path.startsWith("/vendors") ||
+                path.startsWith("/equipment") || path.startsWith("/assets") || path.startsWith("/manpower") ||
+                path.startsWith("/geotrack") -> "Project Management"
+            path.startsWith("/land-procurement") -> "Land Procurement"
+            path.startsWith("/hr") || path.startsWith("/attendance") || path.startsWith("/my-team") ||
+                path.startsWith("/payroll") -> "HR"
+            path.startsWith("/accounts") -> "Accounts"
+            path.startsWith("/finance") || path.startsWith("/financials") -> "Finance"
+            path.startsWith("/complaints") -> "CRM"
+            path.startsWith("/settings") -> "Settings"
+            path.startsWith("/task-manager") -> "Task Manager"
+            source in setOf("staff-attendance", "leave", "permission", "work-from-home", "loan",
+                "hiring-request", "onboarding", "staff-asset", "shift_update") -> "HR"
+            source.startsWith("loan_") -> "Post Sales"
+            source.contains("booking") -> "Marketing"
+            source.contains("site_visit") || source == "out_of_station_handoff" ||
+                source == "client_place_visit" -> "Marketing"
+            source.contains("project") || source.contains("boq") || source == "work-order" ||
+                source == "issue" -> "Project Management"
+            else -> "Task Manager"
+        }
+    }
+
+    private inner class TaskAdapter : RecyclerView.Adapter<TaskAdapter.VH>() {
+        private var items: List<DailyTaskData> = emptyList()
+
+        fun submit(list: List<DailyTaskData>) {
+            items = list
+            notifyDataSetChanged()
+        }
+
+        inner class VH(val view: View) : RecyclerView.ViewHolder(view)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+            VH(layoutInflater.inflate(R.layout.item_daily_task, parent, false))
+
+        override fun getItemCount() = items.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) =
+            bindRow(holder.view, items[position])
     }
 
     companion object {

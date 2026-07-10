@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingGeoTrackEventEntity::class,
         PendingChatMessageEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class GeoTrackDatabase : RoomDatabase() {
@@ -63,6 +63,15 @@ abstract class GeoTrackDatabase : RoomDatabase() {
             }
         }
 
+        // V4 stamps each buffered point with the tracking session it was
+        // captured under, so a backlog can flush under the RIGHT session
+        // even after clock-out cleared the live session id.
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_points ADD COLUMN sessionId TEXT")
+            }
+        }
+
         fun getInstance(context: Context): GeoTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -70,7 +79,7 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                     GeoTrackDatabase::class.java,
                     "geotrack_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                 INSTANCE = instance
                 instance

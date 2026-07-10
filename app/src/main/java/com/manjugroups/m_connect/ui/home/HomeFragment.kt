@@ -222,7 +222,8 @@ class HomeFragment : Fragment() {
         // Replay the stagger when returning to the Home tab (either from a child
         // fragment via back, or after pop-back from another tab via show/hide).
         if (_binding != null && binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
+            // Posted lambdas run a frame later — guard against view teardown.
+            binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
         }
         startBannerAnimation()
     }
@@ -230,10 +231,10 @@ class HomeFragment : Fragment() {
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (hidden) {
-            binding.homeHeader.stopFloatingAnimation()
+            _binding?.homeHeader?.stopFloatingAnimation()
         } else if (_binding != null &&
             binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
+            binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
         }
     }
 
@@ -279,7 +280,9 @@ class HomeFragment : Fragment() {
                             }
                             if (pendingEntryAnimation) {
                                 pendingEntryAnimation = false
-                                binding.homeContent.post { binding.homeHeader.playEntryAnimation() }
+                                // The posted lambda runs a frame later — the view can
+                                // be destroyed by then (fast tab switch), so guard.
+                                binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
                             }
                         }
 
@@ -412,6 +415,13 @@ class HomeFragment : Fragment() {
         // For now, keeping it consistent with the image.
     }
 
+    // Signature of the last-rendered visit list. renderVisitCard is invoked
+    // from ~7 different state collectors, and each call re-inflates EVERY visit
+    // card on the main thread. Re-inflating unchanged cards repeatedly pegged
+    // the UI thread and ANR'd the Home screen ("crashing while loading"). We
+    // skip the re-inflation when nothing visible changed.
+    private var lastVisitRenderSignature: String? = null
+
     private fun renderVisitCard(state: HomeUiState.Loaded) {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
@@ -453,6 +463,21 @@ class HomeFragment : Fragment() {
 
         binding.visitListContent.visibility = View.VISIBLE
         binding.visitEmptyContent.visibility = View.GONE
+
+        // Only re-inflate when the visible list actually changed. The childCount
+        // check also forces a rebuild after view recreation (fresh empty
+        // container) even if the signature happens to match.
+        val signature = buildString {
+            append(state.hasOpenSession).append('|').append(selectedTab).append('|')
+            visits.forEach { append(it.id).append(':').append(it.status).append(';') }
+        }
+        if (signature == lastVisitRenderSignature &&
+            binding.visitListContent.childCount == displayCount
+        ) {
+            return
+        }
+        lastVisitRenderSignature = signature
+
         binding.visitListContent.removeAllViews()
 
         visits.forEachIndexed { index, visit ->

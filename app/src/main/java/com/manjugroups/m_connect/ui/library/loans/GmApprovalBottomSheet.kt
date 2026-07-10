@@ -297,6 +297,9 @@ class GmApprovalBottomSheet(
                 onAccepted()
                 dismiss()
             } catch (e: Exception) {
+                // Sheet dismissed mid-request cancels this coroutine; skip the
+                // view + Toast work when the binding is already gone.
+                if (_binding == null) return@launch
                 binding.btnAccept.isEnabled = true
                 binding.btnAccept.text = "Accept"
                 val serverMsg = extractHttpErrorMessage(e)
@@ -326,6 +329,7 @@ class GmApprovalBottomSheet(
                 onRejected()
                 dismiss()
             } catch (e: Exception) {
+                if (_binding == null) return@launch
                 binding.btnReject.isEnabled = true
                 binding.btnReject.text = "Reject"
                 val serverMsg = extractHttpErrorMessage(e)

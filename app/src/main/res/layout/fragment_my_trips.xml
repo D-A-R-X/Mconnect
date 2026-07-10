@@ -152,7 +152,7 @@
             android:padding="32dp"
             android:gravity="center"
             android:visibility="gone"
-            app:es_image="@drawable/ic_apps_pill_v_fleet"
+            app:es_image="@drawable/ic_trips_empty"
             app:es_title="No Trips Found"
             app:es_description="There are no trips matching your search or filter." />
 

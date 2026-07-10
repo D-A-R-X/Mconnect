@@ -14,6 +14,8 @@ import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
+import com.manjugroups.m_connect.network.SessionData
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -114,14 +116,14 @@ class AttendanceFlowViewModel(
                 val lastPunchOut = dayResp?.lastPunchOut ?: attendance?.lastPunchOut
                 val hasOpenSession = attendance?.hasOpenSession == true ||
                     dayResp?.hasOpenSession == true
-                // `isClockedIn` reflects whether an open session exists right
-                // now — it drives the live "today" ticker and the clocked-in
-                // header. It is NOT used to gate the Clock Out button anymore:
-                // per the one-time-Clock-In rule the button stays "Clock Out"
-                // all day, and the server now accepts a Clock Out with no open
-                // session by re-stamping the day's last punch-out (the last
-                // tap wins, locked at midnight) instead of rejecting it.
-                val isClockedInForUi = hasOpenSession
+                // `isClockedIn` drives the live "today" ticker and the clocked-in
+                // header. It must reflect ONLY the app's own punches — a
+                // biometric (gate) punch-out must never flip the app to "clocked
+                // out", nor a biometric punch-in flip it back. So derive it from
+                // the mobile sessions, NOT the server's hasOpenSession (which
+                // counts every punch source).
+                val sessions = (dayResp?.sessions ?: attendance?.sessions).orEmpty()
+                val isClockedInForUi = computeMobileClockedIn(sessions, fallback = hasOpenSession)
                 val hasClockedInTodayForUi =
                     AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
@@ -283,13 +285,16 @@ class AttendanceFlowViewModel(
                 val compressed = withContext(Dispatchers.IO) {
                     runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
                 }
-                val storageId = uploadSelfie(token, compressed)
+                val upload = StorageUploader.upload(api, token, compressed)
+                val storageId = upload.storageId
                 if (storageId.isNullOrBlank()) {
                     rollbackOptimistic(previousState)
                     _events.emit(
                         AttendanceFlowEvent.SubmissionFailed(
                             mode,
-                            "Failed to upload selfie. Please try again.",
+                            "Failed to upload selfie." +
+                                (upload.errorMessage?.let { " $it" } ?: "") +
+                                " Please try again.",
                         ),
                     )
                     return@launch
@@ -404,16 +409,6 @@ class AttendanceFlowViewModel(
         }
     }
 
-    private suspend fun uploadSelfie(token: String, file: File): String? {
-        return try {
-            val requestBody = file.asRequestBody("image/jpeg".toMediaType())
-            val response = api.uploadStorageFile(token, requestBody)
-            response.storageId
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     /**
      * Re-encodes the selfie to a max 1080px JPEG at quality 80 with EXIF rotation baked in.
      * Typical 3-5MB camera output drops to ~150-300KB → 10x faster upload on slow networks.
@@ -518,6 +513,49 @@ class AttendanceFlowViewModel(
             hasOpenSession: Boolean,
         ): Boolean {
             return AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
+        }
+
+        /**
+         * Whether the user is currently clocked IN *by the mobile app*.
+         *
+         * Only the app's own punches count. We take the latest mobile punch-in
+         * and the latest mobile punch-out; the user is clocked in iff there is a
+         * mobile punch-in with no later mobile punch-out. Biometric (gate)
+         * punches are ignored entirely, so a punch-out at the gate can never flip
+         * the app to "clocked out", nor a gate punch-in flip it back on.
+         *
+         * Falls back to [fallback] only when the day has no mobile punch at all
+         * (a purely-biometric day, or sessions not yet loaded), preserving the
+         * previous behaviour for users who never clock in from the app.
+         */
+        internal fun computeMobileClockedIn(
+            sessions: List<SessionData>,
+            fallback: Boolean,
+        ): Boolean {
+            var lastMobileInMs: Long? = null
+            var lastMobileOutMs: Long? = null
+            for (s in sessions) {
+                if (s.source.equals("mobile", ignoreCase = true) &&
+                    !s.punchInTime.isNullOrBlank()
+                ) {
+                    val ms = parseMillis(s.punchInTime)
+                    if (ms != null && (lastMobileInMs == null || ms > lastMobileInMs!!)) {
+                        lastMobileInMs = ms
+                    }
+                }
+                // Punch-out source falls back to the session source when absent.
+                val outSource = s.punchOutSource ?: s.source
+                if (outSource.equals("mobile", ignoreCase = true) &&
+                    !s.punchOutTime.isNullOrBlank()
+                ) {
+                    val ms = parseMillis(s.punchOutTime)
+                    if (ms != null && (lastMobileOutMs == null || ms > lastMobileOutMs!!)) {
+                        lastMobileOutMs = ms
+                    }
+                }
+            }
+            val inMs = lastMobileInMs ?: return fallback
+            return lastMobileOutMs == null || inMs > lastMobileOutMs!!
         }
 
         internal fun formatIsoToTime(iso: String): String {

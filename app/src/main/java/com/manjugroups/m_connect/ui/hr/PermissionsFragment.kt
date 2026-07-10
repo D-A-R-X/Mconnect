@@ -57,6 +57,7 @@ class PermissionsFragment : Fragment() {
     companion object {
         private const val ARG_MODE = "mode"
         private const val ARG_ENTITY_ID = "entity_id"
+        private const val REJECT_RESULT_KEY = "permission_reject_reason"
         const val MODE_HISTORY = WorkflowNotificationRoute.MODE_HISTORY
         const val MODE_APPROVAL = WorkflowNotificationRoute.MODE_APPROVAL
 
@@ -88,6 +89,21 @@ class PermissionsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+
+        // Reject-with-reason bottom sheet result → run the reject with the
+        // captured reason (shared component; reject only, not cancel).
+        childFragmentManager.setFragmentResultListener(REJECT_RESULT_KEY, viewLifecycleOwner) { _, bundle ->
+            val id = bundle.getString(com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.KEY_ITEM_ID).orEmpty()
+            val reason = bundle.getString(com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.KEY_REASON).orEmpty()
+            if (id.isNotEmpty()) {
+                viewModel.rejectPermission(
+                    session.bearerToken,
+                    id,
+                    reason.ifBlank { "Rejected" },
+                    session.hasPermission("permissions.approve"),
+                )
+            }
+        }
 
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
@@ -284,11 +300,10 @@ class PermissionsFragment : Fragment() {
             state.pendingApprovals
         } else when (scope) {
             Scope.MY -> filterHistoryPermissions(mineOnly)
+            // Team = hierarchy-scoped only (empty when the user has no team).
             Scope.TEAM -> filterHistoryPermissions(state.pendingApprovals)
-            Scope.ALL -> {
-                val combined = state.myPermissions + state.pendingApprovals
-                filterHistoryPermissions(combined.distinctBy { it.id })
-            }
+            // All = every request company-wide (backend gates to admins/viewAll).
+            Scope.ALL -> filterHistoryPermissions(state.allApprovals.distinctBy { it.id })
         }
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
@@ -376,16 +391,23 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun filterHistoryPermissions(items: List<PermissionData>): List<PermissionData> {
-        return items.filter { perm ->
-            when (historyFilter) {
-                HistoryFilter.REVIEW -> bucketForStatus(perm.status) == StatusBucket.REVIEW
-                HistoryFilter.APPROVED -> bucketForStatus(perm.status) == StatusBucket.APPROVED
-                HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
+        return items
+            // Cancelled permissions are not a category — never show them.
+            .filterNot { it.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled" }
+            .filter { perm ->
+                when (historyFilter) {
+                    HistoryFilter.REVIEW -> bucketForStatus(perm.status) == StatusBucket.REVIEW
+                    HistoryFilter.APPROVED -> bucketForStatus(perm.status) == StatusBucket.APPROVED
+                    HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
+                }
             }
-        }
     }
 
+    // Cancels an in-flight chunked render when a newer pass starts.
+    private var renderGen = 0
+
     private fun renderPermissions(items: List<PermissionData>, approvalMode: Boolean) {
+        renderGen++
         binding.permissionList.removeAllViews()
         binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
 
@@ -393,7 +415,7 @@ class PermissionsFragment : Fragment() {
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-        items.forEach { perm ->
+        fun bindCard(perm: PermissionData): View {
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_permission, binding.permissionList, false)
 
@@ -473,9 +495,13 @@ class PermissionsFragment : Fragment() {
             staffName.text = displayName
             staffInitial.text = initial
 
-            if (approvalMode && perm.staffName != null) {
-                // Only show approve/reject if this is a team permission (has staffName).
-                // My own permissions shouldn't be approvable by me.
+            // Never approve/reject your OWN permission — not even as a super
+            // admin. Own rows stay visible (in review) but carry no buttons.
+            val isOwnPerm = !perm.staffId.isNullOrBlank() && perm.staffId == session.staffId
+            if (approvalMode && perm.staffName != null && bucket == StatusBucket.REVIEW && !isOwnPerm) {
+                // Approve/Reject only for a team member's request that is still
+                // PENDING. Already-decided (approved/rejected) rows must show
+                // their status, not the action buttons — even in Team/All scope.
                 actionRow.visibility = View.VISIBLE
                 approveButton.setOnClickListener {
                     perm.id?.let { id ->
@@ -526,8 +552,20 @@ class PermissionsFragment : Fragment() {
                 card.alpha = 1f
             }
 
-            binding.permissionList.addView(card)
+            return card
         }
+
+        // Chunked render — see renderLeaves: hundreds of admin-scope rows in
+        // one main-thread inflate pass froze mid-range phones.
+        val gen = renderGen
+        val chunk = 24
+        fun renderChunk(start: Int) {
+            if (gen != renderGen || _binding == null) return
+            val end = minOf(start + chunk, items.size)
+            for (i in start until end) binding.permissionList.addView(bindCard(items[i]))
+            if (end < items.size) binding.permissionList.post { renderChunk(end) }
+        }
+        renderChunk(0)
     }
 
     private fun showCancelPermissionDialog(permissionId: String) {
@@ -585,23 +623,12 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun showRejectDialog(permissionId: String) {
-        val input = EditText(requireContext()).apply {
-            hint = "Reason for rejection"
-            minLines = 3
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Reject permission request")
-            .setView(input)
-            .setPositiveButton("Reject") { _, _ ->
-                viewModel.rejectPermission(
-                    session.bearerToken,
-                    permissionId,
-                    input.text?.toString()?.trim().orEmpty().ifBlank { "Rejected" },
-                    session.hasPermission("permissions.approve")
-                )
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet.newInstance(
+            itemId = permissionId,
+            resultKey = REJECT_RESULT_KEY,
+            title = "Reject permission request",
+            buttonText = "Reject Permission",
+        ).show(childFragmentManager, "reject_permission")
     }
 
     private fun resolveColor(attr: Int): Int {

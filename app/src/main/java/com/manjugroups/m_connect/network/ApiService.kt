@@ -221,7 +221,26 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String,
         @Query("toDate") toDate: String,
+        // Server-side name/employee-id search. Without it the backend returns
+        // only the newest ~750 rows company-wide (≈ a few days), so client-side
+        // filtering silently missed a person's older records.
+        @Query("search") search: String? = null,
     ): AttendanceApprovalsResponse
+
+    // Whether the caller has a team (direct reports) — drives which attendance
+    // tabs show + the "No team members" empty state, mirroring the web.
+    // Put an attendance row on hold (web parity: the amber Hold action in the
+    // review dialog). Body reuses RejectRequest — {id, reason}.
+    @POST("api/hr/attendance/hold")
+    suspend fun holdAttendance(
+        @Header("Authorization") token: String,
+        @Body body: RejectRequest,
+    ): SimpleResponse
+
+    @GET("api/hr/attendance/team-scope")
+    suspend fun getAttendanceTeamScope(
+        @Header("Authorization") token: String,
+    ): TeamScopeResponse
 
     // HR Review tab — company-wide rows awaiting HR action (needs permission).
     @GET("api/hr/attendance/hr-review")
@@ -397,7 +416,12 @@ interface ApiService {
     ): MyPermissionsResponse
 
     @GET("api/hr/permissions/pending-approvals")
-    suspend fun getPendingPermissionApprovals(@Header("Authorization") token: String): MyPermissionsResponse
+    suspend fun getPendingPermissionApprovals(
+        @Header("Authorization") token: String,
+        // all=true → every request company-wide (All Permission scope, admins
+        // only). Omitted/false → hierarchy-scoped Team Permission.
+        @Query("all") all: Boolean? = null,
+    ): MyPermissionsResponse
 
     @POST("api/hr/permissions/apply")
     suspend fun applyPermission(
@@ -919,6 +943,12 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MarketingProjectsResponse
 
+    // Master material catalog (Project Management > Library > Material Catalog).
+    @GET("api/materials")
+    suspend fun getMaterials(
+        @Header("Authorization") token: String,
+    ): MaterialsResponse
+
     @GET("api/marketing/inventory-units")
     suspend fun listInventoryUnits(
         @Header("Authorization") token: String,
@@ -1093,9 +1123,21 @@ interface ApiService {
     ): InspectionActionResponse
 
     companion object {
-        fun create(): ApiService {
+        // Single shared client for the whole app. Previously every one of the
+        // ~114 create() call sites built a fresh OkHttpClient (its own
+        // connection + thread pools), so no TLS/keep-alive reuse across screens
+        // — a real per-navigation latency hit. Now built once, lazily.
+        private val instance: ApiService by lazy { buildService() }
+
+        fun create(): ApiService = instance
+
+        private fun buildService(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                // BODY logging buffers + logs full request/response bodies —
+                // fine in debug, but pure overhead (and a data-leak risk) in
+                // release. Gate it to debug builds only.
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
             }
             // Auto-logout on 401. Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
@@ -1127,6 +1169,11 @@ interface ApiService {
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
+                // OkHttp's default write timeout is only 10s — a punch selfie
+                // (~200-300KB) on a weak field uplink can't finish the body in
+                // time, so uploads died with SocketTimeoutException. 60s only
+                // bites on large request bodies; normal JSON calls are unaffected.
+                .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)
@@ -1464,7 +1511,13 @@ data class AttendanceApprovalRecord(
     val staffPhotoUrl: String? = null,
     // "remarks" = employee-submitted correction/leave request; "attendance" =
     // normal punch record. Drives the HR Review Attendance/Request sub-tabs.
-    val requestType: String? = null
+    val requestType: String? = null,
+    // Correction-request payload (Requests sub-tab rows): the times the
+    // employee ASKED to be corrected to, plus their stated reason. The
+    // punchInTime/punchOutTime above stay the recorded (actual) punches.
+    val requestedPunchIn: String? = null,
+    val requestedPunchOut: String? = null,
+    val requestReason: String? = null,
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
@@ -1472,7 +1525,11 @@ data class AttendanceApprovalRecord(
 // audit logs unambiguous.
 data class ApproveAttendanceRequest(
     val id: String,
-    val approvedAttendance: String
+    val approvedAttendance: String,
+    // True when `id` is an attendanceRequests doc (HR Review → Requests row);
+    // the backend then applies the request-review mutation instead of the
+    // plain attendance approve. Omitted (null) for normal punch records.
+    val isRequest: Boolean? = null,
 )
 
 // Punch models
@@ -1529,6 +1586,9 @@ data class MyLeavesResponse(val success: Boolean, val total: Int?, val leaves: L
 data class LeaveData(
     @SerializedName("_id") val id: String?,
     val leaveId: String? = null,
+    // Applicant's staff id — lets the approval UI recognise the viewer's OWN
+    // leave and hide its Approve/Reject (no self-approval).
+    val staffId: String? = null,
     val staffName: String? = null,
     val leaveType: String?,
     val fromDate: String?,
@@ -1794,7 +1854,7 @@ data class ApproveLoanRequest(
 )
 
 data class IdRequest(val id: String)
-data class RejectRequest(val id: String, val reason: String)
+data class RejectRequest(val id: String, val reason: String, val isRequest: Boolean? = null)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
 data class PushRegisterRequest(
     val token: String,
@@ -2220,10 +2280,20 @@ data class DailyTaskData(
     val priority: String? = null,
     val description: String? = null,
     val deadline: String? = null,
+    // Staff ids — needed to compute the "My Tasks" / "My Team Tasks" /
+    // "Assigned By Me" info cards client-side, exactly like the web page.
+    val assignedTo: String? = null,
+    val assignedBy: String? = null,
     val assignedToName: String? = null,
     val assignedByName: String? = null,
     val taskCategory: String? = null,
     val status: String? = null,
+    // Module label ("HR", "Marketing", "Land Procurement", …) resolved by the
+    // backend so the mobile module tabs match the web without re-deriving it.
+    val module: String? = null,
+    // Whether a deadline-extension request is pending on this task (Extension
+    // Requests card).
+    val pendingExtensionRequest: Boolean? = null,
     val sourceReferenceType: String? = null,
     val sourceReferenceId: String? = null,
     val actionUrl: String? = null,
@@ -2235,6 +2305,13 @@ data class TaskManagerResponse(
     val tasks: List<DailyTaskData> = emptyList(),
     val teamIds: List<String> = emptyList(),
     val scope: String? = null,
+    val error: String? = null
+)
+
+data class TeamScopeResponse(
+    val success: Boolean = false,
+    val teamCount: Int = 0,
+    val hasTeam: Boolean = false,
     val error: String? = null
 )
 
@@ -2718,6 +2795,22 @@ data class MarketingProject(
 data class MarketingProjectsResponse(
     val success: Boolean,
     val projects: List<MarketingProject> = emptyList(),
+    val error: String? = null,
+)
+
+data class MaterialCatalogItem(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val unit: String? = null,
+    val category: String? = null,
+    val itemCode: String? = null,
+    val brand: String? = null,
+)
+
+data class MaterialsResponse(
+    val success: Boolean = false,
+    val total: Int? = null,
+    val materials: List<MaterialCatalogItem> = emptyList(),
     val error: String? = null,
 )
 
@@ -3485,6 +3578,7 @@ data class FineDeductionItem(
     val status: String = "active",
     val notes: String? = null,
     val photoUrl: String? = null,
+    val staffPhotoUrl: String? = null,
     val createdAt: String? = null,
 )
 

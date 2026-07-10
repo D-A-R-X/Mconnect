@@ -363,7 +363,7 @@ class HrDashboardFragment : Fragment() {
         binding.hrRefresh.setupPullToRefresh {
             flowViewModel.loadTodayAttendance(session.bearerToken)
             loadRecentHistoryCards()
-            binding.hrRefresh.postDelayed({ binding.hrRefresh.dismissRefresh() }, 800)
+            binding.hrRefresh.postDelayed({ _binding?.hrRefresh?.dismissRefresh() }, 800)
         }
 
         // Header pieces start hidden — content pieces are wired to enter once their
@@ -959,6 +959,11 @@ class HrDashboardFragment : Fragment() {
     }
 
     private fun bindRecentHistoryCards(records: List<AttendanceRecord>) {
+        // The loader coroutine runs on viewLifecycleOwner.lifecycleScope, but a
+        // view torn down mid-request resumes the suspended call with a
+        // CancellationException that the broad `catch (_: Exception)` swallows —
+        // then this runs with _binding already null. Bail before touching views.
+        if (_binding == null) return
         recentHistoryRecords = records
         // Fill gaps: walk every date from the start of the current
         // month to today and inject a placeholder AttendanceRecord
@@ -1237,6 +1242,9 @@ class HrDashboardFragment : Fragment() {
         val appCtx = requireContext().applicationContext
 
         session.clearOnDutyDetails()
+        // Field activity ended → return the tracking notification to its
+        // neutral shift line.
+        com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(appCtx)
         Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
         updateOnDutyButtonUi()
         val isClockedIn = flowViewModel.uiState.value.isClockedIn

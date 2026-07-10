@@ -91,9 +91,14 @@ object AttendanceStatusBadge {
             return set(pill, "Pending", FG_PENDING, R.drawable.bg_pill_yellow_light)
         }
 
-        // Real clock-in + clock-out + no HR verdict → no pill (the
-        // row will pick one up once HR finalises).
-        pill.visibility = View.GONE
+        // Real clock-in + clock-out + worked hours, HR not finalised yet →
+        // show a PROVISIONAL Present. The staff worked a full day; leaving
+        // these unbadged (only HR-finalised days got a pill) made genuinely
+        // present days look unmarked next to a finalised one — exactly the
+        // "2nd/4th/5th marked but no Present tag" report. This matches the
+        // screen's own summary, which already counts any day with worked
+        // minutes as present; HR can still re-mark it later.
+        set(pill, "Present", FG_PRESENT, R.drawable.bg_pill_green_light)
     }
 
     private fun set(view: TextView, text: String, fg: Int, bgRes: Int) {

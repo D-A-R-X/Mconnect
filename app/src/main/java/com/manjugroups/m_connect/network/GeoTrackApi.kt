@@ -445,9 +445,17 @@ interface GeoTrackApi {
     ): TripsResponse
 
     companion object {
-        fun create(): GeoTrackApi {
+        // Single shared client (see ApiService.create() — same rationale):
+        // build once, reuse the connection pool across every trip/visit call
+        // instead of rebuilding an OkHttpClient per call site.
+        private val instance: GeoTrackApi by lazy { buildService() }
+
+        fun create(): GeoTrackApi = instance
+
+        private fun buildService(): GeoTrackApi {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
             }
             // Same auto-logout-on-401 watchdog as ApiService.create() —
             // GeoTrack endpoints also need it because every trip /
@@ -515,12 +523,19 @@ data class HeartbeatRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
     val batteryPct: Int,
-    val appVersion: String
+    val appVersion: String,
+    // Client tick time (ms epoch). The server stores this as the heartbeat
+    // timestamp so offline-queued heartbeats backfill the web battery/uptime
+    // history at their ORIGINAL time instead of the replay time.
+    val recordedAt: Long? = null,
 )
 
 data class TamperReportRequest(
     val eventType: String,
-    val metadata: Map<String, Any?> = emptyMap()
+    val metadata: Map<String, Any?> = emptyMap(),
+    // Original occurrence time (ms epoch) for offline-queued events, so a
+    // replayed GPS_DISABLED/REBOOT surfaces in the feed when it HAPPENED.
+    val detectedAt: Long? = null,
 )
 
 data class ConsentRequest(

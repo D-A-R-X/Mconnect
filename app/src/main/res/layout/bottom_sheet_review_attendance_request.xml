@@ -272,14 +272,16 @@
                 tools:visibility="visible">
 
                 <TextView
+                    android:id="@+id/tvCorrectionTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_bold"
-                    android:text="HR Approved Correction"
+                    android:text="Requested Correction"
                     android:textColor="#039855"
                     android:textSize="12sp" />
 
                 <LinearLayout
+                    android:id="@+id/layoutCorrectionTimes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"

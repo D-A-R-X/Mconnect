@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
@@ -679,6 +680,7 @@ class HomeViewModel : ViewModel() {
                     attendanceActive = true,
                 )
                 _punchEvent.emit(PunchEvent.Success("Visit started!"))
+                setVisitNotification(context, cachedState?.todayVisits?.firstOrNull { it.id == visitId }, null)
                 val latest = cachedState ?: return@launch
                 val updated = latest.copy(
                     showTripSelector = false,
@@ -709,6 +711,10 @@ class HomeViewModel : ViewModel() {
                     attendanceActive = cachedState?.hasOpenSession == true,
                 )
                 _punchEvent.emit(PunchEvent.Success("Visit completed!"))
+                // Visit over → drop the field-activity so the tracking
+                // notification falls back to its neutral shift line.
+                SessionManager(context).clearFieldActivity()
+                com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(context)
                 val current = cachedState ?: return@launch
                 val updated = current.copy(activeVisitId = null)
                 cachedState = updated
@@ -747,6 +753,11 @@ class HomeViewModel : ViewModel() {
                         attendanceActive = true,
                     )
                     _punchEvent.emit(PunchEvent.Success("Trip to $placeName started!"))
+                    setVisitNotification(
+                        context,
+                        cachedState?.todayVisits?.firstOrNull { it.id == createResp.visitId },
+                        placeName,
+                    )
                     val current = cachedState ?: return@launch
                     val updated = current.copy(activeVisitId = createResp.visitId)
                     cachedState = updated
@@ -760,6 +771,21 @@ class HomeViewModel : ViewModel() {
                 _punchEvent.emit(PunchEvent.Error("Failed to start trip: ${e.message}"))
             }
         }
+    }
+
+    /**
+     * Point the GeoTrack notification at the visit the staff just started.
+     * SV vs CP is read from [TodayVisit.visitCategory]; the place name (or a
+     * fallback for ad-hoc trips not yet in the list) becomes the subtitle.
+     * The live elapsed timer runs from now.
+     */
+    private fun setVisitNotification(context: Context, visit: TodayVisit?, fallbackName: String?) {
+        val isSv = visit?.visitCategory == "site_visit"
+        val kind = if (isSv) "sv" else "cp"
+        val name = visit?.placeName?.takeIf { it.isNotBlank() } ?: fallbackName
+        val title = (if (isSv) "Site Visit" else "Client Visit") + (name?.let { " · $it" } ?: "")
+        SessionManager(context).setFieldActivity(kind, title, visit?.placeAddress, System.currentTimeMillis())
+        com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(context)
     }
 
     fun dismissTripSelector() {
@@ -787,11 +813,9 @@ class HomeViewModel : ViewModel() {
     }
 
     private suspend fun uploadPhoto(bearerToken: String, file: File): String? {
-        return try {
-            val requestBody = file.asRequestBody("image/jpeg".toMediaType())
-            val response = api.uploadStorageFile(bearerToken, requestBody)
-            response.storageId
-        } catch (_: Exception) { null }
+        // Retries transient failures; punch selfies from field locations
+        // regularly hit flaky networks and a single attempt loses the punch.
+        return StorageUploader.upload(api, bearerToken, file).storageId
     }
 
     private fun applyTrackingBootstrap(

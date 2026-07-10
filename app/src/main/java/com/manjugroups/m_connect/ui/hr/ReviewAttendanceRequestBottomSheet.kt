@@ -71,32 +71,40 @@ class ReviewAttendanceRequestBottomSheet : BottomSheetDialogFragment() {
         val rec = record ?: return
         
         // Header & Name
-        binding.tvStaffName.text = rec.staffName?.trim().orEmpty().ifBlank { "Elaine" }
-        binding.tvRequestDate.text = formatDateLabel(rec.date) ?: (rec.date ?: "Thu, 27 Sept 2024")
-        
-        // Times
-        val inTime = formatTime(rec.punchInTime) ?: "09:00 AM"
-        val outTime = formatTime(rec.punchOutTime) ?: "05:00 PM"
-        binding.tvRecordedIn.text = inTime
-        binding.tvRecordedOut.text = outTime
+        binding.tvStaffName.text = rec.staffName?.trim().orEmpty()
+        binding.tvRequestDate.text = formatDateLabel(rec.date) ?: rec.date.orEmpty()
+
+        // Recorded (actual) punches — "--" when the day has none, never a
+        // fake placeholder time.
+        binding.tvRecordedIn.text = formatTime(rec.punchInTime) ?: "--"
+        binding.tvRecordedOut.text = formatTime(rec.punchOutTime) ?: "--"
 
         // Source & Submission Date
-        binding.tvSourceBadge.text = rec.source?.ifBlank { "Biometric" } ?: "Biometric"
-        val displayDate = rec.date ?: "27/09/2024"
-        binding.tvSubmittedAt.text = "Submitted on $displayDate, 06:15 PM"
+        binding.tvSourceBadge.text = rec.source?.ifBlank { "mobile" } ?: "mobile"
+        binding.tvSubmittedAt.text = "Submitted on ${rec.date.orEmpty()}"
 
-        // Toggle UI blocks based on Record ID
-        // req_1 corresponds to first dummy, req_2 (or others) to second dummy
-        if (rec.id == "req_1" || rec.id == "app_1") {
-            // First dummy: Correction UI
+        // Correction requests carry the times the employee asked for plus
+        // their reason — show the "Requested Correction" block for those.
+        // Plain review rows keep the rejection-reason input instead.
+        val requestedIn = formatTime(rec.requestedPunchIn)
+        val requestedOut = formatTime(rec.requestedPunchOut)
+        // A real time-correction request carries requested punch times. A plain
+        // remark only carries a reason — for those, drop the "Requested
+        // Correction" punch fields (they'd just read "--") and show the note
+        // under a "Remark" heading instead.
+        val hasRealCorrection = requestedIn != null || requestedOut != null
+        val hasRemark = !rec.requestReason.isNullOrBlank()
+        if (hasRealCorrection || hasRemark) {
             binding.layoutCorrectionUI.visibility = View.VISIBLE
             binding.layoutRejectionUI.visibility = View.GONE
-            
-            binding.tvApprovedIn.text = inTime
-            binding.tvApprovedOut.text = outTime
-            binding.tvCorrectionReason.text = "Worked full day at site"
+
+            binding.tvCorrectionTitle.text = if (hasRealCorrection) "Requested Correction" else "Remark"
+            binding.layoutCorrectionTimes.visibility = if (hasRealCorrection) View.VISIBLE else View.GONE
+            binding.tvApprovedIn.text = requestedIn ?: "--"
+            binding.tvApprovedOut.text = requestedOut ?: "--"
+            binding.tvCorrectionReason.text =
+                rec.requestReason?.trim().takeUnless { it.isNullOrBlank() } ?: "—"
         } else {
-            // Second dummy (and all others): Rejection Reason Input UI
             binding.layoutCorrectionUI.visibility = View.GONE
             binding.layoutRejectionUI.visibility = View.VISIBLE
 
