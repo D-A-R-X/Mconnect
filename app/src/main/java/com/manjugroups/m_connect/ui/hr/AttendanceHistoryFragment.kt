@@ -1393,17 +1393,18 @@ class AttendanceHistoryFragment : Fragment() {
             val outLabel = formatTime(record.punchOutTime) ?: "--"
             tvRange.text = "$inLabel · $outLabel"
 
-            // Active-fine banner (full-width red bar, matching My Attendance) —
-            // only on the All tab, when the staff has a matching active fine.
+            // Attendance-fine banner — the REAL per-DAY late fine for THIS
+            // record (server-computed lateFineDeduction), shown only when it's
+            // actually > 0. Previously this matched cachedFines by staff name,
+            // which smeared one active monthly fine onto every one of that
+            // person's cards (the "₹10 on every date" bug for a staffer with
+            // no fine). Now a day with no fine shows no banner.
             val fineBanner = card.findViewById<View>(R.id.llTeamFinesBanner)
             val tvFineAmount = card.findViewById<TextView>(R.id.tvTeamFineAmount)
-            val fine = if (showFines) cachedFines.firstOrNull {
-                it.staffName.equals(record.staffName, ignoreCase = true) ||
-                    (!record.employeeId.isNullOrBlank() && it.employeeId.equals(record.employeeId, ignoreCase = true))
-            } else null
-            if (fine != null) {
+            val fineAmt = (record.lateFineDeduction ?: record.fineAmount) ?: 0.0
+            if (showFines && fineAmt > 0.0) {
                 fineBanner.visibility = View.VISIBLE
-                tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fine.amount)
+                tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fineAmt)
             } else {
                 fineBanner.visibility = View.GONE
             }

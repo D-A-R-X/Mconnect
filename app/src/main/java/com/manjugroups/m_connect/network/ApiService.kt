@@ -1538,6 +1538,11 @@ data class AttendanceApprovalRecord(
     val requestedPunchIn: String? = null,
     val requestedPunchOut: String? = null,
     val requestReason: String? = null,
+    // Server-computed per-DAY late fine (₹) for this record, from
+    // staffAttendance.listForReport / enrichReportRecords. Drives the All-tab
+    // attendance-fine banner (0 / absent = no fine that day).
+    val lateFineDeduction: Double? = null,
+    val fineAmount: Double? = null,
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
