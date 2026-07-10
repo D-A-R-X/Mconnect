@@ -17,13 +17,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.ChipGroup
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectExpense
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
+import com.manjugroups.m_connect.ui.common.FilterTabsView
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.common.navigateUp
@@ -69,6 +69,7 @@ class ProjectExpensesFragment : Fragment() {
     private lateinit var tvEmpty: TextView
     private lateinit var rvExpenses: RecyclerView
     private lateinit var donut: DonutChartView
+    private lateinit var categoryTabs: FilterTabsView
     private lateinit var btnAddExpense: MaterialButton
 
     private val adapter = ExpenseAdapter()
@@ -115,6 +116,7 @@ class ProjectExpensesFragment : Fragment() {
         tvEmpty = view.findViewById(R.id.tvEmpty)
         rvExpenses = view.findViewById(R.id.rvExpenses)
         donut = view.findViewById(R.id.donutChart)
+        categoryTabs = view.findViewById(R.id.categoryTabs)
         btnAddExpense = view.findViewById(R.id.btnAddExpense)
         BottomActionInsets.applyAboveSystemNavAndTabs(btnAddExpense)
 
@@ -127,14 +129,18 @@ class ProjectExpensesFragment : Fragment() {
             showDateFilter()
         }
 
-        val chips = view.findViewById<ChipGroup>(R.id.categoryPills)
-        chips.setOnCheckedStateChangeListener { _, checkedIds ->
-            val checked = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            selectedCategory = when (checked) {
-                R.id.chipLabour -> "labour"
-                R.id.chipMaterials -> "materials"
-                R.id.chipEquipment -> "equipment"
-                R.id.chipOther -> "other"
+        // Reusable pill-tab filter row. Index → API category slug; index 0
+        // ("All") clears the filter. Tapping a tab fades the list and
+        // re-fetches for the newly selected category.
+        categoryTabs.setTabs(
+            labels = listOf("All", "Labour", "Materials", "Equipments", "Others"),
+            initialIndex = 0,
+        ) { index ->
+            selectedCategory = when (index) {
+                1 -> "labour"
+                2 -> "materials"
+                3 -> "equipment"
+                4 -> "other"
                 else -> null
             }
             // Smooth fade transition for the list
@@ -182,8 +188,8 @@ class ProjectExpensesFragment : Fragment() {
 
     private fun playEntryAnimations(view: View) {
         val totalsCard = view.findViewById<View>(R.id.cardTotals)
-        val chips = view.findViewById<View>(R.id.categoryPills).parent as View
-        
+        val chips = view.findViewById<View>(R.id.categoryTabs)
+
         totalsCard.alpha = 0f
         totalsCard.translationY = 40f
         totalsCard.animate().alpha(1f).translationY(0f).setDuration(400L).setStartDelay(100L).start()
@@ -220,7 +226,9 @@ class ProjectExpensesFragment : Fragment() {
                         ).show()
                     } else {
                         // Auto-select the first project so the user sees data
-                        // immediately. They can still switch via the picker.
+                        // immediately (matches the mockup's populated state).
+                        // They can still switch via the picker; the picker's
+                        // default placeholder text is "Select project".
                         val first = projects.first()
                         selectedProjectId = first.id
                         tvProjectPickerLabel.text = first.name ?: "Untitled project"
@@ -329,7 +337,15 @@ class ProjectExpensesFragment : Fragment() {
     }
 
     private fun refreshExpenses() {
-        val projectId = selectedProjectId ?: return
+        val projectId = selectedProjectId
+        if (projectId == null) {
+            // No project chosen yet — nothing to fetch. Clear any
+            // pull-to-refresh spinner so it doesn't hang, then bail.
+            view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                R.id.expensesRefresh
+            )?.dismissRefresh()
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = api.listProjectExpenses(
