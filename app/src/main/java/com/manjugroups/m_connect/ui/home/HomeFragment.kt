@@ -464,6 +464,14 @@ class HomeFragment : Fragment() {
         binding.visitListContent.visibility = View.VISIBLE
         binding.visitEmptyContent.visibility = View.GONE
 
+        // Super admins see the WHOLE company's trips (100s). Inflating a card
+        // per trip ANRs Home and lags/crashes on every return to it, so show
+        // compact CP / SV / Fleet counts instead — no per-visit inflation.
+        if (session.isAdmin) {
+            renderAdminTripSummary(visits)
+            return
+        }
+
         // Only re-inflate when the visible list actually changed. The childCount
         // check also forces a rebuild after view recreation (fresh empty
         // container) even if the signature happens to match.
@@ -485,6 +493,71 @@ class HomeFragment : Fragment() {
             binding.visitListContent.addView(itemView)
         }
     }
+
+    /**
+     * Admin/super-admin view of Today's Trip: three compact CP / SV / Fleet
+     * count cards instead of a card per (100s of) trips. Only the counting
+     * loop runs — no layout inflation — so Home no longer janks or crashes for
+     * admins, and returning to it is instant.
+     */
+    private fun renderAdminTripSummary(visits: List<TodayVisit>) {
+        var cp = 0
+        var sv = 0
+        var fleet = 0
+        visits.forEach { v ->
+            when {
+                v.tripType?.lowercase(Locale.getDefault()) == "fleet" -> fleet++
+                v.cpVisit != null || v.visitCategory == "direct_cp" ||
+                    v.visitCategory == "sv_cum_cp" || v.tripType == "client_place" -> cp++
+                else -> sv++
+            }
+        }
+        // renderVisitCard fires from ~7 flows; rebuild only when a count moves.
+        val signature = "admin|$cp|$sv|$fleet"
+        if (signature == lastVisitRenderSignature && binding.visitListContent.childCount == 1) return
+        lastVisitRenderSignature = signature
+
+        val ctx = requireContext()
+        binding.visitListContent.removeAllViews()
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        row.addView(adminCountCard(ctx, "CP Visits", cp, "#0B61CA", 0))
+        row.addView(adminCountCard(ctx, "Site Visits", sv, "#7C3AED", dpx(8)))
+        row.addView(adminCountCard(ctx, "Fleet", fleet, "#059669", dpx(8)))
+        binding.visitListContent.addView(row)
+    }
+
+    private fun adminCountCard(
+        ctx: android.content.Context, label: String, count: Int, colorHex: String, startMargin: Int,
+    ): View {
+        val card = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dpx(10), dpx(18), dpx(10), dpx(18))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = startMargin }
+        }
+        card.addView(TextView(ctx).apply {
+            text = count.toString()
+            textSize = 26f
+            setTextColor(Color.parseColor(colorHex))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        card.addView(TextView(ctx).apply {
+            text = label
+            textSize = 12f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dpx(4), 0, 0)
+        })
+        return card
+    }
+
+    private fun dpx(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun createVisitItem(
         visit: TodayVisit,
