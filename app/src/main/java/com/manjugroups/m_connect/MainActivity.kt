@@ -1043,9 +1043,9 @@ class MainActivity : AppCompatActivity() {
         expandedCarouselLayout.visibility = View.VISIBLE
 
         val index = pendingCardItems.indexOfFirst { it.type == initialPageType }
-        if (index >= 0) {
+        if (index >= 0 && index < pendingCardItems.size) {
             vpPendingCards.setCurrentItem(index, false)
-        } else {
+        } else if (pendingCardItems.isNotEmpty()) {
             vpPendingCards.setCurrentItem(0, false)
         }
 
@@ -1174,7 +1174,6 @@ class MainActivity : AppCompatActivity() {
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_task)
 
                         itemView.setOnClickListener {
-                            collapseCarousel()
                             openTaskManager()
                         }
                     }
@@ -1188,7 +1187,6 @@ class MainActivity : AppCompatActivity() {
 
                         itemView.setOnClickListener {
                             collapseCarousel()
-                            selectTab(TAB_HOME)
                         }
                     }
                     CardType.FOLLOW_UP -> {
@@ -1201,7 +1199,6 @@ class MainActivity : AppCompatActivity() {
 
                         itemView.setOnClickListener {
                             collapseCarousel()
-                            selectTab(TAB_HOME)
                         }
                     }
                 }
