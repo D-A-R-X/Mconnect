@@ -411,11 +411,24 @@ class MainActivity : AppCompatActivity() {
      */
     /** Open the mobile Task Manager screen (banner Complete + notification tap). */
     fun openTaskManager() {
-        supportFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
-            .addToBackStack(null)
-            .commitAllowingStateLoss()
+        // Immediately hide the carousel to prevent ViewPager2 internal
+        // RecyclerView state conflicts during the fragment transaction.
+        if (::floatingPeakContainer.isInitialized) {
+            floatingPeakContainer.visibility = View.GONE
+            expandedCarouselLayout.visibility = View.GONE
+            peekingPillsLayout.visibility = View.GONE
+        }
+        // Post to avoid crashing when called from within ViewPager2's
+        // RecyclerView click dispatch (adapter mutation during layout).
+        fragmentContainer.post {
+            if (!isFinishing && !isDestroyed) {
+                supportFragmentManager.beginTransaction()
+                    .applySmoothTransitions()
+                    .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
+                    .addToBackStack(null)
+                    .commitAllowingStateLoss()
+            }
+        }
     }
 
     fun refreshTasksBanner() {
@@ -492,12 +505,14 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                // Update text badge counts
-                tvCountTasks.text = tasks.size.toString()
-                tvCountVisits.text = visits.size.toString()
-                tvCountFollowUps.text = cpVisits.size.toString()
+                // Update text badge counts — guard against uninitialized views
+                if (::tvCountTasks.isInitialized) tvCountTasks.text = tasks.size.toString()
+                if (::tvCountVisits.isInitialized) tvCountVisits.text = visits.size.toString()
+                if (::tvCountFollowUps.isInitialized) tvCountFollowUps.text = cpVisits.size.toString()
 
-                carouselAdapter.submitList(pendingCardItems)
+                if (::carouselAdapter.isInitialized) {
+                    carouselAdapter.submitList(pendingCardItems.toList())
+                }
 
                 // Update system notification for tasks
                 topPendingTask = tasks.maxByOrNull { it.creationTime ?: 0.0 }
@@ -514,17 +529,18 @@ class MainActivity : AppCompatActivity() {
                     topPendingTask?.let { it.title ?: it.taskName },
                 )
 
-                // Visibility logic
-                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME) {
-                    floatingPeakContainer.visibility = View.VISIBLE
-                    // Maintain current layout state (expanded vs collapsed)
-                    if (expandedCarouselLayout.visibility != View.VISIBLE) {
-                        peekingPillsLayout.visibility = View.VISIBLE
+                // Visibility logic — only touch views when initialized
+                if (::floatingPeakContainer.isInitialized) {
+                    if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME) {
+                        floatingPeakContainer.visibility = View.VISIBLE
+                        if (expandedCarouselLayout.visibility != View.VISIBLE) {
+                            peekingPillsLayout.visibility = View.VISIBLE
+                        }
+                    } else {
+                        floatingPeakContainer.visibility = View.GONE
+                        expandedCarouselLayout.visibility = View.GONE
+                        peekingPillsLayout.visibility = View.GONE
                     }
-                } else {
-                    floatingPeakContainer.visibility = View.GONE
-                    expandedCarouselLayout.visibility = View.GONE
-                    peekingPillsLayout.visibility = View.GONE
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainActivity", "Error refreshing peak cards: ${e.message}")
@@ -1075,8 +1091,10 @@ class MainActivity : AppCompatActivity() {
             .setDuration(250)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
             .withEndAction {
+                if (isFinishing || isDestroyed) return@withEndAction
                 expandedCarouselLayout.visibility = View.GONE
-                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME) {
+                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME
+                    && ::peekingPillsLayout.isInitialized) {
                     peekingPillsLayout.visibility = View.VISIBLE
                     peekingPillsLayout.translationY = -60f
                     peekingPillsLayout.alpha = 0f
