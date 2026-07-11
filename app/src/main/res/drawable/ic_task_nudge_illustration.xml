@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Purple clipboard + location pin illustration for the task-nudge card
+     (white background), mirroring the reference mockup's artwork. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="105dp"
+    android:viewportWidth="120"
+    android:viewportHeight="105">
+
+    <!-- Soft backdrop circle -->
+    <path
+        android:fillColor="#F4EBFF"
+        android:pathData="M68,52 m-42,0 a42,42 0 1,0 84,0 a42,42 0 1,0 -84,0" />
+
+    <!-- Clipboard body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#D6BBFB"
+        android:strokeWidth="2.5"
+        android:pathData="M46,16 L90,16 Q96,16 96,22 L96,80 Q96,86 90,86 L46,86 Q40,86 40,80 L40,22 Q40,16 46,16 Z" />
+
+    <!-- Clipboard top clip -->
+    <path
+        android:fillColor="#7F56D9"
+        android:pathData="M58,10 L78,10 Q82,10 82,14 L82,20 Q82,24 78,24 L58,24 Q54,24 54,20 L54,14 Q54,10 58,10 Z" />
+
+    <!-- Checklist rows: coloured dot + line -->
+    <path
+        android:fillColor="#12B76A"
+        android:pathData="M50,36 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+    <path
+        android:strokeColor="#E9D7FE"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M59,36 L84,36" />
+
+    <path
+        android:fillColor="#F79009"
+        android:pathData="M50,50 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+    <path
+        android:strokeColor="#E9D7FE"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M59,50 L80,50" />
+
+    <path
+        android:fillColor="#9E77ED"
+        android:pathData="M50,64 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+    <path
+        android:strokeColor="#E9D7FE"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M59,64 L76,64" />
+
+    <!-- Check badge -->
+    <path
+        android:fillColor="#7F56D9"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:pathData="M60,84 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M54.5,84 L58.5,88 L66,80" />
+
+    <!-- Location pin -->
+    <path
+        android:fillColor="#9E77ED"
+        android:pathData="M101,42 C93.3,42 87,48.3 87,56 C87,64.5 101,78 101,78 C101,78 115,64.5 115,56 C115,48.3 108.7,42 101,42 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M101,56 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>

@@ -58,53 +58,47 @@
             android:clipToPadding="false"
             android:orientation="vertical">
 
-        <!-- Wide, flat pending-tasks bar tucked BEHIND the nav pill so only the
-             top peeks out (bottom edge hidden). Side margins land just inside
-             the nav's rounded ends so the edges reach the curve. Count on the
-             left + a small Complete chip that routes the newest task.
-             Persistent — only hides when nothing is pending; not dismissable. -->
+        <!-- Collapsed nudge: slim tab peeking from behind the nav pill while
+             tasks are pending and the card overlay is closed. Tapping it
+             reopens the task cards; only the top ~26dp is visible (the rest
+             tucks behind the pill via the negative bottom margin). -->
         <LinearLayout
-            android:id="@+id/navTasksBanner"
+            android:id="@+id/navTasksPeek"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="52dp"
             android:layout_marginEnd="52dp"
             android:layout_marginBottom="-26dp"
-            android:background="@drawable/bg_nav_tasks_banner"
+            android:background="@drawable/bg_task_nudge_peek"
             android:elevation="6dp"
-            android:gravity="center_vertical"
+            android:gravity="center_horizontal"
             android:orientation="horizontal"
-            android:paddingStart="14dp"
             android:paddingTop="5dp"
-            android:paddingEnd="5dp"
             android:paddingBottom="20dp"
             android:visibility="gone">
 
+            <ImageView
+                android:id="@+id/ivNavTasksPeekChevron"
+                android:layout_width="13dp"
+                android:layout_height="13dp"
+                android:layout_gravity="center_vertical"
+                android:contentDescription="Show pending tasks"
+                android:rotation="90"
+                android:src="@drawable/ic_calendar_chevron_left"
+                android:tint="#B42318" />
+
             <TextView
-                android:id="@+id/tvNavTasksCount"
-                android:layout_width="0dp"
+                android:id="@+id/tvNavTasksPeek"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:layout_marginStart="6dp"
                 android:ellipsize="end"
                 android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
                 android:maxLines="1"
                 android:text="3 pending"
                 android:textColor="#B42318"
                 android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/btnNavTasksComplete"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_nav_tasks_complete"
-                android:fontFamily="@font/inter_bold"
-                android:paddingStart="10dp"
-                android:paddingTop="2dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="2dp"
-                android:text="Complete"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -278,6 +272,44 @@
             </FrameLayout>
         </LinearLayout>
         </LinearLayout>
+        </FrameLayout>
+
+        <!-- Modal task-nudge overlay: dimmed (and, on Android 12+, blurred)
+             backdrop with a swipeable carousel of pending-task cards floating
+             just above the nav pill. Tapping the backdrop or pressing back
+             dismisses it for the session; the pager's side padding lets the
+             neighbouring cards peek in like the reference mockup. -->
+        <FrameLayout
+            android:id="@+id/taskNudgeOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#66101828"
+            android:clipChildren="false"
+            android:visibility="gone">
+
+            <!-- Dismiss scrim BEHIND the pager: only touches that land outside
+                 the cards reach it, so a fling across the carousel can never
+                 end up dismissing the overlay (a full-screen clickable root
+                 would fire onClick at the end of a drag). -->
+            <View
+                android:id="@+id/taskNudgeScrim"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:contentDescription="Dismiss pending tasks"
+                android:focusable="true" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/taskNudgePager"
+                android:layout_width="match_parent"
+                android:layout_height="384dp"
+                android:layout_gravity="bottom"
+                android:layout_marginBottom="112dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:paddingStart="40dp"
+                android:paddingEnd="40dp" />
         </FrameLayout>
     </FrameLayout>
 </LinearLayout>
