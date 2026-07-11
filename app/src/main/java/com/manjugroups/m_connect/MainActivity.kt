@@ -415,7 +415,7 @@ class MainActivity : AppCompatActivity() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
             .addToBackStack(null)
-            .commit()
+            .commitAllowingStateLoss()
     }
 
     fun refreshTasksBanner() {
@@ -1168,7 +1168,7 @@ class MainActivity : AppCompatActivity() {
                     CardType.TASK -> {
                         cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_task)
                         ivHeaderIcon.setImageResource(R.drawable.ic_nav_attendance)
-                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#7F56D9"))
+                        ivHeaderIcon.setColorFilter(Color.parseColor("#7F56D9"))
                         tvHeaderType.text = "Task Pending"
                         tvHeaderType.setTextColor(Color.parseColor("#7F56D9"))
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_task)
@@ -1181,7 +1181,7 @@ class MainActivity : AppCompatActivity() {
                     CardType.VISIT -> {
                         cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_visit)
                         ivHeaderIcon.setImageResource(R.drawable.ic_map_expand)
-                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#D97706"))
+                        ivHeaderIcon.setColorFilter(Color.parseColor("#D97706"))
                         tvHeaderType.text = "Visit Pending"
                         tvHeaderType.setTextColor(Color.parseColor("#D97706"))
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_visit)
@@ -1194,7 +1194,7 @@ class MainActivity : AppCompatActivity() {
                     CardType.FOLLOW_UP -> {
                         cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_followup)
                         ivHeaderIcon.setImageResource(R.drawable.ic_nav_chat)
-                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#0D9488"))
+                        ivHeaderIcon.setColorFilter(Color.parseColor("#0D9488"))
                         tvHeaderType.text = "Follow-up Pending"
                         tvHeaderType.setTextColor(Color.parseColor("#0D9488"))
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_followup)
