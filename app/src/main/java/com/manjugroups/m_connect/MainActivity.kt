@@ -1054,59 +1054,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun expandCarousel(initialPageType: CardType) {
-        if (!::expandedCarouselLayout.isInitialized) return
-        peekingPillsLayout.visibility = View.GONE
-        expandedCarouselLayout.visibility = View.VISIBLE
+        try {
+            if (!::expandedCarouselLayout.isInitialized) return
+            if (!::vpPendingCards.isInitialized) return
+            val adapterCount = carouselAdapter.itemCount
+            if (adapterCount == 0) return
 
-        val index = pendingCardItems.indexOfFirst { it.type == initialPageType }
-        if (index >= 0 && index < pendingCardItems.size) {
-            vpPendingCards.setCurrentItem(index, false)
-        } else if (pendingCardItems.isNotEmpty()) {
-            vpPendingCards.setCurrentItem(0, false)
+            peekingPillsLayout.visibility = View.GONE
+            expandedCarouselLayout.visibility = View.VISIBLE
+
+            val index = pendingCardItems.indexOfFirst { it.type == initialPageType }
+            val safeIndex = when {
+                index in 0 until adapterCount -> index
+                adapterCount > 0 -> 0
+                else -> -1
+            }
+            if (safeIndex >= 0) {
+                vpPendingCards.setCurrentItem(safeIndex, false)
+            }
+
+            expandedCarouselLayout.translationY = 150f
+            expandedCarouselLayout.scaleX = 0.9f
+            expandedCarouselLayout.scaleY = 0.9f
+            expandedCarouselLayout.alpha = 0f
+
+            expandedCarouselLayout.animate()
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .alpha(1f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.OvershootInterpolator(1.2f))
+                .start()
+
+            updateDots(true, if (safeIndex >= 0) safeIndex else 0)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "expandCarousel error: ${e.message}")
         }
-
-        expandedCarouselLayout.translationY = 150f
-        expandedCarouselLayout.scaleX = 0.9f
-        expandedCarouselLayout.scaleY = 0.9f
-        expandedCarouselLayout.alpha = 0f
-
-        expandedCarouselLayout.animate()
-            .translationY(0f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .alpha(1f)
-            .setDuration(400)
-            .setInterpolator(android.view.animation.OvershootInterpolator(1.2f))
-            .start()
-
-        updateDots(true, if (index >= 0) index else 0)
     }
 
+    /** Collapse without animation — safe to call from any context including
+     *  ViewPager2 item clicks where an async animation would conflict with
+     *  RecyclerView's internal layout pass. */
     private fun collapseCarousel() {
-        if (!::expandedCarouselLayout.isInitialized || expandedCarouselLayout.visibility != View.VISIBLE) return
+        try {
+            if (!::expandedCarouselLayout.isInitialized) return
+            if (expandedCarouselLayout.visibility != View.VISIBLE) return
+            // Cancel any running animation first
+            expandedCarouselLayout.animate().cancel()
+            // Immediate hide — no animation to avoid RecyclerView conflicts
+            expandedCarouselLayout.visibility = View.GONE
+            expandedCarouselLayout.translationY = 0f
+            expandedCarouselLayout.alpha = 1f
+            expandedCarouselLayout.scaleX = 1f
+            expandedCarouselLayout.scaleY = 1f
 
-        expandedCarouselLayout.animate()
-            .translationY(150f)
-            .alpha(0f)
-            .setDuration(250)
-            .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction {
-                if (isFinishing || isDestroyed) return@withEndAction
-                expandedCarouselLayout.visibility = View.GONE
-                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME
-                    && ::peekingPillsLayout.isInitialized) {
-                    peekingPillsLayout.visibility = View.VISIBLE
-                    peekingPillsLayout.translationY = -60f
-                    peekingPillsLayout.alpha = 0f
-                    peekingPillsLayout.animate()
-                        .translationY(0f)
-                        .alpha(1f)
-                        .setDuration(300)
-                        .setInterpolator(android.view.animation.DecelerateInterpolator())
-                        .start()
-                }
+            if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME
+                && ::peekingPillsLayout.isInitialized) {
+                peekingPillsLayout.visibility = View.VISIBLE
+                peekingPillsLayout.translationY = 0f
+                peekingPillsLayout.alpha = 1f
             }
-            .start()
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "collapseCarousel error: ${e.message}")
+        }
     }
 
     private fun updateDots(animated: Boolean, selectedIndex: Int) {
@@ -1203,8 +1214,9 @@ class MainActivity : AppCompatActivity() {
                         tvHeaderType.setTextColor(Color.parseColor("#D97706"))
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_visit)
 
-                        itemView.setOnClickListener {
-                            collapseCarousel()
+                        itemView.setOnClickListener { v ->
+                            // Post to escape ViewPager2's RecyclerView click dispatch
+                            v.post { collapseCarousel() }
                         }
                     }
                     CardType.FOLLOW_UP -> {
@@ -1215,8 +1227,9 @@ class MainActivity : AppCompatActivity() {
                         tvHeaderType.setTextColor(Color.parseColor("#0D9488"))
                         ivCardIllustration.setImageResource(R.drawable.ic_ill_followup)
 
-                        itemView.setOnClickListener {
-                            collapseCarousel()
+                        itemView.setOnClickListener { v ->
+                            // Post to escape ViewPager2's RecyclerView click dispatch
+                            v.post { collapseCarousel() }
                         }
                     }
                 }
