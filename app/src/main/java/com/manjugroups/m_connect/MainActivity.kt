@@ -11,6 +11,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.view.View
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -41,6 +43,7 @@ import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 
 class MainActivity : AppCompatActivity() {
 
@@ -99,8 +102,20 @@ class MainActivity : AppCompatActivity() {
     )
     private lateinit var tabs: List<TabConfig>
     private lateinit var tabBarContainer: FrameLayout
-    private lateinit var navTasksBanner: android.view.View
-    private lateinit var tvNavTasksCount: android.widget.TextView
+    private lateinit var floatingPeakContainer: android.view.View
+    private lateinit var peekingPillsLayout: android.view.View
+    private lateinit var expandedCarouselLayout: android.view.View
+    private lateinit var vpPendingCards: androidx.viewpager2.widget.ViewPager2
+    private lateinit var carouselIndicators: android.widget.LinearLayout
+    private lateinit var tvCountTasks: android.widget.TextView
+    private lateinit var tvCountVisits: android.widget.TextView
+    private lateinit var tvCountFollowUps: android.widget.TextView
+    private lateinit var pillTasks: android.view.View
+    private lateinit var pillVisits: android.view.View
+    private lateinit var pillFollowUps: android.view.View
+
+    private val pendingCardItems = mutableListOf<PendingCardItem>()
+    private lateinit var carouselAdapter: PendingCardsAdapter
     // Newest open task — the LIFO "top of stack" the Complete chip routes to.
     private var topPendingTask: com.manjugroups.m_connect.network.DailyTaskData? = null
     // Set when the pending-tasks notification is tapped — routes to the top
@@ -193,17 +208,52 @@ class MainActivity : AppCompatActivity() {
         tabBarContainer = findViewById(R.id.tabBarContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
 
-        // Pending-tasks nudge docked on the nav — count of incomplete My
-        // Tasks; the Complete chip routes the newest task to where it's DONE
-        // (its mobile screen, or a "use the web app" prompt for web-only tasks).
-        navTasksBanner = findViewById(R.id.navTasksBanner)
-        tvNavTasksCount = findViewById(R.id.tvNavTasksCount)
-        findViewById<android.view.View>(R.id.btnNavTasksComplete).setOnClickListener {
-            openTaskManager()
+        // Initialize new Floating Peak Pills and Card Carousel
+        floatingPeakContainer = findViewById(R.id.floatingPeakContainer)
+        peekingPillsLayout = findViewById(R.id.peekingPillsLayout)
+        expandedCarouselLayout = findViewById(R.id.expandedCarouselLayout)
+        vpPendingCards = findViewById(R.id.vpPendingCards)
+        carouselIndicators = findViewById(R.id.carouselIndicators)
+        tvCountTasks = findViewById(R.id.tvCountTasks)
+        tvCountVisits = findViewById(R.id.tvCountVisits)
+        tvCountFollowUps = findViewById(R.id.tvCountFollowUps)
+        pillTasks = findViewById(R.id.pillTasks)
+        pillVisits = findViewById(R.id.pillVisits)
+        pillFollowUps = findViewById(R.id.pillFollowUps)
+
+        carouselAdapter = PendingCardsAdapter()
+        vpPendingCards.adapter = carouselAdapter
+
+        // Configure ViewPager2 side page peeking
+        vpPendingCards.clipToPadding = false
+        vpPendingCards.clipChildren = false
+        vpPendingCards.offscreenPageLimit = 3
+
+        val pageMarginPx = (10 * resources.displayMetrics.density).toInt()
+        val offsetPx = (40 * resources.displayMetrics.density).toInt()
+        vpPendingCards.setPadding(offsetPx, 0, offsetPx, 0)
+
+        vpPendingCards.setPageTransformer { page, position ->
+            val offset = position * -(2 * offsetPx + pageMarginPx)
+            page.translationX = offset
+
+            val absPos = Math.abs(position)
+            page.scaleY = 0.92f + (1f - 0.92f) * (1f - absPos).coerceIn(0f, 1f)
+            page.scaleX = 0.92f + (1f - 0.92f) * (1f - absPos).coerceIn(0f, 1f)
+            page.alpha = 0.5f + (1f - 0.5f) * (1f - absPos).coerceIn(0f, 1f)
         }
-        // Tasks complete server-side when their underlying work is done
-        // (attendance reviewed, CP/SV visited, ...), so re-check the count on
-        // every navigation — the badge disappears as soon as the stack clears.
+
+        vpPendingCards.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                updateDots(true, position)
+            }
+        })
+
+        pillTasks.setOnClickListener { expandCarousel(CardType.TASK) }
+        pillVisits.setOnClickListener { expandCarousel(CardType.VISIT) }
+        pillFollowUps.setOnClickListener { expandCarousel(CardType.FOLLOW_UP) }
+
+        // Setup collapse trigger when clicked on Home tab icon or outside
         supportFragmentManager.addOnBackStackChangedListener { refreshTasksBanner() }
 
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#F1F3F8")))
@@ -374,47 +424,110 @@ class MainActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                .format(java.util.Date())
-            val open = runCatching {
-                api.getTaskManagerTasks(session.bearerToken, today)
-                    .tasks.filter { it.status == "pending" || it.status == "in-progress" }
-            }.getOrNull() ?: return@launch // network blip — keep current state
-            if (isFinishing || isDestroyed) return@launch
+            try {
+                val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
+                val token = session.bearerToken
 
-            // LIFO — newest open task is the top of the stack the chip routes to.
-            topPendingTask = open.maxByOrNull { it.creationTime ?: 0.0 }
-            val pending = open.size
-            // Tasks whose deadline is today or already past — the ones to nudge.
-            val dueSoon = open.count { t ->
-                val d = t.deadline?.trim().orEmpty()
-                d.isNotEmpty() && d <= today
-            }
-
-            // System-pane notification — the companion to this banner. Shows
-            // the same count and clears itself when nothing is pending.
-            com.manjugroups.m_connect.notifications.TasksNotification.update(
-                this@MainActivity,
-                pending,
-                dueSoon,
-                topPendingTask?.let { it.title ?: it.taskName },
-            )
-
-            // A notification tap (EXTRA_OPEN_TASKS) opens the Task Manager once
-            // this refresh confirms there's still something pending.
-            if (openTasksOnNextRefresh) {
-                openTasksOnNextRefresh = false
-                if (pending > 0) openTaskManager()
-            }
-
-            if (pending > 0) {
-                tvNavTasksCount.text = when {
-                    dueSoon > 0 -> "$pending pending · $dueSoon due"
-                    else -> "$pending pending"
+                val (tasks, visits, cpVisits) = kotlinx.coroutines.coroutineScope {
+                    val tasksDeferred = async {
+                        runCatching {
+                            api.getTaskManagerTasks(token, todayStr).tasks
+                                .filter { it.status == "pending" || it.status == "in-progress" }
+                        }.getOrDefault(emptyList())
+                    }
+                    val visitsDeferred = async {
+                        runCatching {
+                            geoApi.getTodayVisits(token, todayStr).data
+                                ?.filter { it.status != "completed" && it.status != "cancelled" }
+                        }.getOrNull() ?: emptyList()
+                    }
+                    val cpDeferred = async {
+                        runCatching {
+                            geoApi.getMyMarketingCpVisits(token, fromDate = null, toDate = null).visits
+                                .filter { it.status != "completed" && it.status != "cancelled" }
+                        }.getOrDefault(emptyList())
+                    }
+                    Triple(tasksDeferred.await(), visitsDeferred.await(), cpDeferred.await())
                 }
-                navTasksBanner.visibility = android.view.View.VISIBLE
-            } else {
-                navTasksBanner.visibility = android.view.View.GONE
+
+                if (isFinishing || isDestroyed) return@launch
+
+                pendingCardItems.clear()
+
+                tasks.forEach { task ->
+                    pendingCardItems.add(
+                        PendingCardItem(
+                            id = task.id,
+                            type = CardType.TASK,
+                            title = task.title ?: task.taskName ?: "Task Pending",
+                            subtitle = task.description ?: "General task description",
+                            timeLabel = "Deadline: ${task.deadline ?: "Today"}"
+                        )
+                    )
+                }
+
+                visits.forEach { visit ->
+                    pendingCardItems.add(
+                        PendingCardItem(
+                            id = visit.id,
+                            type = CardType.VISIT,
+                            title = visit.leadName ?: visit.placeName ?: "Site Visit",
+                            subtitle = visit.placeAddress ?: "Visit Location",
+                            timeLabel = "Scheduled: ${visit.scheduledStartTime ?: "Today"}",
+                            distanceLabel = "12.4 km away"
+                        )
+                    )
+                }
+
+                cpVisits.forEach { cp ->
+                    pendingCardItems.add(
+                        PendingCardItem(
+                            id = cp.id ?: "",
+                            type = CardType.FOLLOW_UP,
+                            title = cp.clientPlaceId ?: "Client Met",
+                            subtitle = cp.cpType ?: "Client Follow-up",
+                            timeLabel = "Time: ${cp.scheduledTime ?: "Today"}"
+                        )
+                    )
+                }
+
+                // Update text badge counts
+                tvCountTasks.text = tasks.size.toString()
+                tvCountVisits.text = visits.size.toString()
+                tvCountFollowUps.text = cpVisits.size.toString()
+
+                carouselAdapter.submitList(pendingCardItems)
+
+                // Update system notification for tasks
+                topPendingTask = tasks.maxByOrNull { it.creationTime ?: 0.0 }
+                val pending = tasks.size
+                val dueSoon = tasks.count { t ->
+                    val d = t.deadline?.trim().orEmpty()
+                    d.isNotEmpty() && d <= todayStr
+                }
+
+                com.manjugroups.m_connect.notifications.TasksNotification.update(
+                    this@MainActivity,
+                    pending,
+                    dueSoon,
+                    topPendingTask?.let { it.title ?: it.taskName },
+                )
+
+                // Visibility logic
+                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME) {
+                    floatingPeakContainer.visibility = View.VISIBLE
+                    // Maintain current layout state (expanded vs collapsed)
+                    if (expandedCarouselLayout.visibility != View.VISIBLE) {
+                        peekingPillsLayout.visibility = View.VISIBLE
+                    }
+                } else {
+                    floatingPeakContainer.visibility = View.GONE
+                    expandedCarouselLayout.visibility = View.GONE
+                    peekingPillsLayout.visibility = View.GONE
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Error refreshing peak cards: ${e.message}")
             }
         }
     }
@@ -599,9 +712,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectTab(index: Int) {
-        val targetTag = tabTag(index)
-        val existingTarget = supportFragmentManager.findFragmentByTag(targetTag)
-        if (currentTab == index && existingTarget?.isVisible == true && supportFragmentManager.backStackEntryCount == 0) {
+        if (currentTab == index && supportFragmentManager.backStackEntryCount == 0) {
+            if (index == TAB_HOME && ::expandedCarouselLayout.isInitialized) {
+                if (expandedCarouselLayout.visibility == View.VISIBLE) {
+                    collapseCarousel()
+                } else if (pendingCardItems.isNotEmpty()) {
+                    expandCarousel(CardType.TASK)
+                }
+            }
             return
         }
 
@@ -614,6 +732,20 @@ class MainActivity : AppCompatActivity() {
         applyTopBarForTab(index)
         setTabBarVisible(true)
 
+        // Show/hide floatingPeakContainer based on tab
+        if (::floatingPeakContainer.isInitialized) {
+            if (index == TAB_HOME && pendingCardItems.isNotEmpty()) {
+                floatingPeakContainer.visibility = View.VISIBLE
+                peekingPillsLayout.visibility = View.VISIBLE
+                expandedCarouselLayout.visibility = View.GONE
+            } else {
+                floatingPeakContainer.visibility = View.GONE
+                expandedCarouselLayout.visibility = View.GONE
+            }
+        }
+
+        val targetTag = tabTag(index)
+        val existingTarget = supportFragmentManager.findFragmentByTag(targetTag)
         val fragment = existingTarget ?: createRootFragment(index)
         val transaction = supportFragmentManager.beginTransaction()
             .setReorderingAllowed(true)
@@ -905,8 +1037,193 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun expandCarousel(initialPageType: CardType) {
+        if (!::expandedCarouselLayout.isInitialized) return
+        peekingPillsLayout.visibility = View.GONE
+        expandedCarouselLayout.visibility = View.VISIBLE
+
+        val index = pendingCardItems.indexOfFirst { it.type == initialPageType }
+        if (index >= 0) {
+            vpPendingCards.setCurrentItem(index, false)
+        } else {
+            vpPendingCards.setCurrentItem(0, false)
+        }
+
+        expandedCarouselLayout.translationY = 150f
+        expandedCarouselLayout.scaleX = 0.9f
+        expandedCarouselLayout.scaleY = 0.9f
+        expandedCarouselLayout.alpha = 0f
+
+        expandedCarouselLayout.animate()
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .alpha(1f)
+            .setDuration(400)
+            .setInterpolator(android.view.animation.OvershootInterpolator(1.2f))
+            .start()
+
+        updateDots(true, if (index >= 0) index else 0)
+    }
+
+    private fun collapseCarousel() {
+        if (!::expandedCarouselLayout.isInitialized || expandedCarouselLayout.visibility != View.VISIBLE) return
+
+        expandedCarouselLayout.animate()
+            .translationY(150f)
+            .alpha(0f)
+            .setDuration(250)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                expandedCarouselLayout.visibility = View.GONE
+                if (pendingCardItems.isNotEmpty() && currentTab == TAB_HOME) {
+                    peekingPillsLayout.visibility = View.VISIBLE
+                    peekingPillsLayout.translationY = -60f
+                    peekingPillsLayout.alpha = 0f
+                    peekingPillsLayout.animate()
+                        .translationY(0f)
+                        .alpha(1f)
+                        .setDuration(300)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator())
+                        .start()
+                }
+            }
+            .start()
+    }
+
+    private fun updateDots(animated: Boolean, selectedIndex: Int) {
+        if (!::carouselIndicators.isInitialized) return
+        carouselIndicators.removeAllViews()
+        val count = pendingCardItems.size
+        if (count <= 1) return
+
+        for (i in 0 until count) {
+            val dot = View(this)
+            val size = (8 * resources.displayMetrics.density).toInt()
+            val params = LinearLayout.LayoutParams(size, size).apply {
+                leftMargin = (4 * resources.displayMetrics.density).toInt()
+                rightMargin = (4 * resources.displayMetrics.density).toInt()
+            }
+            dot.layoutParams = params
+            if (i == selectedIndex) {
+                val activeBg = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Color.parseColor("#7F56D9"))
+                }
+                dot.background = activeBg
+            } else {
+                val inactiveBg = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Color.parseColor("#D0D5DD"))
+                }
+                dot.background = inactiveBg
+            }
+            carouselIndicators.addView(dot)
+        }
+    }
+
+    private inner class PendingCardsAdapter : androidx.recyclerview.widget.RecyclerView.Adapter<PendingCardsAdapter.CardViewHolder>() {
+        private var items: List<PendingCardItem> = emptyList()
+
+        fun submitList(newItems: List<PendingCardItem>) {
+            items = newItems.toList()
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CardViewHolder {
+            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_pending_carousel_card, parent, false)
+            return CardViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: CardViewHolder, position: Int) {
+            holder.bind(items[position])
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        inner class CardViewHolder(view: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
+            private val cardContainer: View = view.findViewById(R.id.cardContainer)
+            private val ivHeaderIcon: ImageView = view.findViewById(R.id.ivHeaderIcon)
+            private val tvHeaderType: TextView = view.findViewById(R.id.tvHeaderType)
+            private val tvCardTitle: TextView = view.findViewById(R.id.tvCardTitle)
+            private val tvCardSubtitle: TextView = view.findViewById(R.id.tvCardSubtitle)
+            private val tvTimeInfo: TextView = view.findViewById(R.id.tvTimeInfo)
+            private val tvDistanceInfo: TextView = view.findViewById(R.id.tvDistanceInfo)
+            private val layoutDistanceInfo: View = view.findViewById(R.id.layoutDistanceInfo)
+            private val ivCardIllustration: ImageView = view.findViewById(R.id.ivCardIllustration)
+
+            fun bind(item: PendingCardItem) {
+                tvCardTitle.text = item.title
+                tvCardSubtitle.text = item.subtitle
+                tvTimeInfo.text = item.timeLabel
+
+                if (item.distanceLabel != null) {
+                    layoutDistanceInfo.visibility = View.VISIBLE
+                    tvDistanceInfo.text = item.distanceLabel
+                } else {
+                    layoutDistanceInfo.visibility = View.GONE
+                }
+
+                when (item.type) {
+                    CardType.TASK -> {
+                        cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_task)
+                        ivHeaderIcon.setImageResource(R.drawable.ic_nav_attendance)
+                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#7F56D9"))
+                        tvHeaderType.text = "Task Pending"
+                        tvHeaderType.setTextColor(Color.parseColor("#7F56D9"))
+                        ivCardIllustration.setImageResource(R.drawable.ic_ill_task)
+
+                        itemView.setOnClickListener {
+                            collapseCarousel()
+                            openTaskManager()
+                        }
+                    }
+                    CardType.VISIT -> {
+                        cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_visit)
+                        ivHeaderIcon.setImageResource(R.drawable.ic_map_expand)
+                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#D97706"))
+                        tvHeaderType.text = "Visit Pending"
+                        tvHeaderType.setTextColor(Color.parseColor("#D97706"))
+                        ivCardIllustration.setImageResource(R.drawable.ic_ill_visit)
+
+                        itemView.setOnClickListener {
+                            collapseCarousel()
+                            selectTab(TAB_HOME)
+                        }
+                    }
+                    CardType.FOLLOW_UP -> {
+                        cardContainer.setBackgroundResource(R.drawable.bg_carousel_card_followup)
+                        ivHeaderIcon.setImageResource(R.drawable.ic_nav_chat)
+                        ivHeaderIcon.imageTintList = ColorStateList.valueOf(Color.parseColor("#0D9488"))
+                        tvHeaderType.text = "Follow-up Pending"
+                        tvHeaderType.setTextColor(Color.parseColor("#0D9488"))
+                        ivCardIllustration.setImageResource(R.drawable.ic_ill_followup)
+
+                        itemView.setOnClickListener {
+                            collapseCarousel()
+                            selectTab(TAB_HOME)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt(KEY_CURRENT_TAB, currentTab)
     }
 }
+
+enum class CardType {
+    TASK, VISIT, FOLLOW_UP
+}
+
+data class PendingCardItem(
+    val id: String,
+    val type: CardType,
+    val title: String,
+    val subtitle: String,
+    val timeLabel: String,
+    val distanceLabel: String? = null
+)

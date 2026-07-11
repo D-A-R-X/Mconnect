@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Three sparks/lines radiating outwards right -->
+    <path
+        android:pathData="M17,12 L21,12 M16,8 L20,5 M16,16 L20,19"
+        android:strokeColor="#0D9488"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"/>
+</vector>
