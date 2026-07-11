@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -20,6 +21,7 @@ import androidx.camera.video.*
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import coil.load
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -107,6 +109,20 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     private lateinit var tvZoom1x: TextView
     private lateinit var tvZoom2x: TextView
 
+    // Post-capture review overlay
+    private lateinit var reviewOverlay: View
+    private lateinit var imgReviewPhoto: ImageView
+    private lateinit var videoReview: VideoView
+    private lateinit var btnReviewRetake: View
+    private lateinit var btnReviewConfirm: View
+    private lateinit var tvReviewConfirm: TextView
+    private lateinit var cameraHeader: View
+    private lateinit var modeTabs: View
+    private lateinit var bottomControls: View
+    private lateinit var bottomTip: View
+    private var reviewUri: Uri? = null
+    private var reviewIsVideo = false
+
     private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -182,6 +198,22 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         tvZoom1x = view.findViewById(R.id.tvZoom1x)
         tvZoom2x = view.findViewById(R.id.tvZoom2x)
 
+        reviewOverlay = view.findViewById(R.id.reviewOverlay)
+        imgReviewPhoto = view.findViewById(R.id.imgReviewPhoto)
+        videoReview = view.findViewById(R.id.videoReview)
+        // Render the review clip's surface above the live camera preview's
+        // surface (both are SurfaceViews); regular views — the Retake/Use
+        // bar — still composite on top. Must be set before the surface is
+        // created, i.e. while the VideoView is still GONE.
+        videoReview.setZOrderMediaOverlay(true)
+        btnReviewRetake = view.findViewById(R.id.btnReviewRetake)
+        btnReviewConfirm = view.findViewById(R.id.btnReviewConfirm)
+        tvReviewConfirm = view.findViewById(R.id.tvReviewConfirm)
+        cameraHeader = view.findViewById(R.id.cameraHeader)
+        modeTabs = view.findViewById(R.id.modeTabs)
+        bottomControls = view.findViewById(R.id.bottomControls)
+        bottomTip = view.findViewById(R.id.bottomTip)
+
         // Set listeners
         btnClose.setOnClickListener { dismiss() }
         btnGallery.setOnClickListener {
@@ -205,6 +237,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         tvZoom05.setOnClickListener { setZoom(0.5f, tvZoom05) }
         tvZoom1x.setOnClickListener { setZoom(1.0f, tvZoom1x) }
         tvZoom2x.setOnClickListener { setZoom(2.0f, tvZoom2x) }
+
+        btnReviewRetake.setOnClickListener { exitReview(discard = true) }
+        btnReviewConfirm.setOnClickListener { confirmReview() }
 
         // Apply initial visual state based on mode
         if (pendingCameraMode == Mode.VIDEO) {
@@ -431,9 +466,9 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             ContextCompat.getMainExecutor(requireContext()),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    val uri = Uri.fromFile(photoFile)
-                    listener?.onMediaCaptured(uri, isVideo = false)
-                    dismiss()
+                    // Don't return the photo yet — show it in the review
+                    // overlay so the user can confirm (tick) or retake.
+                    enterReview(Uri.fromFile(photoFile), isVideo = false)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -482,9 +517,14 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
                         is VideoRecordEvent.Finalize -> {
                             mainHandler.removeCallbacks(recordingProgressRunnable)
                             if (!recordEvent.hasError()) {
-                                val uri = Uri.fromFile(videoFile)
-                                listener?.onMediaCaptured(uri, isVideo = true)
-                                dismiss()
+                                // Reset the shutter back to a clean video-ready
+                                // state so a Retake resumes correctly, then show
+                                // the captured clip in the review overlay.
+                                isRecording = false
+                                imgShutter.setImageResource(R.drawable.ic_chat_video)
+                                btnCapture.backgroundTintList =
+                                    android.content.res.ColorStateList.valueOf(Color.parseColor("#38A612"))
+                                enterReview(Uri.fromFile(videoFile), isVideo = true)
                             } else {
                                 safeToast("Failed to save video")
                                 isRecording = false
@@ -498,8 +538,83 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    // ── Post-capture review ──────────────────────────────────────────────
+
+    /** Freeze on the just-captured media with Retake / Use actions instead
+     *  of returning it straight away. */
+    private fun enterReview(uri: Uri, isVideo: Boolean) {
+        if (!isAdded) return
+        reviewUri = uri
+        reviewIsVideo = isVideo
+
+        // Kill the torch so it doesn't stay lit behind the overlay.
+        camera?.cameraControl?.enableTorch(false)
+
+        // Repurpose the header and hide the live-camera chrome.
+        tvTitle.text = "Preview"
+        tvSubtitle.text = if (isVideo) "Use this video or retake" else "Use this photo or retake"
+        btnFlash.visibility = View.INVISIBLE
+        modeTabs.visibility = View.GONE
+        bottomControls.visibility = View.GONE
+        bottomTip.visibility = View.GONE
+
+        tvReviewConfirm.text = if (isVideo) "Use Video" else "Use Photo"
+        if (isVideo) {
+            imgReviewPhoto.visibility = View.GONE
+            videoReview.visibility = View.VISIBLE
+            videoReview.setVideoURI(uri)
+            videoReview.setOnPreparedListener { mp ->
+                mp.isLooping = true
+                videoReview.start()
+            }
+        } else {
+            videoReview.visibility = View.GONE
+            imgReviewPhoto.visibility = View.VISIBLE
+            // Coil downsamples to the view, avoiding OOM on full-res captures.
+            imgReviewPhoto.load(uri)
+        }
+        reviewOverlay.visibility = View.VISIBLE
+    }
+
+    /** Leave the review overlay. [discard]=true throws the capture away and
+     *  resumes the live camera; false leaves the file in place for confirm. */
+    private fun exitReview(discard: Boolean) {
+        runCatching { if (videoReview.isPlaying) videoReview.stopPlayback() }
+        videoReview.visibility = View.GONE
+        imgReviewPhoto.visibility = View.GONE
+        imgReviewPhoto.setImageDrawable(null)
+        reviewOverlay.visibility = View.GONE
+
+        // Restore the live-camera chrome.
+        tvTitle.text = if (activeMode == Mode.VIDEO) "Video" else "Camera"
+        tvSubtitle.text = if (activeMode == Mode.VIDEO) "Record a video" else "Take a photo"
+        btnFlash.visibility = View.VISIBLE
+        modeTabs.visibility = View.VISIBLE
+        bottomControls.visibility = View.VISIBLE
+        bottomTip.visibility = View.VISIBLE
+
+        if (discard) {
+            reviewUri?.path?.let { runCatching { File(it).delete() } }
+            // Re-light the torch if flash was ON in photo mode.
+            val enableTorch = (flashMode == ImageCapture.FLASH_MODE_ON && activeMode == Mode.PHOTO)
+            camera?.cameraControl?.enableTorch(enableTorch)
+        }
+        reviewUri = null
+    }
+
+    /** Confirm (tick): hand the reviewed media to the caller and close. */
+    private fun confirmReview() {
+        val uri = reviewUri ?: return
+        runCatching { if (videoReview.isPlaying) videoReview.stopPlayback() }
+        listener?.onMediaCaptured(uri, reviewIsVideo)
+        dismiss()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        runCatching {
+            if (this::videoReview.isInitialized && videoReview.isPlaying) videoReview.stopPlayback()
+        }
         orientationEventListener?.disable()
         orientationEventListener = null
         cameraExecutor.shutdown()

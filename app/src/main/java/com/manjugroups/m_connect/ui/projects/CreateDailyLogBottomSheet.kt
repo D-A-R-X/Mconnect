@@ -42,6 +42,7 @@ import com.manjugroups.m_connect.network.MaterialCatalogItem
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet
+import com.manjugroups.m_connect.ui.common.ImagePreviewDialog
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import kotlinx.coroutines.Dispatchers
@@ -210,24 +211,33 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
 
     private fun showCustomCamera() {
         if (!isAdded) return
-        CustomCameraBottomSheet().apply {
-            setListener(object : CustomCameraBottomSheet.CameraResultListener {
-                override fun onMediaCaptured(uri: Uri, isVideo: Boolean) {
-                    pickedMedia.add(PickedMedia(uri, isVideo))
-                    view?.let { renderAttachments(it) }
-                }
+        // Build the listener with a plain local — NOT inside
+        // `CustomCameraBottomSheet().apply { ... }`. Inside that apply block
+        // the implicit receiver is the CAMERA sheet, so an unqualified `view`
+        // resolves to the camera's view (both classes are Fragments), not
+        // this sheet's. renderAttachments would then search the camera's
+        // layout for attachmentsContainer, get null, and crash on capture.
+        // Qualify `view` to this sheet explicitly so it can't happen again.
+        val camera = CustomCameraBottomSheet()
+        camera.setListener(object : CustomCameraBottomSheet.CameraResultListener {
+            override fun onMediaCaptured(uri: Uri, isVideo: Boolean) {
+                pickedMedia.add(PickedMedia(uri, isVideo))
+                this@CreateDailyLogBottomSheet.view?.let { renderAttachments(it) }
+            }
 
-                override fun onGalleryClicked() {
-                    pickMedia.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
-                    )
-                }
-            })
-        }.show(childFragmentManager, "daily_log_camera")
+            override fun onGalleryClicked() {
+                pickMedia.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                )
+            }
+        })
+        camera.show(childFragmentManager, "daily_log_camera")
     }
 
     private fun renderAttachments(root: View) {
-        val c = root.findViewById<LinearLayout>(R.id.attachmentsContainer)
+        // Guard the lookup: if we're ever handed a root that doesn't contain
+        // the container (wrong view hierarchy), bail instead of NPE-ing.
+        val c = root.findViewById<LinearLayout>(R.id.attachmentsContainer) ?: return
         c.removeAllViews()
         val ctx = context ?: return
         pickedMedia.forEach { m ->
@@ -240,16 +250,21 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 setBackgroundResource(R.drawable.bg_input)
                 clipToOutline = true
                 load(m.uri)
+                // Tap an image thumbnail to preview it full-screen in-app.
+                if (!m.isVideo) setOnClickListener {
+                    ImagePreviewDialog.show(requireContext(), m.uri.toString())
+                }
             }
             frame.addView(iv)
             if (m.isVideo) {
-                frame.addView(TextView(ctx).apply {
-                    text = "▶"
-                    textSize = 20f
-                    setTextColor(Color.WHITE)
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
-                    )
+                frame.addView(ImageView(ctx).apply {
+                    setImageResource(R.drawable.ic_home_trip_play)
+                    setColorFilter(Color.WHITE)
+                    setBackgroundResource(R.drawable.bg_home_new_action_circle)
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(Color.parseColor("#66000000"))
+                    val p = dp(6); setPadding(p, p, p, p)
+                    layoutParams = FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER)
                 })
             }
             frame.addView(TextView(ctx).apply {
