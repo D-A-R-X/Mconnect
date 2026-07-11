@@ -60,14 +60,18 @@ object AvatarUtils {
     fun ImageView.loadUserAvatar(photoUrl: String?, name: String?) {
         val fallback = initialDrawable(resources, name)
         val url = photoUrl?.takeIf { it.isNotBlank() }
-        if (url == null) {
-            setImageDrawable(fallback)
-            return
-        }
+        // Always route through Coil's load() — even when url is null — so any
+        // in-flight request on this (recycled) ImageView is cancelled first.
+        // The old early-return setImageDrawable(fallback) did NOT cancel a
+        // pending request, so when a RecyclerView row that had loaded someone's
+        // photo got rebound to a person with NO photo, the stale request would
+        // still land and paint the wrong face over the initials. fallback()
+        // renders the initials when the data (url) is null.
         load(url) {
             transformations(CircleCropTransformation())
             placeholder(fallback)
             error(fallback)
+            fallback(fallback)
         }
     }
 }

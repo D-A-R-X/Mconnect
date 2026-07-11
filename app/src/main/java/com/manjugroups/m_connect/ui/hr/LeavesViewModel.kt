@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.hr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.network.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,14 +39,18 @@ class LeavesViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
-                val balance = try { api.getLeaveBalance(bearerToken) } catch (_: Exception) { null }
-                val history = try { api.getMyLeaves(bearerToken) } catch (_: Exception) { null }
-                val pending = if (canApprove) {
-                    try { api.getPendingLeaveApprovals(bearerToken) } catch (_: Exception) { null }
-                } else {
-                    null
+                // Independent reads fired in PARALLEL — previously serial, so the
+                // screen blocked on the SUM of four round-trips; now the slowest.
+                val balanceD = async { runCatching { api.getLeaveBalance(bearerToken) }.getOrNull() }
+                val historyD = async { runCatching { api.getMyLeaves(bearerToken) }.getOrNull() }
+                val pendingD = async {
+                    if (canApprove) runCatching { api.getPendingLeaveApprovals(bearerToken) }.getOrNull() else null
                 }
-                val policyResp = try { api.getPolicy(bearerToken) } catch (_: Exception) { null }
+                val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
+                val balance = balanceD.await()
+                val history = historyD.await()
+                val pending = pendingD.await()
+                val policyResp = policyD.await()
 
                 val b = balance?.balance
                 val policy = policyResp?.policy?.leave

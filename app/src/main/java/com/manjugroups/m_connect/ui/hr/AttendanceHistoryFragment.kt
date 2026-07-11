@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
+import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
@@ -49,13 +50,16 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
-    // The "All" tab shows the entire attendance log, so it queries from an
-    // all-time start date instead of the current filter window.
+    // All-time bounds for HR Review (which shows the entire review backlog).
+    // The "All" tab now honors the date filter instead (filterFromDate/To),
+    // so "Last month" and friends actually apply there.
     private val ALL_TAB_FROM_DATE = "2000-01-01"
-    // Far-future upper bound for the all-time tabs (HR Review / All). Using
-    // today's date cut any future-dated rows (planned corrections, requests
-    // dated ahead) that the web's all-time view shows — this matches it.
     private val ALL_TAB_TO_DATE = "2100-12-31"
+    // Reject-reason result keys for the shared RejectWithReasonBottomSheet —
+    // two keys encode whether the row is an attendanceRequests doc so the
+    // decision routes correctly even across process recreation.
+    private val REJECT_KEY_REQUEST = "reject_attn_request"
+    private val REJECT_KEY_REVIEW = "reject_attn_review"
     // Role/hierarchy-based tab visibility (mirrors the web). Logical tab ids:
     // 0=My Attendance, 1=Team Attendance, 2=Team Approval, 3=All Approval,
     // 4=HR Review, 5=All. `visibleLogicalTabs` is the subset actually shown, in
@@ -152,6 +156,23 @@ class AttendanceHistoryFragment : Fragment() {
             filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
             updateRangeLabel()
             refreshAllData(showSkeleton = true, forceRefresh = true)
+        }
+
+        // Rejection reason via the shared reject-with-reason bottom sheet
+        // (same component as leaves/permissions) instead of a bare AlertDialog.
+        setFragmentResultListener(REJECT_KEY_REQUEST) { _, b ->
+            rejectRecord(
+                b.getString(RejectWithReasonBottomSheet.KEY_ITEM_ID).orEmpty(),
+                b.getString(RejectWithReasonBottomSheet.KEY_REASON).orEmpty(),
+                isRequest = true,
+            )
+        }
+        setFragmentResultListener(REJECT_KEY_REVIEW) { _, b ->
+            rejectRecord(
+                b.getString(RejectWithReasonBottomSheet.KEY_ITEM_ID).orEmpty(),
+                b.getString(RejectWithReasonBottomSheet.KEY_REASON).orEmpty(),
+                isRequest = false,
+            )
         }
 
         // A submitted correction/remark request reloads the list so any
@@ -319,6 +340,12 @@ class AttendanceHistoryFragment : Fragment() {
             binding.emptyState.visibility = View.GONE
         }
 
+        // Thread the active search into the All-tab fetch so the backend returns
+        // the searched person's FULL date range, not the capped ~750 newest
+        // company-wide rows (which, after a "Last month" filter, collapsed to
+        // just the last few days).
+        val allSearch = binding.etSearch.text?.toString()?.trim()?.ifBlank { null }
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val token = session.bearerToken
@@ -345,7 +372,10 @@ class AttendanceHistoryFragment : Fragment() {
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {
-                    runCatching { api.getAllAttendance(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
+                    // Honor the date filter (e.g. "Last month") AND any active
+                    // search — search bypasses the backend's ~750-row cap and
+                    // returns the full range for that person.
+                    runCatching { api.getAllAttendance(token, filterFromDate, filterToDate, search = allSearch) }.getOrNull()
                 }
                 val finesDeferred = async {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
@@ -468,8 +498,8 @@ class AttendanceHistoryFragment : Fragment() {
             val resp = runCatching {
                 api.getAllAttendance(
                     session.bearerToken,
-                    ALL_TAB_FROM_DATE,
-                    ALL_TAB_TO_DATE,
+                    filterFromDate,
+                    filterToDate,
                     search = query.trim().ifBlank { null },
                 )
             }.getOrNull() ?: return@launch
@@ -1118,19 +1148,13 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun showRejectDialog(id: String, isRequest: Boolean = false) {
-        val input = EditText(requireContext()).apply {
-            hint = "Reason for rejection"
-            minLines = 3
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Reject attendance")
-            .setView(input)
-            .setPositiveButton("Reject") { _, _ ->
-                val reason = input.text?.toString()?.trim().orEmpty().ifBlank { "Rejected" }
-                rejectRecord(id, reason, isRequest)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        RejectWithReasonBottomSheet.newInstance(
+            itemId = id,
+            resultKey = if (isRequest) REJECT_KEY_REQUEST else REJECT_KEY_REVIEW,
+            title = "Reject attendance",
+            subtitle = "Add a reason for rejecting this attendance",
+            buttonText = "Reject",
+        ).show(parentFragmentManager, "reject_attendance")
     }
 
     private fun showHoldDialog(id: String) {
@@ -1369,22 +1393,29 @@ class AttendanceHistoryFragment : Fragment() {
             val outLabel = formatTime(record.punchOutTime) ?: "--"
             tvRange.text = "$inLabel · $outLabel"
 
-            // Active-fine badge — only on the All tab, when the staff has a
-            // matching active fine.
-            val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
-            val fine = if (showFines) cachedFines.firstOrNull {
-                it.staffName.equals(record.staffName, ignoreCase = true) ||
-                    (!record.employeeId.isNullOrBlank() && it.employeeId.equals(record.employeeId, ignoreCase = true))
-            } else null
-            if (fine != null) {
-                tvFine.visibility = View.VISIBLE
-                tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", fine.amount)
+            // Attendance-fine banner — the REAL per-DAY late fine for THIS
+            // record (server-computed lateFineDeduction), shown only when it's
+            // actually > 0. Previously this matched cachedFines by staff name,
+            // which smeared one active monthly fine onto every one of that
+            // person's cards (the "₹10 on every date" bug for a staffer with
+            // no fine). Now a day with no fine shows no banner.
+            val fineBanner = card.findViewById<View>(R.id.llTeamFinesBanner)
+            val tvFineAmount = card.findViewById<TextView>(R.id.tvTeamFineAmount)
+            val fineAmt = (record.lateFineDeduction ?: record.fineAmount) ?: 0.0
+            if (showFines && fineAmt > 0.0) {
+                fineBanner.visibility = View.VISIBLE
+                tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fineAmt)
             } else {
-                tvFine.visibility = View.GONE
+                fineBanner.visibility = View.GONE
             }
 
+            // Name + employee id so two DIFFERENT staff who share a name (e.g.
+            // duplicate "DHIVAGAR.B" accounts) are distinguishable — each row's
+            // photo is correct for its own staffId; the id makes that clear.
+            val name = record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
+            val empId = record.employeeId?.trim().orEmpty()
             card.findViewById<TextView>(R.id.tvStaffName).text =
-                record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
+                if (empId.isNotBlank()) "$name · $empId" else name
             card.findViewById<ImageView>(R.id.ivStaffAvatar)
                 .loadUserAvatar(record.staffPhotoUrl, record.staffName)
     }

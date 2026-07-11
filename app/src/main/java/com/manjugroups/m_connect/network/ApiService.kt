@@ -67,6 +67,26 @@ interface ApiService {
         @Query("year") year: Int? = null,
     ): FinesListResponse
 
+    // ── VP / Management Dashboard ──
+    @GET("api/dashboard/vp")
+    suspend fun getVpDashboard(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+    ): VpDashboardResponse
+
+    @GET("api/dashboard/calls")
+    suspend fun getDashboardCalls(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+        @Query("direction") direction: String? = null,
+    ): DashboardCallsResponse
+
+    @GET("api/dashboard/registrations")
+    suspend fun getDashboardRegistrations(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+    ): DashboardRegistrationsResponse
+
     @POST("api/hr/fines/create")
     suspend fun createFine(
         @Header("Authorization") token: String,
@@ -943,6 +963,12 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MarketingProjectsResponse
 
+    // Master material catalog (Project Management > Library > Material Catalog).
+    @GET("api/materials")
+    suspend fun getMaterials(
+        @Header("Authorization") token: String,
+    ): MaterialsResponse
+
     @GET("api/marketing/inventory-units")
     suspend fun listInventoryUnits(
         @Header("Authorization") token: String,
@@ -1117,9 +1143,21 @@ interface ApiService {
     ): InspectionActionResponse
 
     companion object {
-        fun create(): ApiService {
+        // Single shared client for the whole app. Previously every one of the
+        // ~114 create() call sites built a fresh OkHttpClient (its own
+        // connection + thread pools), so no TLS/keep-alive reuse across screens
+        // — a real per-navigation latency hit. Now built once, lazily.
+        private val instance: ApiService by lazy { buildService() }
+
+        fun create(): ApiService = instance
+
+        private fun buildService(): ApiService {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                // BODY logging buffers + logs full request/response bodies —
+                // fine in debug, but pure overhead (and a data-leak risk) in
+                // release. Gate it to debug builds only.
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
             }
             // Auto-logout on 401. Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
@@ -1500,6 +1538,11 @@ data class AttendanceApprovalRecord(
     val requestedPunchIn: String? = null,
     val requestedPunchOut: String? = null,
     val requestReason: String? = null,
+    // Server-computed per-DAY late fine (₹) for this record, from
+    // staffAttendance.listForReport / enrichReportRecords. Drives the All-tab
+    // attendance-fine banner (0 / absent = no fine that day).
+    val lateFineDeduction: Double? = null,
+    val fineAmount: Double? = null,
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
@@ -2780,6 +2823,22 @@ data class MarketingProjectsResponse(
     val error: String? = null,
 )
 
+data class MaterialCatalogItem(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val unit: String? = null,
+    val category: String? = null,
+    val itemCode: String? = null,
+    val brand: String? = null,
+)
+
+data class MaterialsResponse(
+    val success: Boolean = false,
+    val total: Int? = null,
+    val materials: List<MaterialCatalogItem> = emptyList(),
+    val error: String? = null,
+)
+
 data class InventoryLayoutCoordinates(
     val shape: String? = null,
     val x: Double? = null,
@@ -3546,6 +3605,61 @@ data class FineDeductionItem(
     val photoUrl: String? = null,
     val staffPhotoUrl: String? = null,
     val createdAt: String? = null,
+)
+
+// ── VP / Management Dashboard models ──
+data class VpDashboardResponse(
+    val success: Boolean = false,
+    val date: String? = null,
+    val present: Int = 0,
+    val absent: Int = 0,
+    val totalStaff: Int = 0,
+    val notPunchedIn: Int = 0,
+    val incomingCalls: Int = 0,
+    val outboundCalls: Int = 0,
+    val totalCalls: Int = 0,
+    val cpVisitsFixed: Int = 0,
+    val cpVisitsCompleted: Int = 0,
+    val svVisitsFixed: Int = 0,
+    val svVisitsCompleted: Int = 0,
+    val collectionTotal: Double = 0.0,
+    val collectionCount: Int = 0,
+    val bookingCount: Int = 0,
+    val registrationCount: Int = 0,
+    val error: String? = null,
+)
+
+data class DashboardCallRow(
+    val id: String,
+    val phoneNumber: String? = null,
+    val callType: String? = null,
+    val status: String? = null,
+    val agent: String? = null,
+    val duration: String? = null,
+    val talkTime: String? = null,
+    val time: String? = null,
+)
+
+data class DashboardCallsResponse(
+    val success: Boolean = false,
+    val calls: List<DashboardCallRow> = emptyList(),
+    val error: String? = null,
+)
+
+data class DashboardRegistrationRow(
+    val id: String,
+    val clientName: String? = null,
+    val ownerName: String? = null,
+    val status: String? = null,
+    val completedDate: String? = null,
+    val scheduledDate: String? = null,
+    val notes: String? = null,
+)
+
+data class DashboardRegistrationsResponse(
+    val success: Boolean = false,
+    val registrations: List<DashboardRegistrationRow> = emptyList(),
+    val error: String? = null,
 )
 
 data class CreateFineRequest(

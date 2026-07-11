@@ -155,6 +155,9 @@ class AcceptLoanBottomSheet(
                 onSuccess()
                 dismiss()
             } catch (e: Exception) {
+                // Sheet dismissed mid-approval cancels this coroutine; skip the
+                // view + Toast work when the binding is already gone.
+                if (_binding == null) return@launch
                 binding.btnSubmit.isEnabled = true
                 binding.btnSubmit.text = "Submit"
                 val serverMsg = extractHttpErrorMessage(e)

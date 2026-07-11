@@ -50,14 +50,21 @@ class GeoTrackService : Service() {
         private const val SYNC_INTERVAL_MS = 30_000L
         private const val HEARTBEAT_INTERVAL_MS = 120_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
+        // Idle-shift power saving: when clocked in but physically STILL with no
+        // active trip/visit, relax GPS to balanced/long-interval so the chip
+        // idles, and sync less often. Snaps back to fast/precise the moment a
+        // field activity starts or motion resumes.
+        private const val IDLE_LOCATION_INTERVAL_MS = 150_000L // 2.5 min
+        private const val IDLE_SYNC_INTERVAL_MS = 90_000L
+        private const val RECENT_MOTION_MS = 120_000L // keep precise 2 min after motion
         // Short, self-timing wakelock taken ONLY around a network sync burst
         // (not for the whole shift) so an upload can finish even if the device
         // is dozing. The OS auto-releases after this timeout as a safety net.
         private const val SYNC_WAKELOCK_MS = 15_000L
         // The persistent foreground notification is mandatory for a location
-        // service, but it shows a single clean, user-facing line — not the
-        // internal capture/sync/battery counters that used to leak to staff.
-        private const val TRACKING_NOTIF_TEXT = "Location tracking is active during your shift."
+        // service. Its content is built by TrackingNotification and adapts to
+        // the staff's field activity (On Duty / CP / SV / Fleet); it never
+        // shows internal capture/sync/battery counters.
         private const val MAX_POINT_AGE_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
         // Unsent points hang around for 30 days so a multi-day offline
         // period (field staff with no signal) still flushes when the
@@ -100,6 +107,9 @@ class GeoTrackService : Service() {
 
         fun stop(context: Context) {
             Log.i(TAG, ">>> Stopping GeoTrack service")
+            // Shift ended → drop any lingering field-activity so the next
+            // shift's notification starts neutral (no stale cross-day timer).
+            SessionManager(context.applicationContext).clearFieldActivity()
             context.stopService(Intent(context, GeoTrackService::class.java))
         }
 
@@ -148,6 +158,12 @@ class GeoTrackService : Service() {
     private var locationThread: HandlerThread? = null
     private var fusedLocationRegistered = false
     private var activityPendingIntent: PendingIntent? = null
+    // Current fused GPS power mode. false = HIGH_ACCURACY (default/precise),
+    // true = relaxed idle mode. Only ever true during an idle+still shift.
+    @Volatile private var lowPowerLocationMode = false
+    // Wall-clock of the last fix that showed real movement. Keeps precise mode
+    // "sticky" for RECENT_MOTION_MS so we don't flap modes at stoplights.
+    @Volatile private var lastMovingAtMs = 0L
 
     // Stationary dedup + GPS drift filter
     @Volatile private var lastStoredLat = 0.0
@@ -255,7 +271,8 @@ class GeoTrackService : Service() {
 
     private fun startForegroundSafely(): Boolean {
         return runCatching {
-            val notification = buildNotif(TRACKING_NOTIF_TEXT)
+            // Context-adaptive (On Duty / CP / SV / Fleet) — see TrackingNotification.
+            val notification = TrackingNotification.build(this)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
@@ -361,10 +378,10 @@ class GeoTrackService : Service() {
 
         // Primary: FusedLocationProviderClient (Google Play Services)
         try {
-            val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
-                .setMinUpdateIntervalMillis(5_000)
-                .setWaitForAccurateLocation(false)
-                .build()
+            // Start precise; reevaluateLocationMode() relaxes it later if the
+            // shift goes idle + still.
+            lowPowerLocationMode = false
+            val req = buildFusedRequest(lowPower = false)
 
             fusedClient.requestLocationUpdates(req, locationCallback, looper)
                 .addOnSuccessListener {
@@ -387,6 +404,55 @@ class GeoTrackService : Service() {
                 Log.w(TAG, "FusedLocation not confirmed after 5s, starting LocationManager fallback")
                 startLocationManagerFallback(looper)
             }
+        }
+    }
+
+    /**
+     * The fused location request for the current power mode.
+     *  - precise (default): HIGH_ACCURACY @ 10s — full path fidelity.
+     *  - low power (idle+still): BALANCED @ 2.5 min + 40 m min-distance so the
+     *    GPS chip idles; a cheap wifi/cell fix still arrives occasionally and,
+     *    the instant it shows motion, we snap back to precise.
+     */
+    private fun buildFusedRequest(lowPower: Boolean): LocationRequest {
+        return if (lowPower) {
+            LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_LOCATION_INTERVAL_MS)
+                .setMinUpdateIntervalMillis(60_000)
+                .setMinUpdateDistanceMeters(40f)
+                .setWaitForAccurateLocation(false)
+                .build()
+        } else {
+            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
+                .setMinUpdateIntervalMillis(5_000)
+                .setWaitForAccurateLocation(false)
+                .build()
+        }
+    }
+
+    /**
+     * Decide whether GPS should idle and re-register the fused request if the
+     * mode changed. SAFE BY DESIGN: precise is forced whenever a field activity
+     * (On Duty / CP / SV / Fleet) is running OR the staff is moving, so every
+     * tracked trip keeps full fidelity. Low power engages only during an idle
+     * shift while physically still — where accuracy doesn't matter and the old
+     * always-HIGH_ACCURACY request was burning battery. Only touches the fused
+     * stack; the LocationManager fallback is left alone.
+     */
+    @SuppressLint("MissingPermission")
+    private fun reevaluateLocationMode() {
+        if (!fusedLocationRegistered) return
+        val hasFieldActivity = session.fieldActivity() != null
+        val moving = (lastActivity != "STILL" && lastActivity != "UNKNOWN") ||
+            (System.currentTimeMillis() - lastMovingAtMs < RECENT_MOTION_MS)
+        val desiredLowPower = !hasFieldActivity && !moving
+        if (desiredLowPower == lowPowerLocationMode) return
+        val looper = locationThread?.looper ?: return
+        try {
+            fusedClient.requestLocationUpdates(buildFusedRequest(desiredLowPower), locationCallback, looper)
+            lowPowerLocationMode = desiredLowPower
+            Log.i(TAG, "Location mode → ${if (desiredLowPower) "LOW_POWER (idle+still)" else "HIGH_ACCURACY"}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Re-register location failed: ${e.message}")
         }
     }
 
@@ -521,6 +587,14 @@ class GeoTrackService : Service() {
         else @Suppress("DEPRECATION") location.isFromMockProvider
 
         if (isMock) reportTamper("MOCK_LOCATION")
+
+        // Motion detector for the power mode, independent of the storage dedup
+        // below (which may early-return). A moving fix snaps GPS back to precise
+        // immediately if we'd relaxed it.
+        if (location.speed >= 1.5f) {
+            lastMovingAtMs = now
+            if (lowPowerLocationMode) reevaluateLocationMode()
+        }
 
         // ── Smart dedup: different rules for moving vs stationary ──
         // An activity transition (still→vehicle, vehicle→still, …) forces the
@@ -704,23 +778,42 @@ class GeoTrackService : Service() {
             if (!enforceClockInGate()) return@launch
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
-                if (hasNetwork()) {
-                    markNetworkOnlineIfNeeded()
-                    if (!enforceClockInGate()) break
-                    runWithSyncWakeLock {
-                        syncPoints()
-                        syncEvents()
+                try {
+                    // Cheap re-check (a pref read + flag compare) each cycle: relax
+                    // or restore the GPS request as the shift goes idle/active.
+                    reevaluateLocationMode()
+                    if (hasNetwork()) {
+                        markNetworkOnlineIfNeeded()
+                        if (!enforceClockInGate()) break
+                        runWithSyncWakeLock {
+                            syncPoints()
+                            syncEvents()
+                        }
+                    } else {
+                        markNetworkOfflineIfNeeded()
+                        Log.d(TAG, "Sync: no network, skipping")
                     }
-                } else {
-                    markNetworkOfflineIfNeeded()
-                    Log.d(TAG, "Sync: no network, skipping")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Never let an unexpected error kill the loop — local buffering
+                    // keeps running and we retry next cycle. Store-and-forward must
+                    // survive ANY single-cycle failure (permission, network, DB…);
+                    // the data stays queued locally until a cycle succeeds.
+                    consecutiveSyncFailures++
+                    Log.e(TAG, "Sync cycle error (continuing): ${e.message}", e)
                 }
-                // Adaptive delay: back off if failing
-                val delay = if (consecutiveSyncFailures > 0) {
-                    val backoff = SYNC_INTERVAL_MS * minOf(consecutiveSyncFailures, MAX_SYNC_RETRIES)
-                    Log.d(TAG, "Sync backoff: ${backoff}ms (failures=$consecutiveSyncFailures)")
-                    backoff
-                } else SYNC_INTERVAL_MS
+                // Adaptive delay: back off hard while sync is failing, ease off
+                // during an idle+still shift, otherwise the normal cadence.
+                val delay = when {
+                    consecutiveSyncFailures > 0 -> {
+                        val backoff = SYNC_INTERVAL_MS * minOf(consecutiveSyncFailures, MAX_SYNC_RETRIES)
+                        Log.d(TAG, "Sync backoff: ${backoff}ms (failures=$consecutiveSyncFailures)")
+                        backoff
+                    }
+                    lowPowerLocationMode -> IDLE_SYNC_INTERVAL_MS
+                    else -> SYNC_INTERVAL_MS
+                }
                 delay(delay)
             }
         }
@@ -770,6 +863,10 @@ class GeoTrackService : Service() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
                 delay(HEARTBEAT_INTERVAL_MS)
+                // Self-heal the ongoing permission alert every tick: clears it
+                // the moment the staff grants the last missing permission, and
+                // re-posts it if the OS dropped it (Android 14+ can).
+                runCatching { refreshPermissionNotification() }
                 val battery = getBatteryLevel()
                 val sessionId = session.activeTrackingSessionId
                 val deviceId = session.trackingDeviceId
@@ -848,11 +945,12 @@ class GeoTrackService : Service() {
 
     // ── Notification ──
     //
-    // The foreground notification now shows a single static, user-facing line
-    // (TRACKING_NOTIF_TEXT) set when we enter the foreground state. There is no
-    // periodic update loop: it used to rewrite the notification every minute
-    // with internal capture/sync/battery counters, which both leaked debug
-    // detail to staff and woke the CPU + hit the DB on every tick.
+    // Built by TrackingNotification and adapts to the staff's current field
+    // activity. There is still NO periodic update loop (the old per-minute
+    // rewrite woke the CPU + hit the DB every tick): the content is refreshed
+    // event-driven — a flow calls TrackingNotification.refresh() when the
+    // activity changes — and the live elapsed timer is rendered by the OS
+    // chronometer, so it ticks without any wakeups from us.
 
     // ── Tamper ──
 
@@ -888,6 +986,12 @@ class GeoTrackService : Service() {
         if (!hasBackground) missing.add("background_location")
         if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
         if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+
+        // Immediate, offline-capable heads-up to the staff so they can fix it
+        // and resume normal signal transfer. Posts the ongoing red alert for
+        // the full missing set (same set the in-app gate enforces) so the
+        // notification and the gate agree and clear together.
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
         if (missing.isEmpty()) return
 
         val missingKey = missing.sorted().joinToString("_")
@@ -898,6 +1002,26 @@ class GeoTrackService : Service() {
             signature = "permission_missing_$missingKey",
         )
         if (queued && hasNetwork()) syncEvents()
+    }
+
+    /**
+     * Post-or-clear ONLY the ongoing permission alert, cheaply and idempotently
+     * (a few permission reads + one notify/cancel; no DB, no network, no event
+     * enqueue). Called each heartbeat so the red alert self-heals: it comes
+     * back if the OS drops it and, crucially, disappears the moment the staff
+     * grants the last missing permission mid-shift.
+     */
+    private fun refreshPermissionNotification() {
+        val missing = mutableListOf<String>()
+        val hasFine = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val hasCoarse = checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) missing.add("fine_location")
+        if (!hasBackgroundLocationPermission()) missing.add("background_location")
+        if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
+        if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
     }
 
     private suspend fun buildEventMetadata(): Map<String, Any?> {
@@ -988,22 +1112,6 @@ class GeoTrackService : Service() {
             ch.setShowBadge(false)
             getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
         }
-    }
-
-    private fun buildNotif(text: String): Notification {
-        val pi = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("M-Connect Tracking")
-            .setContentText(text)
-            .setSmallIcon(R.drawable.ic_tab_home)
-            .setContentIntent(pi)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
     }
 
     // ── Utils ──

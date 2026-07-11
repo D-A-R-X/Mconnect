@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Daily Log — loans-style page: blue hero, white rounded wrapper with the
+     segmented tabs + "+" beside them, and plain aggregated lists ("my entries"
+     / "my DPR recipients & history") with EmptyStateView empty states. The
+     project pickers live INSIDE the create sheets, not on this page. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FEFEFE">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/dailyLogScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:paddingBottom="40dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- ── Blue hero (mirrors My Loans) ── -->
+            <FrameLayout
+                android:id="@+id/dailyLogHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_home_blue_header"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingBottom="58dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:id="@+id/btnDailyLogBack"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_home_header_avatar"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Back"
+                            android:src="@drawable/ic_arrow_left"
+                            app:tint="#FFFFFF" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="16dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:letterSpacing="-0.02"
+                        android:text="Daily Log"
+                        android:textColor="#FEFEFE"
+                        android:textSize="24sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:letterSpacing="0.01"
+                        android:text="Site progress and DPR WhatsApp"
+                        android:textColor="#D9D6FE"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- ── White wrapper overlapping the hero ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-44dp"
+                android:background="@drawable/bg_loan_hero_card"
+                android:orientation="vertical"
+                android:paddingBottom="24dp">
+
+                <!-- Segment + "+" (loans pattern) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_loans_segment"
+                        android:orientation="horizontal"
+                        android:padding="3dp">
+
+                        <TextView
+                            android:id="@+id/tabNewEntry"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_loans_segment_active"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_semibold"
+                            android:gravity="center"
+                            android:text="New Entry"
+                            android:textColor="#FFFFFF"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tabDpr"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@null"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:text="DPR WhatsApp"
+                            android:textColor="#475467"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/btnDailyLogAdd"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_marginStart="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        app:cardBackgroundColor="#FFFFFF"
+                        app:cardCornerRadius="10dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#EAECF0"
+                        app:strokeWidth="1dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:text="+"
+                            android:textColor="#101828"
+                            android:textSize="22sp" />
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- ── New Entry: aggregated "my entries" list ── -->
+                <LinearLayout
+                    android:id="@+id/newEntryContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvEntriesTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="20dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Recent Entries"
+                        android:textColor="#101828"
+                        android:textSize="16sp" />
+
+                    <LinearLayout
+                        android:id="@+id/logsContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp" />
+
+                    <com.manjugroups.m_connect.ui.common.EmptyStateView
+                        android:id="@+id/emptyLogs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="56dp"
+                        android:paddingBottom="32dp"
+                        android:visibility="gone"
+                        app:es_image="@drawable/img_issues_empty"
+                        app:es_title="No Daily Logs Yet"
+                        app:es_description="Tap + to record today's site progress, labour, materials and observations." />
+                </LinearLayout>
+
+                <!-- ── DPR WhatsApp: recipients + send + history. The add-
+                     recipient form opens from the "+" (DprAddRecipientBottomSheet). ── -->
+                <LinearLayout
+                    android:id="@+id/dprContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Recipients"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvRecipientsCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="0 active"
+                            android:textColor="#16A34A"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/recipientsContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp" />
+
+                    <TextView
+                        android:id="@+id/tvRecipientsEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:text="No recipients yet — tap + to add a WhatsApp recipient. Active recipients get the DPR PDF at 7:00 PM IST."
+                        android:textColor="#98A2B3"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+
+                    <!-- Send + history only make sense once a recipient exists;
+                         hidden on the empty state so it reads as a clean prompt
+                         to add one via "+". -->
+                    <LinearLayout
+                        android:id="@+id/dprManageSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSendDpr"
+                            android:layout_width="match_parent"
+                            android:layout_height="54dp"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="20dp"
+                            android:backgroundTint="#16A34A"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Send today's DPR now"
+                            android:textAllCaps="false"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            app:cornerRadius="27dp"
+                            app:elevation="0dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="24dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Recent DPR History"
+                            android:textColor="#101828"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvHistoryEmpty"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="16dp"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:text="No DPR send history yet."
+                            android:textColor="#98A2B3"
+                            android:textSize="13sp" />
+
+                        <LinearLayout
+                            android:id="@+id/historyContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="16dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</FrameLayout>

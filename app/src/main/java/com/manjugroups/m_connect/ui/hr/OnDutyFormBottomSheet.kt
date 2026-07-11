@@ -93,6 +93,14 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
 
+        // Resize the sheet when the keyboard opens so the focused input (the
+        // Remarks / search field) and the pinned Next/Submit button stay above
+        // it instead of being covered. App convention — see CreateIssueBottomSheet.
+        // Pairs with the weighted NestedScrollView in sheet_on_duty_form.xml.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
+
         // Intercept the system back gesture / hardware back button so it
         // walks the multi-step sheet back one step at a time instead of
         // dismissing outright.
@@ -572,6 +580,20 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
         // Clear any stale tripId from a previous session before the new
         // start call returns.
         session.onDutyTripId = null
+
+        // Drive the adaptive tracking notification: title "On Duty · <category>"
+        // with a live elapsed timer from now.
+        val actTitle = buildString {
+            append("On Duty")
+            if (!selectedCategory.isNullOrBlank()) append(" · ").append(selectedCategory)
+        }
+        session.setFieldActivity(
+            kind = "onduty",
+            title = actTitle,
+            sub = targetName?.takeIf { it.isNotBlank() } ?: selectedVehicleType,
+            startMs = System.currentTimeMillis(),
+        )
+        com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
 
         val resultBundle = Bundle().apply {
             putBoolean(KEY_STARTED, true)

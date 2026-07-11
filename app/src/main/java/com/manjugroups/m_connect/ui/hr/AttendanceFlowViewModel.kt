@@ -57,6 +57,13 @@ data class AttendanceFlowState(
      *  not block work just because the user happens to be mid-break after
      *  a clock-out. Mirrors `AttendanceTrackingGate.isClockedInForToday`. */
     val hasClockedInToday: Boolean = false,
+    /** True iff the person's MOST RECENT attendance event today is a *mobile*
+     *  clock-out. The mobile button is the disabled "Clocked Out" only in this
+     *  state; any later punch — including a biometric gate punch (in OR out) —
+     *  becomes the latest event and re-enables "Clock Out". A biometric gate
+     *  punch-out mid-day does NOT set this (only a mobile clock-out does), so
+     *  it never stops tracking. */
+    val clockedOutOnMobile: Boolean = false,
     val todayMinutes: Int = 0,
     val todayHours: String = "00:00 Hrs",
     val latestTotalHours: String = "00:00:00 hrs",
@@ -123,9 +130,17 @@ class AttendanceFlowViewModel(
                 // the mobile sessions, NOT the server's hasOpenSession (which
                 // counts every punch source).
                 val sessions = (dayResp?.sessions ?: attendance?.sessions).orEmpty()
-                val isClockedInForUi = computeMobileClockedIn(sessions, fallback = hasOpenSession)
+                val clockedOutOnMobileForUi = computeClockedOutOnMobile(sessions)
                 val hasClockedInTodayForUi =
                     AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
+                // "Clocked in" (drives the live ticker, header and range label)
+                // now means ON THE CLOCK: punched in today and the latest event
+                // isn't a mobile clock-out. So a biometric gate punch-in counts,
+                // and a gate punch-out never flips it off — only a mobile
+                // clock-out does. (Was mobile-punches-only via
+                // computeMobileClockedIn; the user now wants gate punches to
+                // drive the clocked-in state.)
+                val isClockedInForUi = hasClockedInTodayForUi && !clockedOutOnMobileForUi
                 val range = buildRangeLabel(firstPunchIn, lastPunchOut, isClockedInForUi)
 
                 val aggregateMinutes = dayResp?.cumulativeMinutes ?: totalMinutes
@@ -139,6 +154,7 @@ class AttendanceFlowViewModel(
                     hasLoaded = true,
                     isClockedIn = isClockedInForUi,
                     hasClockedInToday = hasClockedInTodayForUi,
+                    clockedOutOnMobile = clockedOutOnMobileForUi,
                     todayMinutes = totalMinutes,
                     todayHours = formatMinutesForToday(totalMinutes),
                     latestTotalHours = formatMinutesForPeriod(aggregateMinutes),
@@ -275,6 +291,9 @@ class AttendanceFlowViewModel(
                 // course flips it on. This matches the one-time-Clock-In
                 // rule used everywhere outside the live ticker.
                 hasClockedInToday = it.hasClockedInToday || mode == PunchMode.PUNCH_IN,
+                // A mobile clock-out becomes the latest event → disable the
+                // button optimistically; a mobile clock-in clears it.
+                clockedOutOnMobile = mode == PunchMode.PUNCH_OUT,
             )
         }
 
@@ -405,6 +424,7 @@ class AttendanceFlowViewModel(
                 isSubmitting = false,
                 isClockedIn = previous.isClockedIn,
                 hasClockedInToday = previous.hasClockedInToday,
+                clockedOutOnMobile = previous.clockedOutOnMobile,
             )
         }
     }
@@ -556,6 +576,39 @@ class AttendanceFlowViewModel(
             }
             val inMs = lastMobileInMs ?: return fallback
             return lastMobileOutMs == null || inMs > lastMobileOutMs!!
+        }
+
+        /**
+         * True iff the person's most-recent attendance event today is a
+         * *mobile* clock-out — the only state in which the mobile button is the
+         * disabled "Clocked Out". Any later event (a punch-in of any source, or
+         * a biometric gate punch-out) is "activity" that becomes the latest
+         * event → the button returns to an enabled "Clock Out". So a biometric
+         * gate punch (in OR out) after a mobile clock-out re-enables Clock Out,
+         * while a biometric punch-out mid-shift never clocks the person out.
+         */
+        internal fun computeClockedOutOnMobile(sessions: List<SessionData>): Boolean {
+            var latestMobileOutMs: Long? = null
+            var latestActivityMs: Long? = null
+            for (s in sessions) {
+                s.punchInTime?.takeIf { it.isNotBlank() }?.let { iso ->
+                    parseMillis(iso)?.let { t ->
+                        if (latestActivityMs == null || t > latestActivityMs!!) latestActivityMs = t
+                    }
+                }
+                s.punchOutTime?.takeIf { it.isNotBlank() }?.let { iso ->
+                    parseMillis(iso)?.let { t ->
+                        val outSource = s.punchOutSource ?: s.source
+                        if (outSource.equals("mobile", ignoreCase = true)) {
+                            if (latestMobileOutMs == null || t > latestMobileOutMs!!) latestMobileOutMs = t
+                        } else {
+                            if (latestActivityMs == null || t > latestActivityMs!!) latestActivityMs = t
+                        }
+                    }
+                }
+            }
+            val mobileOut = latestMobileOutMs ?: return false
+            return latestActivityMs == null || mobileOut >= latestActivityMs!!
         }
 
         internal fun formatIsoToTime(iso: String): String {

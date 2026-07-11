@@ -18,6 +18,21 @@ data class DriverTrip(
     val totalDistance: String
 )
 
+/**
+ * The staff's current field-work context, surfaced in the GeoTrack
+ * foreground notification so it adapts to what they're actually doing
+ * (idle shift vs. On Duty vs. a CP / Site / Fleet visit) instead of a
+ * single static line. `startMs` drives the notification's live elapsed
+ * chronometer. Written by the flow that begins the activity and cleared
+ * when it ends; read by TrackingNotification.
+ */
+data class FieldActivity(
+    val kind: String,   // "onduty" | "cp" | "sv" | "fleet"
+    val title: String,
+    val sub: String?,
+    val startMs: Long,
+)
+
 class SessionManager(context: Context) {
 
     private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
@@ -228,6 +243,45 @@ class SessionManager(context: Context) {
             .remove(KEY_ON_DUTY_VEHICLE_TYPE)
             .remove(KEY_ON_DUTY_TRIP_ID)
             .apply()
+        // On-duty is one kind of field activity; drop the notification
+        // context with it so a stale "On Duty" line can't linger.
+        if (getCachedString(KEY_FIELD_ACT_KIND, null) == "onduty") clearFieldActivity()
+    }
+
+    // ── Field-activity context for the tracking notification ──
+    //
+    // A single source of truth the GeoTrack notification reads. Each flow
+    // (On Duty / CP / Site / Fleet) sets it when the activity begins and
+    // clears it when the activity ends. Kept deliberately small (4 keys) so
+    // reads are cheap enough to happen on notification refresh.
+
+    fun setFieldActivity(kind: String, title: String, sub: String?, startMs: Long) {
+        setCachedString(KEY_FIELD_ACT_KIND, kind)
+        setCachedString(KEY_FIELD_ACT_TITLE, title)
+        setCachedString(KEY_FIELD_ACT_SUB, sub)
+        memoryCache[KEY_FIELD_ACT_START_MS] = startMs
+        prefs.edit().putLong(KEY_FIELD_ACT_START_MS, startMs).apply()
+    }
+
+    fun clearFieldActivity() {
+        memoryCache.remove(KEY_FIELD_ACT_KIND)
+        memoryCache.remove(KEY_FIELD_ACT_TITLE)
+        memoryCache.remove(KEY_FIELD_ACT_SUB)
+        memoryCache.remove(KEY_FIELD_ACT_START_MS)
+        prefs.edit()
+            .remove(KEY_FIELD_ACT_KIND)
+            .remove(KEY_FIELD_ACT_TITLE)
+            .remove(KEY_FIELD_ACT_SUB)
+            .remove(KEY_FIELD_ACT_START_MS)
+            .apply()
+    }
+
+    /** Current field activity, or null when the staff is on a plain shift. */
+    fun fieldActivity(): FieldActivity? {
+        val kind = getCachedString(KEY_FIELD_ACT_KIND, null) ?: return null
+        val title = getCachedString(KEY_FIELD_ACT_TITLE, null) ?: return null
+        val start = prefs.getLong(KEY_FIELD_ACT_START_MS, 0L)
+        return FieldActivity(kind, title, getCachedString(KEY_FIELD_ACT_SUB, null), start)
     }
 
     fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
@@ -490,5 +544,9 @@ class SessionManager(context: Context) {
         private const val KEY_ON_DUTY_TRIP_ID = "on_duty_trip_id"
         private const val KEY_RATE_PER_KM = "rate_per_km"
         private const val KEY_RATE_PACKAGE = "rate_package"
+        private const val KEY_FIELD_ACT_KIND = "field_act_kind"
+        private const val KEY_FIELD_ACT_TITLE = "field_act_title"
+        private const val KEY_FIELD_ACT_SUB = "field_act_sub"
+        private const val KEY_FIELD_ACT_START_MS = "field_act_start_ms"
     }
 }

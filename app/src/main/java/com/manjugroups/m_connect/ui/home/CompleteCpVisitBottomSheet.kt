@@ -469,13 +469,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(it)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
-                // UX hardening — the form sheet was getting dismissed by a
-                // plain content scroll because the nested-scroll handoff
-                // promoted the gesture to a sheet drag. Killing drag means
-                // the sheet only closes via the Reject/Confirm/Save buttons
-                // or the system back press — never by a stray finger swipe
-                // inside the form. Programmatic dismiss() still works.
-                behavior.isDraggable = false
+                // Pullable now that the form root is a NestedScrollView (was a
+                // plain ScrollView): it hands the scroll off to the BottomSheet
+                // correctly, so scrolling the body scrolls the content and
+                // pulling the handle/header drags the sheet — no more stray
+                // dismiss from a content scroll, which is why drag was disabled.
+                behavior.isDraggable = true
                 isCancelable = true
             }
             // Hide the host activity's bottom tab bar for the sheet's

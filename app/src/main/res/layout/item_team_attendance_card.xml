@@ -47,22 +47,6 @@
             android:textSize="11sp"
             tools:text="Present" />
 
-        <TextView
-            android:id="@+id/tvHistoryItemFine"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_pill_red_light"
-            android:fontFamily="@font/inter_semibold"
-            android:includeFontPadding="false"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
-            android:textColor="#D92D20"
-            android:textSize="11sp"
-            android:visibility="gone"
-            tools:text="Fine: ₹700"
-            tools:visibility="visible" />
-
         <!-- User profile section -->
         <LinearLayout
             android:layout_width="wrap_content"
@@ -83,10 +67,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
+                android:ellipsize="end"
                 android:fontFamily="@font/inter_medium"
+                android:maxLines="1"
+                android:maxWidth="120dp"
                 android:textColor="#344054"
                 android:textSize="12sp"
-                tools:text="Elaine" />
+                tools:text="Elaine · MFPL001" />
         </LinearLayout>
     </LinearLayout>
 
@@ -145,5 +132,46 @@
                 android:textColor="#344054"
                 android:textSize="13sp" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- Fine banner (full-width red bar, same style as My Attendance) -->
+    <LinearLayout
+        android:id="@+id/llTeamFinesBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_fines_banner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_receipt_red"
+            app:tint="#D92D20" />
+
+        <TextView
+            android:id="@+id/tvTeamFineText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:text="Attendance fine"
+            android:textColor="#D92D20"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvTeamFineAmount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:textColor="#D92D20"
+            android:textSize="12sp"
+            tools:text="Fine : ₹700" />
     </LinearLayout>
 </LinearLayout>

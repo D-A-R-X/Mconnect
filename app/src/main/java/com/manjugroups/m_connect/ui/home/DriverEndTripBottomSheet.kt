@@ -230,6 +230,13 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
                     endTime = timeStr
                 )
 
+                // Fleet trip over → clear its notification context (only if the
+                // current activity is the fleet trip, never someone else's).
+                if (session.fieldActivity()?.kind == "fleet") {
+                    session.clearFieldActivity()
+                    com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
+                }
+
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {

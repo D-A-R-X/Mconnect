@@ -68,9 +68,13 @@ object PushTokenManager {
         // Loans / advance
         "loan-needs-review", "loan-approval-needed",
         "loan-decision", "loan-disbursed" -> CHANNEL_LOANS
-        // Real-time alerts (tamper, on-duty, geotrack)
+        // Real-time alerts (tamper, on-duty, geotrack, biometric punch).
+        // Biometric punches are server-synced attendance events the staff
+        // can't see any other way, so they ride the high-importance alerts
+        // channel for a heads-up instead of the quiet general fallback.
         "geotrack-tamper-alert", "on-duty-started",
-        "on-duty-completed", "near-planned-visit" -> CHANNEL_ALERTS
+        "on-duty-completed", "near-planned-visit",
+        "biometric-punch-in", "biometric-punch-out" -> CHANNEL_ALERTS
         else -> CHANNEL_ID
     }
 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Expense screen header background. Solid brand blue with rounded bottom
-  corners so the header reads as its own rounded card. The white totals
-  card below sits just under it, exposing the rounded "shoulders" of the
-  blue on either side — matches the reference design.
+  Expense screen header background. Flat brand blue with rounded bottom
+  corners so the header reads as its own rounded card; the white totals
+  card floats up over its lower edge, exposing the rounded "shoulders"
+  of the blue on either side — matches the reference design.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">

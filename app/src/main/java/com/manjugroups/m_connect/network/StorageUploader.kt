@@ -32,11 +32,14 @@ object StorageUploader {
         token: String,
         file: File,
         attempts: Int = 3,
+        contentType: String = "image/jpeg",
     ): Result {
         var lastError: String? = null
         repeat(attempts) { attempt ->
             try {
-                val body = file.asRequestBody("image/jpeg".toMediaType())
+                val mime = runCatching { contentType.toMediaType() }.getOrNull()
+                    ?: "application/octet-stream".toMediaType()
+                val body = file.asRequestBody(mime)
                 val response = api.uploadStorageFile(token, body)
                 val id = response.storageId
                 if (!id.isNullOrBlank()) return Result(id, null)

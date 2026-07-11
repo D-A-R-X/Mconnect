@@ -24,7 +24,7 @@
     bodyBookingStaff           — AVP / GM / Senior Manager / References / Save as
     bodyComingSoon             — fallback for non-Booking outcomes
 -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/colorSurfacePrimary"
@@ -602,4 +602,4 @@
             android:textSize="12sp"
             android:visibility="gone" />
     </LinearLayout>
-</ScrollView>
+</androidx.core.widget.NestedScrollView>

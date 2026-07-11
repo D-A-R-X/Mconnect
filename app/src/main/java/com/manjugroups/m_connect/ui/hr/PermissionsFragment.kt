@@ -213,25 +213,26 @@ class PermissionsFragment : Fragment() {
         val menuMy = popupView.findViewById<TextView>(R.id.menuMyPerm)
         val menuTeam = popupView.findViewById<View>(R.id.menuTeamPerm)
         val tvMenuTeam = popupView.findViewById<TextView>(R.id.tvMenuTeamPerm)
-        val menuAll = popupView.findViewById<TextView>(R.id.menuAllPerm)
+        val menuAll = popupView.findViewById<View>(R.id.menuAllPerm)
+        val tvMenuAll = popupView.findViewById<TextView>(R.id.tvMenuAllPerm)
 
         val activeColor = ContextCompat.getColor(requireContext(), R.color.chat_blue_top)
         val defaultColor = android.graphics.Color.parseColor("#061D3D")
 
         menuMy.setTextColor(if (scope == Scope.MY) activeColor else defaultColor)
         tvMenuTeam?.setTextColor(if (scope == Scope.TEAM) activeColor else defaultColor)
-        menuAll?.setTextColor(if (scope == Scope.ALL) activeColor else defaultColor)
+        tvMenuAll?.setTextColor(if (scope == Scope.ALL) activeColor else defaultColor)
 
-        val pendingCount = viewModel.uiState.value.pendingApprovals.size
-        val dotBadge = popupView.findViewById<TextView>(R.id.dotTeamBadge)
-        if (dotBadge != null) {
-            if (pendingCount > 0) {
-                dotBadge.visibility = View.VISIBLE
-                dotBadge.text = pendingCount.toString()
-            } else {
-                dotBadge.visibility = View.GONE
-            }
-        }
+        // Each badge = the PENDING (actionable) count in that scope. Team is
+        // already pending-only from the server; the company-wide All feed also
+        // carries approved/rejected rows, so filter to pending here. Team is
+        // hierarchy-scoped server-side, so it's genuinely 0 for a no-team user.
+        val state = viewModel.uiState.value
+        setScopeBadge(popupView.findViewById(R.id.dotTeamBadge), state.pendingApprovals.count { isPending(it) })
+        setScopeBadge(
+            popupView.findViewById(R.id.dotAllBadge),
+            state.allApprovals.distinctBy { it.id }.count { isPending(it) },
+        )
 
         menuMy.setOnClickListener {
             popup.dismiss()
@@ -261,6 +262,19 @@ class PermissionsFragment : Fragment() {
             .setDuration(150)
             .setInterpolator(android.view.animation.DecelerateInterpolator())
             .start()
+    }
+
+    private fun isPending(p: com.manjugroups.m_connect.network.PermissionData): Boolean =
+        p.status?.trim()?.lowercase() == "pending"
+
+    private fun setScopeBadge(badge: TextView?, count: Int) {
+        badge ?: return
+        if (count > 0) {
+            badge.visibility = View.VISIBLE
+            badge.text = if (count > 99) "99+" else count.toString()
+        } else {
+            badge.visibility = View.GONE
+        }
     }
 
     private fun collectState() {
@@ -308,10 +322,17 @@ class PermissionsFragment : Fragment() {
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
-        val pendingCount = state.pendingApprovals.size
-        if (pendingCount > 0 && screenMode == MODE_HISTORY && canApprove) {
+        // Collapsed selector badge tracks the CURRENT scope's pending count so
+        // it matches what's on screen (team is 0 for a no-team user; All shows
+        // the company-wide pending pile).
+        val scopePending = when (scope) {
+            Scope.MY -> mineOnly.count { isPending(it) }
+            Scope.TEAM -> state.pendingApprovals.count { isPending(it) }
+            Scope.ALL -> state.allApprovals.distinctBy { it.id }.count { isPending(it) }
+        }
+        if (scopePending > 0 && screenMode == MODE_HISTORY && canApprove) {
             binding.dotScopeBadge.visibility = View.VISIBLE
-            binding.dotScopeBadge.text = pendingCount.toString()
+            binding.dotScopeBadge.text = if (scopePending > 99) "99+" else scopePending.toString()
         } else {
             binding.dotScopeBadge.visibility = View.GONE
         }
@@ -403,7 +424,11 @@ class PermissionsFragment : Fragment() {
             }
     }
 
+    // Cancels an in-flight chunked render when a newer pass starts.
+    private var renderGen = 0
+
     private fun renderPermissions(items: List<PermissionData>, approvalMode: Boolean) {
+        renderGen++
         binding.permissionList.removeAllViews()
         binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
 
@@ -411,7 +436,7 @@ class PermissionsFragment : Fragment() {
         val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val statusFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
-        items.forEach { perm ->
+        fun bindCard(perm: PermissionData): View {
             val card = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_permission, binding.permissionList, false)
 
@@ -548,8 +573,20 @@ class PermissionsFragment : Fragment() {
                 card.alpha = 1f
             }
 
-            binding.permissionList.addView(card)
+            return card
         }
+
+        // Chunked render — see renderLeaves: hundreds of admin-scope rows in
+        // one main-thread inflate pass froze mid-range phones.
+        val gen = renderGen
+        val chunk = 24
+        fun renderChunk(start: Int) {
+            if (gen != renderGen || _binding == null) return
+            val end = minOf(start + chunk, items.size)
+            for (i in start until end) binding.permissionList.addView(bindCard(items[i]))
+            if (end < items.size) binding.permissionList.post { renderChunk(end) }
+        }
+        renderChunk(0)
     }
 
     private fun showCancelPermissionDialog(permissionId: String) {

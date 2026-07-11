@@ -1306,14 +1306,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
                 swipeArrived?.lockAsBusy("Opening camera…")
                 launchArrivalCamera()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    "Network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG
-                ).show()
+                context?.let { ctx ->
+                    Toast.makeText(
+                        ctx,
+                        "Network error: ${e.message ?: "unknown"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
@@ -1372,11 +1376,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             if (storageId == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    "Photo upload failed. Try again.",
-                    Toast.LENGTH_LONG
-                ).show()
+                context?.let { ctx ->
+                    Toast.makeText(
+                        ctx,
+                        "Photo upload failed. Try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
                 return@launch
             }
             pendingArrivalStorageId = storageId

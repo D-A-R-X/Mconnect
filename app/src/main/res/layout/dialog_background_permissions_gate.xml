@@ -186,7 +186,69 @@
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
-    <!-- ── Row 3: Battery Optimization ─────────────────────────── -->
+    <!-- ── Row 3: Physical Activity ────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/rowActivityRecognition"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp">
+
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_circle_teal">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_gate_vector_activity" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Physical Activity"
+                android:textColor="#101828"
+                android:textSize="16sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Detect walking vs. stops for accurate journey and battery savings"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchActivityRecognition"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:focusableInTouchMode="false" />
+    </LinearLayout>
+
+    <!-- ── Row 4: Battery Optimization ─────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowBatteryOpt"
         android:layout_width="match_parent"

@@ -527,7 +527,10 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         val checkRunnable = object : Runnable {
             var attempts = 0
             override fun run() {
-                val viewHolder = binding.rvMessages.findViewHolderForAdapterPosition(index)
+                // Self-rescheduling for up to 2s — the view can be destroyed
+                // mid-retry (Back from the thread), so re-resolve each tick.
+                val rv = _binding?.rvMessages ?: return
+                val viewHolder = rv.findViewHolderForAdapterPosition(index)
                 if (viewHolder != null) {
                     val viewToHighlight = viewHolder.itemView
                     val colorFrom = android.graphics.Color.parseColor("#400B61CA")
@@ -4037,7 +4040,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
                 if (ime.bottom > sys.bottom) {
                     binding.rvMessages.post {
-                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                        _binding?.rvMessages?.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
                     }
                 }
             }
@@ -4047,7 +4050,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             if (bottom < oldBottom) {
                 if (_binding != null) {
                     binding.rvMessages.post {
-                        binding.rvMessages.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
+                        _binding?.rvMessages?.scrollToPosition(chatAdapter.itemCount.coerceAtLeast(1) - 1)
                     }
                 }
             }

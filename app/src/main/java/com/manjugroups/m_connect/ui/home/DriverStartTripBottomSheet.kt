@@ -245,6 +245,15 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                     startTime = timeStr
                 )
 
+                // Adaptive tracking notification: Fleet trip + live elapsed timer.
+                session.setFieldActivity(
+                    kind = "fleet",
+                    title = "Fleet Trip",
+                    sub = "Trip in progress",
+                    startMs = System.currentTimeMillis(),
+                )
+                com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
+
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {

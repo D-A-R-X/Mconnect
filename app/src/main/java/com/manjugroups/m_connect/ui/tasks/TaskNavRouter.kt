@@ -1,8 +1,5 @@
 package com.manjugroups.m_connect.ui.tasks
 
-import android.content.Intent
-import android.net.Uri
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.manjugroups.m_connect.R
@@ -49,7 +46,7 @@ object TaskNavRouter {
         }
     }
 
-    /** Web-only task → tell the user to finish it on the web app. */
+    /** Web-only task → app-styled sheet with Open / Copy of the deep link. */
     private fun showWebTaskDialog(activity: FragmentActivity, task: DailyTaskData) {
         val label = task.title?.trim().takeUnless { it.isNullOrBlank() }
             ?: task.taskName?.trim().takeUnless { it.isNullOrBlank() }
@@ -58,15 +55,7 @@ object TaskNavRouter {
             if (path.startsWith("http")) path else WEB_APP_URL + (if (path.startsWith("/")) path else "/$path")
         } ?: WEB_APP_URL
 
-        AlertDialog.Builder(activity)
-            .setTitle("Complete on the web app")
-            .setMessage("“$label” is completed from the web app. Open it in a browser to finish this task.")
-            .setPositiveButton("Open Web") { _, _ ->
-                runCatching {
-                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                }
-            }
-            .setNegativeButton("Close", null)
-            .show()
+        WebTaskLinkBottomSheet.newInstance(title = label, url = url)
+            .show(activity.supportFragmentManager, "web_task_link")
     }
 }
