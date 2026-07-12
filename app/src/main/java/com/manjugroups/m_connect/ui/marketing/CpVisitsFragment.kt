@@ -55,14 +55,18 @@ class CpVisitsFragment : Fragment() {
     private var allVisits: List<TodayVisit> = emptyList()
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
-    // Row cache: every visit's card is inflated ONCE per (data, clock-state)
-    // generation and pill taps / search keystrokes only toggle visibility.
-    // renderList() used to removeAllViews() + re-inflate up to 200 card
-    // layouts on the main thread on every single tab switch, which is what
-    // made switching tabs feel slow on this screen.
-    private var rowCache: List<Pair<TodayVisit, View>> = emptyList()
+    // Row cache: a visit's card is inflated at most ONCE per (data,
+    // clock-state) generation — re-inflating up to 200 card layouts on every
+    // tab switch is what used to make this screen feel slow. Pagination now
+    // bounds each render to one page of rows; cards inflate lazily on the
+    // first page that shows them and come back from this cache afterwards.
+    private var rowViewCache = java.util.IdentityHashMap<TodayVisit, View>()
     private var rowsBuiltFor: List<TodayVisit>? = null
     private var rowsBuiltClockedIn: Boolean? = null
+    // Web-style rows-per-page pagination (10/25/50/100).
+    private var cpPage = 1
+    private var cpPageSize = 10
+    private var cpPageCtx: String? = null
     private var pendingEntryAnimation = true
     // True once the first CP-visit fetch has rendered. Gates the skeleton
     // so refreshes / re-opens with data already on screen don't flash the
@@ -91,6 +95,26 @@ class CpVisitsFragment : Fragment() {
         setupSearch(view)
         setupFilterPills(view)
         observeAttendanceState()
+
+        // Web-style rows-per-page footer; renderList slices to the page.
+        val paginationBar =
+            view.findViewById<com.manjugroups.m_connect.ui.common.PaginationBarView>(
+                R.id.cpvPaginationBar
+            )
+        val scrollToTop = {
+            view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)
+                .scrollTo(0, 0)
+        }
+        paginationBar.onPageChange = { p ->
+            cpPage = p
+            renderList()
+            scrollToTop()
+        }
+        paginationBar.onPageSizeChange = { size ->
+            cpPageSize = size
+            renderList()
+            scrollToTop()
+        }
 
         // Pull-to-refresh: re-runs the list load. The spinner is dismissed
         // inside loadVisits when the response (or error) lands.
@@ -123,7 +147,7 @@ class CpVisitsFragment : Fragment() {
         pendingEntryAnimation = true
         rootView = null
         // Cached rows belong to the destroyed view tree — never reattach them.
-        rowCache = emptyList()
+        rowViewCache.clear()
         rowsBuiltFor = null
         rowsBuiltClockedIn = null
         super.onDestroyView()
@@ -443,15 +467,15 @@ class CpVisitsFragment : Fragment() {
         val emptyTitle = root.findViewById<TextView>(R.id.tvCpvEmptyTitle)
         val emptySubtitle = root.findViewById<TextView>(R.id.tvCpvEmptySubtitle)
 
-        // Rebuild the row views only when the data set is replaced (new fetch)
-        // or the clock-in gate flips (row action buttons depend on it). Tab
-        // and search changes reuse the cached views below.
-        val cacheStale =
-            rowsBuiltFor !== allVisits || rowsBuiltClockedIn != isClockedIn
-        if (cacheStale) {
-            list.removeAllViews()
-            rowCache = allVisits.map { it to createRow(it, list) }
-            rowCache.forEach { (_, rowView) -> list.addView(rowView) }
+        val paginationBar =
+            root.findViewById<com.manjugroups.m_connect.ui.common.PaginationBarView>(
+                R.id.cpvPaginationBar
+            )
+
+        // Invalidate the row cache only when the data set is replaced (new
+        // fetch) or the clock-in gate flips (row action buttons depend on it).
+        if (rowsBuiltFor !== allVisits || rowsBuiltClockedIn != isClockedIn) {
+            rowViewCache.clear()
             rowsBuiltFor = allVisits
             rowsBuiltClockedIn = isClockedIn
         }
@@ -463,15 +487,32 @@ class CpVisitsFragment : Fragment() {
             return listOf(v.placeName, v.leadName, v.placeAddress)
                 .any { it?.lowercase(Locale.US)?.contains(needle) == true }
         }
+        val matched = allVisits.filter { matches(it) }
 
-        var visibleCount = 0
-        rowCache.forEach { (visit, rowView) ->
-            val show = matches(visit)
-            rowView.visibility = if (show) View.VISIBLE else View.GONE
-            if (show) visibleCount++
+        // Page resets whenever the filter / search / data context changes.
+        val pageCtx =
+            "$currentFilter|$needle|${System.identityHashCode(allVisits)}|$cpPageSize"
+        if (pageCtx != cpPageCtx) {
+            cpPageCtx = pageCtx
+            cpPage = 1
         }
+        cpPage = cpPage.coerceIn(
+            1,
+            com.manjugroups.m_connect.ui.common.PaginationBarView.maxPage(matched.size, cpPageSize),
+        )
+        paginationBar.bind(matched.size, cpPage, cpPageSize)
 
-        if (visibleCount == 0) {
+        // Attach only the current page's rows.
+        list.removeAllViews()
+        com.manjugroups.m_connect.ui.common.PaginationBarView
+            .pageOf(matched, cpPage, cpPageSize)
+            .forEach { visit ->
+                val rowView = rowViewCache.getOrPut(visit) { createRow(visit, list) }
+                rowView.visibility = View.VISIBLE
+                list.addView(rowView)
+            }
+
+        if (matched.isEmpty()) {
             list.visibility = View.GONE
             empty.visibility = View.VISIBLE
             emptyTitle.text = when (currentFilter) {

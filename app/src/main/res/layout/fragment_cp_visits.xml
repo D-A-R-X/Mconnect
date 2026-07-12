@@ -224,7 +224,12 @@
             android:fillViewport="true"
             android:overScrollMode="never">
 
-            <FrameLayout
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
@@ -236,7 +241,7 @@
                     android:orientation="vertical"
                     android:paddingHorizontal="16dp"
                     android:paddingTop="16dp"
-                    android:paddingBottom="40dp" />
+                    android:paddingBottom="6dp" />
 
                 <!-- EMPTY STATE -->
                 <LinearLayout
@@ -283,7 +288,20 @@
                         android:textColor="#667085"
                         android:textSize="13sp" />
                 </LinearLayout>
-            </FrameLayout>
+                </FrameLayout>
+
+                <!-- Web-style rows-per-page footer (10/25/50/100); scrolls
+                     with the list content, hides while the list is small. -->
+                <com.manjugroups.m_connect.ui.common.PaginationBarView
+                    android:id="@+id/cpvPaginationBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_marginBottom="40dp"
+                    android:background="@drawable/bg_pagination_card"
+                    android:visibility="gone" />
+            </LinearLayout>
         </androidx.core.widget.NestedScrollView>
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 

@@ -75,6 +75,12 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     // tapping through to this screen first.
     private var homeFence: HomeFenceData? = null
     private var isInsideHomeFence: Boolean = false
+    // Last good GPS fix this screen obtained — reused as a fallback so a
+    // momentary dropout doesn't dead-end the punch flow, and as the truth
+    // signal for the "you are in the clock-in area" banner.
+    private var lastGoodFix: Location? = null
+    // Bounded auto-retry when the first fix attempt comes back empty.
+    private var locationAutoRetries = 0
     private var geofenceWatcherJob: Job? = null
     // Geographic circle for the home fence drawn on the Clock-In Area
     // map. Stays anchored to the home pin's coords — Google Maps moves
@@ -223,7 +229,28 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
                 HomeFenceWarningDialog.show(parentFragmentManager)
                 return@setOnClickListener
             }
-            beginPunchCapture(PunchMode.PUNCH_IN)
+            if (lastGoodFix != null) {
+                beginPunchCapture(PunchMode.PUNCH_IN)
+                return@setOnClickListener
+            }
+            // No fix yet — resolve one BEFORE launching the camera, so the
+            // user isn't dead-ended by the GPS toast after taking a selfie.
+            binding.layoutPunchLoading.visibility = View.VISIBLE
+            viewLifecycleOwner.lifecycleScope.launch {
+                val fix = fetchLocationOrNull()
+                if (_binding == null) return@launch
+                binding.layoutPunchLoading.visibility = View.GONE
+                if (fix == null) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Unable to fetch GPS location. Please try again in open sky.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    updateAreaBanner()
+                    beginPunchCapture(PunchMode.PUNCH_IN)
+                }
+            }
         }
 
         loadTodayShift()
@@ -320,13 +347,37 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
 
         viewLifecycleOwner.lifecycleScope.launch {
             val location = fetchLocationOrNull()
+            if (_binding == null) return@launch
             if (location == null) {
                 binding.tvProfileLatLng.text = "Unable to fetch current GPS location"
+                updateAreaBanner()
+                // Don't strand the map at world zoom: frame the home fence —
+                // the only geo anchor we know — while waiting for a fix.
+                val fence = homeFence
+                val fLat = fence?.lat
+                val fLng = fence?.lng
+                if (fLat != null && fLng != null) {
+                    googleMap?.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(LatLng(fLat, fLng), 16f)
+                    )
+                }
+                // GPS often just needs a warm-up — retry a couple of times.
+                if (locationAutoRetries < 2) {
+                    locationAutoRetries++
+                    binding.root.postDelayed(
+                        { if (_binding != null) updateUserLocationOnMap() },
+                        5_000L,
+                    )
+                }
                 return@launch
             }
+            locationAutoRetries = 0
             val lat = location.latitude
             val lng = location.longitude
             binding.tvProfileLatLng.text = String.format(Locale.US, "Lat %.6f Long %.6f", lat, lng)
+            // Re-evaluate the home fence with the fresh fix; that path also
+            // refreshes the banner.
+            refreshGeofenceState()
 
             val map = googleMap ?: return@launch
             val point = LatLng(lat, lng)
@@ -339,6 +390,26 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             drawHomeFenceCircleOnMap()
             updateUserMarker(point)
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 17f))
+        }
+    }
+
+    /** Keep the blue banner truthful: it only claims "in the clock-in area"
+     *  once we actually have a fix and the user isn't inside the home fence. */
+    private fun updateAreaBanner() {
+        val b = _binding ?: return
+        when {
+            lastGoodFix == null -> {
+                b.tvAreaBannerTitle.text = "Getting your location…"
+                b.tvAreaBannerSubtitle.text = "Make sure GPS is on to clock in"
+            }
+            isInsideHomeFence -> {
+                b.tvAreaBannerTitle.text = "You're inside your home area"
+                b.tvAreaBannerSubtitle.text = "Move away from home to clock in"
+            }
+            else -> {
+                b.tvAreaBannerTitle.text = "You are in the clock-in area!"
+                b.tvAreaBannerSubtitle.text = "Now you can press clock in in this area"
+            }
         }
     }
 
@@ -540,14 +611,37 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     }
 
     private suspend fun fetchLocationOrNull(): Location? {
-        return try {
-            val fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())
-            val token = CancellationTokenSource().token
-            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
-                ?: fusedClient.lastLocation.await()
-        } catch (_: Exception) {
-            null
+        if (!isAdded) return lastGoodFix
+        val fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        // getCurrentLocation can hang indefinitely on a cold GPS start (the
+        // token was never cancelled before), which is what left this screen
+        // stuck on "Unable to fetch". Give each attempt a hard deadline,
+        // fall back to lastLocation, and try once more — the first request
+        // warms the GPS chip up, so the retry usually lands.
+        repeat(2) { attempt ->
+            val cts = CancellationTokenSource()
+            val current = try {
+                kotlinx.coroutines.withTimeoutOrNull(if (attempt == 0) 6_000L else 10_000L) {
+                    fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                        .await()
+                } ?: run { cts.cancel(); null }
+            } catch (_: Exception) {
+                cts.cancel()
+                null
+            }
+            val fix = current ?: try {
+                fusedClient.lastLocation.await()
+            } catch (_: Exception) {
+                null
+            }
+            if (fix != null && !(fix.latitude == 0.0 && fix.longitude == 0.0)) {
+                lastGoodFix = fix
+                return fix
+            }
         }
+        // Both attempts dry — an earlier fix from this screen is still far
+        // better than dead-ending the flow.
+        return lastGoodFix
     }
 
     // ── Home geofence enforcement (same shape as HrDashboardFragment) ──
@@ -587,12 +681,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             lastFenceStatus = "Grant location permission to enforce home fence"
             return false
         }
-        val loc = try {
-            val client = LocationServices.getFusedLocationProviderClient(requireContext())
-            val token = CancellationTokenSource().token
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
-                ?: client.lastLocation.await()
-        } catch (_: Exception) { null }
+        val loc = fetchLocationOrNull()
         if (loc == null || (loc.latitude == 0.0 && loc.longitude == 0.0)) {
             lastFenceStatus = "Waiting for GPS fix…"
             return false
@@ -615,6 +704,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             if (_binding == null) return@launch
             isInsideHomeFence = inside
             applyGeofenceToButton()
+            updateAreaBanner()
         }
     }
 

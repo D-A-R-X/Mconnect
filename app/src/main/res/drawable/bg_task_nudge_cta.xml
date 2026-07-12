@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Red gradient CTA for the task-nudge card ("Complete Task"). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="0"
+        android:startColor="#F04438"
+        android:endColor="#C8281E" />
+    <corners android:radius="14dp" />
+</shape>

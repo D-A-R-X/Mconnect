@@ -262,46 +262,37 @@ class TaskManagerFragment : Fragment() {
         emptyState?.visibility = if (list.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
     }
 
-    private fun bindRow(row: View, task: DailyTaskData) {
-        row.findViewById<TextView>(R.id.tvTaskTitle).text =
-            task.title?.takeIf { it.isNotBlank() } ?: task.taskName ?: "Task"
+    private fun bindRow(h: TaskAdapter.VH, task: DailyTaskData) {
+        h.title.text = task.title?.takeIf { it.isNotBlank() } ?: task.taskName ?: "Task"
 
-        val nameView = row.findViewById<TextView>(R.id.tvTaskName)
         val subtitle = task.taskName?.takeIf { it.isNotBlank() && it != task.title }
         if (subtitle != null) {
-            nameView.text = subtitle
-            nameView.visibility = View.VISIBLE
-        } else nameView.visibility = View.GONE
+            h.name.text = subtitle
+            h.name.visibility = View.VISIBLE
+        } else h.name.visibility = View.GONE
 
-        row.findViewById<TextView>(R.id.tvTaskDeadline).text = formatDeadline(task.deadline)
-        row.findViewById<TextView>(R.id.tvTaskAssignedTo).text =
-            task.assignedToName?.takeIf { it.isNotBlank() } ?: "—"
+        h.deadline.text = formatDeadline(task.deadline)
+        h.assignedTo.text = task.assignedToName?.takeIf { it.isNotBlank() } ?: "—"
 
-        applyStatusPill(row.findViewById(R.id.tvTaskStatusPill), task)
+        applyStatusPill(h.statusPill, task)
 
-        val categoryLabel = row.findViewById<TextView>(R.id.tvTaskCategoryLabel)
         val badge = moduleOf(task).takeIf { it.isNotBlank() && it != "Task Manager" }
             ?: task.label?.takeIf { it.isNotBlank() }
             ?: task.taskCategory?.takeIf { it.isNotBlank() }
         if (badge != null) {
-            categoryLabel.text = badge
-            categoryLabel.visibility = View.VISIBLE
-        } else categoryLabel.visibility = View.GONE
+            h.categoryLabel.text = badge
+            h.categoryLabel.visibility = View.VISIBLE
+        } else h.categoryLabel.visibility = View.GONE
 
-        val actionRow = row.findViewById<View>(R.id.rowTaskHandoffActions)
         val isOpen = task.status == "pending" || task.status == "in-progress"
         if (task.sourceReferenceType == "out_of_station_handoff" && isOpen) {
-            actionRow.visibility = View.VISIBLE
-            row.findViewById<View>(R.id.btnTaskHandoffComplete).setOnClickListener {
-                updateStatus(task.id, "completed")
-            }
-            row.findViewById<View>(R.id.btnTaskHandoffCancel).setOnClickListener {
-                updateStatus(task.id, "cancelled")
-            }
-        } else actionRow.visibility = View.GONE
+            h.actionRow.visibility = View.VISIBLE
+            h.btnComplete.setOnClickListener { updateStatus(task.id, "completed") }
+            h.btnCancel.setOnClickListener { updateStatus(task.id, "cancelled") }
+        } else h.actionRow.visibility = View.GONE
 
         // Tap → the task's mobile screen, or a "open in web" dialog for web-only.
-        row.setOnClickListener { TaskNavRouter.open(requireActivity(), task) }
+        h.itemView.setOnClickListener { TaskNavRouter.open(requireActivity(), task) }
     }
 
     private fun applyStatusPill(pill: TextView, task: DailyTaskData) {
@@ -331,7 +322,10 @@ class TaskManagerFragment : Fragment() {
                         Toast.LENGTH_SHORT,
                     ).show()
                     loadTasks(showSkeleton = false)
-                    (activity as? com.manjugroups.m_connect.MainActivity)?.refreshTasksBanner()
+                    // force — the banner must reflect the completion now, not
+                    // whenever its background throttle window reopens.
+                    (activity as? com.manjugroups.m_connect.MainActivity)
+                        ?.refreshTasksBanner(force = true)
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Update failed", Toast.LENGTH_SHORT).show()
                 }
@@ -394,11 +388,40 @@ class TaskManagerFragment : Fragment() {
         private var items: List<DailyTaskData> = emptyList()
 
         fun submit(list: List<DailyTaskData>) {
+            // Diff instead of wholesale notifyDataSetChanged so the silent
+            // re-entry refreshes don't rebind (and visibly churn) every row.
+            val old = items
+            val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                object : androidx.recyclerview.widget.DiffUtil.Callback() {
+                    override fun getOldListSize() = old.size
+                    override fun getNewListSize() = list.size
+                    override fun areItemsTheSame(o: Int, n: Int) =
+                        old[o].id == list[n].id
+
+                    override fun areContentsTheSame(o: Int, n: Int): Boolean {
+                        val a = old[o]
+                        val b = list[n]
+                        return a.status == b.status && a.deadline == b.deadline &&
+                            a.title == b.title && a.taskName == b.taskName &&
+                            a.assignedToName == b.assignedToName
+                    }
+                }
+            )
             items = list
-            notifyDataSetChanged()
+            diff.dispatchUpdatesTo(this)
         }
 
-        inner class VH(val view: View) : RecyclerView.ViewHolder(view)
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val title: TextView = view.findViewById(R.id.tvTaskTitle)
+            val name: TextView = view.findViewById(R.id.tvTaskName)
+            val deadline: TextView = view.findViewById(R.id.tvTaskDeadline)
+            val assignedTo: TextView = view.findViewById(R.id.tvTaskAssignedTo)
+            val statusPill: TextView = view.findViewById(R.id.tvTaskStatusPill)
+            val categoryLabel: TextView = view.findViewById(R.id.tvTaskCategoryLabel)
+            val actionRow: View = view.findViewById(R.id.rowTaskHandoffActions)
+            val btnComplete: View = view.findViewById(R.id.btnTaskHandoffComplete)
+            val btnCancel: View = view.findViewById(R.id.btnTaskHandoffCancel)
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
             VH(layoutInflater.inflate(R.layout.item_daily_task, parent, false))
@@ -406,7 +429,7 @@ class TaskManagerFragment : Fragment() {
         override fun getItemCount() = items.size
 
         override fun onBindViewHolder(holder: VH, position: Int) =
-            bindRow(holder.view, items[position])
+            bindRow(holder, items[position])
     }
 
     companion object {

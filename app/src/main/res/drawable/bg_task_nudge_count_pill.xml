@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Red live-count pill in the task-nudge card header ("340 pending · 235 due"). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FEF3F2" />
+    <stroke android:width="1dp" android:color="#FECDCA" />
+    <corners android:radius="99dp" />
+</shape>
