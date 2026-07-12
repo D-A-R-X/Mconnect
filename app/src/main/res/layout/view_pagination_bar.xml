@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reusable rows-per-page pagination bar (10/25/50/100), mirroring the web
+     tables' footer. Hosted by ui/common/PaginationBarView. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:orientation="horizontal"
+    tools:parentTag="android.widget.LinearLayout">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Rows"
+        android:textColor="#667085"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/pillPageSize"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_pagination_size_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="5dp"
+        android:paddingEnd="7dp"
+        android:paddingBottom="5dp">
+
+        <TextView
+            android:id="@+id/tvPageSize"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:text="10"
+            android:textColor="#344054"
+            android:textSize="12.5sp" />
+
+        <ImageView
+            android:layout_width="11dp"
+            android:layout_height="11dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="Change rows per page"
+            android:rotation="270"
+            android:src="@drawable/ic_calendar_chevron_left"
+            android:tint="#667085" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/tvPageRange"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="1–10 of 0"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <FrameLayout
+        android:id="@+id/btnPagePrev"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="10dp"
+        android:background="@drawable/bg_pagination_nav_chip">
+
+        <ImageView
+            android:layout_width="15dp"
+            android:layout_height="15dp"
+            android:layout_gravity="center"
+            android:contentDescription="Previous page"
+            android:src="@drawable/ic_calendar_chevron_left"
+            android:tint="#475467" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/btnPageNext"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_pagination_nav_chip">
+
+        <ImageView
+            android:layout_width="15dp"
+            android:layout_height="15dp"
+            android:layout_gravity="center"
+            android:contentDescription="Next page"
+            android:src="@drawable/ic_calendar_chevron_right"
+            android:tint="#475467" />
+    </FrameLayout>
+</merge>

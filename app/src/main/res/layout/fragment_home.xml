@@ -123,6 +123,50 @@
                             android:layout_height="0dp"
                             android:layout_weight="1" />
 
+                        <!-- VP dashboard date filter — visible only in the
+                             KPI-dashboard branch; tapping opens a date picker
+                             and every tile re-fetches for that day. -->
+                        <LinearLayout
+                            android:id="@+id/btnDashDateFilter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_pagination_size_pill"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="10dp"
+                            android:paddingTop="6dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="6dp"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="Pick dashboard date"
+                                android:src="@drawable/ic_calendar_days"
+                                android:tint="#475467" />
+
+                            <TextView
+                                android:id="@+id/tvDashDateFilter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:includeFontPadding="false"
+                                android:text="Today"
+                                android:textColor="#344054"
+                                android:textSize="12.5sp" />
+
+                            <ImageView
+                                android:layout_width="10dp"
+                                android:layout_height="10dp"
+                                android:layout_marginStart="4dp"
+                                android:contentDescription="@null"
+                                android:rotation="270"
+                                android:src="@drawable/ic_calendar_chevron_left"
+                                android:tint="#667085" />
+                        </LinearLayout>
+
                         <!--
                           Role dropdown removed — Driver vs Executive view
                           is now derived from the logged-in staff's

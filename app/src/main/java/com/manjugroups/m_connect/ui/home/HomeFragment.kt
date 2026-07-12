@@ -47,6 +47,12 @@ class HomeFragment : Fragment() {
     private var vpDashboardData: com.manjugroups.m_connect.network.VpDashboardResponse? = null
     private var vpDashboardLoading = false
     private var lastDashSignature: String? = null
+    // Dashboard date filter: null = today. Every tile re-fetches for this day.
+    private var vpSelectedDate: String? = null
+
+    private companion object {
+        const val DASH_DATE_RESULT_KEY = "home_dash_date_result"
+    }
     private val visitEmptySubtitle =
         "It looks like you don’t have any meetings scheduled at the moment. " +
             "This space will be updated as new meetings are added!"
@@ -91,7 +97,24 @@ class HomeFragment : Fragment() {
             }
         })
         setupPullToRefresh()
-        if (session.hasPermission("vpDashboard.view")) loadVpDashboard()
+        if (session.hasPermission("vpDashboard.view")) {
+            binding.btnDashDateFilter.setOnClickListener { showDashDatePicker() }
+            parentFragmentManager.setFragmentResultListener(
+                DASH_DATE_RESULT_KEY, viewLifecycleOwner
+            ) { _, bundle ->
+                val picked = bundle.getString(
+                    com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM
+                ).orEmpty()
+                if (picked.isBlank()) return@setFragmentResultListener
+                vpSelectedDate = if (picked == indiaToday()) null else picked
+                // Counts for another day may coincidentally match — clear the
+                // cached signature so the header swap is never skipped.
+                lastDashSignature = null
+                applyDashHeader()
+                loadVpDashboard(force = true)
+            }
+            loadVpDashboard()
+        }
         setupHomeScrollAnimation()
         collectState()
         collectEvents()
@@ -437,11 +460,13 @@ class HomeFragment : Fragment() {
         // the dashboard endpoint, not the visits flow, so short-circuit here
         // before any trip rendering / empty-state logic.
         if (session.hasPermission("vpDashboard.view")) {
-            binding.tvVisitSectionTitle.text = "Today's Overview"
+            applyDashHeader()
             // The globe icon belongs to the "Today's Trip" view, not the KPI
-            // dashboard — hide it so the header reads cleanly.
+            // dashboard — hide it so the header reads cleanly, and surface
+            // the date filter in its place.
             binding.ivVisitTitleGlobe.visibility = View.GONE
             binding.tvVisitCountBadge.visibility = View.GONE
+            binding.btnDashDateFilter.visibility = View.VISIBLE
             binding.visitListContent.visibility = View.VISIBLE
             binding.visitEmptyContent.visibility = View.GONE
             renderVpDashboard()
@@ -582,24 +607,59 @@ class HomeFragment : Fragment() {
 
     // ── VP / Management Dashboard ───────────────────────────────────────────
 
-    private fun loadVpDashboard() {
-        if (vpDashboardLoading) return
+    private fun loadVpDashboard(force: Boolean = false) {
+        if (vpDashboardLoading && !force) return
         vpDashboardLoading = true
+        val requestedDate = vpSelectedDate
         viewLifecycleOwner.lifecycleScope.launch {
             // Prefer the company-wide aggregate route; when it isn't deployed
             // (404), fall back to counting what the live per-screen endpoints
-            // already expose (CP + Site visits for today).
-            val resp = runCatching { api.getVpDashboard(session.bearerToken, null) }.getOrNull()
+            // already expose (CP + Site visits for the selected day).
+            val resp = runCatching {
+                api.getVpDashboard(session.bearerToken, requestedDate)
+            }.getOrNull()
             val data = if (resp?.success == true) resp
-                else runCatching { computeVpFallback() }.getOrNull()
+                else runCatching { computeVpFallback(requestedDate ?: indiaToday()) }.getOrNull()
             vpDashboardLoading = false
             if (view == null) return@launch
+            // The user picked a different date while this was in flight —
+            // that newer load owns the render; drop this stale result.
+            if (requestedDate != vpSelectedDate) return@launch
             if (data != null) {
                 vpDashboardData = data
                 renderVpDashboard()
             }
         }
     }
+
+    /** Date-filter picker for the dashboard: every tile re-fetches for the
+     *  picked day; picking today returns to the live "Today's Overview".
+     *  Uses the app's own calendar sheet (single-select mode), not the stock
+     *  Android dialog. */
+    private fun showDashDatePicker() {
+        val initial = vpSelectedDate ?: indiaToday()
+        com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
+            title = "Dashboard Date",
+            subtitle = "Pick a day to view its overview",
+            initialFrom = initial,
+            initialTo = initial,
+            resultKey = DASH_DATE_RESULT_KEY,
+            singleSelect = true,
+        ).show(parentFragmentManager, "dash_date_picker")
+    }
+
+    /** Header + date-chip copy for the current dashboard date. */
+    private fun applyDashHeader() {
+        val day = vpSelectedDate
+        binding.tvVisitSectionTitle.text =
+            if (day == null) "Today's Overview" else "Overview"
+        binding.tvDashDateFilter.text = if (day == null) "Today" else prettyDashDate(day)
+    }
+
+    private fun prettyDashDate(d: String): String = runCatching {
+        java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US)
+            .format(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(d)!!)
+    }.getOrDefault(d)
 
     /** India-local yyyy-MM-dd — matches how a visit's scheduledDate is stored. */
     private fun indiaToday(): String =
@@ -609,8 +669,8 @@ class HomeFragment : Fragment() {
 
     /**
      * Fallback dashboard data when the `/api/dashboard/vp` aggregate isn't
-     * deployed. Counts today's metrics from the same live endpoints the
-     * individual screens use (admins/viewAll get the company-wide pool):
+     * deployed. Counts the selected day's metrics from the same live endpoints
+     * the individual screens use (admins/viewAll get the company-wide pool):
      *  - CP + Site visits  → geoApi.getMyMarketingCpVisits / getMySiteVisits
      *  - Present           → api.getAllAttendance (approvedAttendance)
      *  - Bookings          → api.listMyBookings (excl draft/cancelled)
@@ -620,11 +680,10 @@ class HomeFragment : Fragment() {
      * pending-verification queue, not the approved total) — those stay at -1
      * and render as "–". Returns null only if every call fails.
      */
-    private suspend fun computeVpFallback(): com.manjugroups.m_connect.network.VpDashboardResponse? {
-        val today = indiaToday()
-        val cp = runCatching { geoApi.getMyMarketingCpVisits(session.bearerToken, today, today) }.getOrNull()
-        val sv = runCatching { geoApi.getMySiteVisits(session.bearerToken, today, today) }.getOrNull()
-        val att = runCatching { api.getAllAttendance(session.bearerToken, today, today) }.getOrNull()
+    private suspend fun computeVpFallback(day: String): com.manjugroups.m_connect.network.VpDashboardResponse? {
+        val cp = runCatching { geoApi.getMyMarketingCpVisits(session.bearerToken, day, day) }.getOrNull()
+        val sv = runCatching { geoApi.getMySiteVisits(session.bearerToken, day, day) }.getOrNull()
+        val att = runCatching { api.getAllAttendance(session.bearerToken, day, day) }.getOrNull()
         val bk = runCatching { api.listMyBookings(session.bearerToken) }.getOrNull()
 
         val cpOk = cp?.success == true
@@ -636,7 +695,7 @@ class HomeFragment : Fragment() {
         val cancelled = setOf("cancelled", "canceled", "cancel")
         val completed = setOf("completed", "complete", "done", "closed")
         val present = setOf("present", "half-day", "half day", "halfday")
-        fun onToday(s: String?) = s?.startsWith(today) == true
+        fun onToday(s: String?) = s?.startsWith(day) == true
         fun lc(s: String?) = (s ?: "").lowercase(java.util.Locale.US)
 
         val cpRows = cp?.visits.orEmpty().filter { onToday(it.scheduledDate) }
@@ -647,6 +706,7 @@ class HomeFragment : Fragment() {
 
         return com.manjugroups.m_connect.network.VpDashboardResponse(
             success = true,
+            date = day,
             present = if (attOk) attRows.count { lc(it.approvedAttendance) in present } else -1,
             absent = if (attOk) attRows.count { lc(it.approvedAttendance) == "absent" } else -1,
             incomingCalls = -1, outboundCalls = -1,
@@ -674,7 +734,9 @@ class HomeFragment : Fragment() {
         val ctx = context ?: return
         val d = vpDashboardData
         val signature = if (d == null) "loading" else buildString {
-            append("vp|").append(d.present).append('|').append(d.absent).append('|')
+            append("vp|").append(vpSelectedDate ?: "today").append('|')
+                .append(d.totalStaff).append('|')
+                .append(d.present).append('|').append(d.absent).append('|')
                 .append(d.cpVisitsFixed).append('|').append(d.cpVisitsCompleted).append('|')
                 .append(d.svVisitsFixed).append('|').append(d.svVisitsCompleted).append('|')
                 .append(d.incomingCalls).append('|').append(d.outboundCalls).append('|')
@@ -720,8 +782,16 @@ class HomeFragment : Fragment() {
             fun nz(v: Int): String = if (v < 0) "–" else v.toString()
             fun sec(v: Int, suffix: String): String? = if (v < 0) null else "$v $suffix"
             val collText = if (d.collectionTotal < 0) "–" else "₹${inr.format(d.collectionTotal.toLong())}"
+            // "173 present of 1000 staff" — the aggregate route reports the
+            // company-wide active headcount; the fallback path doesn't, so
+            // it degrades to the plain absent count.
+            val presentSec = when {
+                d.present < 0 -> null
+                d.totalStaff > 0 -> "of ${d.totalStaff} · ${d.absent} absent"
+                else -> sec(d.absent, "absent")
+            }
             listOf(
-                DashTile(R.drawable.ic_chat_users, "Present", nz(d.present), sec(d.absent, "absent"), "#0F6E56", "#E1F5EE", "#04342C") {
+                DashTile(R.drawable.ic_chat_users, "Present", nz(d.present), presentSec, "#0F6E56", "#E1F5EE", "#04342C") {
                     openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
                 },
                 DashTile(R.drawable.ic_cp_staff, "CP Visits", nz(d.cpVisitsFixed), sec(d.cpVisitsCompleted, "completed"), "#185FA5", "#E6F1FB", "#042C53") {
@@ -736,7 +806,7 @@ class HomeFragment : Fragment() {
                 DashTile(R.drawable.ic_custom_phone, "Outbound Calls", nz(d.outboundCalls), null, "#993C1D", "#FAECE7", "#4A1B0C") {
                     openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
                 },
-                DashTile(R.drawable.ic_cash_bills, "Collections", collText, sec(d.collectionCount, "today"), "#854F0B", "#FAEEDA", "#412402") {
+                DashTile(R.drawable.ic_cash_bills, "Collections", collText, sec(d.collectionCount, "receipts"), "#854F0B", "#FAEEDA", "#412402") {
                     openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
                 },
                 DashTile(R.drawable.ic_booking_calendar, "Bookings", nz(d.bookingCount), null, "#993556", "#FBEAF0", "#4B1528") {

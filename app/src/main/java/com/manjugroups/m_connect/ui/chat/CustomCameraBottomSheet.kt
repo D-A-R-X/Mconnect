@@ -560,13 +560,47 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
         tvReviewConfirm.text = if (isVideo) "Use Video" else "Use Photo"
         if (isVideo) {
+            // The live CameraX preview and the VideoView are both
+            // SurfaceViews; some devices refuse to hand the reviewed clip a
+            // playable surface while the camera pipeline is still streaming
+            // underneath ("Can't play this video."). Release the camera for
+            // the duration of the review — exitReview rebinds it.
+            cameraProvider?.unbindAll()
+            viewFinder.visibility = View.INVISIBLE
+
             imgReviewPhoto.visibility = View.GONE
             videoReview.visibility = View.VISIBLE
-            videoReview.setVideoURI(uri)
+            // Consume playback errors ourselves: without a listener VideoView
+            // pops the system "Can't play this video." dialog. Retry once
+            // (the surface may not have been ready on the first attempt);
+            // the recorded FILE itself is fine — Finalize succeeded — so the
+            // tick still hands over a working video even if preview fails.
+            var retriedPlayback = false
+            videoReview.setOnErrorListener { _, what, extra ->
+                android.util.Log.e(
+                    "CustomCamera", "Review playback error what=$what extra=$extra"
+                )
+                if (!retriedPlayback) {
+                    retriedPlayback = true
+                    videoReview.postDelayed({
+                        if (isAdded && reviewIsVideo && reviewOverlay.visibility == View.VISIBLE) {
+                            videoReview.setVideoURI(uri)
+                        }
+                    }, 200)
+                } else if (isAdded) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Preview unavailable — the video is saved; tap ✓ to use it",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                true
+            }
             videoReview.setOnPreparedListener { mp ->
                 mp.isLooping = true
                 videoReview.start()
             }
+            videoReview.setVideoURI(uri)
         } else {
             videoReview.visibility = View.GONE
             imgReviewPhoto.visibility = View.VISIBLE
@@ -584,6 +618,13 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         imgReviewPhoto.visibility = View.GONE
         imgReviewPhoto.setImageDrawable(null)
         reviewOverlay.visibility = View.GONE
+
+        // Video reviews release the camera (see enterReview) — bring the
+        // live preview back before restoring the chrome.
+        if (reviewIsVideo) {
+            viewFinder.visibility = View.VISIBLE
+            bindCameraUseCases()
+        }
 
         // Restore the live-camera chrome.
         tvTitle.text = if (activeMode == Mode.VIDEO) "Video" else "Camera"
