@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft pill for the task-nudge card's status chip / View Details action.
+     Base colour is overridden at runtime via backgroundTintList. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F4EBFF" />
+    <corners android:radius="99dp" />
+</shape>

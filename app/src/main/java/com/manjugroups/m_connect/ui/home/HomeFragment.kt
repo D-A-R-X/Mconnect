@@ -42,6 +42,11 @@ class HomeFragment : Fragment() {
     private val viewModel: HomeViewModel by viewModels()
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+    private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
+    // VP / Management dashboard (replaces Today's Trip for vpDashboard.view holders).
+    private var vpDashboardData: com.manjugroups.m_connect.network.VpDashboardResponse? = null
+    private var vpDashboardLoading = false
+    private var lastDashSignature: String? = null
     private val visitEmptySubtitle =
         "It looks like you don’t have any meetings scheduled at the moment. " +
             "This space will be updated as new meetings are added!"
@@ -86,6 +91,7 @@ class HomeFragment : Fragment() {
             }
         })
         setupPullToRefresh()
+        if (session.hasPermission("vpDashboard.view")) loadVpDashboard()
         setupHomeScrollAnimation()
         collectState()
         collectEvents()
@@ -426,6 +432,21 @@ class HomeFragment : Fragment() {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
         setVisitSkeletonVisible(false)
+        // VP / Management dashboard replaces the Today's Trip list for anyone
+        // with vpDashboard.view (super-admins included). Its numbers come from
+        // the dashboard endpoint, not the visits flow, so short-circuit here
+        // before any trip rendering / empty-state logic.
+        if (session.hasPermission("vpDashboard.view")) {
+            binding.tvVisitSectionTitle.text = "Today's Overview"
+            // The globe icon belongs to the "Today's Trip" view, not the KPI
+            // dashboard — hide it so the header reads cleanly.
+            binding.ivVisitTitleGlobe.visibility = View.GONE
+            binding.tvVisitCountBadge.visibility = View.GONE
+            binding.visitListContent.visibility = View.VISIBLE
+            binding.visitEmptyContent.visibility = View.GONE
+            renderVpDashboard()
+            return
+        }
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
@@ -464,6 +485,14 @@ class HomeFragment : Fragment() {
         binding.visitListContent.visibility = View.VISIBLE
         binding.visitEmptyContent.visibility = View.GONE
 
+        // Super admins see the WHOLE company's trips (100s). Inflating a card
+        // per trip ANRs Home and lags/crashes on every return to it, so show
+        // compact CP / SV / Fleet counts instead — no per-visit inflation.
+        if (session.isAdmin) {
+            renderAdminTripSummary(visits)
+            return
+        }
+
         // Only re-inflate when the visible list actually changed. The childCount
         // check also forces a rebuild after view recreation (fresh empty
         // container) even if the signature happens to match.
@@ -484,6 +513,355 @@ class HomeFragment : Fragment() {
             val itemView = createVisitItem(visit, index, displayCount, state.hasOpenSession)
             binding.visitListContent.addView(itemView)
         }
+    }
+
+    /**
+     * Admin/super-admin view of Today's Trip: three compact CP / SV / Fleet
+     * count cards instead of a card per (100s of) trips. Only the counting
+     * loop runs — no layout inflation — so Home no longer janks or crashes for
+     * admins, and returning to it is instant.
+     */
+    private fun renderAdminTripSummary(visits: List<TodayVisit>) {
+        var cp = 0
+        var sv = 0
+        var fleet = 0
+        visits.forEach { v ->
+            when {
+                v.tripType?.lowercase(Locale.getDefault()) == "fleet" -> fleet++
+                v.cpVisit != null || v.visitCategory == "direct_cp" ||
+                    v.visitCategory == "sv_cum_cp" || v.tripType == "client_place" -> cp++
+                else -> sv++
+            }
+        }
+        // renderVisitCard fires from ~7 flows; rebuild only when a count moves.
+        val signature = "admin|$cp|$sv|$fleet"
+        if (signature == lastVisitRenderSignature && binding.visitListContent.childCount == 1) return
+        lastVisitRenderSignature = signature
+
+        val ctx = requireContext()
+        binding.visitListContent.removeAllViews()
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        row.addView(adminCountCard(ctx, "CP Visits", cp, "#0B61CA", 0))
+        row.addView(adminCountCard(ctx, "Site Visits", sv, "#7C3AED", dpx(8)))
+        row.addView(adminCountCard(ctx, "Fleet", fleet, "#059669", dpx(8)))
+        binding.visitListContent.addView(row)
+    }
+
+    private fun adminCountCard(
+        ctx: android.content.Context, label: String, count: Int, colorHex: String, startMargin: Int,
+    ): View {
+        val card = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dpx(10), dpx(18), dpx(10), dpx(18))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = startMargin }
+        }
+        card.addView(TextView(ctx).apply {
+            text = count.toString()
+            textSize = 26f
+            setTextColor(Color.parseColor(colorHex))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        card.addView(TextView(ctx).apply {
+            text = label
+            textSize = 12f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dpx(4), 0, 0)
+        })
+        return card
+    }
+
+    private fun dpx(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    // ── VP / Management Dashboard ───────────────────────────────────────────
+
+    private fun loadVpDashboard() {
+        if (vpDashboardLoading) return
+        vpDashboardLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Prefer the company-wide aggregate route; when it isn't deployed
+            // (404), fall back to counting what the live per-screen endpoints
+            // already expose (CP + Site visits for today).
+            val resp = runCatching { api.getVpDashboard(session.bearerToken, null) }.getOrNull()
+            val data = if (resp?.success == true) resp
+                else runCatching { computeVpFallback() }.getOrNull()
+            vpDashboardLoading = false
+            if (view == null) return@launch
+            if (data != null) {
+                vpDashboardData = data
+                renderVpDashboard()
+            }
+        }
+    }
+
+    /** India-local yyyy-MM-dd — matches how a visit's scheduledDate is stored. */
+    private fun indiaToday(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+        }.format(java.util.Date())
+
+    /**
+     * Fallback dashboard data when the `/api/dashboard/vp` aggregate isn't
+     * deployed. Counts today's metrics from the same live endpoints the
+     * individual screens use (admins/viewAll get the company-wide pool):
+     *  - CP + Site visits  → geoApi.getMyMarketingCpVisits / getMySiteVisits
+     *  - Present           → api.getAllAttendance (approvedAttendance)
+     *  - Bookings          → api.listMyBookings (excl draft/cancelled)
+     * Incoming/Outbound calls, Collections, and Registrations have no clean
+     * live company-wide source (calls + registrations live only behind the
+     * un-deployed dashboard routes; the for-accounts collections endpoint is a
+     * pending-verification queue, not the approved total) — those stay at -1
+     * and render as "–". Returns null only if every call fails.
+     */
+    private suspend fun computeVpFallback(): com.manjugroups.m_connect.network.VpDashboardResponse? {
+        val today = indiaToday()
+        val cp = runCatching { geoApi.getMyMarketingCpVisits(session.bearerToken, today, today) }.getOrNull()
+        val sv = runCatching { geoApi.getMySiteVisits(session.bearerToken, today, today) }.getOrNull()
+        val att = runCatching { api.getAllAttendance(session.bearerToken, today, today) }.getOrNull()
+        val bk = runCatching { api.listMyBookings(session.bearerToken) }.getOrNull()
+
+        val cpOk = cp?.success == true
+        val svOk = sv?.success == true
+        val attOk = att?.success == true
+        val bkOk = bk?.success == true
+        if (!cpOk && !svOk && !attOk && !bkOk) return null
+
+        val cancelled = setOf("cancelled", "canceled", "cancel")
+        val completed = setOf("completed", "complete", "done", "closed")
+        val present = setOf("present", "half-day", "half day", "halfday")
+        fun onToday(s: String?) = s?.startsWith(today) == true
+        fun lc(s: String?) = (s ?: "").lowercase(java.util.Locale.US)
+
+        val cpRows = cp?.visits.orEmpty().filter { onToday(it.scheduledDate) }
+        val svRows = sv?.visits.orEmpty().filter { onToday(it.scheduledDate) }
+        val attRows = att?.records.orEmpty().filter { onToday(it.date) }
+        val bkRows = bk?.bookings.orEmpty()
+            .filter { onToday(it.bookingDate) && lc(it.status) !in cancelled && lc(it.status) != "draft" }
+
+        return com.manjugroups.m_connect.network.VpDashboardResponse(
+            success = true,
+            present = if (attOk) attRows.count { lc(it.approvedAttendance) in present } else -1,
+            absent = if (attOk) attRows.count { lc(it.approvedAttendance) == "absent" } else -1,
+            incomingCalls = -1, outboundCalls = -1,
+            cpVisitsFixed = if (cpOk) cpRows.count { lc(it.status) !in cancelled } else -1,
+            cpVisitsCompleted = if (cpOk) cpRows.count { lc(it.status) in completed } else -1,
+            svVisitsFixed = if (svOk) svRows.count { lc(it.status) !in cancelled } else -1,
+            svVisitsCompleted = if (svOk) svRows.count { lc(it.status) in completed } else -1,
+            collectionTotal = -1.0,
+            collectionCount = -1,
+            bookingCount = if (bkOk) bkRows.size else -1,
+            registrationCount = -1,
+        )
+    }
+
+    private data class DashTile(
+        val iconRes: Int, val label: String, val primary: String, val secondary: String?,
+        // colorHex = icon (ramp 600), bgHex = tint (ramp 50), deepHex = chip text (ramp 900)
+        val colorHex: String, val bgHex: String, val deepHex: String, val onTap: () -> Unit,
+    )
+
+    /** Grid of KPI tiles (2 per row) driven by the dashboard endpoint. Each
+     *  tile shows a count and opens its detail screen. Guarded by a value
+     *  signature so the ~7 render flows don't rebuild it on every emit. */
+    private fun renderVpDashboard() {
+        val ctx = context ?: return
+        val d = vpDashboardData
+        val signature = if (d == null) "loading" else buildString {
+            append("vp|").append(d.present).append('|').append(d.absent).append('|')
+                .append(d.cpVisitsFixed).append('|').append(d.cpVisitsCompleted).append('|')
+                .append(d.svVisitsFixed).append('|').append(d.svVisitsCompleted).append('|')
+                .append(d.incomingCalls).append('|').append(d.outboundCalls).append('|')
+                .append(d.collectionTotal).append('|').append(d.bookingCount).append('|')
+                .append(d.registrationCount)
+        }
+        if (signature == lastDashSignature && binding.visitListContent.childCount > 0) return
+        lastDashSignature = signature
+
+        val tiles = if (d == null) {
+            // No data yet (endpoint pending on prod): still show the full
+            // coloured design with "–" placeholders, and keep every tile
+            // tappable so the redirects work before the counts land.
+            listOf(
+                DashTile(R.drawable.ic_chat_users, "Present", "–", null, "#0F6E56", "#E1F5EE", "#04342C") {
+                    openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
+                },
+                DashTile(R.drawable.ic_cp_staff, "CP Visits", "–", null, "#185FA5", "#E6F1FB", "#042C53") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
+                },
+                DashTile(R.drawable.ic_map_pin, "Site Visits", "–", null, "#534AB7", "#EEEDFE", "#26215C") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
+                },
+                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", "–", null, "#3B6D11", "#EAF3DE", "#173404") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
+                },
+                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", "–", null, "#993C1D", "#FAECE7", "#4A1B0C") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
+                },
+                DashTile(R.drawable.ic_cash_bills, "Collections", "–", null, "#854F0B", "#FAEEDA", "#412402") {
+                    openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
+                },
+                DashTile(R.drawable.ic_booking_calendar, "Bookings", "–", null, "#993556", "#FBEAF0", "#4B1528") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment())
+                },
+                DashTile(R.drawable.ic_loan_document, "Registrations", "–", null, "#A32D2D", "#FCEBEB", "#501313") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.RegistrationsFragment.newInstance())
+                },
+            )
+        } else {
+            val inr = java.text.NumberFormat.getIntegerInstance(java.util.Locale("en", "IN"))
+            // -1 means "not available from a live endpoint yet" → show "–".
+            fun nz(v: Int): String = if (v < 0) "–" else v.toString()
+            fun sec(v: Int, suffix: String): String? = if (v < 0) null else "$v $suffix"
+            val collText = if (d.collectionTotal < 0) "–" else "₹${inr.format(d.collectionTotal.toLong())}"
+            listOf(
+                DashTile(R.drawable.ic_chat_users, "Present", nz(d.present), sec(d.absent, "absent"), "#0F6E56", "#E1F5EE", "#04342C") {
+                    openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
+                },
+                DashTile(R.drawable.ic_cp_staff, "CP Visits", nz(d.cpVisitsFixed), sec(d.cpVisitsCompleted, "completed"), "#185FA5", "#E6F1FB", "#042C53") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
+                },
+                DashTile(R.drawable.ic_map_pin, "Site Visits", nz(d.svVisitsFixed), sec(d.svVisitsCompleted, "completed"), "#534AB7", "#EEEDFE", "#26215C") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
+                },
+                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", nz(d.incomingCalls), null, "#3B6D11", "#EAF3DE", "#173404") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
+                },
+                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", nz(d.outboundCalls), null, "#993C1D", "#FAECE7", "#4A1B0C") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
+                },
+                DashTile(R.drawable.ic_cash_bills, "Collections", collText, sec(d.collectionCount, "today"), "#854F0B", "#FAEEDA", "#412402") {
+                    openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
+                },
+                DashTile(R.drawable.ic_booking_calendar, "Bookings", nz(d.bookingCount), null, "#993556", "#FBEAF0", "#4B1528") {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment())
+                },
+                DashTile(R.drawable.ic_loan_document, "Registrations", nz(d.registrationCount), null, "#A32D2D", "#FCEBEB", "#501313") {
+                    openScreen(com.manjugroups.m_connect.ui.dashboard.RegistrationsFragment.newInstance())
+                },
+            )
+        }
+
+        binding.visitListContent.removeAllViews()
+        var i = 0
+        while (i < tiles.size) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { if (i > 0) topMargin = dpx(8) }
+            }
+            row.addView(dashTile(ctx, tiles[i], 0))
+            if (i + 1 < tiles.size) row.addView(dashTile(ctx, tiles[i + 1], dpx(8)))
+            binding.visitListContent.addView(row)
+            i += 2
+        }
+    }
+
+    private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {
+        val iconColor = Color.parseColor(t.colorHex)
+        val tintBg = Color.parseColor(t.bgHex)
+
+        // Elevated, ripple-backed card. Height = MATCH_PARENT so both tiles in
+        // a row equalise to the taller one (even grid); minHeight stops the
+        // no-secondary tiles from collapsing.
+        val card = com.google.android.material.card.MaterialCardView(ctx).apply {
+            radius = dpx(18).toFloat()
+            cardElevation = dpx(2).toFloat()
+            strokeWidth = 0
+            setCardBackgroundColor(Color.WHITE)
+            minimumHeight = dpx(122)
+            isClickable = true
+            isFocusable = true
+            rippleColor = android.content.res.ColorStateList.valueOf(
+                androidx.core.graphics.ColorUtils.setAlphaComponent(iconColor, 20)
+            )
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+                .apply { marginStart = startMargin }
+            setOnClickListener { t.onTap() }
+        }
+
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpx(15), dpx(15), dpx(15), dpx(15))
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+
+        // Tinted circular chip (ramp-50 fill) holding a vector icon (ramp-600).
+        content.addView(android.widget.FrameLayout(ctx).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(tintBg)
+            }
+            layoutParams = LinearLayout.LayoutParams(dpx(40), dpx(40))
+            addView(android.widget.ImageView(ctx).apply {
+                setImageResource(t.iconRes)
+                setColorFilter(iconColor)
+                layoutParams = android.widget.FrameLayout.LayoutParams(dpx(20), dpx(20), android.view.Gravity.CENTER)
+            })
+        })
+
+        // Value — dark, so the number reads as the hero (not tinted).
+        content.addView(TextView(ctx).apply {
+            text = t.primary
+            textSize = 25f
+            setTextColor(Color.parseColor("#0B1728"))
+            typeface = interBoldOrDefault()
+            maxLines = 1
+            setPadding(0, dpx(12), 0, 0)
+        })
+        content.addView(TextView(ctx).apply {
+            text = t.label
+            textSize = 13f
+            setTextColor(Color.parseColor("#667085"))
+            typeface = interFontOrDefault()
+            setPadding(0, dpx(3), 0, 0)
+        })
+        // Secondary count as a soft colour pill (ramp-50 fill + ramp-900 text).
+        t.secondary?.let { sec ->
+            content.addView(TextView(ctx).apply {
+                text = sec
+                textSize = 11f
+                setTextColor(Color.parseColor(t.deepHex))
+                typeface = interFontOrDefault()
+                setPadding(dpx(9), dpx(3), dpx(9), dpx(3))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dpx(20).toFloat()
+                    setColor(tintBg)
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dpx(9) }
+            })
+        }
+
+        card.addView(content)
+        return card
+    }
+
+    private fun interBoldOrDefault(): android.graphics.Typeface =
+        runCatching { androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_bold) }
+            .getOrNull() ?: android.graphics.Typeface.DEFAULT_BOLD
+
+    private fun interFontOrDefault(): android.graphics.Typeface =
+        runCatching { androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium) }
+            .getOrNull() ?: android.graphics.Typeface.DEFAULT
+
+    private fun openScreen(fragment: androidx.fragment.app.Fragment) {
+        parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
+            .replace(R.id.fragmentContainer, fragment)
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun createVisitItem(

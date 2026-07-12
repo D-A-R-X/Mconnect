@@ -180,16 +180,16 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showOriginalDocumentPicker() {
-        val docs = arrayOf("Aadhaar Card", "PAN Card", "Salary Slip", "Bond Certificate", "Other")
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select Original Document")
-            .setItems(docs) { _, which ->
-                val doc = docs[which]
-                originalDocument = doc
-                binding.tvOriginalDocument.text = doc
-                binding.tvOriginalDocument.setTextColor(android.graphics.Color.parseColor("#101828"))
-            }
-            .show()
+        val docs = listOf("Aadhaar Card", "PAN Card", "Salary Slip", "Bond Certificate", "Other")
+        val options = docs.map { com.manjugroups.m_connect.ui.common.SearchableOption(it, it) }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            requireContext(), "Select Original Document", options,
+        ) { doc ->
+            if (_binding == null) return@show
+            originalDocument = doc
+            binding.tvOriginalDocument.text = doc
+            binding.tvOriginalDocument.setTextColor(android.graphics.Color.parseColor("#101828"))
+        }
     }
 
     private fun showDatePicker(onDateSelected: (year: Int, month: Int, day: Int) -> Unit) {

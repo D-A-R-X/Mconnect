@@ -208,7 +208,16 @@ class BookingsFragment : Fragment() {
                 hasLoadedOnce = true
                 skeletonContainer?.visibility = View.GONE
                 refreshLayout?.isRefreshing = false
-                renderList()
+                // renderList() runs in finally (after both the success and the
+                // error path), so guard it: a render/inflate failure must fall
+                // back to the empty state rather than crash the whole screen.
+                try {
+                    renderList()
+                } catch (t: Throwable) {
+                    android.util.Log.e("BookingsFragment", "renderList failed", t)
+                    listContainer?.visibility = View.GONE
+                    emptyState?.visibility = View.VISIBLE
+                }
             }
         }
     }

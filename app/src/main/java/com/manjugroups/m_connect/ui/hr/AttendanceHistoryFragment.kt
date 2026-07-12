@@ -340,6 +340,12 @@ class AttendanceHistoryFragment : Fragment() {
             binding.emptyState.visibility = View.GONE
         }
 
+        // Thread the active search into the All-tab fetch so the backend returns
+        // the searched person's FULL date range, not the capped ~750 newest
+        // company-wide rows (which, after a "Last month" filter, collapsed to
+        // just the last few days).
+        val allSearch = binding.etSearch.text?.toString()?.trim()?.ifBlank { null }
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val token = session.bearerToken
@@ -366,9 +372,10 @@ class AttendanceHistoryFragment : Fragment() {
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {
-                    // Honor the date filter (e.g. "Last month") instead of the
-                    // all-time 2000–2100 window that ignored it.
-                    runCatching { api.getAllAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    // Honor the date filter (e.g. "Last month") AND any active
+                    // search — search bypasses the backend's ~750-row cap and
+                    // returns the full range for that person.
+                    runCatching { api.getAllAttendance(token, filterFromDate, filterToDate, search = allSearch) }.getOrNull()
                 }
                 val finesDeferred = async {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
@@ -1386,22 +1393,29 @@ class AttendanceHistoryFragment : Fragment() {
             val outLabel = formatTime(record.punchOutTime) ?: "--"
             tvRange.text = "$inLabel · $outLabel"
 
-            // Active-fine badge — only on the All tab, when the staff has a
-            // matching active fine.
-            val tvFine = card.findViewById<TextView>(R.id.tvHistoryItemFine)
-            val fine = if (showFines) cachedFines.firstOrNull {
-                it.staffName.equals(record.staffName, ignoreCase = true) ||
-                    (!record.employeeId.isNullOrBlank() && it.employeeId.equals(record.employeeId, ignoreCase = true))
-            } else null
-            if (fine != null) {
-                tvFine.visibility = View.VISIBLE
-                tvFine.text = String.format(Locale.getDefault(), "Fine: ₹%.0f", fine.amount)
+            // Attendance-fine banner — the REAL per-DAY late fine for THIS
+            // record (server-computed lateFineDeduction), shown only when it's
+            // actually > 0. Previously this matched cachedFines by staff name,
+            // which smeared one active monthly fine onto every one of that
+            // person's cards (the "₹10 on every date" bug for a staffer with
+            // no fine). Now a day with no fine shows no banner.
+            val fineBanner = card.findViewById<View>(R.id.llTeamFinesBanner)
+            val tvFineAmount = card.findViewById<TextView>(R.id.tvTeamFineAmount)
+            val fineAmt = (record.lateFineDeduction ?: record.fineAmount) ?: 0.0
+            if (showFines && fineAmt > 0.0) {
+                fineBanner.visibility = View.VISIBLE
+                tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fineAmt)
             } else {
-                tvFine.visibility = View.GONE
+                fineBanner.visibility = View.GONE
             }
 
+            // Name + employee id so two DIFFERENT staff who share a name (e.g.
+            // duplicate "DHIVAGAR.B" accounts) are distinguishable — each row's
+            // photo is correct for its own staffId; the id makes that clear.
+            val name = record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
+            val empId = record.employeeId?.trim().orEmpty()
             card.findViewById<TextView>(R.id.tvStaffName).text =
-                record.staffName?.trim().orEmpty().ifBlank { "Staff Member" }
+                if (empId.isNotBlank()) "$name · $empId" else name
             card.findViewById<ImageView>(R.id.ivStaffAvatar)
                 .loadUserAvatar(record.staffPhotoUrl, record.staffName)
     }

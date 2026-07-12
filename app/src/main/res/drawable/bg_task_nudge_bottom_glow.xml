@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Urgency treatment: soft red gradient rising from the bottom of the
+     task-nudge card so the pending task reads as "needs doing now".
+     angle=90 runs bottom→top, so startColor sits at the card's base. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:startColor="#2EF04438"
+        android:centerColor="#12F04438"
+        android:endColor="#00FFFFFF" />
+    <corners
+        android:bottomLeftRadius="22dp"
+        android:bottomRightRadius="22dp" />
+</shape>

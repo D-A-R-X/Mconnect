@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Project Expenses screen — pixel-aligned with the Figma mockup.
+  Project Expenses screen — pixel-aligned with the reference mockup.
 
   Stack:
-    1. Solid-blue header with back arrow, title, subtitle, project picker
-       (white pill + red dot + down-chevron) and calendar (white square
-       pill with blue icon). Colourful clipboard-+-calculator illustration
-       sits in the top-right corner of the header.
-    2. White totals card with the Total Expenses headline, donut chart,
-       and a 3-up legend showing category dot + name + bold amount.
-    3. Filter chips — single-select, brand-blue when active.
-    4. Vertical RecyclerView of expense rows.
+    1. Flat-blue header (rounded bottom): back arrow, title, subtitle,
+       project picker (white pill + red active-dot + chevron), calendar
+       button, and the 3D expense illustration in the top-right corner.
+    2. White totals card floating up over the header's lower edge:
+       Total Expenses headline + donut chart + a single-row 3-up legend
+       (Labour / Materials / Equipments).
+    3. Reusable FilterTabsView pill row (All / Labour / … / Others).
+    4. Vertical RecyclerView of expense rows + empty state.
     5. Full-width rounded green "Add Expense" button pinned at the bottom.
+
+  NOTE: view IDs are load-bearing — ProjectExpensesFragment binds to
+  them directly. Keep them stable when restyling.
 -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -20,9 +23,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/lt_surface_primary">
+    android:background="#F4F6F9">
 
-    <!-- ─── Blue header ──────────────────────────────────────────── -->
+    <!-- ─── Blue header ──────────────────────────────────────────────── -->
     <FrameLayout
         android:id="@+id/expenseHeader"
         android:layout_width="match_parent"
@@ -30,17 +33,14 @@
         android:background="@drawable/bg_expense_header"
         android:paddingHorizontal="16dp"
         android:paddingTop="8dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="26dp">
 
-        <!-- Illustration sits flush with the header's right padding instead
-             of bleeding off-screen — the previous marginEnd=-10dp clipped
-             the clipboard/coins art on narrower devices. -->
         <ImageView
-            android:layout_width="130dp"
-            android:layout_height="100dp"
+            android:layout_width="138dp"
+            android:layout_height="95dp"
             android:layout_gravity="end|top"
-            android:layout_marginTop="20dp"
-            android:src="@drawable/ic_expense_illustration"
+            android:layout_marginTop="6dp"
+            android:src="@drawable/expense_hero"
             android:contentDescription="@null"
             android:scaleType="fitCenter" />
 
@@ -74,24 +74,24 @@
                 android:layout_marginTop="4dp"
                 android:text="Manage and track all Expenses"
                 android:fontFamily="@font/inter_medium"
-                android:textColor="#D9D6FE"
+                android:textColor="#D4E2FF"
                 android:textSize="13sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="16dp"
                 android:orientation="horizontal">
 
                 <LinearLayout
                     android:id="@+id/btnProjectPicker"
                     android:layout_width="0dp"
                     android:layout_weight="1"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:background="@drawable/bg_expense_project_picker"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:paddingHorizontal="14dp"
+                    android:paddingHorizontal="16dp"
                     android:clickable="true"
                     android:focusable="true">
 
@@ -100,7 +100,7 @@
                         android:layout_width="0dp"
                         android:layout_weight="1"
                         android:layout_height="wrap_content"
-                        android:text="Choose a project"
+                        android:text="Select project"
                         android:fontFamily="@font/inter_semibold"
                         android:textColor="#101828"
                         android:textSize="14sp"
@@ -128,9 +128,9 @@
 
                 <FrameLayout
                     android:id="@+id/btnDateFilter"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_width="46dp"
+                    android:layout_height="46dp"
+                    android:layout_marginStart="10dp"
                     android:background="@drawable/bg_home_soft_pill"
                     android:backgroundTint="#FFFFFF"
                     android:clickable="true"
@@ -141,21 +141,19 @@
                         android:layout_gravity="center"
                         android:src="@drawable/ic_calendar_days"
                         android:contentDescription="Date filter"
-                        app:tint="#0B61CA" />
+                        app:tint="@color/category_labour" />
                 </FrameLayout>
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Totals card sits just BELOW the rounded blue header (positive top
-         margin) so the header's rounded shoulders show on either side
-         instead of being hidden by the card. -->
+    <!-- ─── Totals card (floats up over the header's rounded edge) ────── -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cardTotals"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="-14dp"
         app:cardCornerRadius="16dp"
         app:cardElevation="2dp"
         app:cardBackgroundColor="#FFFFFF">
@@ -184,7 +182,7 @@
                         android:text="Total Expenses"
                         android:fontFamily="@font/inter_medium"
                         android:textColor="#667085"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/tvTotalAmount"
@@ -235,7 +233,7 @@
                             android:layout_width="10dp"
                             android:layout_height="10dp"
                             android:background="@drawable/bg_home_status_dot"
-                            android:backgroundTint="#2563EB" />
+                            android:backgroundTint="@color/category_labour" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -271,7 +269,7 @@
                             android:layout_width="10dp"
                             android:layout_height="10dp"
                             android:background="@drawable/bg_home_status_dot"
-                            android:backgroundTint="#F97316" />
+                            android:backgroundTint="@color/category_materials" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -307,7 +305,7 @@
                             android:layout_width="10dp"
                             android:layout_height="10dp"
                             android:background="@drawable/bg_home_status_dot"
-                            android:backgroundTint="#16A34A" />
+                            android:backgroundTint="@color/category_equipment" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -331,93 +329,23 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- ─── Category filter chips ──────────────────────────────────── -->
-    <HorizontalScrollView
+    <!-- ─── Reusable category filter tabs ──────────────────────────────── -->
+    <com.manjugroups.m_connect.ui.common.FilterTabsView
+        android:id="@+id/categoryTabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
-        android:scrollbars="none">
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/categoryPills"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingHorizontal="16dp"
-            app:chipSpacingHorizontal="8dp"
-            app:singleSelection="true"
-            app:singleLine="true"
-            app:selectionRequired="true">
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipAll"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="All"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp"
-                app:checkedIconVisible="false" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipLabour"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Labour"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp"
-                app:checkedIconVisible="false" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipMaterials"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Materials"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp"
-                app:checkedIconVisible="false" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipEquipment"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Equipments"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp"
-                app:checkedIconVisible="false" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipOther"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Other"
-                android:textColor="@color/chip_filter_text"
-                app:chipBackgroundColor="@color/chip_filter_bg"
-                app:chipStrokeWidth="0dp"
-                app:checkedIconVisible="false" />
-        </com.google.android.material.chip.ChipGroup>
-    </HorizontalScrollView>
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp" />
 
     <!-- ─── Expense list + empty state ─────────────────────────────────
-         Wrapped in a FrameLayout with weight=1 so either child (the list
-         when there are rows, the empty-state text otherwise) fills the
-         remaining vertical space. Without this, when rvExpenses is GONE
-         its weight stops applying and the Add Expense button slides up
-         next to the empty text instead of staying pinned at the bottom.
-    -->
+         FrameLayout with weight=1 so either child (list or empty text)
+         fills the remaining space and the Add button stays pinned. -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="10dp">
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/expensesRefresh"
@@ -439,15 +367,13 @@
             android:gravity="center"
             android:padding="32dp"
             android:text="No expenses logged yet."
-            android:textColor="#FF71717A"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#98A2B3"
+            android:textSize="14sp"
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- ─── Add Expense button (full-width green pill) ───────────────
-         Uses the same vibrant green (#1BCA0B) as the Submit Date CTA
-         on the date filter sheet so the two primary actions on this
-         screen share the same colour token.
-    -->
+    <!-- ─── Add Expense button (full-width green pill) ─────────────────── -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAddExpense"
         android:layout_width="match_parent"

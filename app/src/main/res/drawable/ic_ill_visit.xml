@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <!-- Map fold 1 -->
+    <path
+        android:pathData="M16,18 L32,22 L32,58 L16,54 Z"
+        android:fillColor="#FEF08A"/>
+    <!-- Map fold 2 -->
+    <path
+        android:pathData="M32,22 L48,18 L48,54 L32,58 Z"
+        android:fillColor="#FEF9C3"/>
+    <!-- Map fold 3 -->
+    <path
+        android:pathData="M48,18 L60,22 L60,58 L48,54 Z"
+        android:fillColor="#FEF08A"/>
+    <!-- Route Line -->
+    <path
+        android:pathData="M24,40 C28,34 36,46 42,34 C44,30 48,28 50,30"
+        android:strokeColor="#D97706"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"/>
+    <!-- Location Pin -->
+    <path
+        android:pathData="M40,20 C36,20 34,22.5 34,26 C34,31 40,36 40,36 C40,36 46,31 46,26 C46,22.5 44,20 40,20 Z"
+        android:fillColor="#D97706"/>
+    <path
+        android:pathData="M40,26 C41.1,26 42,25.1 42,24 C42,22.9 41.1,22 40,22 C38.9,22 38,22.9 38,24 C38,25.1 38.9,26 40,26 Z"
+        android:fillColor="#FFFFFF"/>
+</vector>

@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One page of the task-nudge carousel (modal overlay above the bottom nav).
+     Mirrors the reference mockup: drag handle, "Task Pending" header, title +
+     clipboard illustration, due-date row, description row, then the urgency
+     base — red gradient rising from the card's bottom with the Complete CTA
+     and the page dots. Width is the pager width minus its peek padding so the
+     neighbouring cards peek in from the sides. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:background="@drawable/bg_task_nudge_card"
+    android:clickable="true"
+    android:elevation="8dp"
+    android:focusable="true"
+    android:orientation="vertical">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_chat_sheet_handle" />
+
+    <!-- Header: icon chip + label + live count pill -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="14dp">
+
+        <FrameLayout
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_task_nudge_icon_chip">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="Task pending"
+                android:src="@drawable/ic_custom_clipboard_check"
+                android:tint="#7F56D9" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="9dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:includeFontPadding="false"
+            android:text="Task Pending"
+            android:textColor="#6941C6"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvNudgeCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_task_nudge_count_pill"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_bold"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingStart="9dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="9dp"
+            android:paddingBottom="4dp"
+            android:text="3 pending"
+            android:textColor="#B42318"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <!-- Title / meta / status beside the clipboard illustration -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="12dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvNudgeTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:text="Visit Site #12"
+                android:textColor="#101828"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/tvNudgeMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="Project Green Valley"
+                android:textColor="#667085"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvNudgeStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_task_nudge_pill"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:paddingStart="11dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="11dp"
+                android:paddingBottom="4dp"
+                android:text="In Progress"
+                android:textColor="#6941C6"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="100dp"
+            android:layout_height="92dp"
+            android:contentDescription="Pending task"
+            android:src="@drawable/ic_task_nudge_illustration" />
+    </LinearLayout>
+
+    <!-- Due date row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp">
+
+        <FrameLayout
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_task_nudge_icon_chip">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:contentDescription="Due date"
+                android:src="@drawable/ic_calendar_days"
+                android:tint="#7F56D9" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Due Date"
+                android:textColor="#98A2B3"
+                android:textSize="10.5sp" />
+
+            <TextView
+                android:id="@+id/tvNudgeDue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="Today, 11:30 AM"
+                android:textColor="#101828"
+                android:textSize="13.5sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnNudgeDetails"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_task_nudge_pill"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:paddingStart="12dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp"
+            android:text="View Details"
+            android:textColor="#6941C6"
+            android:textSize="11.5sp" />
+    </LinearLayout>
+
+    <!-- Description row (hidden when the task has no description) -->
+    <LinearLayout
+        android:id="@+id/rowNudgeDesc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="11dp"
+        android:paddingEnd="16dp">
+
+        <FrameLayout
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_task_nudge_icon_chip">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:contentDescription="Description"
+                android:src="@drawable/ic_task_note"
+                android:tint="#7F56D9" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:text="Description"
+                android:textColor="#98A2B3"
+                android:textSize="10.5sp" />
+
+            <TextView
+                android:id="@+id/tvNudgeDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/inter_medium"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:text="Site inspection and client meeting."
+                android:textColor="#475467"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Push the urgency base to the card's bottom -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Urgency base: red gradient rising from the card's bottom, holding
+         the red-gradient Complete CTA and the carousel page dots. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_task_nudge_bottom_glow"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp">
+
+        <LinearLayout
+            android:id="@+id/btnNudgeComplete"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:background="@drawable/bg_task_nudge_cta"
+            android:clickable="true"
+            android:elevation="2dp"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:contentDescription="Complete task"
+                android:src="@drawable/ic_home_trip_play"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/inter_bold"
+                android:includeFontPadding="false"
+                android:text="Complete Task"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nudgeDots"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </LinearLayout>
+</LinearLayout>

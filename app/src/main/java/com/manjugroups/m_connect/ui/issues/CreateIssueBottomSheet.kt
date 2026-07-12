@@ -23,6 +23,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.SheetCreateIssueBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ProjectSummary
+import com.manjugroups.m_connect.ui.common.SearchableOption
+import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -53,8 +55,10 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
                 .onSuccess { resp ->
                     if (_binding == null) return@onSuccess
                     if (resp.success) {
+                        // Issues are only raised against ongoing projects
+                        // (matches the web's "Ongoing" = status == "ongoing").
                         projects.clear()
-                        projects.addAll(resp.projects)
+                        projects.addAll(resp.projects.filter { it.status?.trim()?.lowercase() == "ongoing" })
                     }
                 }
         }
@@ -65,16 +69,13 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Loading projects…", Toast.LENGTH_SHORT).show()
             return
         }
-        val names = projects.map { it.name ?: "Untitled" }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Select Project")
-            .setItems(names) { _, which ->
-                val p = projects[which]
-                selectedProjectId = p.id
-                binding.tvSelectProject.text = p.name ?: "Untitled"
-                binding.tvSelectProject.setTextColor(android.graphics.Color.parseColor("#0F172A"))
-            }
-            .show()
+        val options = projects.map { SearchableOption(it, it.name ?: "Untitled", it.status) }
+        SearchableSelectionDialog.show(requireContext(), "Select Project", options) { p ->
+            if (_binding == null) return@show
+            selectedProjectId = p.id
+            binding.tvSelectProject.text = p.name ?: "Untitled"
+            binding.tvSelectProject.setTextColor(android.graphics.Color.parseColor("#0F172A"))
+        }
     }
 
     // Audio recording & playback variables

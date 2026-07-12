@@ -23,6 +23,8 @@ import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
+import com.manjugroups.m_connect.ui.common.SearchableOption
+import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -219,22 +221,23 @@ class BookingCreateFragment : Fragment() {
                     toast(resp.error ?: "Failed to load projects")
                     return@launch
                 }
-                val projects = resp.projects
+                // Bookings are only made against ongoing projects (matches the
+                // web's "Ongoing" = status == "ongoing").
+                val projects = resp.projects.filter { it.status?.trim()?.lowercase() == "ongoing" }
                 if (projects.isEmpty()) {
-                    toast("No projects available")
+                    toast("No ongoing projects available")
                     return@launch
                 }
-                val names = projects.map { it.name ?: "Unnamed" }.toTypedArray()
-                AlertDialog.Builder(requireContext())
-                    .setTitle("Select project")
-                    .setItems(names) { _, idx ->
-                        selectedProject = projects[idx]
-                        // Picking a different project invalidates the unit choice.
-                        selectedUnit = null
-                        label.text = selectedProject?.name ?: "Select project"
-                        view?.findViewById<TextView>(R.id.tvBookingUnit)?.text = "Select unit"
-                    }
-                    .show()
+                if (view == null) return@launch
+                val options = projects.map { SearchableOption(it, it.name ?: "Unnamed", it.status) }
+                SearchableSelectionDialog.show(requireContext(), "Select project", options) { p ->
+                    if (view == null) return@show
+                    selectedProject = p
+                    // Picking a different project invalidates the unit choice.
+                    selectedUnit = null
+                    label.text = p.name ?: "Select project"
+                    view?.findViewById<TextView>(R.id.tvBookingUnit)?.text = "Select unit"
+                }
             } catch (e: Exception) {
                 toast("Network error: ${e.message ?: "unknown"}")
             }
@@ -263,28 +266,25 @@ class BookingCreateFragment : Fragment() {
                     toast("No available units in this project")
                     return@launch
                 }
-                val labels = available.map { u ->
-                    val parts = mutableListOf<String>()
-                    parts += u.unitNumber ?: "Unit"
-                    u.unitType?.let { parts += it }
-                    u.facing?.let { parts += "facing $it" }
-                    u.area?.let { parts += "${it.toInt()} sqft" }
-                    parts.joinToString(" · ")
-                }.toTypedArray()
-                AlertDialog.Builder(requireContext())
-                    .setTitle("Select available unit")
-                    .setItems(labels) { _, idx ->
-                        val picked = available[idx]
-                        // Defensive: never accept anything that is not available
-                        // even if the picker drifted (race with another agent).
-                        if (picked.status != "available") {
-                            toast("Unit is no longer available")
-                            return@setItems
-                        }
-                        selectedUnit = picked
-                        label.text = "Unit ${picked.unitNumber ?: picked.id}"
+                if (view == null) return@launch
+                val options = available.map { u ->
+                    val sub = listOfNotNull(
+                        u.unitType,
+                        u.facing?.let { "facing $it" },
+                        u.area?.let { "${it.toInt()} sqft" },
+                    ).joinToString(" · ")
+                    SearchableOption(u, u.unitNumber ?: "Unit", sub)
+                }
+                SearchableSelectionDialog.show(requireContext(), "Select available unit", options) { picked ->
+                    // Defensive: never accept anything that is not available
+                    // even if the picker drifted (race with another agent).
+                    if (picked.status != "available") {
+                        toast("Unit is no longer available")
+                        return@show
                     }
-                    .show()
+                    selectedUnit = picked
+                    label.text = "Unit ${picked.unitNumber ?: picked.id}"
+                }
             } catch (e: Exception) {
                 toast("Network error: ${e.message ?: "unknown"}")
             }

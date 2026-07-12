@@ -98,6 +98,7 @@
                             android:textSize="20sp" />
 
                         <ImageView
+                            android:id="@+id/ivVisitTitleGlobe"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:layout_marginStart="9dp"

@@ -22,7 +22,6 @@ import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
@@ -42,6 +41,8 @@ import com.manjugroups.m_connect.network.DailyLogMaterial
 import com.manjugroups.m_connect.network.MaterialCatalogItem
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.network.StorageUploader
+import com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet
+import com.manjugroups.m_connect.ui.common.ImagePreviewDialog
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import kotlinx.coroutines.Dispatchers
@@ -86,25 +87,12 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         view?.let { renderAttachments(it) }
     }
 
-    // Camera capture (photo / video) into a FileProvider URI.
-    private var cameraCaptureUri: Uri? = null
-    private var pendingCameraVideo = false
-    private val takePhotoLauncher = registerForActivityResult(
-        ActivityResultContracts.TakePicture(),
-    ) { ok ->
-        val uri = cameraCaptureUri
-        if (ok && uri != null) { pickedMedia.add(PickedMedia(uri, false)); view?.let { renderAttachments(it) } }
-    }
-    private val takeVideoLauncher = registerForActivityResult(
-        ActivityResultContracts.CaptureVideo(),
-    ) { ok ->
-        val uri = cameraCaptureUri
-        if (ok && uri != null) { pickedMedia.add(PickedMedia(uri, true)); view?.let { renderAttachments(it) } }
-    }
+    // Camera permission gate for the rich in-app camera (shared with chat:
+    // live preview, flash, 0.5/1x/2x zoom, photo/video toggle, gallery).
     private val cameraPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) launchCamera(pendingCameraVideo)
+        if (granted) showCustomCamera()
         else context?.let { Toast.makeText(it, "Camera permission is required", Toast.LENGTH_SHORT).show() }
     }
 
@@ -175,7 +163,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         }
         view.findViewById<View>(R.id.btnAddMaterial).setOnClickListener { pickMaterial(view) }
         view.findViewById<View>(R.id.btnAddEquipment).setOnClickListener { addEquipmentRow(view) }
-        view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener { showMediaSourceChooser() }
+        view.findViewById<View>(R.id.btnAddAttachment).setOnClickListener { openCustomCamera() }
         view.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).setOnClickListener { submit(view) }
 
         // Auto-save a draft as the main fields change (crash-safe filling).
@@ -204,110 +192,52 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.loadingOverlay)?.visibility = View.GONE
     }
 
-    /** Camera (photo/video) or the gallery picker, as a styled bottom sheet. */
-    private fun showMediaSourceChooser() {
-        val ctx = requireContext()
-        val sheet = BottomSheetDialog(ctx)
-        val root = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_bottom_sheet)
-            setPadding(dp(8), dp(10), dp(8), dp(16))
-        }
-        root.addView(View(ctx).apply {
-            setBackgroundResource(R.drawable.bg_chat_sheet_handle)
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(8)
-            }
-        })
-        root.addView(TextView(ctx).apply {
-            text = "Add photo or video"
-            textSize = 16f
-            setTextColor(Color.parseColor("#101828"))
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(dp(12), dp(4), dp(12), dp(8))
-        })
-        root.addView(chooserRow(ctx, "📷", "Take photo", "Capture with the camera") {
-            sheet.dismiss(); requestCameraThen(video = false)
-        })
-        root.addView(chooserRow(ctx, "🎥", "Record video", "Capture a short clip") {
-            sheet.dismiss(); requestCameraThen(video = true)
-        })
-        root.addView(chooserRow(ctx, "🖼️", "Choose from gallery", "Pick existing photos or videos") {
-            sheet.dismiss()
-            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-        })
-        sheet.setContentView(root)
-        sheet.show()
-    }
-
-    private fun chooserRow(ctx: Context, emoji: String, title: String, subtitle: String, onClick: () -> Unit): View {
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            isClickable = true
-            isFocusable = true
-            foreground = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
-                .let { ta -> ta.getDrawable(0).also { ta.recycle() } }
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            setOnClickListener { onClick() }
-        }
-        row.addView(TextView(ctx).apply {
-            text = emoji
-            textSize = 19f
-            gravity = Gravity.CENTER
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(Color.parseColor("#F2F4F7"))
-            }
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
-        })
-        val col = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), 0, 0, 0)
-        }
-        col.addView(TextView(ctx).apply {
-            text = title; textSize = 15f; setTextColor(Color.parseColor("#101828"))
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        })
-        col.addView(TextView(ctx).apply {
-            text = subtitle; textSize = 12f; setTextColor(Color.parseColor("#667085")); setPadding(0, dp(1), 0, 0)
-        })
-        row.addView(col)
-        return row
-    }
-
-    private fun requestCameraThen(video: Boolean) {
-        pendingCameraVideo = video
+    /**
+     * Rich in-app camera shared with chat ([CustomCameraBottomSheet]): live
+     * preview, flash, 0.5/1x/2x zoom, photo↔video toggle, and a Gallery button.
+     * Captured media comes back as a file:// Uri; Gallery delegates to the same
+     * Photo Picker used before. Needs CAMERA permission first (the sheet assumes
+     * it's granted before the preview binds).
+     */
+    private fun openCustomCamera() {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            launchCamera(video)
+            showCustomCamera()
         } else {
             cameraPermLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    private fun launchCamera(video: Boolean) {
-        val ctx = context ?: return
-        val f = runCatching {
-            // Must live under a directory declared in res/xml/file_paths.xml,
-            // else FileProvider.getUriForFile throws "failed to find root".
-            val dir = File(ctx.cacheDir, "daily_log_media").apply { if (!exists()) mkdirs() }
-            File.createTempFile(if (video) "dpr_vid_" else "dpr_img_", if (video) ".mp4" else ".jpg", dir)
-        }.getOrNull() ?: run {
-            Toast.makeText(ctx, "Unable to create file", Toast.LENGTH_SHORT).show(); return
-        }
-        val uri = runCatching {
-            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
-        }.getOrNull() ?: run {
-            Toast.makeText(ctx, "Unable to create file", Toast.LENGTH_SHORT).show(); return
-        }
-        cameraCaptureUri = uri
-        if (video) takeVideoLauncher.launch(uri) else takePhotoLauncher.launch(uri)
+    private fun showCustomCamera() {
+        if (!isAdded) return
+        // Build the listener with a plain local — NOT inside
+        // `CustomCameraBottomSheet().apply { ... }`. Inside that apply block
+        // the implicit receiver is the CAMERA sheet, so an unqualified `view`
+        // resolves to the camera's view (both classes are Fragments), not
+        // this sheet's. renderAttachments would then search the camera's
+        // layout for attachmentsContainer, get null, and crash on capture.
+        // Qualify `view` to this sheet explicitly so it can't happen again.
+        val camera = CustomCameraBottomSheet()
+        camera.setListener(object : CustomCameraBottomSheet.CameraResultListener {
+            override fun onMediaCaptured(uri: Uri, isVideo: Boolean) {
+                pickedMedia.add(PickedMedia(uri, isVideo))
+                this@CreateDailyLogBottomSheet.view?.let { renderAttachments(it) }
+            }
+
+            override fun onGalleryClicked() {
+                pickMedia.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                )
+            }
+        })
+        camera.show(childFragmentManager, "daily_log_camera")
     }
 
     private fun renderAttachments(root: View) {
-        val c = root.findViewById<LinearLayout>(R.id.attachmentsContainer)
+        // Guard the lookup: if we're ever handed a root that doesn't contain
+        // the container (wrong view hierarchy), bail instead of NPE-ing.
+        val c = root.findViewById<LinearLayout>(R.id.attachmentsContainer) ?: return
         c.removeAllViews()
         val ctx = context ?: return
         pickedMedia.forEach { m ->
@@ -320,16 +250,21 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 setBackgroundResource(R.drawable.bg_input)
                 clipToOutline = true
                 load(m.uri)
+                // Tap an image thumbnail to preview it full-screen in-app.
+                if (!m.isVideo) setOnClickListener {
+                    ImagePreviewDialog.show(requireContext(), m.uri.toString())
+                }
             }
             frame.addView(iv)
             if (m.isVideo) {
-                frame.addView(TextView(ctx).apply {
-                    text = "▶"
-                    textSize = 20f
-                    setTextColor(Color.WHITE)
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
-                    )
+                frame.addView(ImageView(ctx).apply {
+                    setImageResource(R.drawable.ic_home_trip_play)
+                    setColorFilter(Color.WHITE)
+                    setBackgroundResource(R.drawable.bg_home_new_action_circle)
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(Color.parseColor("#66000000"))
+                    val p = dp(6); setPadding(p, p, p, p)
+                    layoutParams = FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER)
                 })
             }
             frame.addView(TextView(ctx).apply {
@@ -422,6 +357,24 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(requireContext(), title, options) { onPick(it) }
     }
 
+    /** Clean circular ✕ remove button shared by material/equipment rows. */
+    private fun removeRowButton(onRemove: () -> Unit): TextView {
+        val ctx = requireContext()
+        return TextView(ctx).apply {
+            text = "✕"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setTextColor(Color.parseColor("#667085"))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.parseColor("#F2F4F7"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginStart = dp(8) }
+            setOnClickListener { onRemove() }
+        }
+    }
+
     private fun buildRow(fields: List<Pair<String, Float>>): LinearLayout {
         val ctx = requireContext()
         val row = LinearLayout(ctx).apply {
@@ -442,9 +395,11 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 addTextChangedListener(draftWatcher)
             })
         }
-        row.addView(TextView(ctx).apply {
-            text = "✕"; textSize = 16f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(8), dp(8), dp(4), dp(8))
-            setOnClickListener { (parent as? ViewGroup)?.removeView(row); view?.let { saveDraft(it) } }
+        row.addView(removeRowButton {
+            // row.parent (the container), NOT the unqualified `parent` — inside
+            // this lambda `parent` was the ✕ view's parent (the row itself), so
+            // removeView(row) was a no-op and Equipment rows couldn't be removed.
+            (row.parent as? ViewGroup)?.removeView(row); view?.let { saveDraft(it) }
         })
         return row
     }
@@ -524,9 +479,8 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 .apply { marginStart = dp(8); marginEnd = dp(6) }
             addTextChangedListener(draftWatcher)
         })
-        row.addView(TextView(ctx).apply {
-            text = "✕"; textSize = 16f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(8), dp(8), dp(4), dp(8))
-            setOnClickListener { container.removeView(row); view?.let { saveDraft(it) } }
+        row.addView(removeRowButton {
+            container.removeView(row); view?.let { saveDraft(it) }
         })
         container.addView(row)
         if (!restoring) saveDraft(root)
@@ -619,7 +573,15 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 clearDraft()
                 // Remember this log's uploaded media locally so it renders even
                 // before the backend `attachments` field is deployed to prod.
-                if (attachments.isNotEmpty()) DailyLogAttachmentCache.put(appCtx, resp.id, attachments)
+                // Key on content (project+date+summary — always reconstructable
+                // when the list reloads) and also on the id if the route
+                // returned one.
+                if (attachments.isNotEmpty()) {
+                    DailyLogAttachmentCache.put(
+                        appCtx, DailyLogAttachmentCache.key(project.id, date, work), attachments,
+                    )
+                    DailyLogAttachmentCache.put(appCtx, resp.id, attachments)
+                }
                 setFragmentResult(RESULT_KEY, bundleOf(KEY_PROJECT_ID to project.id))
                 Toast.makeText(appCtx, "Daily log saved", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()

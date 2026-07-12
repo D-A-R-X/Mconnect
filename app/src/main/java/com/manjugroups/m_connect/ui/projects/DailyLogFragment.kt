@@ -35,6 +35,8 @@ import com.manjugroups.m_connect.network.IdOnlyRequest
 import com.manjugroups.m_connect.network.ProjectSummary
 import com.manjugroups.m_connect.network.SendDprRequest
 import com.manjugroups.m_connect.network.UpdateDprRecipientRequest
+import com.manjugroups.m_connect.ui.common.IconPillView
+import com.manjugroups.m_connect.ui.common.ImagePreviewDialog
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.SkeletonLoader
@@ -226,8 +228,15 @@ class DailyLogFragment : Fragment() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
+            weatherIcon(log.weather).takeIf { it != 0 }?.let { wIcon ->
+                header.addView(ImageView(ctx).apply {
+                    setImageResource(wIcon)
+                    layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
+                        .apply { marginEnd = dp(7) }
+                })
+            }
             header.addView(TextView(ctx).apply {
-                text = (weatherEmoji(log.weather)?.let { "$it  " } ?: "") + displayDate(log.date)
+                text = displayDate(log.date)
                 textSize = 14f
                 setTextColor(Color.parseColor("#101828"))
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -250,13 +259,19 @@ class DailyLogFragment : Fragment() {
                 setPadding(0, dp(10), 0, 0)
             }
             var hasPill = false
-            log.labourCount?.let { pills.addView(pill(ctx, "👷 $it")); hasPill = true }
-            log.labourHours?.let { pills.addView(pill(ctx, "⏱ ${trimNum(it)} hrs")); hasPill = true }
+            log.labourCount?.let {
+                pills.addView(metaPill(ctx, R.drawable.ic_chat_users, "$it")); hasPill = true
+            }
+            log.labourHours?.let {
+                pills.addView(metaPill(ctx, R.drawable.ic_clock, "${trimNum(it)} hrs")); hasPill = true
+            }
             log.siteConditions?.takeIf { it.isNotBlank() }?.let {
-                pills.addView(pill(ctx, it.replaceFirstChar(Char::uppercase))); hasPill = true
+                pills.addView(metaPill(ctx, 0, it.replaceFirstChar(Char::uppercase))); hasPill = true
             }
             val atts = mergedAttachments(ctx, log)
-            if (atts.isNotEmpty()) { pills.addView(pill(ctx, "🖼 ${atts.size}")); hasPill = true }
+            if (atts.isNotEmpty()) {
+                pills.addView(metaPill(ctx, R.drawable.ic_attach_image, "${atts.size}")); hasPill = true
+            }
             if (hasPill) content.addView(pills)
 
             if (atts.isNotEmpty()) content.addView(buildAttachmentStrip(ctx, atts))
@@ -266,28 +281,23 @@ class DailyLogFragment : Fragment() {
         }
     }
 
-    private fun weatherEmoji(w: String?): String? = when (w?.lowercase(Locale.US)) {
-        "sunny" -> "☀️"
-        "cloudy" -> "☁️"
-        "rainy" -> "🌧️"
-        "windy" -> "💨"
-        "stormy" -> "⛈️"
-        else -> null
+    private fun weatherIcon(w: String?): Int = when (w?.lowercase(Locale.US)) {
+        "sunny" -> R.drawable.ic_weather_sunny
+        "cloudy" -> R.drawable.ic_weather_cloudy
+        "rainy" -> R.drawable.ic_weather_rainy
+        "windy" -> R.drawable.ic_weather_windy
+        "stormy" -> R.drawable.ic_weather_stormy
+        else -> 0
     }
 
-    private fun pill(ctx: android.content.Context, text: String): TextView = TextView(ctx).apply {
-        this.text = text
-        textSize = 11f
-        setTextColor(Color.parseColor("#475467"))
-        setPadding(dp(9), dp(4), dp(9), dp(5))
-        background = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(9).toFloat()
-            setColor(Color.parseColor("#F2F4F7"))
+    /** A reusable metadata pill (leading icon + label). iconRes 0 = text-only. */
+    private fun metaPill(ctx: android.content.Context, iconRes: Int, text: String): IconPillView =
+        IconPillView(ctx).apply {
+            bind(iconRes, text)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(6) }
         }
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { marginEnd = dp(6) }
-    }
 
     private fun projectChip(ctx: android.content.Context, name: String): TextView = TextView(ctx).apply {
         text = name
@@ -488,14 +498,21 @@ class DailyLogFragment : Fragment() {
                 load(url)
             })
             if (a.type == "video") {
-                frame.addView(TextView(ctx).apply {
-                    text = "▶"; textSize = 18f; setTextColor(Color.WHITE)
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
-                    )
+                frame.addView(ImageView(ctx).apply {
+                    setImageResource(R.drawable.ic_home_trip_play)
+                    setColorFilter(Color.WHITE)
+                    setBackgroundResource(R.drawable.bg_home_new_action_circle)
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(Color.parseColor("#66000000"))
+                    val p = dp(6); setPadding(p, p, p, p)
+                    layoutParams = FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER)
                 })
             }
-            frame.setOnClickListener { openMedia(url) }
+            frame.setOnClickListener {
+                // Images preview in-app; video still opens externally.
+                if (a.type == "video") openMedia(url)
+                else ImagePreviewDialog.show(requireContext(), url)
+            }
             row.addView(frame)
         }
         scroll.addView(row)
@@ -509,8 +526,7 @@ class DailyLogFragment : Fragment() {
 
     private fun openLogDetail(log: DailyLogEntry) {
         // Fold in device-cached media when the server has none (pre-deploy).
-        val merged = if (log.attachments.orEmpty().any { it.storageId.isNotBlank() }) log
-            else log.copy(attachments = DailyLogAttachmentCache.get(requireContext(), log.id))
+        val merged = log.copy(attachments = mergedAttachments(requireContext(), log))
         val json = runCatching { com.google.gson.Gson().toJson(merged) }.getOrNull() ?: return
         DailyLogDetailBottomSheet.newInstance(json).show(childFragmentManager, "daily_log_detail")
     }
@@ -518,9 +534,12 @@ class DailyLogFragment : Fragment() {
     /** Server attachments if present, else the device-local cache for this log. */
     private fun mergedAttachments(ctx: android.content.Context, log: DailyLogEntry): List<DailyLogAttachment> {
         val server = log.attachments.orEmpty().filter { it.storageId.isNotBlank() }
-        return server.ifEmpty {
-            DailyLogAttachmentCache.get(ctx, log.id).filter { it.storageId.isNotBlank() }
-        }
+        if (server.isNotEmpty()) return server
+        val bySig = DailyLogAttachmentCache.get(
+            ctx, DailyLogAttachmentCache.key(log.projectId, log.date, log.workSummary),
+        )
+        return bySig.ifEmpty { DailyLogAttachmentCache.get(ctx, log.id) }
+            .filter { it.storageId.isNotBlank() }
     }
 
     private fun displayDate(iso: String?): String {
