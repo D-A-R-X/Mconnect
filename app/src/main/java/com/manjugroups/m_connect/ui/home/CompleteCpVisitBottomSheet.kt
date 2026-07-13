@@ -110,7 +110,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var bookDuplicate: Boolean = true
     private var payGstApplicable: Boolean = true
     private var payOtherApplicable: Boolean = true
-    private var payFlexi: Boolean = true
+    // Balance Payment Schedule plan — "Regular" (30d) / "Flexi" (60d) /
+    // "Special" (180d, only when the project enables it). Flexi keeps
+    // mapping to the legacy freePayment flag on the wire.
+    private var payPlan: String = "Regular"
+    // specialPaymentEnabled from the latest plot-prefill; either this or the
+    // selected project row unlocks the Special plan option.
+    private var plotPrefillSpecialPayment: Boolean = false
     private var staffSaveAs: SaveAs = SaveAs.DRAFT
     private var lastBookingPrefillKey: String? = null
     private var bookingGstPercent: Double? = null
@@ -293,7 +299,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var lblPayLoanAmount: TextView? = null
     private var rowPayLoanAmount: View? = null
     private var etPayLoanAmount: EditText? = null
-    private var ivPayFlexi: ImageView? = null
+    private var tvPayPlan: TextView? = null
     private var etPayAllotDue: EditText? = null
     private var tvPayAllotDate: TextView? = null
     private var etPay2Mode: EditText? = null
@@ -836,7 +842,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         lblPayLoanAmount = view.findViewById(R.id.lblPayLoanAmount)
         rowPayLoanAmount = view.findViewById(R.id.rowPayLoanAmount)
         etPayLoanAmount = view.findViewById(R.id.etPayLoanAmount)
-        ivPayFlexi = view.findViewById(R.id.ivPayFlexi)
+        tvPayPlan = view.findViewById(R.id.tvPayPlan)
         etPayAllotDue = view.findViewById(R.id.etPayAllotDue)
         tvPayAllotDate = view.findViewById(R.id.tvPayAllotDate)
         etPay2Mode = view.findViewById(R.id.etPay2Mode)
@@ -1081,7 +1087,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             ) { tvBookSource?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener {
-            pickDate(tvBookDate) { loadBookingPlotPrefill(force = true) }
+            pickDate(tvBookDate) {
+                loadBookingPlotPrefill(force = true)
+                // The payment windows are anchored to the booking date —
+                // snap any now-out-of-window scheduled dates back in.
+                clampPaymentDatesToPlan()
+            }
         }
         view?.findViewById<View>(R.id.rowBookProject)?.setOnClickListener {
             pickBookingProject()
@@ -1164,16 +1175,32 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 applyLoanAmountVisibility()
             }
         }
-        view?.findViewById<View>(R.id.rowPayFlexi)?.setOnClickListener {
-            payFlexi = !payFlexi
-            ivPayFlexi?.setImageResource(
-                if (payFlexi) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
-            )
+        view?.findViewById<View>(R.id.rowPayPlan)?.setOnClickListener {
+            // Payment Plan — mirrors the web Balance Payment Schedule
+            // select: Regular/Flexi always, Special only when the selected
+            // project has specialPaymentEnabled (project row or plot
+            // prefill). Flexi keeps mapping to the freePayment flag the
+            // backend already understands.
+            picker("Select Payment Plan", paymentPlanOptions()) {
+                payPlan = planFromLabel(it)
+                tvPayPlan?.text = it
+                clampPaymentDatesToPlan()
+            }
         }
-        view?.findViewById<View>(R.id.rowPayAllotDate)?.setOnClickListener { pickDate(tvPayAllotDate) }
-        view?.findViewById<View>(R.id.rowPay2Date)?.setOnClickListener { pickDate(tvPay2Date) }
-        view?.findViewById<View>(R.id.rowPay3Date)?.setOnClickListener { pickDate(tvPay3Date) }
-        view?.findViewById<View>(R.id.rowPay4Date)?.setOnClickListener { pickDate(tvPay4Date) }
+        // Web parity on date windows: allotment due ≤ 10 days from booking
+        // date (all plans); 2nd/3rd/4th ≤ the plan's window (30/60/180).
+        view?.findViewById<View>(R.id.rowPayAllotDate)?.setOnClickListener {
+            pickDate(tvPayAllotDate, maxDateMillis = paymentDateLimitMillis(10))
+        }
+        view?.findViewById<View>(R.id.rowPay2Date)?.setOnClickListener {
+            pickDate(tvPay2Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+        }
+        view?.findViewById<View>(R.id.rowPay3Date)?.setOnClickListener {
+            pickDate(tvPay3Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+        }
+        view?.findViewById<View>(R.id.rowPay4Date)?.setOnClickListener {
+            pickDate(tvPay4Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+        }
         view?.findViewById<View>(R.id.rowPayPrefReg)?.setOnClickListener { pickDate(tvPayPrefReg) }
 
         // Staff pickers + radio
@@ -1286,9 +1313,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (payOtherApplicable) R.drawable.ic_outcome_checkbox_checked
             else R.drawable.ic_outcome_checkbox_empty
         )
-        ivPayFlexi?.setImageResource(
-            if (payFlexi) R.drawable.ic_outcome_radio_on else R.drawable.ic_outcome_radio_off
-        )
+        tvPayPlan?.text = planLabel(payPlan)
     }
 
     private fun refreshStaffSaveRadios() {
@@ -1992,6 +2017,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etChargeOfferValidity" to et(etChargeOfferValidity),
             // Payment
             "tvPayPaymentMode" to tv(tvPayPaymentMode),
+            "tvPayPlan" to tv(tvPayPlan),
             "etPayRegCharges" to et(etPayRegCharges),
             "etPayGstAmount" to et(etPayGstAmount),
             "etPayDocCharges" to et(etPayDocCharges),
@@ -2079,6 +2105,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etChargePromoValue, "etChargePromoValue")
             et(etChargeOfferValidity, "etChargeOfferValidity")
             tv(tvPayPaymentMode, "tvPayPaymentMode")
+            tv(tvPayPlan, "tvPayPlan")
+            // Re-derive the plan state from the restored label so windows
+            // and the request payload stay in sync with what's displayed.
+            tvPayPlan?.text?.toString()?.substringBefore(" (")?.trim()
+                ?.takeIf { it == "Regular" || it == "Flexi" || it == "Special" }
+                ?.let { payPlan = it }
             et(etPayRegCharges, "etPayRegCharges")
             et(etPayGstAmount, "etPayGstAmount")
             et(etPayDocCharges, "etPayDocCharges")
@@ -2257,7 +2289,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bookDuplicate = false
         payGstApplicable = true
         payOtherApplicable = true
-        payFlexi = false
+        payPlan = "Regular"
+        plotPrefillSpecialPayment = false
         staffSaveAs = SaveAs.DRAFT
         bookingSub = BookingSub.CLIENT
         bookingStep = BookingStep.CLIENT_FORM
@@ -2322,7 +2355,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun pickDate(target: TextView?, format: String = "dd/MM/yyyy", afterPicked: (() -> Unit)? = null) {
+    private fun pickDate(
+        target: TextView?,
+        format: String = "dd/MM/yyyy",
+        maxDateMillis: Long? = null,
+        afterPicked: (() -> Unit)? = null,
+    ) {
         val cal = Calendar.getInstance()
         val raw = target?.text?.toString()?.trim().orEmpty()
         listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy").firstNotNullOfOrNull { pattern ->
@@ -2342,7 +2380,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
             cal.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        ).apply {
+            maxDateMillis?.let { datePicker.maxDate = it }
+        }.show()
     }
 
     private fun pickTime(target: TextView?) {
@@ -2402,6 +2442,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             bookingGstPercent = null
             tvBookProject?.text = project.name ?: "Selected"
             tvBookPlot?.text = "Select Plot"
+            // A different project may not allow the Special plan.
+            plotPrefillSpecialPayment = false
+            ensurePaymentPlanAllowed()
         }
     }
 
@@ -2497,6 +2540,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun applyBookingPlotPrefill(resp: BookingPlotPrefillResponse) {
         bookingGstPercent = resp.project?.gstPercent
+        plotPrefillSpecialPayment = resp.project?.specialPaymentEnabled == true
+        ensurePaymentPlanAllowed()
         val fields = resp.fields
         fun money(value: Double?): String? {
             if (value == null || !value.isFinite()) return null
@@ -3325,6 +3370,98 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         return dateTextForApi(raw)
     }
 
+    // ── Payment plan (web parity: booking-new-page PAYMENT_PLAN_DAYS) ──
+
+    /** Day window for the scheduled payment dates under [plan]. */
+    private fun paymentPlanDays(plan: String = payPlan): Int = when (plan) {
+        "Flexi" -> 60
+        "Special" -> 180
+        else -> 30
+    }
+
+    private fun planLabel(plan: String): String = "$plan (max ${paymentPlanDays(plan)} days)"
+
+    private fun planFromLabel(label: String): String = label.substringBefore(" (").trim()
+
+    private fun specialPaymentAllowed(): Boolean =
+        bookingProject?.specialPaymentEnabled == true || plotPrefillSpecialPayment
+
+    /** Regular and Flexi always; Special only for enabled projects. */
+    private fun paymentPlanOptions(): List<String> = buildList {
+        add(planLabel("Regular"))
+        add(planLabel("Flexi"))
+        if (specialPaymentAllowed()) add(planLabel("Special"))
+    }
+
+    /** Web parity: a project without the flag can't keep a Special plan. */
+    private fun ensurePaymentPlanAllowed() {
+        if (payPlan == "Special" && !specialPaymentAllowed()) {
+            payPlan = "Regular"
+            tvPayPlan?.text = planLabel(payPlan)
+            clampPaymentDatesToPlan()
+        }
+    }
+
+    /** bookingDate + [days] as a DatePicker max; null without a booking date. */
+    private fun paymentDateLimitMillis(days: Int): Long? {
+        val iso = bookingDateForApi() ?: return null
+        val parsed = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
+        }.getOrNull() ?: return null
+        return Calendar.getInstance().apply {
+            time = parsed
+            add(Calendar.DAY_OF_YEAR, days)
+        }.timeInMillis
+    }
+
+    /** Days from the booking date to [raw]; null when either is unparsable. */
+    private fun daysFromBooking(raw: CharSequence?): Int? {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val booking = bookingDateForApi()
+            ?.let { runCatching { fmt.parse(it) }.getOrNull() } ?: return null
+        val target = dateTextForApi(raw)
+            ?.let { runCatching { fmt.parse(it) }.getOrNull() } ?: return null
+        return ((target.time - booking.time) / 86_400_000L).toInt()
+    }
+
+    /** Snap any scheduled date beyond the current plan's window back to the
+     *  window edge — same as the web's clamp on plan/booking-date changes. */
+    private fun clampPaymentDatesToPlan() {
+        val out = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+        fun clamp(tv: TextView?, maxDays: Int) {
+            val days = daysFromBooking(tv?.text) ?: return
+            if (days > maxDays) {
+                paymentDateLimitMillis(maxDays)?.let {
+                    tv?.text = out.format(java.util.Date(it))
+                }
+            }
+        }
+        clamp(tvPayAllotDate, 10)
+        val cap = paymentPlanDays()
+        clamp(tvPay2Date, cap)
+        clamp(tvPay3Date, cap)
+        clamp(tvPay4Date, cap)
+    }
+
+    /** Save-time guard mirroring the web's validation messages. */
+    private fun validatePaymentSchedule(): String? {
+        daysFromBooking(tvPayAllotDate?.text)?.let { days ->
+            if (days > 10) {
+                return "Allotment Due Date cannot exceed 10 days from booking date"
+            }
+        }
+        val cap = paymentPlanDays()
+        listOf("2nd" to tvPay2Date, "3rd" to tvPay3Date, "4th" to tvPay4Date)
+            .forEach { (label, tv) ->
+                daysFromBooking(tv?.text)?.let { days ->
+                    if (days > cap) {
+                        return "$payPlan plan $label payment date cannot exceed $cap days"
+                    }
+                }
+            }
+        return null
+    }
+
     private fun dateTextForApi(raw: CharSequence?): String? {
         val value = raw?.toString()?.trim().orEmpty()
         if (value.isBlank() || value.contains("dd/", ignoreCase = true)) return null
@@ -3376,6 +3513,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         if (bookingDateForApi() == null) {
             finishCta(error = "Booking Date is required")
+            return null
+        }
+        // Web-parity payment-schedule windows (allotment ≤ 10 days; the
+        // plan's 30/60/180-day cap on the scheduled payment dates).
+        validatePaymentSchedule()?.let { message ->
+            finishCta(error = message)
             return null
         }
         val bookingCost = numberOrNull(etChargeBookingCost?.text)
@@ -3441,7 +3584,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             loanAmountRequested = if (parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B")
                 numberOrNull(etPayLoanAmount?.text)
             else null,
-            freePayment = payFlexi,
+            paymentPlan = payPlan,
+            freePayment = payPlan == "Flexi",
             allotmentDueAmount = numberOrNull(etPayAllotDue?.text),
             allotmentDueDate = dateTextForApi(tvPayAllotDate?.text),
             secondPaymentAmount = numberOrNull(etPay2Mode?.text),
@@ -3740,7 +3884,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         row("Other Charges If Applicable", if (payOtherApplicable) "Yes" else "No")
         row("Advance Amount", etPayAdvanceAmount?.text)
         row("Payment Mode", tvPayPaymentMode?.text)
-        row("Flexi Payment", if (payFlexi) "Yes" else "No")
+        row("Payment Plan", planLabel(payPlan))
         row("Allotment Due Amount", etPayAllotDue?.text)
         row("Allotment Due Date", tvPayAllotDate?.text)
         row("2nd Payment Mode", etPay2Mode?.text)

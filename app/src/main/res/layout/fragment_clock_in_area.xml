@@ -133,22 +133,30 @@
                 android:background="@drawable/bg_attendance_banner">
 
                 <TextView
+                    android:id="@+id/tvAreaBannerTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
                     android:layout_marginTop="22dp"
+                    android:layout_marginEnd="96dp"
                     android:fontFamily="@font/inter_semibold"
-                    android:text="You are in the clock-in area!"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Getting your location…"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp" />
 
                 <TextView
+                    android:id="@+id/tvAreaBannerSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
                     android:layout_marginTop="48dp"
+                    android:layout_marginEnd="96dp"
                     android:fontFamily="@font/inter_medium"
-                    android:text="Now you can press clock in in this area"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:text="Make sure GPS is on to clock in"
                     android:textColor="#EDEAFF"
                     android:textSize="13sp" />
 

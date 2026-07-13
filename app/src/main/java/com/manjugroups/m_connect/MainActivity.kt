@@ -60,6 +60,10 @@ class MainActivity : AppCompatActivity() {
         // overlay is open and untouched.
         private const val NUDGE_AUTO_ADVANCE_MS = 4000L
 
+        // Minimum gap between full task-queue downloads for the nudge banner;
+        // backstack churn inside this window reuses the last result.
+        private const val TASKS_BANNER_TTL_MS = 15_000L
+
         private const val KEY_CURRENT_TAB = "current_tab"
         private const val KEY_NUDGE_DISMISSED_AT = "task_nudge_dismissed_at"
         private const val TAG_HOME = "root_tab_home"
@@ -137,6 +141,8 @@ class MainActivity : AppCompatActivity() {
     }
     // Newest open task — the LIFO "top of stack" the Complete chip routes to.
     private var topPendingTask: com.manjugroups.m_connect.network.DailyTaskData? = null
+    // Last time refreshTasksBanner actually hit the network (throttle clock).
+    private var lastTasksBannerFetchAt = 0L
     // Set when the pending-tasks notification is tapped — routes to the top
     // task once the next banner refresh has loaded it.
     private var openTasksOnNextRefresh = false
@@ -440,11 +446,23 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
-    fun refreshTasksBanner() {
+    fun refreshTasksBanner(force: Boolean = false) {
         if (!session.isLoggedIn) {
             com.manjugroups.m_connect.notifications.TasksNotification.clear(this)
             return
         }
+        // This fires on every backstack change AND activity resume, each call
+        // re-downloading the full task queue (hundreds of rows for admins) in
+        // parallel with any fetch the Task Manager screen itself is doing.
+        // Throttle background refreshes; task-completion paths pass force=true
+        // and a pending notification-tap route must always resolve.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force && !openTasksOnNextRefresh &&
+            now - lastTasksBannerFetchAt < TASKS_BANNER_TTL_MS
+        ) {
+            return
+        }
+        lastTasksBannerFetchAt = now
         lifecycleScope.launch {
             val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 .format(java.util.Date())
