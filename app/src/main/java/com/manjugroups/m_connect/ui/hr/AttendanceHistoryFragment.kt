@@ -236,7 +236,11 @@ class AttendanceHistoryFragment : Fragment() {
             logical.add(2 to "Team Approval")
         }
         if (canViewAllAppr) logical.add(3 to "All Approval")
-        if (canApprove) logical.add(4 to "HR Review")
+        // HR Review is an HR surface (final company-wide reclassification).
+        // Gate it on viewAllApprovals, NOT approve — managers/reporting
+        // officers legitimately hold attendance.approve for their own team
+        // and must not see the HR queue.
+        if (canViewAllAppr) logical.add(4 to "HR Review")
         if (canViewAll) logical.add(5 to "All")
 
         visibleLogicalTabs = logical.map { it.first }
@@ -380,14 +384,23 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 val approvalsDeferred = async {
                     if (cachedApprovals.isNotEmpty()) null
-                    else runCatching { api.getPendingAttendanceApprovals(token) }.getOrNull()
+                    // subtree, not the server's "direct" default: a reporting
+                    // officer must see pending approvals for EVERYONE below
+                    // them, not just direct reports — a manager-of-managers
+                    // otherwise gets an empty Team Approval tab.
+                    else runCatching {
+                        api.getPendingAttendanceApprovals(token, scope = "subtree")
+                    }.getOrNull()
                 }
+                // Company-wide surfaces are HR-only — skip the guaranteed-403
+                // fetches when the caller doesn't hold the permission.
+                val canViewAllApprovals = session.hasPermission("attendance.viewAllApprovals")
                 val allApprovalsDeferred = async {
-                    if (cachedAllApprovals.isNotEmpty()) null
+                    if (cachedAllApprovals.isNotEmpty() || !canViewAllApprovals) null
                     else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
                 val hrReviewDeferred = async {
-                    if (cachedHrReview.isNotEmpty()) null
+                    if (cachedHrReview.isNotEmpty() || !canViewAllApprovals) null
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {

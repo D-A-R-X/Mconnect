@@ -2815,6 +2815,9 @@ data class MarketingProject(
     val scope: String? = null,
     val status: String? = null,
     val location: String? = null,
+    // Gates the "Special (max 180 days)" payment plan in the booking form,
+    // mirroring the web. Null until the backend exposing it is deployed.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class MarketingProjectsResponse(
@@ -2905,6 +2908,8 @@ data class BookingPlotPrefillProject(
     val ratePerSqft: Double? = null,
     val guidelineRatePerSqft: Double? = null,
     val gstPercent: Double? = null,
+    // See MarketingProject.specialPaymentEnabled.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class BookingPlotPrefillPlot(
@@ -3016,6 +3021,9 @@ data class CreateBookingRequest(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -3162,6 +3170,9 @@ data class Booking(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -3323,6 +3334,9 @@ data class UpdateBookingRequest(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,

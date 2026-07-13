@@ -130,36 +130,15 @@
             android:inputType="numberDecimal" />
     </LinearLayout>
 
-    <!-- Flexi Payment (Yes radio) -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Flexi Payment" />
-    <LinearLayout
-        android:id="@+id/rowPayFlexi"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="14dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:text="Yes"
-            android:textColor="#101828"
-            android:textSize="13sp" />
-
-        <ImageView
-            android:id="@+id/ivPayFlexi"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_outcome_radio_on" />
+    <!-- Payment Plan — mirrors the web's Balance Payment Schedule select:
+         Regular (max 30 days) / Flexi (max 60 days) always, plus
+         Special (max 180 days) only when the selected project has
+         specialPaymentEnabled. Flexi keeps mapping to freePayment. -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Payment Plan" />
+    <LinearLayout android:id="@+id/rowPayPlan" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+        <TextView android:id="@+id/tvPayPlan" style="@style/OutcomeFieldValue" android:hint="Select Plan" />
+        <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Allotment Due Amount" />
