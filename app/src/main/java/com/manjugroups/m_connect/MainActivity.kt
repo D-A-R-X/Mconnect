@@ -674,6 +674,101 @@ class MainActivity : AppCompatActivity() {
         }
         h.title.text = (t.title ?: t.taskName ?: t.label ?: "Pending task").trim()
 
+        // ── Per-card color theme ──────────────────────────────────────────
+        // Cycle through 4 premium palettes so each card in the carousel
+        // is visually distinct when swiping.
+        data class NudgeTheme(
+            val accentDark: Int,    // header label, icon tint, View Details text
+            val accentLight: Int,   // icon chip bg, status pill bg
+            val statusInProgressBg: Int,
+            val statusInProgressText: Int,
+            val statusPendingBg: Int,
+            val statusPendingText: Int,
+            val ctaRes: Int,        // CTA button drawable
+            val glowRes: Int,       // bottom glow drawable
+            val dotColor: Int,      // active page dot
+        )
+
+        val themes = arrayOf(
+            // 0 — Purple / Indigo
+            NudgeTheme(
+                accentDark = Color.parseColor("#6941C6"),
+                accentLight = Color.parseColor("#F4EBFF"),
+                statusInProgressBg = Color.parseColor("#F4EBFF"),
+                statusInProgressText = Color.parseColor("#6941C6"),
+                statusPendingBg = Color.parseColor("#FFFAEB"),
+                statusPendingText = Color.parseColor("#B54708"),
+                ctaRes = R.drawable.bg_task_nudge_cta_purple,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_purple,
+                dotColor = Color.parseColor("#7F56D9"),
+            ),
+            // 1 — Amber / Orange
+            NudgeTheme(
+                accentDark = Color.parseColor("#B54708"),
+                accentLight = Color.parseColor("#FFF6ED"),
+                statusInProgressBg = Color.parseColor("#FFF6ED"),
+                statusInProgressText = Color.parseColor("#B54708"),
+                statusPendingBg = Color.parseColor("#FEF3F2"),
+                statusPendingText = Color.parseColor("#B42318"),
+                ctaRes = R.drawable.bg_task_nudge_cta_amber,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_amber,
+                dotColor = Color.parseColor("#D97706"),
+            ),
+            // 2 — Ocean Blue
+            NudgeTheme(
+                accentDark = Color.parseColor("#1D4ED8"),
+                accentLight = Color.parseColor("#EFF6FF"),
+                statusInProgressBg = Color.parseColor("#EFF6FF"),
+                statusInProgressText = Color.parseColor("#1D4ED8"),
+                statusPendingBg = Color.parseColor("#FFF7ED"),
+                statusPendingText = Color.parseColor("#C2410C"),
+                ctaRes = R.drawable.bg_task_nudge_cta_blue,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_blue,
+                dotColor = Color.parseColor("#2563EB"),
+            ),
+            // 3 — Emerald / Teal
+            NudgeTheme(
+                accentDark = Color.parseColor("#047857"),
+                accentLight = Color.parseColor("#ECFDF5"),
+                statusInProgressBg = Color.parseColor("#ECFDF5"),
+                statusInProgressText = Color.parseColor("#047857"),
+                statusPendingBg = Color.parseColor("#FFFBEB"),
+                statusPendingText = Color.parseColor("#A16207"),
+                ctaRes = R.drawable.bg_task_nudge_cta_emerald,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_emerald,
+                dotColor = Color.parseColor("#059669"),
+            ),
+        )
+
+        val theme = themes[position % themes.size]
+
+        // Apply accent color to header
+        h.tvHeaderLabel.setTextColor(theme.accentDark)
+        h.ivHeaderIcon.setColorFilter(theme.accentDark)
+        h.chipHeaderIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // Apply to due-date row icons
+        h.ivDueIcon.setColorFilter(theme.accentDark)
+        h.chipDueIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // Apply to description row icons
+        h.ivDescIcon.setColorFilter(theme.accentDark)
+        h.chipDescIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // View Details pill
+        (h.details as? TextView)?.setTextColor(theme.accentDark)
+        h.details.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // CTA button and bottom glow
+        h.complete.setBackgroundResource(theme.ctaRes)
+        h.bottomGlow.setBackgroundResource(theme.glowRes)
+
+        // ── End color theme ───────────────────────────────────────────────
+
         // Category/module can arrive raw ("site_visits") — humanize it.
         val moduleLabel = (t.module ?: t.taskCategory)
             ?.takeIf { it.isNotBlank() }
@@ -691,10 +786,10 @@ class MainActivity : AppCompatActivity() {
         val inProgress = t.status?.equals("in-progress", ignoreCase = true) == true
         h.status.text = if (inProgress) "In Progress" else "Pending"
         h.status.backgroundTintList = android.content.res.ColorStateList.valueOf(
-            Color.parseColor(if (inProgress) "#F4EBFF" else "#FFFAEB")
+            if (inProgress) theme.statusInProgressBg else theme.statusPendingBg
         )
         h.status.setTextColor(
-            Color.parseColor(if (inProgress) "#6941C6" else "#B54708")
+            if (inProgress) theme.statusInProgressText else theme.statusPendingText
         )
 
         // Deadline is yyyy-MM-dd; overdue/today render red so the urgency
@@ -747,6 +842,10 @@ class MainActivity : AppCompatActivity() {
                     if (active) R.drawable.bg_task_nudge_dot_on
                     else R.drawable.bg_task_nudge_dot_off
                 )
+                if (active) {
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(theme.dotColor)
+                }
                 layoutParams = LinearLayout.LayoutParams(
                     dpToPx(if (active) 18 else 7), dpToPx(7)
                 ).apply { marginStart = dpToPx(3); marginEnd = dpToPx(3) }
@@ -770,6 +869,15 @@ class MainActivity : AppCompatActivity() {
         val details: android.view.View = v.findViewById(R.id.btnNudgeDetails)
         val complete: android.view.View = v.findViewById(R.id.btnNudgeComplete)
         val dots: LinearLayout = v.findViewById(R.id.nudgeDots)
+        // Tintable elements for per-card color theming
+        val chipHeaderIcon: android.view.View = v.findViewById(R.id.chipHeaderIcon)
+        val ivHeaderIcon: ImageView = v.findViewById(R.id.ivHeaderIcon)
+        val tvHeaderLabel: TextView = v.findViewById(R.id.tvHeaderLabel)
+        val chipDueIcon: android.view.View = v.findViewById(R.id.chipDueIcon)
+        val ivDueIcon: ImageView = v.findViewById(R.id.ivDueIcon)
+        val chipDescIcon: android.view.View = v.findViewById(R.id.chipDescIcon)
+        val ivDescIcon: ImageView = v.findViewById(R.id.ivDescIcon)
+        val bottomGlow: android.view.View = v.findViewById(R.id.bottomGlowContainer)
     }
 
     private class TaskNudgeAdapter(private val host: MainActivity) :
