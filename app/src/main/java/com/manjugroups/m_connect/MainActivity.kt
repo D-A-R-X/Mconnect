@@ -269,7 +269,115 @@ class MainActivity : AppCompatActivity() {
         // Collapsed nudge tab behind the nav pill — reopens the cards.
         navTasksPeek = findViewById(R.id.navTasksPeek)
         tvNavTasksPeek = findViewById(R.id.tvNavTasksPeek)
-        navTasksPeek.setOnClickListener { showTaskNudgeOverlay() }
+
+        // Custom touch listener that supports both tap and swipe up to expand cards smoothly
+        val density = resources.displayMetrics.density
+        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        var startY = 0f
+        var startX = 0f
+        var isDragging = false
+        val maxDragDistance = 250f * density // Total vertical drag distance to open
+        val initialPagerY = 250f * density // Pager initial downward translation when starting drag
+
+        navTasksPeek.setOnTouchListener(object : android.view.View.OnTouchListener {
+            @android.annotation.SuppressLint("ClickableViewAccessibility")
+            override fun onTouch(v: android.view.View, event: android.view.MotionEvent): Boolean {
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        startY = event.rawY
+                        startX = event.rawX
+                        isDragging = false
+                        taskNudgeOverlay.animate().cancel()
+                        taskNudgePager.animate().cancel()
+                        return true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val dy = event.rawY - startY
+                        val dx = event.rawX - startX
+                        if (!isDragging && dy < -touchSlop && Math.abs(dy) > Math.abs(dx)) {
+                            isDragging = true
+                            taskNudgeBackCallback.isEnabled = true
+                            if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
+                                taskNudgeOverlay.visibility = android.view.View.VISIBLE
+                                taskNudgeOverlay.alpha = 0f
+                                taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
+                                taskNudgePager.translationY = initialPagerY
+                                taskNudgePager.scaleX = 0.94f
+                                taskNudgePager.scaleY = 0.94f
+                                taskNudgePager.alpha = 0f
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val blur = android.graphics.RenderEffect.createBlurEffect(
+                                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
+                                )
+                                fragmentContainer.setRenderEffect(blur)
+                                tabBarContainer.setRenderEffect(blur)
+                                if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur)
+                            }
+                            navTasksPeek.visibility = android.view.View.GONE
+                        }
+                        if (isDragging) {
+                            val progress = Math.min(1.0f, Math.max(0f, -dy / maxDragDistance))
+                            taskNudgeOverlay.alpha = progress
+                            taskNudgePager.alpha = progress
+                            taskNudgePager.scaleX = 0.94f + (0.06f * progress)
+                            taskNudgePager.scaleY = 0.94f + (0.06f * progress)
+                            taskNudgePager.translationY = initialPagerY * (1.0f - progress)
+                        }
+                        return true
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        val dy = event.rawY - startY
+                        if (isDragging) {
+                            if (-dy > maxDragDistance * 0.3f) {
+                                // Snap fully open with overshoot
+                                taskNudgeOverlay.animate().alpha(1f).setDuration(250).start()
+                                taskNudgePager.animate()
+                                    .translationY(0f)
+                                    .alpha(1f)
+                                    .scaleX(1f)
+                                    .scaleY(1f)
+                                    .setDuration(350)
+                                    .setInterpolator(android.view.animation.OvershootInterpolator(1.1f))
+                                    .withEndAction {
+                                        scheduleTaskNudgeAutoAdvance()
+                                        fragmentContainer.importantForAccessibility =
+                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                        tabBarContainer.importantForAccessibility =
+                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
+                                    }
+                                    .start()
+                            } else {
+                                // Animate back to hidden
+                                taskNudgeOverlay.animate().alpha(0f).setDuration(200).withEndAction {
+                                    taskNudgeOverlay.visibility = android.view.View.GONE
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        fragmentContainer.setRenderEffect(null)
+                                        tabBarContainer.setRenderEffect(null)
+                                        if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
+                                    }
+                                    navTasksPeek.visibility = android.view.View.VISIBLE
+                                    taskNudgeBackCallback.isEnabled = false
+                                }.start()
+                                taskNudgePager.animate()
+                                    .translationY(initialPagerY)
+                                    .alpha(0f)
+                                    .scaleX(0.94f)
+                                    .scaleY(0.94f)
+                                    .setDuration(200)
+                                    .start()
+                            }
+                        } else {
+                            // Simple click/tap action
+                            showTaskNudgeOverlay()
+                        }
+                        return true
+                    }
+                }
+                return false
+            }
+        })
         // Tasks complete server-side when their underlying work is done
         // (attendance reviewed, CP/SV visited, ...), so re-check the count on
         // every navigation — the badge disappears as soon as the stack clears.
