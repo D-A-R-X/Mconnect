@@ -283,8 +283,8 @@ class MainActivity : AppCompatActivity() {
                 addUpdateListener { animator ->
                     val color = animator.animatedValue as Int
                     val fraction = animator.animatedFraction
-                    // Breathe stroke thickness from 1dp to 1.8dp dynamically
-                    val width = (1.0f + fraction * 0.8f) * resources.displayMetrics.density
+                    // Breathe stroke thickness from 1.2dp to 2.8dp dynamically to make it more noticeable
+                    val width = (1.2f + fraction * 1.6f) * resources.displayMetrics.density
                     bg.setStroke(width.toInt(), color)
                 }
             }
