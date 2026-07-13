@@ -824,12 +824,13 @@ class MainActivity : AppCompatActivity() {
         h.descRow.visibility =
             if (desc.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
 
-        // View Details + Complete both close the nudge and open the Task
+        // Card itself + View Details + Complete all close the nudge and open the Task
         // Manager (tasks complete server-side when their work is done).
         val openManager = android.view.View.OnClickListener {
             hideTaskNudgeOverlay(markDismissed = true)
             openTaskManager()
         }
+        h.itemView.setOnClickListener(openManager)
         h.details.setOnClickListener(openManager)
         h.complete.setOnClickListener(openManager)
 
