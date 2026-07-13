@@ -222,6 +222,9 @@ interface ApiService {
         @Query("scope") scope: String? = null,
         @Query("onlyOverdue") onlyOverdue: Boolean? = null,
         @Query("all") all: Boolean? = null,
+        // requests=true also returns the caller's team correction/remark
+        // requests waiting on the reporting officer (response.requests).
+        @Query("requests") requests: Boolean? = null,
     ): AttendanceApprovalsResponse
 
     // Team Attendance tab — the caller's reporting-subtree attendance for a
@@ -1508,7 +1511,15 @@ data class DaySessionsResponse(
 data class AttendanceApprovalsResponse(
     val success: Boolean,
     val total: Int? = null,
-    val records: List<AttendanceApprovalRecord> = emptyList()
+    val records: List<AttendanceApprovalRecord> = emptyList(),
+    // Pending correction/remark requests WAITING ON the reporting officer
+    // (returned when the pending-approvals call passes requests=true).
+    // Separate from records: their _id is an attendanceRequests id and must
+    // be approved/rejected with isRequest = true.
+    // NULLABLE, not defaulted: Gson skips Kotlin constructor defaults, so a
+    // backend that doesn't return the field yet yields null — a non-null
+    // declaration would NPE at first use.
+    val requests: List<AttendanceApprovalRecord>? = null,
 )
 
 data class AttendanceApprovalRecord(
@@ -1538,6 +1549,11 @@ data class AttendanceApprovalRecord(
     val requestedPunchIn: String? = null,
     val requestedPunchOut: String? = null,
     val requestReason: String? = null,
+    // "ro" = waiting on the reporting/attendance officer, "hr" = waiting on
+    // HR. Only present on TRUE request rows (attendanceRequests ids) from
+    // hr-review / the pending-approvals requests array — attendance rows
+    // leave it null, which is how the two are told apart safely.
+    val requestStage: String? = null,
     // Server-computed per-DAY late fine (₹) for this record, from
     // staffAttendance.listForReport / enrichReportRecords. Drives the All-tab
     // attendance-fine banner (0 / absent = no fine that day).

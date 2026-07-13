@@ -78,7 +78,11 @@ class AttendanceHistoryFragment : Fragment() {
     private val submittedRemarkDates = mutableSetOf<String>()
 
     private var cachedMyRecords: List<AttendanceRecord> = emptyList()
-    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()      // Team Approval
+    private var cachedApprovals: List<AttendanceApprovalRecord> = emptyList()      // Team Approval · Attendance
+    // Team Approval · Requests — the caller's team correction/remark requests
+    // waiting on the reporting officer (web's "Waiting on RO"). Their ids are
+    // attendanceRequests ids: approve/reject with isRequest = true.
+    private var cachedTeamRequests: List<AttendanceApprovalRecord> = emptyList()
     private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()   // All Approval
     private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()       // HR Review (both sub-tabs)
     private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance
@@ -255,7 +259,9 @@ class AttendanceHistoryFragment : Fragment() {
             logical.map { HorizontalTabLayout.Tab(it.second) },
             defaultSelection = defaultPos,
         )
-        if (activeTab == 4) {
+        // Team Approval (2) and HR Review (4) both host the
+        // Attendance/Requests sub-tab strip.
+        if (activeTab == 2 || activeTab == 4) {
             binding.layoutSubTabs.visibility = View.VISIBLE
             updateSubTabStyles()
         } else {
@@ -267,8 +273,9 @@ class AttendanceHistoryFragment : Fragment() {
                 activeTab = visibleLogicalTabs.getOrElse(index) { 0 }
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
-                if (activeTab == 4) {
+                if (activeTab == 2 || activeTab == 4) {
                     binding.layoutSubTabs.visibility = View.VISIBLE
+                    activeSubTab = 0
                     updateSubTabStyles()
                 } else {
                     binding.layoutSubTabs.visibility = View.GONE
@@ -335,8 +342,17 @@ class AttendanceHistoryFragment : Fragment() {
         binding.subTabRequest.background = if (activeSubTab == 1) activeBg else inactiveBg
         binding.subTabRequest.setTextColor(if (activeSubTab == 1) activeColor else inactiveColor)
 
-        val attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
-        val reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
+        // The strip is shared by HR Review (tab 4) and Team Approval (tab 2);
+        // counts come from whichever tab is hosting it.
+        val attCount: Int
+        val reqCount: Int
+        if (activeTab == 2) {
+            attCount = cachedApprovals.size
+            reqCount = cachedTeamRequests.size
+        } else {
+            attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
+            reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
+        }
         binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
         binding.subTabRequest.text = String.format(Locale.US, "Requests (%02d)", reqCount)
     }
@@ -346,6 +362,7 @@ class AttendanceHistoryFragment : Fragment() {
             cachedMyRecords = emptyList()
             cachedTeamAttendance = emptyList()
             cachedApprovals = emptyList()
+            cachedTeamRequests = emptyList()
             cachedAllApprovals = emptyList()
             cachedHrReview = emptyList()
             cachedAllAttendance = emptyList()
@@ -389,7 +406,9 @@ class AttendanceHistoryFragment : Fragment() {
                     // them, not just direct reports — a manager-of-managers
                     // otherwise gets an empty Team Approval tab.
                     else runCatching {
-                        api.getPendingAttendanceApprovals(token, scope = "subtree")
+                        api.getPendingAttendanceApprovals(
+                            token, scope = "subtree", requests = true,
+                        )
                     }.getOrNull()
                 }
                 // Company-wide surfaces are HR-only — skip the guaranteed-403
@@ -419,8 +438,40 @@ class AttendanceHistoryFragment : Fragment() {
                 teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
                 updateBadgeFor(1, cachedTeamAttendance.size)
 
-                approvalsDeferred.await()?.let { if (it.success) cachedApprovals = it.records }
-                updateBadgeFor(2, cachedApprovals.size)
+                approvalsDeferred.await()?.let {
+                    if (it.success) {
+                        cachedApprovals = it.records
+                        // orEmpty — a backend without the requests param yet
+                        // returns no field at all (Gson → null).
+                        cachedTeamRequests = it.requests.orEmpty()
+                        // Fallback while the backend predates ?requests=true:
+                        // hr-review ALREADY returns the true request rows
+                        // (attendanceRequests ids + requestStage), just
+                        // company-wide — scope them to the caller's subtree
+                        // using the Team Attendance staff set. Gated on
+                        // attendance.approve (the hr-review route's gate);
+                        // retires automatically once the server sends
+                        // `requests`.
+                        if (it.requests == null &&
+                            session.hasPermission("attendance.approve")
+                        ) {
+                            val teamIds = cachedTeamAttendance
+                                .mapNotNull { r -> r.staffId }
+                                .toSet()
+                            if (teamIds.isNotEmpty()) {
+                                val hr = runCatching {
+                                    api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE)
+                                }.getOrNull()
+                                if (hr?.success == true) {
+                                    cachedTeamRequests = hr.records.filter { row ->
+                                        row.requestStage == "ro" && row.staffId in teamIds
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                updateBadgeFor(2, cachedApprovals.size + cachedTeamRequests.size)
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
                 updateBadgeFor(3, cachedAllApprovals.size)
@@ -487,7 +538,9 @@ class AttendanceHistoryFragment : Fragment() {
         when (activeTab) {
             0 -> renderRecords(fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate), "")
             1 -> renderTeamAttendance(cachedTeamAttendance, showFines = false, "")
-            2 -> renderApprovals(cachedApprovals, "")
+            2 -> renderApprovals(
+                if (activeSubTab == 1) cachedTeamRequests else cachedApprovals, ""
+            )
             3 -> renderApprovals(cachedAllApprovals, "")
             4 -> {
                 val source = if (activeSubTab == 0) {
@@ -507,7 +560,7 @@ class AttendanceHistoryFragment : Fragment() {
     private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
         0 -> cachedMyRecords.isEmpty()
         1 -> cachedTeamAttendance.isEmpty()
-        2 -> cachedApprovals.isEmpty()
+        2 -> cachedApprovals.isEmpty() && cachedTeamRequests.isEmpty()
         3 -> cachedAllApprovals.isEmpty()
         4 -> cachedHrReview.isEmpty()
         5 -> cachedAllAttendance.isEmpty()
@@ -1122,7 +1175,10 @@ class AttendanceHistoryFragment : Fragment() {
             // web's review dialog. Rows on the Requests sub-tab are
             // attendanceRequests docs, so their decision routes through the
             // request mutations (isRequest).
-            val isRequestRow = activeTab == 4 && activeSubTab == 1
+            // Request rows (attendanceRequests ids → isRequest=true on
+            // approve/reject) live on the Requests sub-tab of BOTH the
+            // Team Approval and HR Review tabs.
+            val isRequestRow = (activeTab == 2 || activeTab == 4) && activeSubTab == 1
             val openReviewModal = View.OnClickListener {
                 val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
                     override fun onApprove(recordId: String, status: String) {
@@ -1262,7 +1318,7 @@ class AttendanceHistoryFragment : Fragment() {
         val originalList: List<Any> = when (activeTab) {
             0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
             1 -> cachedTeamAttendance
-            2 -> cachedApprovals
+            2 -> if (activeSubTab == 1) cachedTeamRequests else cachedApprovals
             3 -> cachedAllApprovals
             4 -> {
                 if (activeSubTab == 0) {
