@@ -146,7 +146,15 @@ class HomeFragment : Fragment() {
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         }
-        setupEdgeDragQr()
+        // The edge-drag QR panel opens the Front-Desk check-in scanner —
+        // only wire it for staff who hold a frontdesk permission (web
+        // parity: /frontdesk is gated the same way). Everyone else keeps
+        // an artifact-free home edge.
+        if (listOf("frontdesk.view", "frontdesk.checkin", "frontdesk.invite")
+                .any { session.hasPermission(it) }
+        ) {
+            setupEdgeDragQr()
+        }
     }
 
     private fun setupPullToRefresh() {

@@ -83,6 +83,11 @@ class AttendanceHistoryFragment : Fragment() {
     // waiting on the reporting officer (web's "Waiting on RO"). Their ids are
     // attendanceRequests ids: approve/reject with isRequest = true.
     private var cachedTeamRequests: List<AttendanceApprovalRecord> = emptyList()
+    // True once a REAL request feed exists (server `requests` array or the
+    // hr-review fallback). Only then are request-linked shadow rows filtered
+    // out of the Team Approval attendance list — otherwise a plain reporting
+    // officer on a pre-deploy backend would lose request visibility entirely.
+    private var teamRequestsSourced = false
     private var cachedAllApprovals: List<AttendanceApprovalRecord> = emptyList()   // All Approval
     private var cachedHrReview: List<AttendanceApprovalRecord> = emptyList()       // HR Review (both sub-tabs)
     private var cachedTeamAttendance: List<AttendanceApprovalRecord> = emptyList() // Team Attendance
@@ -347,7 +352,7 @@ class AttendanceHistoryFragment : Fragment() {
         val attCount: Int
         val reqCount: Int
         if (activeTab == 2) {
-            attCount = cachedApprovals.size
+            attCount = teamApprovalAttendanceRows().size
             reqCount = cachedTeamRequests.size
         } else {
             attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
@@ -444,6 +449,7 @@ class AttendanceHistoryFragment : Fragment() {
                         // orEmpty — a backend without the requests param yet
                         // returns no field at all (Gson → null).
                         cachedTeamRequests = it.requests.orEmpty()
+                        teamRequestsSourced = it.requests != null
                         // Fallback while the backend predates ?requests=true:
                         // hr-review ALREADY returns the true request rows
                         // (attendanceRequests ids + requestStage), just
@@ -466,15 +472,24 @@ class AttendanceHistoryFragment : Fragment() {
                                     cachedTeamRequests = hr.records.filter { row ->
                                         row.requestStage == "ro" && row.staffId in teamIds
                                     }
+                                    // hr-review rows carry requestStage only
+                                    // on true request rows — if none do, the
+                                    // backend predates the field and we have
+                                    // no real request feed.
+                                    teamRequestsSourced =
+                                        hr.records.any { row -> row.requestStage != null }
                                 }
                             }
                         }
                     }
                 }
-                updateBadgeFor(2, cachedApprovals.size + cachedTeamRequests.size)
+                updateBadgeFor(
+                    2,
+                    teamApprovalAttendanceRows().size + cachedTeamRequests.size,
+                )
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
-                updateBadgeFor(3, cachedAllApprovals.size)
+                updateBadgeFor(3, cachedAllApprovals.count { !isRequestLinked(it) })
 
                 hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
                 updateBadgeFor(4, cachedHrReview.size)
@@ -539,9 +554,11 @@ class AttendanceHistoryFragment : Fragment() {
             0 -> renderRecords(fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate), "")
             1 -> renderTeamAttendance(cachedTeamAttendance, showFines = false, "")
             2 -> renderApprovals(
-                if (activeSubTab == 1) cachedTeamRequests else cachedApprovals, ""
+                if (activeSubTab == 1) cachedTeamRequests
+                else teamApprovalAttendanceRows(),
+                ""
             )
-            3 -> renderApprovals(cachedAllApprovals, "")
+            3 -> renderApprovals(cachedAllApprovals.filterNot(::isRequestLinked), "")
             4 -> {
                 val source = if (activeSubTab == 0) {
                     cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
@@ -555,6 +572,23 @@ class AttendanceHistoryFragment : Fragment() {
 
         filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
     }
+
+    /**
+     * True when an attendance row is just the shadow of a pending
+     * correction/remark REQUEST (the pending-approvals feed folds those in
+     * with requestType set). They must not appear in the Attendance
+     * approval lists — acting on the day directly while its request is
+     * open is exactly the confusion the Requests tabs exist to avoid; the
+     * request itself surfaces there with the proper review modal.
+     */
+    private fun isRequestLinked(r: AttendanceApprovalRecord): Boolean =
+        r.requestType == "remarks" || r.requestType == "correction"
+
+    /** Team Approval · Attendance rows: request shadows are filtered out
+     *  only once a real Requests feed exists to hold them. */
+    private fun teamApprovalAttendanceRows(): List<AttendanceApprovalRecord> =
+        if (teamRequestsSourced) cachedApprovals.filterNot(::isRequestLinked)
+        else cachedApprovals
 
     /** Whether the ACTIVE tab's backing cache has nothing to show yet. */
     private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
@@ -1318,8 +1352,9 @@ class AttendanceHistoryFragment : Fragment() {
         val originalList: List<Any> = when (activeTab) {
             0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
             1 -> cachedTeamAttendance
-            2 -> if (activeSubTab == 1) cachedTeamRequests else cachedApprovals
-            3 -> cachedAllApprovals
+            2 -> if (activeSubTab == 1) cachedTeamRequests
+                 else teamApprovalAttendanceRows()
+            3 -> cachedAllApprovals.filterNot(::isRequestLinked)
             4 -> {
                 if (activeSubTab == 0) {
                     cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }

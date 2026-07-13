@@ -377,6 +377,14 @@ class AppLibraryFragment : Fragment() {
         // visibility and click wiring atomically.
         val session = SessionManager(requireContext())
         val hasAny = { keys: List<String> -> keys.any { session.hasPermission(it) } }
+        // Web-parity telesales lockout (app-sidebar's TELESALES_RESTRICTED_GROUPS):
+        // telesales-wing staff never see the Accounts group, even when an IAM
+        // template accidentally grants the permission. Designation is the
+        // mobile session's signal (the web additionally checks department,
+        // which mobile sessions don't carry).
+        val isTelesalesRestricted = (session.designation ?: "")
+            .lowercase(java.util.Locale.US)
+            .let { it.contains("lead management executive") || it.contains("telesales") }
 
         // ── HR ────────────────────────────────────────────────────────────
         bindIamEntry(
@@ -468,9 +476,11 @@ class AppLibraryFragment : Fragment() {
         binding.dividerHrAttendanceReview.visibility = View.GONE
 
         // ── Task Manager ──────────────────────────────────────────────────
+        // Web parity: the sidebar gates Task Manager on dailyTasks.view (a
+        // self-service default — everyone has their own daily-task queue).
         bindIamEntry(
             row = binding.itemTaskManagerOpen,
-            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+            allowed = hasAny(listOf("dailyTasks.view", "dailyTasks.viewAll", "dailyTasks.create")),
         ) { openScreen(com.manjugroups.m_connect.ui.tasks.TaskManagerFragment()) }
 
         // ── Project ───────────────────────────────────────────────────────
@@ -478,13 +488,17 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemProjectTasks,
             allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
         ) { openScreen(TasksFragment()) }
+        // Daily Log and Issues are PROJECT-module surfaces (web: tabs inside
+        // the project detail, behind projects.view) — gating them on the
+        // self-service tasks.view leaked the whole Project card to roles
+        // like telecallers.
         bindIamEntry(
             row = binding.itemProjectDailyLog,
-            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+            allowed = session.hasPermission("projects.view"),
         ) { openScreen(com.manjugroups.m_connect.ui.projects.DailyLogFragment()) }
         bindIamEntry(
             row = binding.itemProjectIssues,
-            allowed = hasAny(listOf("tasks.view", "tasks.viewAll", "tasks.create")),
+            allowed = session.hasPermission("projects.view"),
         ) { openScreen(com.manjugroups.m_connect.ui.issues.IssuesFragment()) }
         bindIamEntry(
             row = binding.itemProjectExpenses,
@@ -518,9 +532,12 @@ class AppLibraryFragment : Fragment() {
         ) { openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment()) }
 
         // ── Fleet Management ──────────────────────────────────────────────
+        // Web parity: /fleet/my-trips is DRIVER-only (roster check on the
+        // web) — marketing.siteVisits.view used to leak a Fleet card to
+        // every marketing/telecaller role.
         bindIamEntry(
             row = binding.itemFleetMyTrips,
-            allowed = session.isDriverMode || session.hasPermission("marketing.siteVisits.view") || session.hasPermission("fleet.view"),
+            allowed = session.isDriverMode,
         ) {
             openScreen(MyTripsFragment())
         }
@@ -547,10 +564,13 @@ class AppLibraryFragment : Fragment() {
         // ── Accounts ───────────────────────────────────────────────────────
         // Accounts section — the collections verification / payment queue.
         // Shows for the Accounts-module "Requests" permission (accounts.requests.view)
-        // OR the Post-Sales verify permission, so granting either reveals it.
+        // OR the Post-Sales verify permission — but NEVER for telesales staff:
+        // the web sidebar hard-hides the Accounts group for them even when an
+        // IAM template accidentally grants the key.
         bindIamEntry(
             row = binding.itemAccountsPostSalesVerification,
-            allowed = hasAny(listOf("accounts.requests.view", "postSales.accounts.verify")),
+            allowed = !isTelesalesRestricted &&
+                hasAny(listOf("accounts.requests.view", "postSales.accounts.verify")),
         ) { openScreen(PostSalesVerificationFragment()) }
 
         // ── Front Desk ──────────────────────────────────────────────────────
@@ -698,7 +718,10 @@ class AppLibraryFragment : Fragment() {
             ),
             Triple(
                 Filter.PROJECT, binding.cardProject,
-                listOf(R.id.itemProjectTasks, R.id.itemProjectExpenses),
+                listOf(
+                    R.id.itemProjectTasks, R.id.itemProjectDailyLog,
+                    R.id.itemProjectIssues, R.id.itemProjectExpenses,
+                ),
             ),
             Triple(
                 Filter.LAND, binding.cardLand,
