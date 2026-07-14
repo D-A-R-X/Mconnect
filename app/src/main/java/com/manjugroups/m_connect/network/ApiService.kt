@@ -1672,9 +1672,11 @@ data class IamPermissionsResponse(
 data class PolicyResponse(val success: Boolean, val policy: PolicyData?)
 data class PolicyData(val leave: LeavePolicy?, val permission: PermissionPolicy?, val office: OfficePolicy?)
 data class LeavePolicy(
-    val casualPerYear: Int = 0,
-    val sickPerYear: Int = 0,
-    val earnedPerYear: Int = 0,
+    // Nullable so "field absent" (older backend) is distinguishable from an
+    // explicit 0-day allocation — HR policy honors 0 as "category disabled".
+    val casualPerYear: Int? = null,
+    val sickPerYear: Int? = null,
+    val earnedPerYear: Int? = null,
     val types: List<String> = emptyList()
 )
 data class PermissionPolicy(val monthlyLimitHours: Int = 0)
@@ -2334,7 +2336,11 @@ data class DailyTaskData(
     val module: String? = null,
     // Whether a deadline-extension request is pending on this task (Extension
     // Requests card).
-    val pendingExtensionRequest: Boolean? = null,
+    // Older backends sent a Boolean; the extension-requests feature now
+    // sends the full request OBJECT (or null). Typed Any? so one task with
+    // an object can't fail the whole list parse — treat "non-null and not
+    // false" as "has a pending extension request".
+    val pendingExtensionRequest: Any? = null,
     val sourceReferenceType: String? = null,
     val sourceReferenceId: String? = null,
     val actionUrl: String? = null,
@@ -2428,7 +2434,10 @@ data class ProjectSummary(
     val location: String? = null,
     val managerName: String? = null,
     val staffManagerId: String? = null,
-    val projectType: String? = null
+    val projectType: String? = null,
+    // Raw project doc rides through /api/projects/get on every deploy, so
+    // this is the prod-safe source for the Special payment plan gate.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class MyProjectsResponse(
@@ -2979,6 +2988,9 @@ data class CreateBookingRequest(
     val bookingDate: String,                // yyyy-MM-dd
     val leadId: String? = null,
     val title: String? = null,
+    // Optional client photo (web parity) — stored on the clients master row.
+    val clientImageStorageId: String? = null,
+    val clientImageFileName: String? = null,
     val fatherSpouseName: String? = null,
     val dateOfBirth: String? = null,
     val anniversaryDate: String? = null,
