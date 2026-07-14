@@ -222,6 +222,9 @@ interface ApiService {
         @Query("scope") scope: String? = null,
         @Query("onlyOverdue") onlyOverdue: Boolean? = null,
         @Query("all") all: Boolean? = null,
+        // requests=true also returns the caller's team correction/remark
+        // requests waiting on the reporting officer (response.requests).
+        @Query("requests") requests: Boolean? = null,
     ): AttendanceApprovalsResponse
 
     // Team Attendance tab — the caller's reporting-subtree attendance for a
@@ -1508,7 +1511,15 @@ data class DaySessionsResponse(
 data class AttendanceApprovalsResponse(
     val success: Boolean,
     val total: Int? = null,
-    val records: List<AttendanceApprovalRecord> = emptyList()
+    val records: List<AttendanceApprovalRecord> = emptyList(),
+    // Pending correction/remark requests WAITING ON the reporting officer
+    // (returned when the pending-approvals call passes requests=true).
+    // Separate from records: their _id is an attendanceRequests id and must
+    // be approved/rejected with isRequest = true.
+    // NULLABLE, not defaulted: Gson skips Kotlin constructor defaults, so a
+    // backend that doesn't return the field yet yields null — a non-null
+    // declaration would NPE at first use.
+    val requests: List<AttendanceApprovalRecord>? = null,
 )
 
 data class AttendanceApprovalRecord(
@@ -1538,6 +1549,11 @@ data class AttendanceApprovalRecord(
     val requestedPunchIn: String? = null,
     val requestedPunchOut: String? = null,
     val requestReason: String? = null,
+    // "ro" = waiting on the reporting/attendance officer, "hr" = waiting on
+    // HR. Only present on TRUE request rows (attendanceRequests ids) from
+    // hr-review / the pending-approvals requests array — attendance rows
+    // leave it null, which is how the two are told apart safely.
+    val requestStage: String? = null,
     // Server-computed per-DAY late fine (₹) for this record, from
     // staffAttendance.listForReport / enrichReportRecords. Drives the All-tab
     // attendance-fine banner (0 / absent = no fine that day).
@@ -1656,9 +1672,11 @@ data class IamPermissionsResponse(
 data class PolicyResponse(val success: Boolean, val policy: PolicyData?)
 data class PolicyData(val leave: LeavePolicy?, val permission: PermissionPolicy?, val office: OfficePolicy?)
 data class LeavePolicy(
-    val casualPerYear: Int = 0,
-    val sickPerYear: Int = 0,
-    val earnedPerYear: Int = 0,
+    // Nullable so "field absent" (older backend) is distinguishable from an
+    // explicit 0-day allocation — HR policy honors 0 as "category disabled".
+    val casualPerYear: Int? = null,
+    val sickPerYear: Int? = null,
+    val earnedPerYear: Int? = null,
     val types: List<String> = emptyList()
 )
 data class PermissionPolicy(val monthlyLimitHours: Int = 0)
@@ -2318,7 +2336,11 @@ data class DailyTaskData(
     val module: String? = null,
     // Whether a deadline-extension request is pending on this task (Extension
     // Requests card).
-    val pendingExtensionRequest: Boolean? = null,
+    // Older backends sent a Boolean; the extension-requests feature now
+    // sends the full request OBJECT (or null). Typed Any? so one task with
+    // an object can't fail the whole list parse — treat "non-null and not
+    // false" as "has a pending extension request".
+    val pendingExtensionRequest: Any? = null,
     val sourceReferenceType: String? = null,
     val sourceReferenceId: String? = null,
     val actionUrl: String? = null,
@@ -2412,7 +2434,10 @@ data class ProjectSummary(
     val location: String? = null,
     val managerName: String? = null,
     val staffManagerId: String? = null,
-    val projectType: String? = null
+    val projectType: String? = null,
+    // Raw project doc rides through /api/projects/get on every deploy, so
+    // this is the prod-safe source for the Special payment plan gate.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class MyProjectsResponse(
@@ -2815,6 +2840,9 @@ data class MarketingProject(
     val scope: String? = null,
     val status: String? = null,
     val location: String? = null,
+    // Gates the "Special (max 180 days)" payment plan in the booking form,
+    // mirroring the web. Null until the backend exposing it is deployed.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class MarketingProjectsResponse(
@@ -2905,6 +2933,8 @@ data class BookingPlotPrefillProject(
     val ratePerSqft: Double? = null,
     val guidelineRatePerSqft: Double? = null,
     val gstPercent: Double? = null,
+    // See MarketingProject.specialPaymentEnabled.
+    val specialPaymentEnabled: Boolean? = null,
 )
 
 data class BookingPlotPrefillPlot(
@@ -2958,6 +2988,9 @@ data class CreateBookingRequest(
     val bookingDate: String,                // yyyy-MM-dd
     val leadId: String? = null,
     val title: String? = null,
+    // Optional client photo (web parity) — stored on the clients master row.
+    val clientImageStorageId: String? = null,
+    val clientImageFileName: String? = null,
     val fatherSpouseName: String? = null,
     val dateOfBirth: String? = null,
     val anniversaryDate: String? = null,
@@ -3016,6 +3049,9 @@ data class CreateBookingRequest(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -3162,6 +3198,9 @@ data class Booking(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,
@@ -3323,6 +3362,9 @@ data class UpdateBookingRequest(
     // Customer); otherwise null. Server uses this to derive the
     // Cash (Balance) computed value on the booking detail view.
     val loanAmountRequested: Double? = null,
+    // "Regular" | "Flexi" | "Special" — the Balance Payment Schedule plan
+    // (Special only offered when the project has specialPaymentEnabled).
+    val paymentPlan: String? = null,
     val freePayment: Boolean? = null,
     val allotmentDueAmount: Double? = null,
     val allotmentDueDate: String? = null,

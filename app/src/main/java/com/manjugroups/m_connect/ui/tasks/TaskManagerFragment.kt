@@ -190,7 +190,8 @@ class TaskManagerFragment : Fragment() {
             if (me != null && t.assignedTo == me) my++
             if (scope == "all" || (t.assignedTo != null && teamIds.contains(t.assignedTo))) team++
             if (me != null && t.assignedBy == me) assigned++
-            if (t.pendingExtensionRequest == true) ext++
+            // Boolean on older backends, the request object on newer ones.
+            if (t.pendingExtensionRequest.let { it != null && it != false }) ext++
             val od = isOverdue(t)
             if (od) overdue++
 

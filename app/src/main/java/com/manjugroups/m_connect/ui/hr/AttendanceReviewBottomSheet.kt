@@ -208,13 +208,22 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        // Real data arrived — reveal the map, hide the placeholder graphic,
-        // and bring back the playback controls for the drawn route.
+        // Real data arrived — make the map visible right away so its GL
+        // surface initialises while properly attached and sized (creating
+        // the surface on an invisible view and revealing it afterwards is
+        // what produced the half-rendered tiles / black artifacts), but
+        // keep the placeholder overlay covering it until the map reports
+        // its tiles painted below.
         binding.mapRoutePreview.visibility = View.VISIBLE
-        binding.imgRoutePlaceholder.visibility = View.GONE
-        binding.layoutRoutePlaceholderText.visibility = View.GONE
         binding.btnMapFullView.visibility = View.VISIBLE
         binding.layoutReplayControls.visibility = View.VISIBLE
+
+        val placeholderIcon = binding.imgRoutePlaceholder
+        val placeholderText = binding.layoutRoutePlaceholderText
+        fun hidePlaceholders() {
+            placeholderIcon.visibility = View.GONE
+            placeholderText.visibility = View.GONE
+        }
 
         val mapView = binding.mapRoutePreview
         mapView.post {
@@ -229,6 +238,14 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             }.onFailure {
                 map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 13f))
             }
+            // Swap the placeholder out only once tiles have actually
+            // painted; belt-and-braces timeout in case the callback never
+            // fires (poor connectivity) so the map is never left covered.
+            map.setOnMapLoadedCallback {
+                hidePlaceholders()
+                mapView.invalidate()
+            }
+            mapView.postDelayed({ hidePlaceholders() }, 4_000L)
         }
 
         // Feed the real route into the replay engine (marker + seekbar).
@@ -643,7 +660,11 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         dialog.setContentView(root)
         // The dialog owns this MapView's lifecycle: created on show,
         // destroyed on dismiss (and force-dismissed in onDestroyView).
+        // The full create→start→resume sequence matters: skipping onStart
+        // left the expanded map with black/unpainted GL tiles on some
+        // devices.
         mapView.onCreate(null)
+        mapView.onStart()
         mapView.onResume()
         mapView.getMapAsync { map ->
             map.uiSettings.isZoomControlsEnabled = true
@@ -661,6 +682,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         dialog.setOnDismissListener {
             runCatching {
                 fullMapView?.onPause()
+                fullMapView?.onStop()
                 fullMapView?.onDestroy()
             }
             fullMapView = null
@@ -924,6 +946,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
     override fun onLowMemory() {
         super.onLowMemory()
         _binding?.mapRoutePreview?.onLowMemory()
+        fullMapView?.onLowMemory()
     }
 
     override fun onDestroyView() {
