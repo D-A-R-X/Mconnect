@@ -269,7 +269,137 @@ class MainActivity : AppCompatActivity() {
         // Collapsed nudge tab behind the nav pill — reopens the cards.
         navTasksPeek = findViewById(R.id.navTasksPeek)
         tvNavTasksPeek = findViewById(R.id.tvNavTasksPeek)
-        navTasksPeek.setOnClickListener { showTaskNudgeOverlay() }
+
+        // Premium breathing/pulsing animation on the red border to draw user attention to pending tasks
+        (navTasksPeek.background as? android.graphics.drawable.GradientDrawable)?.let { bg ->
+            val strokeAnim = android.animation.ValueAnimator.ofObject(
+                android.animation.ArgbEvaluator(),
+                Color.parseColor("#FECDCA"), // Soft warning red
+                Color.parseColor("#D92D20")  // Urgent alert red
+            ).apply {
+                duration = 1400 // 1.4 seconds per pulse wave
+                repeatMode = android.animation.ValueAnimator.REVERSE
+                repeatCount = android.animation.ValueAnimator.INFINITE
+                addUpdateListener { animator ->
+                    val color = animator.animatedValue as Int
+                    val fraction = animator.animatedFraction
+                    // Breathe stroke thickness from 1.0dp to 2.2dp dynamically to keep it subtle yet notice-worthy
+                    val width = (1.0f + fraction * 1.2f) * resources.displayMetrics.density
+                    bg.setStroke(width.toInt(), color)
+                }
+            }
+            // Start the infinite breathing animation
+            strokeAnim.start()
+        }
+
+        // Custom touch listener that supports both tap and swipe up to expand cards smoothly
+        val density = resources.displayMetrics.density
+        val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        var startY = 0f
+        var startX = 0f
+        var isDragging = false
+        val maxDragDistance = 250f * density // Total vertical drag distance to open
+        val initialPagerY = 250f * density // Pager initial downward translation when starting drag
+
+        navTasksPeek.setOnTouchListener(object : android.view.View.OnTouchListener {
+            @android.annotation.SuppressLint("ClickableViewAccessibility")
+            override fun onTouch(v: android.view.View, event: android.view.MotionEvent): Boolean {
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        startY = event.rawY
+                        startX = event.rawX
+                        isDragging = false
+                        taskNudgeOverlay.animate().cancel()
+                        taskNudgePager.animate().cancel()
+                        return true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val dy = event.rawY - startY
+                        val dx = event.rawX - startX
+                        if (!isDragging && dy < -touchSlop && Math.abs(dy) > Math.abs(dx)) {
+                            isDragging = true
+                            taskNudgeBackCallback.isEnabled = true
+                            if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
+                                taskNudgeOverlay.visibility = android.view.View.VISIBLE
+                                taskNudgeOverlay.alpha = 0f
+                                taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
+                                taskNudgePager.translationY = initialPagerY
+                                taskNudgePager.scaleX = 0.94f
+                                taskNudgePager.scaleY = 0.94f
+                                taskNudgePager.alpha = 0f
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val blur = android.graphics.RenderEffect.createBlurEffect(
+                                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
+                                )
+                                fragmentContainer.setRenderEffect(blur)
+                                tabBarContainer.setRenderEffect(blur)
+                                if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur)
+                            }
+                            navTasksPeek.visibility = android.view.View.GONE
+                        }
+                        if (isDragging) {
+                            val progress = Math.min(1.0f, Math.max(0f, -dy / maxDragDistance))
+                            taskNudgeOverlay.alpha = progress
+                            taskNudgePager.alpha = progress
+                            taskNudgePager.scaleX = 0.94f + (0.06f * progress)
+                            taskNudgePager.scaleY = 0.94f + (0.06f * progress)
+                            taskNudgePager.translationY = initialPagerY * (1.0f - progress)
+                        }
+                        return true
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        val dy = event.rawY - startY
+                        if (isDragging) {
+                            if (-dy > maxDragDistance * 0.3f) {
+                                // Snap fully open with overshoot
+                                taskNudgeOverlay.animate().alpha(1f).setDuration(250).start()
+                                taskNudgePager.animate()
+                                    .translationY(0f)
+                                    .alpha(1f)
+                                    .scaleX(1f)
+                                    .scaleY(1f)
+                                    .setDuration(350)
+                                    .setInterpolator(android.view.animation.OvershootInterpolator(1.1f))
+                                    .withEndAction {
+                                        scheduleTaskNudgeAutoAdvance()
+                                        fragmentContainer.importantForAccessibility =
+                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                        tabBarContainer.importantForAccessibility =
+                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
+                                    }
+                                    .start()
+                            } else {
+                                // Animate back to hidden
+                                taskNudgeOverlay.animate().alpha(0f).setDuration(200).withEndAction {
+                                    taskNudgeOverlay.visibility = android.view.View.GONE
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        fragmentContainer.setRenderEffect(null)
+                                        tabBarContainer.setRenderEffect(null)
+                                        if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
+                                    }
+                                    navTasksPeek.visibility = android.view.View.VISIBLE
+                                    taskNudgeBackCallback.isEnabled = false
+                                }.start()
+                                taskNudgePager.animate()
+                                    .translationY(initialPagerY)
+                                    .alpha(0f)
+                                    .scaleX(0.94f)
+                                    .scaleY(0.94f)
+                                    .setDuration(200)
+                                    .start()
+                            }
+                        } else {
+                            // Simple click/tap action
+                            showTaskNudgeOverlay()
+                        }
+                        return true
+                    }
+                }
+                return false
+            }
+        })
         // Tasks complete server-side when their underlying work is done
         // (attendance reviewed, CP/SV visited, ...), so re-check the count on
         // every navigation — the badge disappears as soon as the stack clears.
@@ -674,6 +804,101 @@ class MainActivity : AppCompatActivity() {
         }
         h.title.text = (t.title ?: t.taskName ?: t.label ?: "Pending task").trim()
 
+        // ── Per-card color theme ──────────────────────────────────────────
+        // Cycle through 4 premium palettes so each card in the carousel
+        // is visually distinct when swiping.
+        data class NudgeTheme(
+            val accentDark: Int,    // header label, icon tint, View Details text
+            val accentLight: Int,   // icon chip bg, status pill bg
+            val statusInProgressBg: Int,
+            val statusInProgressText: Int,
+            val statusPendingBg: Int,
+            val statusPendingText: Int,
+            val ctaRes: Int,        // CTA button drawable
+            val glowRes: Int,       // bottom glow drawable
+            val dotColor: Int,      // active page dot
+        )
+
+        val themes = arrayOf(
+            // 0 — Purple / Indigo
+            NudgeTheme(
+                accentDark = Color.parseColor("#6941C6"),
+                accentLight = Color.parseColor("#F4EBFF"),
+                statusInProgressBg = Color.parseColor("#F4EBFF"),
+                statusInProgressText = Color.parseColor("#6941C6"),
+                statusPendingBg = Color.parseColor("#FFFAEB"),
+                statusPendingText = Color.parseColor("#B54708"),
+                ctaRes = R.drawable.bg_task_nudge_cta_purple,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_purple,
+                dotColor = Color.parseColor("#7F56D9"),
+            ),
+            // 1 — Amber / Orange
+            NudgeTheme(
+                accentDark = Color.parseColor("#B54708"),
+                accentLight = Color.parseColor("#FFF6ED"),
+                statusInProgressBg = Color.parseColor("#FFF6ED"),
+                statusInProgressText = Color.parseColor("#B54708"),
+                statusPendingBg = Color.parseColor("#FEF3F2"),
+                statusPendingText = Color.parseColor("#B42318"),
+                ctaRes = R.drawable.bg_task_nudge_cta_amber,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_amber,
+                dotColor = Color.parseColor("#D97706"),
+            ),
+            // 2 — Ocean Blue
+            NudgeTheme(
+                accentDark = Color.parseColor("#1D4ED8"),
+                accentLight = Color.parseColor("#EFF6FF"),
+                statusInProgressBg = Color.parseColor("#EFF6FF"),
+                statusInProgressText = Color.parseColor("#1D4ED8"),
+                statusPendingBg = Color.parseColor("#FFF7ED"),
+                statusPendingText = Color.parseColor("#C2410C"),
+                ctaRes = R.drawable.bg_task_nudge_cta_blue,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_blue,
+                dotColor = Color.parseColor("#2563EB"),
+            ),
+            // 3 — Emerald / Teal
+            NudgeTheme(
+                accentDark = Color.parseColor("#047857"),
+                accentLight = Color.parseColor("#ECFDF5"),
+                statusInProgressBg = Color.parseColor("#ECFDF5"),
+                statusInProgressText = Color.parseColor("#047857"),
+                statusPendingBg = Color.parseColor("#FFFBEB"),
+                statusPendingText = Color.parseColor("#A16207"),
+                ctaRes = R.drawable.bg_task_nudge_cta_emerald,
+                glowRes = R.drawable.bg_task_nudge_bottom_glow_emerald,
+                dotColor = Color.parseColor("#059669"),
+            ),
+        )
+
+        val theme = themes[position % themes.size]
+
+        // Apply accent color to header
+        h.tvHeaderLabel.setTextColor(theme.accentDark)
+        h.ivHeaderIcon.setColorFilter(theme.accentDark)
+        h.chipHeaderIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // Apply to due-date row icons
+        h.ivDueIcon.setColorFilter(theme.accentDark)
+        h.chipDueIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // Apply to description row icons
+        h.ivDescIcon.setColorFilter(theme.accentDark)
+        h.chipDescIcon.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // View Details pill
+        (h.details as? TextView)?.setTextColor(theme.accentDark)
+        h.details.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(theme.accentLight)
+
+        // CTA button and bottom glow
+        h.complete.setBackgroundResource(theme.ctaRes)
+        h.bottomGlow.setBackgroundResource(theme.glowRes)
+
+        // ── End color theme ───────────────────────────────────────────────
+
         // Category/module can arrive raw ("site_visits") — humanize it.
         val moduleLabel = (t.module ?: t.taskCategory)
             ?.takeIf { it.isNotBlank() }
@@ -691,10 +916,10 @@ class MainActivity : AppCompatActivity() {
         val inProgress = t.status?.equals("in-progress", ignoreCase = true) == true
         h.status.text = if (inProgress) "In Progress" else "Pending"
         h.status.backgroundTintList = android.content.res.ColorStateList.valueOf(
-            Color.parseColor(if (inProgress) "#F4EBFF" else "#FFFAEB")
+            if (inProgress) theme.statusInProgressBg else theme.statusPendingBg
         )
         h.status.setTextColor(
-            Color.parseColor(if (inProgress) "#6941C6" else "#B54708")
+            if (inProgress) theme.statusInProgressText else theme.statusPendingText
         )
 
         // Deadline is yyyy-MM-dd; overdue/today render red so the urgency
@@ -729,12 +954,13 @@ class MainActivity : AppCompatActivity() {
         h.descRow.visibility =
             if (desc.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
 
-        // View Details + Complete both close the nudge and open the Task
+        // Card itself + View Details + Complete all close the nudge and open the Task
         // Manager (tasks complete server-side when their work is done).
         val openManager = android.view.View.OnClickListener {
             hideTaskNudgeOverlay(markDismissed = true)
             openTaskManager()
         }
+        h.itemView.setOnClickListener(openManager)
         h.details.setOnClickListener(openManager)
         h.complete.setOnClickListener(openManager)
 
@@ -747,6 +973,10 @@ class MainActivity : AppCompatActivity() {
                     if (active) R.drawable.bg_task_nudge_dot_on
                     else R.drawable.bg_task_nudge_dot_off
                 )
+                if (active) {
+                    backgroundTintList =
+                        android.content.res.ColorStateList.valueOf(theme.dotColor)
+                }
                 layoutParams = LinearLayout.LayoutParams(
                     dpToPx(if (active) 18 else 7), dpToPx(7)
                 ).apply { marginStart = dpToPx(3); marginEnd = dpToPx(3) }
@@ -770,6 +1000,15 @@ class MainActivity : AppCompatActivity() {
         val details: android.view.View = v.findViewById(R.id.btnNudgeDetails)
         val complete: android.view.View = v.findViewById(R.id.btnNudgeComplete)
         val dots: LinearLayout = v.findViewById(R.id.nudgeDots)
+        // Tintable elements for per-card color theming
+        val chipHeaderIcon: android.view.View = v.findViewById(R.id.chipHeaderIcon)
+        val ivHeaderIcon: ImageView = v.findViewById(R.id.ivHeaderIcon)
+        val tvHeaderLabel: TextView = v.findViewById(R.id.tvHeaderLabel)
+        val chipDueIcon: android.view.View = v.findViewById(R.id.chipDueIcon)
+        val ivDueIcon: ImageView = v.findViewById(R.id.ivDueIcon)
+        val chipDescIcon: android.view.View = v.findViewById(R.id.chipDescIcon)
+        val ivDescIcon: ImageView = v.findViewById(R.id.ivDescIcon)
+        val bottomGlow: android.view.View = v.findViewById(R.id.bottomGlowContainer)
     }
 
     private class TaskNudgeAdapter(private val host: MainActivity) :
