@@ -96,6 +96,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     private var myStaffId: String = ""
     private var otherStaffId: String? = null
     private var otherStaffPhone: String? = null
+    // True for legacy group-dm conversations (3+ people): the thread renders
+    // group-style (sender names, member-count subtitle, group info screen).
+    private var isGroupConversation: Boolean = false
     private var chatPhotoUrl: String? = null
     private var latestMessageTime: Double = 0.0
     private var currentTypingText: String? = null
@@ -237,6 +240,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             }
         }
         binding.btnPhone.visibility = if (channelId != null) View.GONE else View.VISIBLE
+        // Group conversations resolve async — hide the dial button once known.
         setupInlineSearch()
         binding.btnChatHeaderMenu.setOnClickListener { showChatHeaderMenu(it) }
         
@@ -2641,42 +2645,61 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     val conversation =
                         api.getConversation(session.bearerToken, conversationId!!).conversation
                     chatMuted = conversation?.muted == true
+                    isGroupConversation = conversation?.type == "group-dm" ||
+                        (conversation?.participants?.size ?: 0) > 2
 
-                    val participant = conversation?.participants
-                        ?.firstOrNull { it.id != null && it.id != myStaffId }
-                    otherStaffId = participant?.id
+                    if (isGroupConversation) {
+                        // Group identity: the group's own name + member count,
+                        // never one arbitrary member's presence/photo/phone.
+                        otherStaffId = null
+                        otherStaffPhone = null
+                        if (conversation?.displayName?.isNotBlank() == true) {
+                            chatTitle = conversation.displayName
+                        }
+                        initials = chatTitle.split(" ")
+                            .filter { it.isNotBlank() }
+                            .take(2)
+                            .joinToString("") { it.first().uppercase() }.ifBlank { "G" }
+                        val count = conversation?.participants?.size ?: 0
+                        chatSubtitle = if (count > 0) "$count members" else "Group"
+                        photoUrl = null
+                    } else {
+                        val participant = conversation?.participants
+                            ?.firstOrNull { it.id != null && it.id != myStaffId }
+                        otherStaffId = participant?.id
 
-                    if (conversation?.displayName?.isNotBlank() == true) {
-                        chatTitle = conversation.displayName
-                    } else if (participant?.name?.isNotBlank() == true) {
-                        chatTitle = participant.name
-                    }
+                        if (conversation?.displayName?.isNotBlank() == true) {
+                            chatTitle = conversation.displayName
+                        } else if (participant?.name?.isNotBlank() == true) {
+                            chatTitle = participant.name
+                        }
 
-                    initials = chatTitle.split(" ")
-                        .filter { it.isNotBlank() }
-                        .take(2)
-                        .joinToString("") { it.first().uppercase() }.ifBlank { "U" }
+                        initials = chatTitle.split(" ")
+                            .filter { it.isNotBlank() }
+                            .take(2)
+                            .joinToString("") { it.first().uppercase() }.ifBlank { "U" }
 
-                    chatSubtitle = buildPresenceSubtitle(
-                        staffId = otherStaffId,
-                        fallbackStamp = conversation?.lastMessageAt
-                    )
+                        chatSubtitle = buildPresenceSubtitle(
+                            staffId = otherStaffId,
+                            fallbackStamp = conversation?.lastMessageAt
+                        )
 
-                    // Use the photo embedded in the conversation
-                    // response first — server already resolved the
-                    // storage id to a public URL, so the avatar
-                    // renders without waiting for a second round-trip.
-                    photoUrl = participant?.photo?.takeIf { it.isNotBlank() }
+                        // Use the photo embedded in the conversation
+                        // response first — server already resolved the
+                        // storage id to a public URL, so the avatar
+                        // renders without waiting for a second round-trip.
+                        photoUrl = participant?.photo?.takeIf { it.isNotBlank() }
 
-                    val staffId = otherStaffId
-                    if (staffId != null) {
-                        runCatching {
-                            val staffResp = api.getStaffDetail(session.bearerToken, staffId)
-                            val staffPhoto = staffResp.staff?.photo
-                            if (!staffPhoto.isNullOrBlank()) {
-                                photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffPhoto)
+                        val staffId = otherStaffId
+                        if (staffId != null) {
+                            runCatching {
+                                val staffResp = api.getStaffDetail(session.bearerToken, staffId)
+                                val staffPhoto = staffResp.staff?.photo
+                                if (!staffPhoto.isNullOrBlank()) {
+                                    photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(staffPhoto)
+                                }
+                                otherStaffPhone = staffResp.staff?.phone
                             }
-                            otherStaffPhone = staffResp.staff?.phone
                         }
                     }
                 }
@@ -2689,6 +2712,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             binding.tvChatSubtitle.visibility = View.VISIBLE
             binding.tvChatTitle.text = chatTitle
             applySubtitleState()
+            if (isGroupConversation) binding.btnPhone.visibility = View.GONE
 
             binding.tvHeaderAvatarInitials.text = initials
             if (photoUrl != null) {
@@ -2824,13 +2848,20 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun openContactInfo() {
-        val fragment = ChatContactInfoFragment.newInstance(
-            channelId = channelId,
-            conversationId = conversationId,
-            title = chatTitle,
-            otherStaffId = otherStaffId,
-            photoUrl = chatPhotoUrl
-        )
+        // Channels and group conversations get the WhatsApp-style group info
+        // screen; only true 1:1 DMs get the personal contact card.
+        val fragment = when {
+            channelId != null -> GroupInfoFragment.forChannel(channelId!!, chatTitle)
+            isGroupConversation && conversationId != null ->
+                GroupInfoFragment.forConversation(conversationId!!, chatTitle)
+            else -> ChatContactInfoFragment.newInstance(
+                channelId = channelId,
+                conversationId = conversationId,
+                title = chatTitle,
+                otherStaffId = otherStaffId,
+                photoUrl = chatPhotoUrl
+            )
+        }
         parentFragmentManager.beginTransaction()
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
@@ -3469,12 +3500,23 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     lastDayKey = dayKey
                 }
 
+                if (message.kind == "system") {
+                    // Group events ("X added Y", "X left") render as a
+                    // centered pill, never as a bubble.
+                    val text = message.body?.ifBlank { null }
+                    if (text != null) chatItems.add(ChatItem.System(text))
+                    return@forEach
+                }
+
                 val isMine = message.senderId == myStaffId
+                // Sender attribution shows in every multi-party room:
+                // channels AND legacy group-dm conversations.
+                val isGroupRoom = channelId != null || isGroupConversation
                 chatItems.add(ChatItem.Message(
                     data = message,
                     isMine = isMine,
-                    showAvatar = !isMine && channelId != null,
-                    showName = !isMine && channelId != null
+                    showAvatar = !isMine && isGroupRoom,
+                    showName = !isMine && isGroupRoom
                 ))
             }
 

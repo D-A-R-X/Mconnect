@@ -43,12 +43,13 @@ class HomeFragment : Fragment() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
-    // VP / Management dashboard (replaces Today's Trip for vpDashboard.view holders).
-    private var vpDashboardData: com.manjugroups.m_connect.network.VpDashboardResponse? = null
-    private var vpDashboardLoading = false
+    // Overview / Management dashboard (replaces Today's Trip for holders of the
+    // vpDashboard.view IAM key — the key predates the rename; not VP-only).
+    private var overviewDashboardData: com.manjugroups.m_connect.network.OverviewDashboardResponse? = null
+    private var overviewDashboardLoading = false
     private var lastDashSignature: String? = null
     // Dashboard date filter: null = today. Every tile re-fetches for this day.
-    private var vpSelectedDate: String? = null
+    private var dashSelectedDate: String? = null
 
     private companion object {
         const val DASH_DATE_RESULT_KEY = "home_dash_date_result"
@@ -106,14 +107,14 @@ class HomeFragment : Fragment() {
                     com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM
                 ).orEmpty()
                 if (picked.isBlank()) return@setFragmentResultListener
-                vpSelectedDate = if (picked == indiaToday()) null else picked
+                dashSelectedDate = if (picked == indiaToday()) null else picked
                 // Counts for another day may coincidentally match — clear the
                 // cached signature so the header swap is never skipped.
                 lastDashSignature = null
                 applyDashHeader()
-                loadVpDashboard(force = true)
+                loadOverviewDashboard(force = true)
             }
-            loadVpDashboard()
+            loadOverviewDashboard()
         }
         setupHomeScrollAnimation()
         collectState()
@@ -477,7 +478,7 @@ class HomeFragment : Fragment() {
             binding.btnDashDateFilter.visibility = View.VISIBLE
             binding.visitListContent.visibility = View.VISIBLE
             binding.visitEmptyContent.visibility = View.GONE
-            renderVpDashboard()
+            renderOverviewDashboard()
             return
         }
         // Home shows today's visits only.
@@ -615,27 +616,27 @@ class HomeFragment : Fragment() {
 
     // ── VP / Management Dashboard ───────────────────────────────────────────
 
-    private fun loadVpDashboard(force: Boolean = false) {
-        if (vpDashboardLoading && !force) return
-        vpDashboardLoading = true
-        val requestedDate = vpSelectedDate
+    private fun loadOverviewDashboard(force: Boolean = false) {
+        if (overviewDashboardLoading && !force) return
+        overviewDashboardLoading = true
+        val requestedDate = dashSelectedDate
         viewLifecycleOwner.lifecycleScope.launch {
             // Prefer the company-wide aggregate route; when it isn't deployed
             // (404), fall back to counting what the live per-screen endpoints
             // already expose (CP + Site visits for the selected day).
             val resp = runCatching {
-                api.getVpDashboard(session.bearerToken, requestedDate)
+                api.getOverviewDashboard(session.bearerToken, requestedDate)
             }.getOrNull()
             val data = if (resp?.success == true) resp
-                else runCatching { computeVpFallback(requestedDate ?: indiaToday()) }.getOrNull()
-            vpDashboardLoading = false
+                else runCatching { computeOverviewFallback(requestedDate ?: indiaToday()) }.getOrNull()
+            overviewDashboardLoading = false
             if (view == null) return@launch
             // The user picked a different date while this was in flight —
             // that newer load owns the render; drop this stale result.
-            if (requestedDate != vpSelectedDate) return@launch
+            if (requestedDate != dashSelectedDate) return@launch
             if (data != null) {
-                vpDashboardData = data
-                renderVpDashboard()
+                overviewDashboardData = data
+                renderOverviewDashboard()
             }
         }
     }
@@ -645,7 +646,7 @@ class HomeFragment : Fragment() {
      *  Uses the app's own calendar sheet (single-select mode), not the stock
      *  Android dialog. */
     private fun showDashDatePicker() {
-        val initial = vpSelectedDate ?: indiaToday()
+        val initial = dashSelectedDate ?: indiaToday()
         com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
             title = "Dashboard Date",
             subtitle = "Pick a day to view its overview",
@@ -658,7 +659,7 @@ class HomeFragment : Fragment() {
 
     /** Header + date-chip copy for the current dashboard date. */
     private fun applyDashHeader() {
-        val day = vpSelectedDate
+        val day = dashSelectedDate
         binding.tvVisitSectionTitle.text =
             if (day == null) "Today's Overview" else "Overview"
         binding.tvDashDateFilter.text = if (day == null) "Today" else prettyDashDate(day)
@@ -688,7 +689,7 @@ class HomeFragment : Fragment() {
      * pending-verification queue, not the approved total) — those stay at -1
      * and render as "–". Returns null only if every call fails.
      */
-    private suspend fun computeVpFallback(day: String): com.manjugroups.m_connect.network.VpDashboardResponse? {
+    private suspend fun computeOverviewFallback(day: String): com.manjugroups.m_connect.network.OverviewDashboardResponse? {
         val cp = runCatching { geoApi.getMyMarketingCpVisits(session.bearerToken, day, day) }.getOrNull()
         val sv = runCatching { geoApi.getMySiteVisits(session.bearerToken, day, day) }.getOrNull()
         val att = runCatching { api.getAllAttendance(session.bearerToken, day, day) }.getOrNull()
@@ -712,7 +713,7 @@ class HomeFragment : Fragment() {
         val bkRows = bk?.bookings.orEmpty()
             .filter { onToday(it.bookingDate) && lc(it.status) !in cancelled && lc(it.status) != "draft" }
 
-        return com.manjugroups.m_connect.network.VpDashboardResponse(
+        return com.manjugroups.m_connect.network.OverviewDashboardResponse(
             success = true,
             date = day,
             present = if (attOk) attRows.count { lc(it.approvedAttendance) in present } else -1,
@@ -738,11 +739,11 @@ class HomeFragment : Fragment() {
     /** Grid of KPI tiles (2 per row) driven by the dashboard endpoint. Each
      *  tile shows a count and opens its detail screen. Guarded by a value
      *  signature so the ~7 render flows don't rebuild it on every emit. */
-    private fun renderVpDashboard() {
+    private fun renderOverviewDashboard() {
         val ctx = context ?: return
-        val d = vpDashboardData
+        val d = overviewDashboardData
         val signature = if (d == null) "loading" else buildString {
-            append("vp|").append(vpSelectedDate ?: "today").append('|')
+            append("vp|").append(dashSelectedDate ?: "today").append('|')
                 .append(d.totalStaff).append('|')
                 .append(d.present).append('|').append(d.absent).append('|')
                 .append(d.cpVisitsFixed).append('|').append(d.cpVisitsCompleted).append('|')
@@ -826,20 +827,189 @@ class HomeFragment : Fragment() {
             )
         }
 
+        // The tile grid above is superseded by the segmented Overview mock
+        // (Marketing | HR) — kept compiled (tiles referenced below is unused
+        // at runtime) until the new cards are wired to live data.
+        if (tiles.isEmpty()) return
+        renderOverviewMock(ctx)
+    }
+
+    /** One card of the segmented Overview grid (mock data for now). */
+    private data class OverviewCard(
+        val label: String,
+        val value: String,
+        val pill: String,
+        val variant: String, // blue | green | red | orange | neutral
+        val iconRes: Int,
+        val big: Boolean,
+        // 3D render (extracted from the design sheet) shown as the card art.
+        val artRes: Int? = null,
+        val onTap: () -> Unit,
+    )
+
+    private var overviewMockInflated = false
+    private var overviewHrTab = true
+
+    /** Mock-parity "Overview" section: title + Marketing/HR toggle + cards.
+     *  Values are static until the section is wired to live endpoints. */
+    private fun renderOverviewMock(ctx: android.content.Context) {
+        if (overviewMockInflated) return
+        overviewMockInflated = true
+
+        // The mock's white sheet carries its own big "Overview" title, so the
+        // old section header + date pill disappear for dashboard users.
+        binding.tvVisitSectionTitle.visibility = View.GONE
+        binding.ivVisitTitleGlobe.visibility = View.GONE
+        binding.tvVisitCountBadge.visibility = View.GONE
+        binding.btnDashDateFilter.visibility = View.GONE
+
         binding.visitListContent.removeAllViews()
+        val section = layoutInflater.inflate(
+            R.layout.home_overview_cards, binding.visitListContent, false,
+        )
+        binding.visitListContent.addView(section)
+
+        val tabMarketing = section.findViewById<TextView>(R.id.btnTabMarketing)
+        val tabHr = section.findViewById<TextView>(R.id.btnTabHr)
+        val container = section.findViewById<LinearLayout>(R.id.overviewCardsContainer)
+
+        fun applyTab() {
+            val thumb = R.drawable.bg_overview_toggle_thumb
+            tabHr.background = if (overviewHrTab) requireContext().getDrawable(thumb) else null
+            tabHr.setTextColor(Color.parseColor(if (overviewHrTab) "#FFFFFF" else "#344054"))
+            tabMarketing.background = if (!overviewHrTab) requireContext().getDrawable(thumb) else null
+            tabMarketing.setTextColor(Color.parseColor(if (!overviewHrTab) "#FFFFFF" else "#344054"))
+            renderOverviewCards(ctx, container, if (overviewHrTab) hrOverviewCards() else marketingOverviewCards())
+        }
+        tabHr.setOnClickListener { if (!overviewHrTab) { overviewHrTab = true; applyTab() } }
+        tabMarketing.setOnClickListener { if (overviewHrTab) { overviewHrTab = false; applyTab() } }
+        applyTab()
+    }
+
+    private fun hrOverviewCards(): List<OverviewCard> = listOf(
+        OverviewCard("Total Active Staff", "276", "All Departments", "blue", R.drawable.ic_chat_users, true, R.drawable.img_stat_staff) {
+            openScreen(com.manjugroups.m_connect.ui.hr.HrStaffFragment())
+        },
+        OverviewCard("Present", "210", "76% of Total", "green", R.drawable.ic_check_circle, true, R.drawable.img_stat_present) {
+            openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
+        },
+        OverviewCard("Absent", "51", "High Today", "red", R.drawable.ic_auth_user, true, R.drawable.img_stat_absent) {
+            openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
+        },
+        OverviewCard("Leave", "15", "Approved", "orange", R.drawable.ic_booking_calendar, true, R.drawable.img_stat_leave) {
+            openScreen(com.manjugroups.m_connect.ui.hr.LeavesFragment())
+        },
+        OverviewCard("Week Off", "0", "No Data", "neutral", R.drawable.ic_calendar_days, false, R.drawable.img_stat_weekoff) {},
+        OverviewCard("Permission", "0", "No Requests", "neutral", R.drawable.ic_clock_bold, false, R.drawable.img_stat_permission) {
+            openScreen(com.manjugroups.m_connect.ui.hr.PermissionsFragment())
+        },
+        OverviewCard("WFH Approved", "0", "No Data", "neutral", R.drawable.ic_apps_front_desk, false, R.drawable.img_stat_wfh) {},
+    )
+
+    private fun marketingOverviewCards(): List<OverviewCard> = listOf(
+        OverviewCard("Total Calls", "118", "Today", "blue", R.drawable.ic_chat_phone, true, R.drawable.img_stat_calls_total) {
+            openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance(null, "Total Calls"))
+        },
+        OverviewCard("Incoming", "71", "60% of Total", "green", R.drawable.ic_chat_phone, true, R.drawable.img_stat_calls_in) {
+            openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
+        },
+        OverviewCard("Outgoing", "47", "40% of Total", "orange", R.drawable.ic_custom_phone, true, R.drawable.img_stat_calls_out) {
+            openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
+        },
+        OverviewCard("CP / Bookings", "6 / 0", "Today", "blue", R.drawable.ic_cp_staff, true, R.drawable.img_stat_cp_bookings) {
+            openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
+        },
+        OverviewCard("Hot", "0", "No Data", "neutral", R.drawable.ic_home_summary_star, false, R.drawable.img_stat_hot) {},
+        OverviewCard("Warm", "12", "Leads", "neutral", R.drawable.ic_clock_custom, false, R.drawable.img_stat_warm) {},
+        OverviewCard("Cold", "29", "Leads", "neutral", R.drawable.ic_attendance_search, false, R.drawable.img_stat_cold) {},
+        OverviewCard("SV Fixed", "0", "No Data", "neutral", R.drawable.ic_map_pin, false, R.drawable.img_stat_search) {
+            openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
+        },
+    )
+
+    private fun renderOverviewCards(
+        ctx: android.content.Context,
+        container: LinearLayout,
+        cards: List<OverviewCard>,
+    ) {
+        container.removeAllViews()
+        val big = cards.filter { it.big }
+        val small = cards.filter { !it.big }
+
         var i = 0
-        while (i < tiles.size) {
+        while (i < big.size) {
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { if (i > 0) topMargin = dpx(8) }
+                ).apply { if (i > 0) topMargin = dpx(10) }
             }
-            row.addView(dashTile(ctx, tiles[i], 0))
-            if (i + 1 < tiles.size) row.addView(dashTile(ctx, tiles[i + 1], dpx(8)))
-            binding.visitListContent.addView(row)
+            row.addView(bigOverviewCard(ctx, big[i], 0))
+            if (i + 1 < big.size) row.addView(bigOverviewCard(ctx, big[i + 1], dpx(10)))
+            container.addView(row)
             i += 2
         }
+
+        if (small.isNotEmpty()) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dpx(10) }
+            }
+            small.forEachIndexed { index, card ->
+                val view = layoutInflater.inflate(R.layout.item_overview_stat_small, row, false)
+                view.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+                    .apply { if (index > 0) marginStart = dpx(8) }
+                view.findViewById<TextView>(R.id.tvSmallLabel).text = card.label
+                view.findViewById<TextView>(R.id.tvSmallValue).text = card.value
+                view.findViewById<TextView>(R.id.tvSmallPill).text = card.pill
+                view.findViewById<android.widget.ImageView>(R.id.ivSmallIcon).setImageResource(card.iconRes)
+                view.findViewById<android.widget.ImageView>(R.id.ivSmallArt).apply {
+                    if (card.artRes != null) setImageResource(card.artRes) else visibility = View.GONE
+                }
+                view.setOnClickListener { card.onTap() }
+                row.addView(view)
+            }
+            container.addView(row)
+        }
+    }
+
+    private fun bigOverviewCard(ctx: android.content.Context, card: OverviewCard, startMargin: Int): View {
+        data class Variant(val cardBg: Int, val iconTint: String, val pillBg: Int, val pillText: String, val artTint: String)
+        val v = when (card.variant) {
+            "green" -> Variant(R.drawable.bg_stat_card_green, "#067647", R.drawable.bg_stat_pill_green, "#067647", "#34D399")
+            "red" -> Variant(R.drawable.bg_stat_card_red, "#D92D20", R.drawable.bg_stat_pill_red, "#D92D20", "#F87171")
+            "orange" -> Variant(R.drawable.bg_stat_card_orange, "#B54708", R.drawable.bg_stat_pill_orange, "#B54708", "#FBBF24")
+            else -> Variant(R.drawable.bg_stat_card_blue, "#1D4ED8", R.drawable.bg_stat_pill_blue, "#FFFFFF", "#60A5FA")
+        }
+        val view = layoutInflater.inflate(R.layout.item_overview_stat_card, null, false)
+        view.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            .apply { marginStart = startMargin }
+        view.setBackgroundResource(v.cardBg)
+        view.findViewById<TextView>(R.id.tvStatLabel).text = card.label
+        view.findViewById<TextView>(R.id.tvStatValue).text = card.value
+        view.findViewById<TextView>(R.id.tvStatPill).apply {
+            text = card.pill
+            setBackgroundResource(v.pillBg)
+            setTextColor(Color.parseColor(v.pillText))
+        }
+        view.findViewById<android.widget.ImageView>(R.id.ivStatIcon).apply {
+            setImageResource(card.iconRes)
+            setColorFilter(Color.parseColor(v.iconTint))
+        }
+        view.findViewById<android.widget.ImageView>(R.id.ivStatArt).apply {
+            if (card.artRes != null) {
+                // Real 3D render from the design sheet — no tinting.
+                setImageResource(card.artRes)
+            } else {
+                setImageResource(card.iconRes)
+                setColorFilter(Color.parseColor(v.artTint))
+                alpha = 0.9f
+            }
+        }
+        view.setOnClickListener { card.onTap() }
+        return view
     }
 
     private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {

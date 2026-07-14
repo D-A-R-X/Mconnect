@@ -24,7 +24,10 @@ data class ChatListItem(
     val isOnline: Boolean = false,
     val isFavourite: Boolean = false,
     val previewIconRes: Int? = null,
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    // Group-dm conversations render and filter as groups even though their
+    // kind stays DIRECT (they open as conversations).
+    val isGroup: Boolean = false,
 ) {
     enum class Kind { DIRECT, CHANNEL }
 }
