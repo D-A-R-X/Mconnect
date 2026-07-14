@@ -133,21 +133,14 @@ class GroupInfoFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
-        // The outgoing thread's onPause can re-show the bar AFTER our hide
-        // (fragment transactions may resume the incoming screen first) —
-        // re-assert once the transaction has fully settled.
-        view?.post {
-            if (isResumed) (activity as? MainActivity)?.setTabBarVisible(false)
-        }
-    }
-
-    override fun onPause() {
-        (activity as? MainActivity)?.setTabBarVisible(true)
-        super.onPause()
     }
 
     override fun onDestroyView() {
-        (activity as? MainActivity)?.setTabBarVisible(true)
+        // Deliberately does NOT restore the tab bar — MainActivity's
+        // backstack listener sets the correct state on the pop (hidden if
+        // popping to another inner screen, shown if popping to a root tab).
+        // Restoring it here raced the incoming screen's hide and left the
+        // nav bar showing inside chat threads.
         super.onDestroyView()
         _binding = null
     }

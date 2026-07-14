@@ -311,8 +311,12 @@ class HomeFragment : Fragment() {
                             // initial load would flash the empty view before
                             // the visit skeleton appears.
                             val hasVisits = state.todayVisits.any { it.status != "cancelled" }
-                            if ((homeVisitsResolved || hasVisits) &&
-                                !viewModel.isVisitsLoading.value
+                            // Dashboard users get the static Overview grid,
+                            // which doesn't depend on the visits fetch — render
+                            // it immediately instead of waiting on that call.
+                            if (session.hasPermission("vpDashboard.view") ||
+                                ((homeVisitsResolved || hasVisits) &&
+                                    !viewModel.isVisitsLoading.value)
                             ) {
                                 renderVisitCard(state)
                             }
@@ -847,14 +851,16 @@ class HomeFragment : Fragment() {
         val onTap: () -> Unit,
     )
 
-    private var overviewMockInflated = false
     private var overviewHrTab = true
 
     /** Mock-parity "Overview" section: title + Marketing/HR toggle + cards.
      *  Values are static until the section is wired to live endpoints. */
     private fun renderOverviewMock(ctx: android.content.Context) {
-        if (overviewMockInflated) return
-        overviewMockInflated = true
+        // Idempotent per view: skip re-inflating on repeated renderVisitCard
+        // calls, but re-inflate after the view is recreated (tab return) —
+        // a persistent boolean flag used to leave the section blank on
+        // return because the fresh visitListContent had nothing in it.
+        if (binding.visitListContent.findViewById<View>(R.id.overviewCardsContainer) != null) return
 
         // The mock's white sheet carries its own big "Overview" title, so the
         // old section header + date pill disappear for dashboard users.

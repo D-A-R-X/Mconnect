@@ -4119,7 +4119,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         exoPlayer = null
         SkeletonUtils.stopAll()
         (activity as? MainActivity)?.let { main ->
-            main.setTabBarVisible(true)
+            // Don't force the tab bar back on here — the backstack listener
+            // decides it on the pop. Blindly restoring it raced the incoming
+            // screen's hide and made the nav bar flash into chat threads.
             main.setTopBarAppearance(android.graphics.Color.parseColor("#0B61CA"), false, fullBleed = false)
         }
         binding.etMessage.removeTextChangedListener(typingWatcher)
