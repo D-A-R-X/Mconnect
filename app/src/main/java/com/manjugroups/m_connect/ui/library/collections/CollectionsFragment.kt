@@ -63,6 +63,16 @@ class CollectionsFragment : Fragment() {
     // single fetch per id covers all scroll rebinds.
     private val proofUrlCache = mutableMapOf<String, String>()
 
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its
+    // end. Windowing bounds the RecyclerView to the current page; the full
+    // filtered list still drives the empty state and the summary banner.
+    private var collectionsLayoutManager: LinearLayoutManager? = null
+    private var collectionsWindowCtx: String? = null
+    private var collectionsFilteredCount: Int = 0
+    private val collectionsPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { filterCollections() },
+    )
+
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
     // Date-range filter, set when the user picks a range from the
@@ -102,8 +112,11 @@ class CollectionsFragment : Fragment() {
             onImageClick = { item -> showFullscreenImagePreview(item) }
             proofLoader = { storageId, target -> loadProofThumbnail(storageId, target) }
         }
-        binding.rvCollections.layoutManager = LinearLayoutManager(requireContext())
+        val lm = LinearLayoutManager(requireContext())
+        collectionsLayoutManager = lm
+        binding.rvCollections.layoutManager = lm
         binding.rvCollections.adapter = adapter
+        collectionsPager.bindRecyclerView(binding.rvCollections, lm) { collectionsFilteredCount }
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
@@ -423,7 +436,20 @@ class CollectionsFragment : Fragment() {
             }
             matchesTab && matchesSearch && matchesDate
         }
-        adapter.submit(filtered)
+        // Empty state / summary key off the FULL filtered size, not the window.
+        collectionsFilteredCount = filtered.size
+
+        // Reset the scroll window whenever the filter / search / date range /
+        // source data changes so a fresh view starts from the first page.
+        val windowCtx =
+            "$selectedTypeFilter|$currentSearchQuery|$from|$to|${System.identityHashCode(masterList)}"
+        if (windowCtx != collectionsWindowCtx) {
+            collectionsWindowCtx = windowCtx
+            collectionsPager.reset()
+            binding.rvCollections.scrollToPosition(0)
+        }
+
+        adapter.submit(filtered.take(collectionsPager.limit))
         updateSummaryBanner(filtered)
     }
 

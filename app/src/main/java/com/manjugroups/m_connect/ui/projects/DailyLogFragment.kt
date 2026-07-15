@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.network.SendDprRequest
 import com.manjugroups.m_connect.network.UpdateDprRecipientRequest
 import com.manjugroups.m_connect.ui.common.IconPillView
 import com.manjugroups.m_connect.ui.common.ImagePreviewDialog
+import com.manjugroups.m_connect.ui.common.InfiniteScrollPager
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.SkeletonLoader
@@ -71,6 +72,14 @@ class DailyLogFragment : Fragment() {
     private var logsSkeleton: android.animation.ObjectAnimator? = null
     private var dprSkeleton: android.animation.ObjectAnimator? = null
 
+    // Infinite scroll for the New-Entry logs list: render 20 cards, extend by
+    // 20 as the shared NestedScrollView nears its end. Reset when the source
+    // log list is replaced (new fetch / aggregate) so the window starts over.
+    private var logsSource: List<DailyLogEntry> = emptyList()
+    private var logsFilteredCount: Int = 0
+    private var logsWindowCtx: String? = null
+    private val logsPager = InfiniteScrollPager(onLoadMore = { renderLogs(logsSource) })
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, s: Bundle?): View {
         _binding = FragmentDailyLogBinding.inflate(inflater, container, false)
         return binding.root
@@ -97,6 +106,10 @@ class DailyLogFragment : Fragment() {
 
         childFragmentManager.setFragmentResultListener(CreateDailyLogBottomSheet.RESULT_KEY, viewLifecycleOwner) { _, _ -> loadLogs() }
         childFragmentManager.setFragmentResultListener(DprAddRecipientBottomSheet.RESULT_KEY, viewLifecycleOwner) { _, _ -> loadDpr() }
+
+        // Infinite scroll: grow the logs window as the shared page nears the
+        // bottom. Bound once; totalCount reads the full filtered logs size.
+        logsPager.bindNestedScroll(binding.dailyLogScroll, totalCount = { logsFilteredCount })
 
         showTab(true)
         loadProjects()
@@ -199,12 +212,23 @@ class DailyLogFragment : Fragment() {
 
     private fun renderLogs(logs: List<DailyLogEntry>) {
         logsSkeleton?.cancel(); logsSkeleton = null
+        // Window the full filtered list; empty-state + count stay keyed off the
+        // FULL size, only the render is capped to the current window.
+        logsSource = logs
+        logsFilteredCount = logs.size
+        // Reset the scroll window whenever the source list is replaced (new
+        // fetch / aggregate); re-renders from an extend keep the same identity.
+        val windowCtx = System.identityHashCode(logs).toString()
+        if (windowCtx != logsWindowCtx) {
+            logsWindowCtx = windowCtx
+            logsPager.reset()
+        }
         val c = binding.logsContainer
         c.alpha = 1f
         c.removeAllViews()
         binding.emptyLogs.visibility = if (logs.isEmpty()) View.VISIBLE else View.GONE
         binding.tvEntriesTitle.visibility = if (logs.isEmpty()) View.GONE else View.VISIBLE
-        logs.forEach { log ->
+        logs.take(logsPager.limit).forEach { log ->
             val ctx = requireContext()
             val cardView = com.google.android.material.card.MaterialCardView(ctx).apply {
                 radius = dp(16).toFloat()

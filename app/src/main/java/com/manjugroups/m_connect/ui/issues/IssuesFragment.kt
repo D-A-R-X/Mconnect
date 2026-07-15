@@ -50,6 +50,13 @@ class IssuesFragment : Fragment() {
 
     private val issuesList = mutableListOf<IssueData>()
 
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
+    private var issuesWindowCtx: String? = null
+    private var issuesFilteredCount = 0
+    private val issuesPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderIssues() },
+    )
+
     private val api = ApiService.create()
     private val session by lazy { SessionManager(requireContext()) }
 
@@ -128,6 +135,9 @@ class IssuesFragment : Fragment() {
             stopActivePlayback()
             navigateUp()
         }
+
+        // Infinite scroll: render the next 20 rows as the user nears the end.
+        issuesPager.bindNestedScroll(binding.scrollViewIssues, totalCount = { issuesFilteredCount })
 
         // Load saved issues
         loadIssues()
@@ -273,8 +283,29 @@ class IssuesFragment : Fragment() {
         }
     }
 
-    private fun renderIssues(filterList: List<IssueData> = issuesList) {
+    private fun renderIssues() {
         if (_binding == null) return
+
+        // Re-derive the current filter here so the pager's onLoadMore re-applies
+        // the same search when it extends the window.
+        val query = binding.etSearchIssues.text?.toString()?.trim().orEmpty()
+        val filterList = if (query.isEmpty()) {
+            issuesList
+        } else {
+            issuesList.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                        it.description.contains(query, ignoreCase = true)
+            }
+        }
+
+        issuesFilteredCount = filterList.size
+
+        // Reset the scroll window whenever the filter / search / data changes.
+        val windowCtx = "$query|${System.identityHashCode(issuesList)}"
+        if (windowCtx != issuesWindowCtx) {
+            issuesWindowCtx = windowCtx
+            issuesPager.reset()
+        }
 
         if (filterList.isEmpty()) {
             binding.layoutEmptyState.visibility = View.VISIBLE
@@ -287,7 +318,7 @@ class IssuesFragment : Fragment() {
             val inflater = LayoutInflater.from(requireContext())
             val sdf = SimpleDateFormat("hh:mm a", Locale.US)
 
-            for (issue in filterList) {
+            for (issue in filterList.take(issuesPager.limit)) {
                 val cardBinding = ItemIssueCardBinding.inflate(inflater, binding.issuesContainer, false)
 
                 cardBinding.tvIssueCardTitle.text = issue.title
@@ -346,15 +377,9 @@ class IssuesFragment : Fragment() {
     }
 
     private fun performSearch(query: String) {
-        if (query.isEmpty()) {
-            renderIssues(issuesList)
-        } else {
-            val filtered = issuesList.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                        it.description.contains(query, ignoreCase = true)
-            }
-            renderIssues(filtered)
-        }
+        // Filtering now lives in renderIssues (so window extends re-apply it);
+        // the current query is read straight from the search field there.
+        renderIssues()
     }
 
     private fun togglePlayAudio(

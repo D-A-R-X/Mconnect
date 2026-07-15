@@ -53,6 +53,16 @@ class LeavesFragment : Fragment() {
     // data that's already on screen.
     private var hasRenderedLeavesOnce = false
 
+    // Infinite scroll: render one page of the filtered history at a time and
+    // grow the window as the user nears the bottom of the NestedScrollView.
+    // windowCtx tracks tab/scope/screen + the source-list identity so the
+    // window resets to the first page whenever any of those change.
+    private var leavesWindowCtx: String? = null
+    private var leavesFilteredCount: Int = 0
+    private val leavesPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { if (_binding != null) renderState(viewModel.uiState.value) },
+    )
+
     companion object {
         private const val ARG_MODE = "mode"
         private const val ARG_ENTITY_ID = "entity_id"
@@ -152,6 +162,10 @@ class LeavesFragment : Fragment() {
         binding.leavesRefresh.setupPullToRefresh {
             viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
         }
+
+        // Infinite scroll: grow the render window by a page as the user nears
+        // the bottom of the NestedScrollView that hosts the manual card list.
+        leavesPager.bindNestedScroll(binding.contentScroll, totalCount = { leavesFilteredCount })
     }
 
     private fun setupFilterTabs() {
@@ -249,7 +263,28 @@ class LeavesFragment : Fragment() {
         if (!isLoading) hasRenderedLeavesOnce = true
         setEmptyCopy(displayLeaves.isEmpty())
         val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope != LeaveScope.MY)
-        renderLeaves(displayLeaves, isApprovalForRender)
+
+        // Infinite scroll: bound the render to one page of the FULL filtered
+        // history, growing as the user scrolls. Reset the window whenever the
+        // tab (historyFilter), scope, screen, or the underlying source list
+        // (a new fetch / approval action) changes — keyed off source identity.
+        val sourceForWindow = if (screenMode == MODE_APPROVAL) {
+            state.pendingApprovals
+        } else if (canApprove && activeScope != LeaveScope.MY) {
+            state.pendingApprovals
+        } else {
+            state.myLeaves
+        }
+        leavesFilteredCount = displayLeaves.size
+        val windowCtx = "$screenMode|$activeScope|$historyFilter|${System.identityHashCode(sourceForWindow)}"
+        if (windowCtx != leavesWindowCtx) {
+            leavesWindowCtx = windowCtx
+            leavesPager.reset()
+        }
+        // Empty-state stays keyed off the FULL filtered size (above); only the
+        // rendered card set is windowed here. The chunked renderer still slices
+        // this window ~24 cards per frame.
+        renderLeaves(displayLeaves.take(leavesPager.limit), isApprovalForRender)
     }
 
 
