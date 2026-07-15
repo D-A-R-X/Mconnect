@@ -73,7 +73,9 @@
                 android:paddingTop="20dp"
                 android:paddingBottom="20dp">
 
-                <include layout="@layout/layout_home_overview" />
+                <include
+                    android:id="@+id/homeOverviewInclude"
+                    layout="@layout/layout_home_overview" />
 
                 <LinearLayout
                     android:id="@+id/cardTodayVisit"

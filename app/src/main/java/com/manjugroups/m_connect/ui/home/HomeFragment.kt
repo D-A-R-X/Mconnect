@@ -98,6 +98,15 @@ class HomeFragment : Fragment() {
             }
         })
         setupPullToRefresh()
+        // Set the dashboard-vs-trip visibility up front so non-permission
+        // users never flash the management overview before data loads.
+        run {
+            val hasDash = session.hasPermission("vpDashboard.view")
+            binding.homeOverviewInclude.root.visibility =
+                if (hasDash) View.VISIBLE else View.GONE
+            binding.cardTodayVisit.visibility =
+                if (hasDash) View.GONE else View.VISIBLE
+        }
         if (session.hasPermission("vpDashboard.view")) {
             binding.btnDashDateFilter.setOnClickListener { showDashDatePicker() }
             parentFragmentManager.setFragmentResultListener(
@@ -468,21 +477,18 @@ class HomeFragment : Fragment() {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
         setVisitSkeletonVisible(false)
-        // VP / Management dashboard replaces the Today's Trip list for anyone
-        // with vpDashboard.view (super-admins included). Its numbers come from
-        // the dashboard endpoint, not the visits flow, so short-circuit here
-        // before any trip rendering / empty-state logic.
-        if (session.hasPermission("vpDashboard.view")) {
-            applyDashHeader()
-            // The globe icon belongs to the "Today's Trip" view, not the KPI
-            // dashboard — hide it so the header reads cleanly, and surface
-            // the date filter in its place.
-            binding.ivVisitTitleGlobe.visibility = View.GONE
-            binding.tvVisitCountBadge.visibility = View.GONE
-            binding.btnDashDateFilter.visibility = View.VISIBLE
-            binding.visitListContent.visibility = View.VISIBLE
-            binding.visitEmptyContent.visibility = View.GONE
-            renderOverviewDashboard()
+        // The management dashboard is IAM-gated: only users granted
+        // vpDashboard.view (GM + super-admins, who inherit it) see it. It
+        // replaces the Today's Trip card for them. Everyone else keeps the
+        // normal CP / Today's Trip flow, so the dashboard's included layout
+        // is hidden and the trip card is shown.
+        val showDashboard = session.hasPermission("vpDashboard.view")
+        binding.homeOverviewInclude.root.visibility =
+            if (showDashboard) View.VISIBLE else View.GONE
+        binding.cardTodayVisit.visibility =
+            if (showDashboard) View.GONE else View.VISIBLE
+        if (showDashboard) {
+            // The overview layout is static content — nothing to render here.
             return
         }
         // Home shows today's visits only.
