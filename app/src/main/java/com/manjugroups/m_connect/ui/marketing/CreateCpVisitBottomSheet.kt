@@ -256,14 +256,24 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         })
 
         btnDropPin.setOnClickListener {
-            // Pin-drop bottom sheet (map + Places search + draggable
-            // marker) is the next deliverable. Surface a toast for now
-            // so the placeholder doesn't read as a broken button.
-            Toast.makeText(
-                requireContext(),
-                "Map pin-drop launching in the next update",
-                Toast.LENGTH_SHORT,
-            ).show()
+            // Map pin-drop with address search + suggestions (map service).
+            // Seed at the current pin if one was already set.
+            val sheet = com.manjugroups.m_connect.ui.common.MapPinDropBottomSheet
+                .newInstance(pinLat, pinLng)
+            sheet.setListener { result ->
+                pinLat = result.lat
+                pinLng = result.lng
+                pinMapsLink = result.googleMapsLink
+                tvPinLocation.text = result.address.ifBlank { "Location set" }
+                tvPinLocation.visibility = View.VISIBLE
+                // Fill Address Line 1 when empty so the existing paste-to-parse
+                // splits it into the canonical fields; never overwrite what the
+                // user already typed.
+                if (etAddressLine1.text.isNullOrBlank() && result.address.isNotBlank()) {
+                    etAddressLine1.setText(result.address)
+                }
+            }
+            sheet.show(parentFragmentManager, "map_pin_drop")
         }
 
         btnCancel.setOnClickListener { dismissAllowingStateLoss() }
