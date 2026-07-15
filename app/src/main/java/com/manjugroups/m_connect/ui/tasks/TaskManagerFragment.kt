@@ -45,6 +45,13 @@ class TaskManagerFragment : Fragment() {
     private var moduleFilter: String = "All"
     private var moduleTabsList: List<String> = listOf("All")
     private var allTasks: List<DailyTaskData> = emptyList()
+    // Infinite scroll: render 20, extend by 20 near the end. The filtered
+    // list is cached so the scroll listener doesn't re-filter on every tick.
+    private var currentFiltered: List<DailyTaskData> = emptyList()
+    private var taskLayoutManager: LinearLayoutManager? = null
+    private val pager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { render() },
+    )
     // Cache the module label per task id — moduleOf() parses the actionUrl,
     // so re-deriving it on every filter switch / bind was a real cost.
     private val moduleCache = HashMap<String, String>()
@@ -81,10 +88,13 @@ class TaskManagerFragment : Fragment() {
         ViewCompat.requestApplyInsets(view)
 
         recycler = view.findViewById<RecyclerView>(R.id.taskManagerRecycler).apply {
-            layoutManager = LinearLayoutManager(requireContext())
+            val lm = LinearLayoutManager(requireContext())
+            taskLayoutManager = lm
+            layoutManager = lm
             adapter = this@TaskManagerFragment.adapter
             setHasFixedSize(true)
             itemAnimator = null // no cross-fade churn on filter switches
+            pager.bindRecyclerView(this, lm) { currentFiltered.size }
         }
         skeleton = view.findViewById(R.id.taskManagerSkeleton)
         emptyState = view.findViewById(R.id.taskManagerEmpty)
@@ -99,12 +109,16 @@ class TaskManagerFragment : Fragment() {
         statusTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 status = statusOrder.getOrElse(index) { Status.ALL }
+                pager.reset()
+                recycler?.scrollToPosition(0)
                 render()
             }
         })
         moduleTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 moduleFilter = moduleTabsList.getOrElse(index) { "All" }
+                pager.reset()
+                recycler?.scrollToPosition(0)
                 render()
             }
         })
@@ -161,6 +175,7 @@ class TaskManagerFragment : Fragment() {
 
                 renderStats()
                 renderModuleTabs()
+                pager.reset() // fresh data → back to the first window
                 render()
                 recycler?.visibility = View.VISIBLE
             } catch (ce: kotlinx.coroutines.CancellationException) {
@@ -256,11 +271,13 @@ class TaskManagerFragment : Fragment() {
         return System.currentTimeMillis() - created >= 24L * 60 * 60 * 1000
     }
 
-    /** Filter + push to the adapter — no re-inflation, RecyclerView recycles. */
+    /** Filter, then push only the current window (20, +20 on scroll). */
     private fun render() {
-        val list = visibleTasks()
-        adapter.submit(list)
-        emptyState?.visibility = if (list.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
+        val full = visibleTasks()
+        currentFiltered = full
+        adapter.submit(full.take(pager.limit))
+        // Empty state keyed off the FULL filtered size, not the window.
+        emptyState?.visibility = if (full.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
     }
 
     private fun bindRow(h: TaskAdapter.VH, task: DailyTaskData) {
