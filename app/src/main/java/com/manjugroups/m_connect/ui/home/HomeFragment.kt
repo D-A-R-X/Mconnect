@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
@@ -63,6 +64,9 @@ class HomeFragment : Fragment() {
     // visit skeleton so a refresh / attendance update never blanks the
     // trip card back to a skeleton or the empty state.
     private var homeVisitsResolved = false
+    // True once Home has painted real content at least once; gates the
+    // full-screen skeleton so later refreshes don't re-cover the Overview tabs.
+    private var hasRenderedHomeOnce = false
     // True once a real visits load cycle has begun (isVisitsLoading flipped
     // true). The flow starts at `false`, so without this guard the
     // collector's "load finished" branch fires on that initial replayed
@@ -164,6 +168,11 @@ class HomeFragment : Fragment() {
         // one gesture. The spinner is dismissed in collectState() when
         // the next "loaded" state lands.
         binding.homeRefresh.setupPullToRefresh {
+            // Dashboard users see the KPI overview, so a pull must refresh THAT
+            // (a single fast call) and the spinner is dismissed the moment it
+            // lands — instead of spinning for the slow visits/attendance chain
+            // they never even see.
+            if (session.hasPermission("vpDashboard.view")) loadVpDashboard(force = true)
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
             loadUnreadNotifications()
         }
@@ -217,6 +226,39 @@ class HomeFragment : Fragment() {
             )
         }
         binding.whiteContentArea.background = whiteCardBg
+
+        // Touch routing: the header is pinned behind the full-height scroll
+        // panel. Route touches above the visible-header line to the header (so
+        // its buttons work) and the rest to the scroll panel (so the tabs stay
+        // tappable and scrollable once the content covers the header).
+        binding.homeStickyColumn.headerView = binding.homeHeader
+        binding.homeStickyColumn.scrollContainer = binding.homeRefresh
+        binding.homeStickyColumn.coverLineProvider = {
+            val b = _binding
+            if (b == null) 0 else (b.homeHeader.height - b.homeContent.scrollY).coerceAtLeast(0)
+        }
+        // Keep the transparent spacer exactly the header's height so the white
+        // Overview panel sits just below the pinned header at rest.
+        val syncSpacer = {
+            val b = _binding
+            if (b != null) {
+                val h = b.homeHeader.height
+                if (h > 0) {
+                    if (b.homeHeaderSpacer.layoutParams.height != h) {
+                        b.homeHeaderSpacer.layoutParams =
+                            b.homeHeaderSpacer.layoutParams.apply { height = h }
+                        b.homeHeaderSpacer.requestLayout()
+                    }
+                    // homeRefresh is full-height, so the default pull spinner
+                    // lands over the header — drop it just below the header
+                    // instead (rests off-screen at top when idle).
+                    val d = resources.displayMetrics.density
+                    b.homeRefresh.setProgressViewOffset(false, (-40 * d).toInt(), (h + 24 * d).toInt())
+                }
+            }
+        }
+        binding.homeHeader.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        binding.homeHeader.post { syncSpacer() }
 
         binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
             val dy = scrollY - oldScrollY
@@ -284,12 +326,15 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            // Don't paint over the skeleton while a pull-refresh
-                            // is in flight — the swipe spinner already signals
-                            // "loading" so the full-screen skeleton would
-                            // double up. The skeleton is only useful for the
-                            // initial open.
-                            if (!binding.homeRefresh.isRefreshing) {
+                            // The full-screen skeleton is ONLY for the very first
+                            // open (nothing on screen yet). On any later refresh —
+                            // returning to the Home tab, a background reload — we
+                            // keep the already-rendered content up; the opaque
+                            // skeleton would otherwise re-cover the Overview and
+                            // its Marketing/HR tabs, making them feel "unclickable"
+                            // until the reload finished. Pull-refresh has its own
+                            // spinner, so skip the skeleton there too.
+                            if (!hasRenderedHomeOnce && !binding.homeRefresh.isRefreshing) {
                                 SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
                                 // The sticky header + scroll content are now siblings
                                 // under homeStickyColumn — hide the WHOLE column so the
@@ -303,6 +348,9 @@ class HomeFragment : Fragment() {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeRefresh.dismissRefresh()
                             binding.homeStickyColumn.visibility = View.VISIBLE
+                            // Content is on screen now — future Loading emits keep
+                            // it visible instead of flashing the full-screen skeleton.
+                            hasRenderedHomeOnce = true
                             renderSummary()
                             // Paint the trip card only once visits have
                             // resolved (or we already have some to show) AND
@@ -477,30 +525,15 @@ class HomeFragment : Fragment() {
             applyDashHeader()
             // The globe icon belongs to the "Today's Trip" view, not the KPI
             // dashboard — hide it so the header reads cleanly, and surface
-            // the date filter in its place.
-            val root = _binding?.root ?: return
-            val d = vpDashboardData ?: return
-            root.findViewById<android.widget.TextView>(R.id.numStaff)?.text = "${d.totalStaff}"
-            root.findViewById<android.widget.TextView>(R.id.numPresent)?.text = "${d.present}"
-            root.findViewById<android.widget.TextView>(R.id.numAbsent)?.text = "${d.absent}"
-            root.findViewById<android.widget.TextView>(R.id.numLeave)?.text = "${d.leave}"
-
-            // Bind Marketing layout fields
-            val callsStr = "${d.totalCalls}"
-            root.findViewById<android.widget.TextView>(R.id.numCalls)?.text = callsStr
-            root.findViewById<android.widget.TextView>(R.id.numIncoming)?.text = "${d.incomingCalls}"
-            root.findViewById<android.widget.TextView>(R.id.numOutgoing)?.text = "${d.outboundCalls}"
-            root.findViewById<android.widget.TextView>(R.id.numHot)?.text = "${d.hot}"
-            root.findViewById<android.widget.TextView>(R.id.numWarm)?.text = "${d.warm}"
-            root.findViewById<android.widget.TextView>(R.id.numCold)?.text = "${d.cold}"
-            root.findViewById<android.widget.TextView>(R.id.numSv)?.text = "${d.svVisitsFixed}"
-            root.findViewById<android.widget.TextView>(R.id.numCp)?.text = "${d.cpVisitsFixed}"
+            // the date filter in its place. Visibility is set unconditionally
+            // (even before the numbers land) so the overview + its tabs show
+            // immediately; bindDashboardData() fills the counts when ready.
             binding.ivVisitTitleGlobe.visibility = View.GONE
             binding.tvVisitCountBadge.visibility = View.GONE
             binding.btnDashDateFilter.visibility = View.VISIBLE
             binding.visitListContent.visibility = View.VISIBLE
             binding.visitEmptyContent.visibility = View.GONE
-            renderVpDashboard()
+            bindDashboardData()
             return
         }
         // Home shows today's visits only.
@@ -638,10 +671,23 @@ class HomeFragment : Fragment() {
 
     // ── VP / Management Dashboard ───────────────────────────────────────────
 
+    private fun dashCacheKey(date: String?): String =
+        "dash:${session.staffId.orEmpty()}:${date ?: "today"}"
+
     private fun loadVpDashboard(force: Boolean = false) {
         if (vpDashboardLoading && !force) return
         vpDashboardLoading = true
         val requestedDate = vpSelectedDate
+        // Cache-first: paint the last-known numbers immediately so the overview
+        // never sits blank while the network round-trips.
+        if (vpDashboardData == null) {
+            LocalCache.get<com.manjugroups.m_connect.network.MobileDashboardResponse>(
+                requireContext(), dashCacheKey(requestedDate),
+            )?.let { cached ->
+                vpDashboardData = cached
+                bindDashboardData()
+            }
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             // Prefer the company-wide aggregate route; when it isn't deployed
             // (404), fall back to counting what the live per-screen endpoints
@@ -653,12 +699,24 @@ class HomeFragment : Fragment() {
                 else runCatching { computeVpFallback(requestedDate ?: indiaToday()) }.getOrNull()
             vpDashboardLoading = false
             if (view == null) return@launch
+            // Dashboard is the visible content for these users — drop the
+            // pull-to-refresh spinner as soon as it lands, not after the slow
+            // background visits/attendance load.
+            _binding?.homeRefresh?.dismissRefresh()
             // The user picked a different date while this was in flight —
             // that newer load owns the render; drop this stale result.
             if (requestedDate != vpSelectedDate) return@launch
             if (data != null) {
                 vpDashboardData = data
-                renderVpDashboard()
+                // Only the deployed aggregate route is worth caching; the
+                // thin CP/SV fallback would poison the next instant paint.
+                if (resp?.success == true) {
+                    LocalCache.put(
+                        requireContext(), dashCacheKey(requestedDate),
+                        data, System.currentTimeMillis(),
+                    )
+                }
+                bindDashboardData()
             }
         }
     }
@@ -734,7 +792,33 @@ class HomeFragment : Fragment() {
      *  tile shows a count and opens its detail screen. Guarded by a value
      *  signature so the ~7 render flows don't rebuild it on every emit. */
     private fun renderVpDashboard() {
-        // The VP dashboard is now rendered statically via layoutHr and layoutMarketing in renderVisitCard
+        // The VP dashboard is rendered statically via layoutHr/layoutMarketing;
+        // bindDashboardData() writes the live counts into those views.
+        bindDashboardData()
+    }
+
+    /** Writes the current [vpDashboardData] counts into the static HR +
+     *  Marketing overview layouts. Safe to call any time (no-op until data
+     *  lands) so a late network result still repaints without waiting for the
+     *  next visits emit. */
+    private fun bindDashboardData() {
+        val root = _binding?.root ?: return
+        val d = vpDashboardData ?: return
+        fun set(id: Int, value: Int) {
+            root.findViewById<android.widget.TextView>(id)?.text = value.toString()
+        }
+        set(R.id.numStaff, d.totalStaff)
+        set(R.id.numPresent, d.present)
+        set(R.id.numAbsent, d.absent)
+        set(R.id.numLeave, d.leave)
+        set(R.id.numCalls, d.totalCalls)
+        set(R.id.numIncoming, d.incomingCalls)
+        set(R.id.numOutgoing, d.outboundCalls)
+        set(R.id.numHot, d.hot)
+        set(R.id.numWarm, d.warm)
+        set(R.id.numCold, d.cold)
+        set(R.id.numSv, d.svVisitsFixed)
+        set(R.id.numCp, d.cpVisitsFixed)
     }
 
     private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {

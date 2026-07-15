@@ -5,23 +5,27 @@
     android:layout_height="match_parent"
     android:background="#F1F3F8">
 
-    <!-- Vertical stack: sticky blue header on top, refreshable scroll
-         content below. The header sits OUTSIDE the NestedScrollView so
-         it stays pinned while the user scrolls the today's-trip card. -->
-    <LinearLayout
+    <!-- Header + scroll panel OVERLAP inside a touch-routing container. The
+         header (drawn first = behind) stays pinned; the full-height scroll
+         panel (drawn second = in front) slides its white content up over the
+         blue. HomeTouchRouterLayout sends touches on the visible header to
+         the header, and touches where the content has scrolled over it to the
+         scroll panel — so the header buttons AND the scrolled-over tabs both
+         work. -->
+    <com.manjugroups.m_connect.ui.custom.HomeTouchRouterLayout
         android:id="@+id/homeStickyColumn"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipChildren="false"
         android:clipToPadding="false"
-        android:orientation="vertical"
         android:visibility="gone">
 
-            <!-- REUSABLE BLUE HEADER SECTION (STICKY) -->
+            <!-- REUSABLE BLUE HEADER SECTION (pinned, behind the scroll panel) -->
             <com.manjugroups.m_connect.ui.custom.HomeHeaderView
                 android:id="@+id/homeHeader"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_gravity="top" />
 
 
     <!-- Refreshable scrolling content area — sits BELOW the sticky blue
@@ -56,6 +60,14 @@
                 android:layout_height="wrap_content"
                 android:clipChildren="false"
                 android:orientation="vertical">
+
+            <!-- Transparent spacer sized to the header at runtime, so the white
+                 Overview panel starts just below the pinned header at rest and
+                 scrolls up over it. -->
+            <View
+                android:id="@+id/homeHeaderSpacer"
+                android:layout_width="match_parent"
+                android:layout_height="1dp" />
 
             <!-- Section container — sits on the panel's white surface
                  (the panel itself now carries the white bg + rounded
@@ -373,7 +385,7 @@
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-    </LinearLayout>
+    </com.manjugroups.m_connect.ui.custom.HomeTouchRouterLayout>
 
     <LinearLayout
         android:id="@+id/skeletonContainer"

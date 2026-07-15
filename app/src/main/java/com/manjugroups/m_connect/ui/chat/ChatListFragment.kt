@@ -35,6 +35,7 @@ import com.manjugroups.m_connect.network.CreateChannelRequest
 import com.manjugroups.m_connect.network.CreateGroupConversationRequest
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.dismissRefresh
@@ -441,13 +442,39 @@ class ChatListFragment : Fragment() {
 
     private var isLoadingChats = false
 
+    /** Cached snapshot of the three lists that make up the chat overview. */
+    private data class ChatListSnapshot(
+        val conversations: List<ConversationData> = emptyList(),
+        val channels: List<ChannelData> = emptyList(),
+        val staff: List<StaffData> = emptyList(),
+    )
+
+    private fun chatCacheKey(): String = "chatlist:${session.staffId.orEmpty()}"
+
     private fun loadData() {
         if (isLoadingChats) return
         isLoadingChats = true
         viewLifecycleOwner.lifecycleScope.launch {
             if (!hasLoadedOnce) {
-                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-                binding.rvChatList.visibility = View.GONE
+                // Cache-first: paint the last-known chat list INSTANTLY (no
+                // skeleton) and let the network refresh in the background. Only
+                // show the skeleton when there's genuinely nothing cached — this
+                // is what stops Chat from sitting on a long blank/skeleton wait.
+                val cached = runCatching {
+                    LocalCache.get<ChatListSnapshot>(requireContext(), chatCacheKey())
+                }.getOrNull()
+                if (cached != null && _binding != null) {
+                    allConversations = cached.conversations
+                    allChannels = cached.channels
+                    activeStaffCache = cached.staff
+                    hasLoadedOnce = true
+                    SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                    binding.rvChatList.visibility = View.VISIBLE
+                    renderCurrentList()
+                } else {
+                    SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                    binding.rvChatList.visibility = View.GONE
+                }
             }
             var conversations: List<ConversationData> = emptyList()
             var channels: List<ChannelData> = emptyList()
@@ -484,7 +511,16 @@ class ChatListFragment : Fragment() {
                 allChannels = channels
                 activeStaffCache = staffList
                 hasLoadedOnce = true
+                // Persist for the next cold open's instant paint.
+                runCatching {
+                    LocalCache.put(
+                        requireContext(), chatCacheKey(),
+                        ChatListSnapshot(conversations, channels, staffList),
+                        System.currentTimeMillis(),
+                    )
+                }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                binding.rvChatList.visibility = View.VISIBLE
                 renderCurrentList()
 
                 // Background-fetch profile photos for conversation

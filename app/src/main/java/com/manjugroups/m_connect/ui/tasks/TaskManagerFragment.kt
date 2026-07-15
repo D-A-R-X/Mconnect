@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
@@ -152,7 +153,34 @@ class TaskManagerFragment : Fragment() {
         super.onDestroyView()
     }
 
+    private fun tasksCacheKey(): String = "tasks:${session.staffId.orEmpty()}"
+
+    /** Applies a task payload (cached or fresh) to the UI. */
+    private fun applyTasksData(resp: com.manjugroups.m_connect.network.TaskManagerResponse) {
+        allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
+        teamIds = resp.teamIds.toSet()
+        scope = resp.scope
+        // Rebuild the module cache once per load.
+        moduleCache.clear()
+        for (t in allTasks) moduleCache[t.id] = computeModule(t)
+
+        renderStats()
+        renderModuleTabs()
+        pager.reset() // fresh data → back to the first window
+        render()
+        recycler?.visibility = View.VISIBLE
+    }
+
     private fun loadTasks(showSkeleton: Boolean) {
+        // Cache-first: paint the last-known tasks INSTANTLY so the skeleton
+        // only ever shows on a genuine first load with nothing cached.
+        if (allTasks.isEmpty()) {
+            runCatching {
+                LocalCache.get<com.manjugroups.m_connect.network.TaskManagerResponse>(
+                    requireContext(), tasksCacheKey(),
+                )
+            }.getOrNull()?.let { applyTasksData(it) }
+        }
         if (showSkeleton && allTasks.isEmpty()) {
             skeleton?.visibility = View.VISIBLE
             skeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
@@ -166,18 +194,12 @@ class TaskManagerFragment : Fragment() {
             try {
                 todayStr = apiDateFmt.format(System.currentTimeMillis())
                 val resp = api.getTaskManagerTasks(session.bearerToken, todayStr)
-                allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
-                teamIds = resp.teamIds.toSet()
-                scope = resp.scope
-                // Rebuild the module cache once per load.
-                moduleCache.clear()
-                for (t in allTasks) moduleCache[t.id] = computeModule(t)
-
-                renderStats()
-                renderModuleTabs()
-                pager.reset() // fresh data → back to the first window
-                render()
-                recycler?.visibility = View.VISIBLE
+                runCatching {
+                    LocalCache.put(
+                        requireContext(), tasksCacheKey(), resp, System.currentTimeMillis(),
+                    )
+                }
+                applyTasksData(resp)
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (e: Exception) {
