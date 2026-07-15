@@ -63,7 +63,7 @@ class HrStaffFragment : Fragment() {
             val resp = runCatching { api.getStaffCount(session.bearerToken) }.getOrNull()
             if (_binding == null || resp == null || !resp.success) return@launch
             binding.tvStaffCountSummary.text =
-                "Active ${resp.active} · Inactive ${resp.inactive} · Total ${resp.all}"
+                "Active ${resp.activeCount} · Inactive ${resp.inactiveCount} · Total ${resp.allCount}"
             binding.tvStaffCountSummary.visibility = View.VISIBLE
         }
     }

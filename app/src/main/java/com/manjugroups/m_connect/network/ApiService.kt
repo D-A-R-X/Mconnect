@@ -1959,12 +1959,26 @@ data class StaffPaginatedResponse(
     val isDone: Boolean = true,
     val continueCursor: String? = null
 )
-data class StaffCountResponse(
-    val success: Boolean,
+data class StaffCounts(
     val all: Int = 0,
     val active: Int = 0,
-    val inactive: Int = 0
+    val inactive: Int = 0,
 )
+
+data class StaffCountResponse(
+    val success: Boolean,
+    // Current backend nests the breakdown under `counts` and puts the grand
+    // total at top level; older shape had the counts flat. Support both.
+    val counts: StaffCounts? = null,
+    val total: Int = 0,
+    val all: Int = 0,
+    val active: Int = 0,
+    val inactive: Int = 0,
+) {
+    val activeCount: Int get() = counts?.active ?: active
+    val inactiveCount: Int get() = counts?.inactive ?: inactive
+    val allCount: Int get() = counts?.all ?: total.takeIf { it > 0 } ?: all
+}
 
 // Staff detail
 data class StaffDetailResponse(val success: Boolean, val staff: StaffFullData?)
@@ -3715,6 +3729,15 @@ data class OverviewDashboardResponse(
     val collectionCount: Int = 0,
     val bookingCount: Int = 0,
     val registrationCount: Int = 0,
+    // Extended HR + lead-temperature fields — nullable so the overview tiles
+    // render "–" until the extended /api/dashboard/overview route is deployed.
+    val leaveApproved: Int? = null,
+    val weekOff: Int? = null,
+    val permissionCount: Int? = null,
+    val wfhApproved: Int? = null,
+    val leadsHot: Int? = null,
+    val leadsWarm: Int? = null,
+    val leadsCold: Int? = null,
     val error: String? = null,
 )
 
