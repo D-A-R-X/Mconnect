@@ -75,6 +75,12 @@ interface ApiService {
         @Query("date") date: String? = null,
     ): OverviewDashboardResponse
 
+    @GET("api/mobile/dashboard")
+    suspend fun getMobileDashboard(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null,
+    ): MobileDashboardResponse
+
     @GET("api/dashboard/calls")
     suspend fun getDashboardCalls(
         @Header("Authorization") token: String,
@@ -3738,6 +3744,24 @@ data class OverviewDashboardResponse(
     val leadsHot: Int? = null,
     val leadsWarm: Int? = null,
     val leadsCold: Int? = null,
+    val error: String? = null,
+)
+
+data class MobileDashboardResponse(
+    val success: Boolean = false,
+    val date: String? = null,
+    val totalCalls: Int = 0,
+    val incomingCalls: Int = 0,
+    val outboundCalls: Int = 0,
+    val hot: Int = 0,
+    val warm: Int = 0,
+    val cold: Int = 0,
+    val cpVisitsFixed: Int = 0,
+    val svVisitsFixed: Int = 0,
+    val totalStaff: Int = 0,
+    val present: Int = 0,
+    val absent: Int = 0,
+    val leave: Int = 0,
     val error: String? = null,
 )
 
