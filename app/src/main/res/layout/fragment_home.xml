@@ -35,9 +35,8 @@
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/homeRefresh"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="match_parent"
         android:layout_marginTop="0dp"
-        android:layout_weight="1"
         android:background="@android:color/transparent"
         android:clipChildren="false"
         android:clipToPadding="false">
@@ -74,10 +73,13 @@
                 android:paddingTop="20dp"
                 android:paddingBottom="20dp">
 
+                <include layout="@layout/layout_home_overview" />
+
                 <LinearLayout
                     android:id="@+id/cardTodayVisit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:visibility="gone"
                     android:orientation="vertical">
 
                     <LinearLayout
