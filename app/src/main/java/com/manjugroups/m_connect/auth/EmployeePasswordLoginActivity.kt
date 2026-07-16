@@ -152,6 +152,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             }.onSuccess { iam ->
                 session.iamPermissions = iam.permissions.toSet()
                 session.isAdmin = iam.isAdmin
+                session.role = iam.role
             }
 
             user.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->

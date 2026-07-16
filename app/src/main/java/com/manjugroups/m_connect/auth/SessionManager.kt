@@ -128,6 +128,11 @@ class SessionManager(context: Context) {
         get() = getCachedBoolean(KEY_IS_ADMIN, false)
         set(value) = setCachedBoolean(KEY_IS_ADMIN, value)
 
+    // Normalized system role from IAM (super-admin / office-staff / field-staff).
+    var role: String?
+        get() = getCachedString(KEY_ROLE, null)
+        set(value) = setCachedString(KEY_ROLE, value)
+
     var reportingToId: String?
         get() = getCachedString(KEY_REPORTING_TO_ID, null)
         set(value) = setCachedString(KEY_REPORTING_TO_ID, value)
@@ -375,6 +380,39 @@ class SessionManager(context: Context) {
 
     fun hasPermission(perm: String): Boolean = isAdmin || iamPermissions.contains(perm)
 
+    /**
+     * Who sees the company-wide Home dashboard (everyone else gets Today's Trip).
+     *
+     * The dashboard was wrongly showing for ALL users: it was gated on
+     * `hasPermission("vpDashboard.view")`, but `vpDashboard.view` is a phantom
+     * key (never granted to anyone), so that expression collapsed to the broad
+     * `isAdmin` flag — which is set for many roles. Gate strictly instead:
+     *   • super-admins (by normalized role),
+     *   • VP / GM management designations,
+     *   • anyone explicitly granted the dashboard IAM key (if/when it becomes
+     *     a real, grantable permission).
+     * Notably this NO LONGER keys off the blanket `isAdmin` flag.
+     */
+    fun canViewVpDashboard(): Boolean {
+        if ((role ?: "").trim().equals("super-admin", ignoreCase = true)) return true
+        if (iamPermissions.contains("vpDashboard.view")) return true
+        return isVpOrGmDesignation(designation)
+    }
+
+    /** True for the Vice-President / General-Manager designation families
+     *  (incl. Assistant/Deputy variants and Managing Director) that manage the
+     *  company-wide dashboard. Matches full titles and the common abbreviations. */
+    private fun isVpOrGmDesignation(designation: String?): Boolean {
+        val d = (designation ?: "").lowercase(java.util.Locale.US).trim()
+        if (d.isEmpty()) return false
+        if (d.contains("vice president") || d.contains("vice-president") ||
+            d.contains("general manager") || d.contains("managing director")
+        ) return true
+        // Standalone abbreviations only (so "vp"/"gm" don't match inside another
+        // word): VP, AVP, GM, AGM, DGM.
+        return Regex("(^|[^a-z])(vp|avp|gm|agm|dgm)([^a-z]|\$)").containsMatchIn(d)
+    }
+
     fun saveSession(token: String, name: String?, phone: String?) {
         this.token = token
         this.userName = name
@@ -512,6 +550,7 @@ class SessionManager(context: Context) {
         private const val KEY_MUST_CHANGE_PASSWORD = "must_change_password"
         private const val KEY_IAM_PERMISSIONS = "iam_permissions"
         private const val KEY_IS_ADMIN = "is_admin"
+        private const val KEY_ROLE = "iam_role"
         private const val KEY_PUSH_TOKEN = "push_token"
         private const val KEY_NOTIFICATION_PERMISSION_PROMPTED = "notification_permission_prompted"
         private const val KEY_STAFF_ID = "staff_id"

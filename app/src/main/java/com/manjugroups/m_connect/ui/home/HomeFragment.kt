@@ -101,7 +101,7 @@ class HomeFragment : Fragment() {
             }
         })
         setupPullToRefresh()
-        if (session.hasPermission("vpDashboard.view")) {
+        if (session.canViewVpDashboard()) {
             binding.btnDashDateFilter.setOnClickListener { showDashDatePicker() }
             parentFragmentManager.setFragmentResultListener(
                 DASH_DATE_RESULT_KEY, viewLifecycleOwner
@@ -122,6 +122,7 @@ class HomeFragment : Fragment() {
         setupHomeScrollAnimation()
         collectState()
         collectEvents()
+        observeIamUpdates()
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
         loadUnreadNotifications()
         startBannerAnimation()
@@ -172,7 +173,7 @@ class HomeFragment : Fragment() {
             // (a single fast call) and the spinner is dismissed the moment it
             // lands — instead of spinning for the slow visits/attendance chain
             // they never even see.
-            if (session.hasPermission("vpDashboard.view")) loadVpDashboard(force = true)
+            if (session.canViewVpDashboard()) loadVpDashboard(force = true)
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
             loadUnreadNotifications()
         }
@@ -289,7 +290,7 @@ class HomeFragment : Fragment() {
                         val availableCards = vp - navHeight - profileBottom - headerH
                         val overflow = (cardsH - availableCards).coerceAtLeast(0)
                         b.homeContent.maxScrollY =
-                            if (session.hasPermission("vpDashboard.view")) sLimit + overflow
+                            if (session.canViewVpDashboard()) sLimit + overflow
                             else Int.MAX_VALUE
                     }
                 }
@@ -330,7 +331,7 @@ class HomeFragment : Fragment() {
                     // the drawer top + sticky header at the profile row and let the
                     // card grid scroll UNDER them, so cards hidden behind the bottom
                     // nav on short screens stay reachable.
-                    if (session.hasPermission("vpDashboard.view")) {
+                    if (session.canViewVpDashboard()) {
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         b.root.findViewById<View>(R.id.overviewCardsArea)
@@ -394,6 +395,23 @@ class HomeFragment : Fragment() {
 
 
 
+    /** Re-evaluate the dashboard-vs-trip gate when IAM data changes — notably
+     *  when the normalized `role` first populates for a session that logged in
+     *  before the app persisted it, so a super-admin's dashboard reappears
+     *  without a manual refresh. Designation-based (VP/GM) users don't depend
+     *  on this — their designation is already stored. */
+    private fun observeIamUpdates() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                com.manjugroups.m_connect.auth.IamUpdateBus.updates.collect {
+                    if (_binding == null) return@collect
+                    if (session.canViewVpDashboard()) loadVpDashboard()
+                    (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+                }
+            }
+        }
+    }
+
     private fun collectState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -437,7 +455,7 @@ class HomeFragment : Fragment() {
                             // from the dashboard endpoint and not the visits
                             // fetch — render it immediately instead of waiting
                             // on that call (keeps Home Overview loading reliably).
-                            if (session.hasPermission("vpDashboard.view") ||
+                            if (session.canViewVpDashboard() ||
                                 ((homeVisitsResolved || hasVisits) &&
                                     !viewModel.isVisitsLoading.value)
                             ) {
@@ -595,7 +613,7 @@ class HomeFragment : Fragment() {
         // with vpDashboard.view (super-admins included). Its numbers come from
         // the dashboard endpoint, not the visits flow, so short-circuit here
         // before any trip rendering / empty-state logic.
-        if (session.hasPermission("vpDashboard.view")) {
+        if (session.canViewVpDashboard()) {
             applyDashHeader()
             // The globe icon belongs to the "Today's Trip" view, not the KPI
             // dashboard — hide it so the header reads cleanly, and surface
