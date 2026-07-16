@@ -967,7 +967,11 @@ class GeoTrackService : Service() {
                     eventType,
                     buildEventMetadata(),
                     signature = "tamper_$eventType",
-                    minIntervalMs = 6 * 60 * 60 * 1000L,
+                    // 30 min (was 6h): a 6-hour per-type dedup window silently
+                    // dropped a genuine SECOND gps-off / airplane-mode toggle in
+                    // the same shift, so the RO was never told. 30 min still
+                    // suppresses rapid flapping but lets real repeats through.
+                    minIntervalMs = 30 * 60 * 1000L,
                 )
             } else {
                 GeoTrackEventQueue.enqueue(this, eventType, buildEventMetadata())

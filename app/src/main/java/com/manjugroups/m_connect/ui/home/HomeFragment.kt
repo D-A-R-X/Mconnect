@@ -185,7 +185,18 @@ class HomeFragment : Fragment() {
             if (session.canViewVpDashboard()) loadVpDashboard(force = true)
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
             loadUnreadNotifications()
+            // Safety net: the spinner is normally dismissed when the next
+            // "Loaded" state lands, but a refresh that produces IDENTICAL data
+            // may not re-emit (StateFlow de-dups) and a stalled/slow request
+            // could otherwise spin forever. Force-dismiss after a hard cap.
+            binding.homeRefresh.postDelayed({ _binding?.homeRefresh?.dismissRefresh() }, 6000)
         }
+        // setupPullToRefresh() installs a generic inset listener that anchors
+        // the spinner near the top — on the full-bleed Home header that lands
+        // it OVER the blue banner. syncSpacer owns the Home spinner position
+        // (just below the banner), so remove the generic one to stop the two
+        // fighting (the cause of the spinner sometimes appearing mid-screen).
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.homeRefresh, null)
     }
 
     /**
@@ -381,6 +392,9 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Clear any pull-refresh spinner left spinning from before (e.g. the
+        // user opened Notifications mid-refresh and came back to a stuck loader).
+        _binding?.homeRefresh?.dismissRefresh()
         // Restore the tab bar unless the edge-QR panel or its onboarding
         // tooltip is ACTIVELY on screen. The old `hasSeenEdgeQrTooltip && …`
         // gate hid the nav FOREVER for any user who never sees that tooltip —
