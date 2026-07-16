@@ -130,6 +130,9 @@ class HomeFragment : Fragment() {
         setupRoleAdaptiveView()
         setupOverviewTabs()
         setupDriverTabs()
+        // Overview (dashboard) vs Today's Trip from the start, so a normal user
+        // never flashes the dashboard before data loads.
+        applyDashboardVisibility()
 
         setFragmentResultListener(DriverStartTripBottomSheet.RESULT_KEY) { _, bundle ->
             val success = bundle.getBoolean("success")
@@ -193,6 +196,10 @@ class HomeFragment : Fragment() {
     // flush under the blue profile row, then re-rounds on scroll-back.
     private var drawerBg: android.graphics.drawable.GradientDrawable? = null
     private var drawerMaxRadiusPx = 0f
+    // One-shot: force the scroll to its rest state after the header/content
+    // first measure, so an early focus-driven auto-scroll can't leave the
+    // Overview drawer wedged over the banner (the "stuck banner" bug).
+    private var homeRestInitialized = false
 
     /**
      * "Panel slides up over fixed header" scroll effect.
@@ -274,7 +281,11 @@ class HomeFragment : Fragment() {
                     }.getOrDefault(0)
                     if (vp > 0 && profileBottom > 0) {
                         val sLimit = h + (12 * d).toInt() - profileBottom
-                        val target = (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
+                        // The extra scroll range (to lift the Overview drawer to
+                        // its limit) is only for dashboard users; a normal user's
+                        // Today's Trip view uses its natural height (no empty gap).
+                        val target = if (session.canViewVpDashboard())
+                            (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0) else 0
                         if (b.homeScrollContent.minimumHeight != target) {
                             b.homeScrollContent.minimumHeight = target
                         }
@@ -292,6 +303,18 @@ class HomeFragment : Fragment() {
                         b.homeContent.maxScrollY =
                             if (session.canViewVpDashboard()) sLimit + overflow
                             else Int.MAX_VALUE
+                        // Establish the rest state ONCE, now that measurement is
+                        // valid: undo any early auto-scroll (focus-driven) and
+                        // clear the two-stage translations so the banner shows.
+                        // One-shot — syncSpacer also fires on tab toggle/relayout,
+                        // and yanking scrollTo(0,0) there would break sticky-tabs.
+                        if (!homeRestInitialized) {
+                            homeRestInitialized = true
+                            b.homeContent.scrollTo(0, 0)
+                            b.whiteContentArea.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
+                        }
                     }
                 }
             }
@@ -405,6 +428,7 @@ class HomeFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 com.manjugroups.m_connect.auth.IamUpdateBus.updates.collect {
                     if (_binding == null) return@collect
+                    applyDashboardVisibility()
                     if (session.canViewVpDashboard()) loadVpDashboard()
                     (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
                 }
@@ -605,10 +629,28 @@ class HomeFragment : Fragment() {
     // skip the re-inflation when nothing visible changed.
     private var lastVisitRenderSignature: String? = null
 
+    /**
+     * Show the company Overview ONLY for dashboard users; everyone else sees
+     * the "Today's Trip" section. The Overview include (`homeOverviewInclude`)
+     * is otherwise ALWAYS in the layout and `cardTodayVisit` is always gone —
+     * so without this toggle a normal user saw the dashboard and never saw
+     * their trips. Gated on [SessionManager.canViewVpDashboard].
+     */
+    private fun applyDashboardVisibility() {
+        if (_binding == null) return
+        val dash = session.canViewVpDashboard()
+        binding.root.findViewById<View>(R.id.homeOverviewInclude)?.visibility =
+            if (dash) View.VISIBLE else View.GONE
+        binding.root.findViewById<View>(R.id.cardTodayVisit)?.visibility =
+            if (dash) View.GONE else View.VISIBLE
+    }
+
     private fun renderVisitCard(state: HomeUiState.Loaded) {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
         setVisitSkeletonVisible(false)
+        // Overview (dashboard) vs Today's Trip — one or the other, never both.
+        applyDashboardVisibility()
         // VP / Management dashboard replaces the Today's Trip list for anyone
         // with vpDashboard.view (super-admins included). Its numbers come from
         // the dashboard endpoint, not the visits flow, so short-circuit here
@@ -787,14 +829,15 @@ class HomeFragment : Fragment() {
             val resp = runCatching {
                 api.getMobileDashboard(session.bearerToken, requestedDate)
             }.getOrNull()
+            // Drop the pull-to-refresh spinner the moment the primary (fast)
+            // aggregate call resolves — do NOT hold it through the slow
+            // client-side computeVpFallback below, which is what left the
+            // spinner spinning for a long time on slower networks.
+            if (view != null) _binding?.homeRefresh?.dismissRefresh()
             val data = if (resp?.success == true) resp
                 else runCatching { computeVpFallback(requestedDate ?: indiaToday()) }.getOrNull()
             vpDashboardLoading = false
             if (view == null) return@launch
-            // Dashboard is the visible content for these users — drop the
-            // pull-to-refresh spinner as soon as it lands, not after the slow
-            // background visits/attendance load.
-            _binding?.homeRefresh?.dismissRefresh()
             // The user picked a different date while this was in flight —
             // that newer load owns the render; drop this stale result.
             if (requestedDate != vpSelectedDate) return@launch

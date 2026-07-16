@@ -51,6 +51,7 @@
             android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="blocksDescendants"
             android:fillViewport="true"
             android:overScrollMode="never"
             android:paddingBottom="120dp">

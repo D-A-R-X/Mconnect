@@ -540,7 +540,10 @@ class MainActivity : AppCompatActivity() {
                 com.manjugroups.m_connect.ui.common.LocalCache.get<List<com.manjugroups.m_connect.network.DailyTaskData>>(
                     this, taskNudgeCacheKey(),
                 )
-            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { applyTaskNudge(it, fromCache = true) }
+            }.getOrNull()
+                ?.let { scopeToOwnTasks(it) }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { applyTaskNudge(it, fromCache = true) }
         }
         // This fires on every backstack change AND activity resume, each call
         // re-downloading the full task queue (hundreds of rows for admins) in
@@ -561,8 +564,10 @@ class MainActivity : AppCompatActivity() {
             val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 .format(java.util.Date())
             val open = runCatching {
-                api.getTaskManagerTasks(session.bearerToken, today)
-                    .tasks.filter { it.status == "pending" || it.status == "in-progress" }
+                scopeToOwnTasks(
+                    api.getTaskManagerTasks(session.bearerToken, today)
+                        .tasks.filter { it.status == "pending" || it.status == "in-progress" },
+                )
             }.getOrNull() ?: return@launch // network blip — the cache-painted state stays
             if (isFinishing || isDestroyed) return@launch
             // Persist for the next cold start / network blip.
@@ -576,6 +581,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun taskNudgeCacheKey(): String = "tasknudge:${session.staffId.orEmpty()}"
+
+    /**
+     * The pending-tasks nudge is a PERSONAL reminder, so a non-superadmin must
+     * only see tasks assigned to THEM. The Task Manager feed
+     * (`/api/dailyTasks/listForTaskManager`) is intentionally wider — it also
+     * returns tasks the user assigned, supervises, is CC'd on, or that belong
+     * to their team (the web splits it into tabs). Filtering only by status
+     * (as before) leaked others' tasks — e.g. a UI Designer seeing loan-approval
+     * tasks. Scope to `assignedTo == my staffId`. Super-admins keep the full
+     * feed (their nudge is company-wide by design).
+     */
+    private fun scopeToOwnTasks(
+        tasks: List<com.manjugroups.m_connect.network.DailyTaskData>,
+    ): List<com.manjugroups.m_connect.network.DailyTaskData> {
+        val isSuper = session.isAdmin || session.role.equals("super-admin", ignoreCase = true)
+        if (isSuper) return tasks
+        val me = session.staffId?.takeIf { it.isNotBlank() } ?: return emptyList()
+        return tasks.filter { it.assignedTo == me }
+    }
 
     /** Renders the pending-tasks warning (system notification, collapsed peek,
      *  and modal overlay) from an open-task list. [fromCache] paints only the
