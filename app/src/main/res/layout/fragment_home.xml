@@ -45,7 +45,7 @@
         android:clipChildren="false"
         android:clipToPadding="false">
 
-        <androidx.core.widget.NestedScrollView
+        <com.manjugroups.m_connect.ui.custom.HomeScrollView
             android:id="@+id/homeContent"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -56,6 +56,7 @@
             android:paddingBottom="120dp">
 
             <LinearLayout
+                android:id="@+id/homeScrollContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:clipChildren="false"
@@ -383,7 +384,7 @@
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+    </com.manjugroups.m_connect.ui.custom.HomeScrollView>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     </com.manjugroups.m_connect.ui.custom.HomeTouchRouterLayout>
 

@@ -187,6 +187,12 @@ class HomeFragment : Fragment() {
      *    never crosses into the status bar.
      * Effect saturates within ~140dp of scroll.
      */
+    // The Overview drawer's rounded-top background; its corner radius is
+    // animated 24dp → 0dp as the drawer reaches the scroll limit so it sits
+    // flush under the blue profile row, then re-rounds on scroll-back.
+    private var drawerBg: android.graphics.drawable.GradientDrawable? = null
+    private var drawerMaxRadiusPx = 0f
+
     /**
      * "Panel slides up over fixed header" scroll effect.
      * Home's blue header (with profile row + banner) stays anchored at
@@ -226,6 +232,8 @@ class HomeFragment : Fragment() {
             )
         }
         binding.whiteContentArea.background = whiteCardBg
+        drawerBg = whiteCardBg
+        drawerMaxRadiusPx = maxCornerRadiusPx
 
         // Touch routing: the header is pinned behind the full-height scroll
         // panel. Route touches above the visible-header line to the header (so
@@ -254,10 +262,33 @@ class HomeFragment : Fragment() {
                     // instead (rests off-screen at top when idle).
                     val d = resources.displayMetrics.density
                     b.homeRefresh.setProgressViewOffset(false, (-40 * d).toInt(), (h + 24 * d).toInt())
+                    // Scroll limit: lift the drawer just enough to cover the
+                    // BANNER and sit flush under the profile row (avatar/name/
+                    // bell) — NOT past it. So the range = bannerHeight + the
+                    // 12dp drawer margin = (headerHeight + 12) − profileRowBottom.
+                    // The NestedScroll's paddingBottom(120dp) already adds range.
+                    val vp = b.homeContent.height
+                    val profileBottom = runCatching {
+                        b.homeHeader.getHeaderBinding().homeProfileRow.bottom
+                    }.getOrDefault(0)
+                    if (vp > 0 && profileBottom > 0) {
+                        val sLimit = h + (12 * d).toInt() - profileBottom
+                        val target = (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
+                        if (b.homeScrollContent.minimumHeight != target) {
+                            b.homeScrollContent.minimumHeight = target
+                        }
+                        // minHeight only ADDS range for a short grid (HR); it can't
+                        // cap a taller grid (Marketing). Hard-cap the scroll at the
+                        // limit for dashboard users so BOTH tabs stop at the same
+                        // place. Trip lists (non-dashboard) still scroll freely.
+                        b.homeContent.maxScrollY =
+                            if (session.hasPermission("vpDashboard.view")) sLimit else Int.MAX_VALUE
+                    }
                 }
             }
         }
         binding.homeHeader.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        binding.homeContent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
         binding.homeHeader.post { syncSpacer() }
 
         binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
@@ -266,6 +297,24 @@ class HomeFragment : Fragment() {
                 (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
             } else if (scrollY <= 10) {
                 (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+            }
+            // Straighten the drawer's top corners as it nears the scroll limit
+            // (so it sits flush under the blue profile row), then re-round the
+            // moment it scrolls back down.
+            val b = _binding
+            val bg = drawerBg
+            if (b != null && bg != null) {
+                val den = resources.displayMetrics.density
+                val profileBottom = runCatching {
+                    b.homeHeader.getHeaderBinding().homeProfileRow.bottom
+                }.getOrDefault(0)
+                if (profileBottom > 0) {
+                    val sLimit = b.homeHeader.height + 12f * den - profileBottom
+                    val fade = 36f * den // straighten over the last 36dp of travel
+                    val frac = ((sLimit - scrollY) / fade).coerceIn(0f, 1f) // 1 far → 0 at limit
+                    val r = drawerMaxRadiusPx * frac
+                    bg.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                }
             }
         })
     }
