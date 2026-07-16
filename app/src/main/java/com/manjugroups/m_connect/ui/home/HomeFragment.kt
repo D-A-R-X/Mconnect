@@ -277,18 +277,29 @@ class HomeFragment : Fragment() {
                         if (b.homeScrollContent.minimumHeight != target) {
                             b.homeScrollContent.minimumHeight = target
                         }
-                        // minHeight only ADDS range for a short grid (HR); it can't
-                        // cap a taller grid (Marketing). Hard-cap the scroll at the
-                        // limit for dashboard users so BOTH tabs stop at the same
-                        // place. Trip lists (non-dashboard) still scroll freely.
+                        // Allow scrolling PAST the limit only as far as needed to
+                        // reveal cards hidden below the fold (stage 2 — the tabs pin
+                        // and the cards scroll under). Only the CARD area scrolls (the
+                        // header pins), so overflow = cardsHeight − the space between
+                        // the pinned header's bottom and the nav bar. If the grid fits
+                        // at the limit, overflow is 0 and it stops there.
+                        val headerH = b.root.findViewById<View>(R.id.overviewHeader)?.height ?: 0
+                        val cardsH = b.root.findViewById<View>(R.id.overviewCardsArea)?.height ?: 0
+                        val navHeight = (110 * d).toInt()
+                        val availableCards = vp - navHeight - profileBottom - headerH
+                        val overflow = (cardsH - availableCards).coerceAtLeast(0)
                         b.homeContent.maxScrollY =
-                            if (session.hasPermission("vpDashboard.view")) sLimit else Int.MAX_VALUE
+                            if (session.hasPermission("vpDashboard.view")) sLimit + overflow
+                            else Int.MAX_VALUE
                     }
                 }
             }
         }
         binding.homeHeader.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
         binding.homeContent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        // The grid's height changes when the Marketing/HR tab toggles, so recompute
+        // the scroll range then too.
+        binding.whiteContentArea.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
         binding.homeHeader.post { syncSpacer() }
 
         binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
@@ -314,6 +325,20 @@ class HomeFragment : Fragment() {
                     val frac = ((sLimit - scrollY) / fade).coerceIn(0f, 1f) // 1 far → 0 at limit
                     val r = drawerMaxRadiusPx * frac
                     bg.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+
+                    // Two-stage scroll (dashboard only): once past the limit, pin
+                    // the drawer top + sticky header at the profile row and let the
+                    // card grid scroll UNDER them, so cards hidden behind the bottom
+                    // nav on short screens stay reachable.
+                    if (session.hasPermission("vpDashboard.view")) {
+                        val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
+                        b.whiteContentArea.translationY = overshoot
+                        b.root.findViewById<View>(R.id.overviewCardsArea)
+                            ?.translationY = -overshoot
+                        b.root.findViewById<View>(R.id.overviewHeader)
+                            ?.translationZ = if (overshoot > 0f) 20f * den else 0f
+                        b.whiteContentArea.clipChildren = overshoot > 0f
+                    }
                 }
             }
         })

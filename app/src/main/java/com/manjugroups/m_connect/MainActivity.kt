@@ -581,6 +581,16 @@ class MainActivity : AppCompatActivity() {
             com.manjugroups.m_connect.notifications.TasksNotification.clear(this)
             return
         }
+        // Cache-first: paint the last-known open tasks immediately so the
+        // warning shows on cold start and survives a slow / failed fetch,
+        // instead of intermittently not appearing at all.
+        if (taskNudgePendingCount == 0) {
+            runCatching {
+                com.manjugroups.m_connect.ui.common.LocalCache.get<List<com.manjugroups.m_connect.network.DailyTaskData>>(
+                    this, taskNudgeCacheKey(),
+                )
+            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { applyTaskNudge(it, fromCache = true) }
+        }
         // This fires on every backstack change AND activity resume, each call
         // re-downloading the full task queue (hundreds of rows for admins) in
         // parallel with any fetch the Task Manager screen itself is doing.
@@ -602,70 +612,88 @@ class MainActivity : AppCompatActivity() {
             val open = runCatching {
                 api.getTaskManagerTasks(session.bearerToken, today)
                     .tasks.filter { it.status == "pending" || it.status == "in-progress" }
-            }.getOrNull() ?: return@launch // network blip — keep current state
+            }.getOrNull() ?: return@launch // network blip — the cache-painted state stays
             if (isFinishing || isDestroyed) return@launch
-
-            // LIFO — newest open task is the top of the stack the chip routes to.
-            topPendingTask = open.maxByOrNull { it.creationTime ?: 0.0 }
-            val pending = open.size
-            // Tasks whose deadline is today or already past — the ones to nudge.
-            val dueSoon = open.count { t ->
-                val d = t.deadline?.trim().orEmpty()
-                d.isNotEmpty() && d <= today
+            // Persist for the next cold start / network blip.
+            runCatching {
+                com.manjugroups.m_connect.ui.common.LocalCache.put(
+                    this@MainActivity, taskNudgeCacheKey(), open, System.currentTimeMillis(),
+                )
             }
+            applyTaskNudge(open, fromCache = false)
+        }
+    }
 
+    private fun taskNudgeCacheKey(): String = "tasknudge:${session.staffId.orEmpty()}"
+
+    /** Renders the pending-tasks warning (system notification, collapsed peek,
+     *  and modal overlay) from an open-task list. [fromCache] paints only the
+     *  in-app UI from a cached snapshot — the system notification and the
+     *  notification-tap route fire only on a live fetch. */
+    private fun applyTaskNudge(
+        open: List<com.manjugroups.m_connect.network.DailyTaskData>,
+        fromCache: Boolean,
+    ) {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        // LIFO — newest open task is the top of the stack the chip routes to.
+        topPendingTask = open.maxByOrNull { it.creationTime ?: 0.0 }
+        val pending = open.size
+        // Tasks whose deadline is today or already past — the ones to nudge.
+        val dueSoon = open.count { t ->
+            val d = t.deadline?.trim().orEmpty()
+            d.isNotEmpty() && d <= today
+        }
+
+        if (!fromCache) {
             // System-pane notification — the companion to this banner. Shows
             // the same count and clears itself when nothing is pending.
             com.manjugroups.m_connect.notifications.TasksNotification.update(
-                this@MainActivity,
+                this,
                 pending,
                 dueSoon,
                 topPendingTask?.let { it.title ?: it.taskName },
             )
-
             // A notification tap (EXTRA_OPEN_TASKS) opens the Task Manager once
-            // this refresh confirms there's still something pending. Skip the
-            // overlay logic for this pass: the fragment commit is async, so
-            // backStackEntryCount is still 0 here and the show-gate below
-            // would draw the modal on top of the Task Manager.
+            // this refresh confirms there's still something pending.
             if (openTasksOnNextRefresh) {
                 openTasksOnNextRefresh = false
                 if (pending > 0) {
                     hideTaskNudgeOverlay(markDismissed = false)
                     openTaskManager()
-                    return@launch
+                    return
                 }
             }
+        }
 
-            if (pending > 0) {
-                taskNudgeToday = today
-                taskNudgePendingCount = pending
-                // Newest-first carousel, capped so the page dots stay sane.
-                val cards = open
-                    .sortedByDescending { it.creationTime ?: 0.0 }
-                    .take(MAX_NUDGE_CARDS)
-                taskNudgeAdapter.submit(cards, pending, dueSoon)
-                // Collapsed tab mirrors the live count while the overlay is
-                // closed, so pending work stays visible on every root tab.
-                tvNavTasksPeek.text = when {
-                    dueSoon > 0 -> "$pending pending · $dueSoon due"
-                    else -> "$pending pending"
-                }
-                updateNavTasksPeekVisibility()
-                val onHomeRoot =
-                    currentTab == TAB_HOME && supportFragmentManager.backStackEntryCount == 0
-                val reopenDue = taskNudgeDismissedAt == 0L ||
-                    android.os.SystemClock.elapsedRealtime() - taskNudgeDismissedAt >= NUDGE_REOPEN_MS
-                when {
-                    onHomeRoot && reopenDue -> showTaskNudgeOverlay()
-                    supportFragmentManager.backStackEntryCount > 0 ->
-                        hideTaskNudgeOverlay(markDismissed = false)
-                }
-            } else {
-                taskNudgePendingCount = 0
-                updateNavTasksPeekVisibility()
-                hideTaskNudgeOverlay(markDismissed = false)
+        if (pending > 0) {
+            taskNudgeToday = today
+            taskNudgePendingCount = pending
+            // Newest-first carousel, capped so the page dots stay sane.
+            val cards = open
+                .sortedByDescending { it.creationTime ?: 0.0 }
+                .take(MAX_NUDGE_CARDS)
+            taskNudgeAdapter.submit(cards, pending, dueSoon)
+            // Collapsed tab mirrors the live count while the overlay is
+            // closed, so pending work stays visible on every root tab.
+            tvNavTasksPeek.text = when {
+                dueSoon > 0 -> "$pending pending · $dueSoon due"
+                else -> "$pending pending"
             }
+            updateNavTasksPeekVisibility()
+            val onHomeRoot =
+                currentTab == TAB_HOME && supportFragmentManager.backStackEntryCount == 0
+            val reopenDue = taskNudgeDismissedAt == 0L ||
+                android.os.SystemClock.elapsedRealtime() - taskNudgeDismissedAt >= NUDGE_REOPEN_MS
+            when {
+                onHomeRoot && reopenDue -> showTaskNudgeOverlay()
+                supportFragmentManager.backStackEntryCount > 0 ->
+                    hideTaskNudgeOverlay(markDismissed = false)
+            }
+        } else {
+            taskNudgePendingCount = 0
+            updateNavTasksPeekVisibility()
+            hideTaskNudgeOverlay(markDismissed = false)
         }
     }
 

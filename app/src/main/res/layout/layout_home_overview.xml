@@ -8,64 +8,86 @@
     android:clipToPadding="false"
     android:paddingBottom="24dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Overview"
-        android:textSize="22sp"
-        android:textColor="#111827"
-        android:fontFamily="@font/inter_bold"
-        android:layout_marginBottom="16dp" />
-
+    <!-- Sticky header (title + tab toggle). Solid page-grey background + a
+         runtime elevation so, once the Overview hits its scroll limit, the
+         cards scroll UNDERNEATH it (masked) instead of the tabs scrolling off. -->
     <LinearLayout
+        android:id="@+id/overviewHeader"
         android:layout_width="match_parent"
-        android:layout_height="38dp"
-        android:background="@drawable/bg_overview_tab_container"
-        android:orientation="horizontal"
-        android:padding="3dp"
-        android:layout_marginBottom="20dp">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F1F3F8">
 
         <TextView
-            android:id="@+id/tabMarketing"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@null"
-            android:gravity="center"
-            android:textAlignment="center"
-            android:text="Marketing"
-            android:textColor="#475467"
-            android:textSize="15sp"
-            android:fontFamily="@font/inter_medium"
-            android:clickable="true"
-            android:focusable="true" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Overview"
+            android:textSize="22sp"
+            android:textColor="#111827"
+            android:fontFamily="@font/inter_bold"
+            android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:id="@+id/tabHr"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_loans_segment_active"
-            android:gravity="center"
-            android:text="HR"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:fontFamily="@font/inter_semibold"
-            android:clickable="true"
-            android:focusable="true" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_overview_tab_container"
+            android:orientation="horizontal"
+            android:padding="3dp"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:id="@+id/tabMarketing"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@null"
+                android:gravity="center"
+                android:textAlignment="center"
+                android:text="Marketing"
+                android:textColor="#475467"
+                android:textSize="15sp"
+                android:fontFamily="@font/inter_medium"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tabHr"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_loans_segment_active"
+                android:gravity="center"
+                android:text="HR"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:fontFamily="@font/inter_semibold"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
     </LinearLayout>
 
-    <include
-        android:id="@+id/layoutHr"
-        layout="@layout/layout_home_hr"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-        
-    <include
-        android:id="@+id/layoutMarketing"
-        layout="@layout/layout_home_marketing"
+    <!-- The card grid — scrolls under the sticky header above once the
+         Overview reaches its limit, so cards hidden behind the bottom nav on
+         short screens can still be reached. -->
+    <LinearLayout
+        android:id="@+id/overviewCardsArea"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:visibility="gone" />
+        android:orientation="vertical"
+        android:clipChildren="false">
+
+        <include
+            android:id="@+id/layoutHr"
+            layout="@layout/layout_home_hr"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <include
+            android:id="@+id/layoutMarketing"
+            layout="@layout/layout_home_marketing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+    </LinearLayout>
 
 </LinearLayout>
