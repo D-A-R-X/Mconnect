@@ -35,11 +35,13 @@
         android:paddingEnd="14dp">
 
         <FrameLayout
+            android:id="@+id/chipHeaderIcon"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:background="@drawable/bg_task_nudge_icon_chip">
 
             <ImageView
+                android:id="@+id/ivHeaderIcon"
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:layout_gravity="center"
@@ -49,6 +51,7 @@
         </FrameLayout>
 
         <TextView
+            android:id="@+id/tvHeaderLabel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="9dp"
@@ -153,11 +156,13 @@
         android:paddingEnd="16dp">
 
         <FrameLayout
+            android:id="@+id/chipDueIcon"
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:background="@drawable/bg_task_nudge_icon_chip">
 
             <ImageView
+                android:id="@+id/ivDueIcon"
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:layout_gravity="center"
@@ -221,11 +226,13 @@
         android:paddingEnd="16dp">
 
         <FrameLayout
+            android:id="@+id/chipDescIcon"
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:background="@drawable/bg_task_nudge_icon_chip">
 
             <ImageView
+                android:id="@+id/ivDescIcon"
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:layout_gravity="center"
@@ -273,6 +280,7 @@
     <!-- Urgency base: red gradient rising from the card's bottom, holding
          the red-gradient Complete CTA and the carousel page dots. -->
     <LinearLayout
+        android:id="@+id/bottomGlowContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_task_nudge_bottom_glow"

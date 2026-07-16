@@ -98,11 +98,8 @@ class ChatSearchFragment : Fragment() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
     }
-
-    override fun onPause() {
-        (activity as? MainActivity)?.setTabBarVisible(true)
-        super.onPause()
-    }
+    // No onPause restore — MainActivity's backstack listener owns the tab
+    // bar on pop; restoring it here raced the incoming screen's hide.
 
     override fun onDestroyView() {
         SkeletonUtils.stopAll()

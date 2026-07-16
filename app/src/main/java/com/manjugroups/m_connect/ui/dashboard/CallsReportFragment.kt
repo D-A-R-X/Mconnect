@@ -25,10 +25,19 @@ import kotlinx.coroutines.launch
 class CallsReportFragment : Fragment() {
 
     private val api = ApiService.create()
+    // Full fetched set; `rows` holds only the current scroll window the adapter renders.
+    private var allRows: List<DashboardCallRow> = emptyList()
     private val rows = mutableListOf<DashboardCallRow>()
     private val adapter = Adapter()
     private var progress: ProgressBar? = null
     private var empty: View? = null
+    private var recycler: RecyclerView? = null
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
+    private var callsWindowCtx: String? = null
+    private var callsFilteredCount: Int = 0
+    private val callsPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderCalls() },
+    )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, s: Bundle?): View {
         val ctx = requireContext()
@@ -49,12 +58,15 @@ class CallsReportFragment : Fragment() {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f,
             )
         }
+        val lm = LinearLayoutManager(ctx)
         val rv = RecyclerView(ctx).apply {
-            layoutManager = LinearLayoutManager(ctx)
+            layoutManager = lm
             setPadding(dp(16), dp(8), dp(16), dp(24))
             clipToPadding = false
             adapter = this@CallsReportFragment.adapter
         }
+        recycler = rv
+        callsPager.bindRecyclerView(rv, lm) { callsFilteredCount }
         frame.addView(rv)
         progress = ProgressBar(ctx).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -78,11 +90,26 @@ class CallsReportFragment : Fragment() {
             val resp = runCatching { api.getDashboardCalls(session.bearerToken, null, direction) }.getOrNull()
             if (view == null) return@launch
             progress?.visibility = View.GONE
-            rows.clear()
-            rows.addAll(resp?.calls.orEmpty())
-            adapter.notifyDataSetChanged()
-            empty?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+            allRows = resp?.calls.orEmpty()
+            renderCalls()
         }
+    }
+
+    /** Render only the current scroll window; on extend re-slice and notify. */
+    private fun renderCalls() {
+        val full = allRows
+        callsFilteredCount = full.size
+        val windowCtx = System.identityHashCode(full).toString()
+        if (windowCtx != callsWindowCtx) {
+            callsWindowCtx = windowCtx
+            callsPager.reset()
+            recycler?.scrollToPosition(0)
+        }
+        rows.clear()
+        rows.addAll(full.take(callsPager.limit))
+        adapter.notifyDataSetChanged()
+        // Empty state keyed off the FULL fetched size, not the window.
+        empty?.visibility = if (full.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

@@ -1,7 +1,9 @@
 package com.manjugroups.m_connect.ui.home
 
+import android.Manifest
 import android.app.Dialog
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -15,8 +17,11 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
+import coil.load
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -38,6 +43,7 @@ import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
@@ -46,7 +52,10 @@ import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -117,6 +126,37 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // specialPaymentEnabled from the latest plot-prefill; either this or the
     // selected project row unlocks the Special plan option.
     private var plotPrefillSpecialPayment: Boolean = false
+    // specialPaymentEnabled resolved from /api/projects/get — that route
+    // passes the RAW project doc through on every deployed backend, unlike
+    // the trimmed marketing-projects / plot-prefill responses which only
+    // carry the flag on newer deploys.
+    private var projectDetailSpecialPayment: Boolean = false
+
+    // Client Image (web parity: optional client photo on Client Details).
+    // The storage id rides the create payload; server stores it on the
+    // clients master row.
+    private var clientImageStorageId: String? = null
+    private var clientImageFileName: String? = null
+    private var clientImageLocalUri: Uri? = null
+    private var imgClientPhoto: ImageView? = null
+    private var tvClientImageName: TextView? = null
+    private var btnClientImageAction: TextView? = null
+    private var cardClientImageUpload: View? = null
+    private var tvClientImageAction: TextView? = null
+    private var rowClientImagePreview: View? = null
+
+    private val clientImageCameraPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) showClientImageCamera()
+            else Toast.makeText(
+                requireContext(), "Camera permission is needed to take a photo", Toast.LENGTH_SHORT,
+            ).show()
+        }
+
+    private val pickClientImage =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri != null) uploadClientImage(uri)
+        }
     private var staffSaveAs: SaveAs = SaveAs.DRAFT
     private var lastBookingPrefillKey: String? = null
     private var bookingGstPercent: Double? = null
@@ -750,6 +790,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etFormWhatsApp = view.findViewById(R.id.etFormWhatsApp)
         etFormEmail = view.findViewById(R.id.etFormEmail)
         tvFormNationality = view.findViewById(R.id.tvFormNationality)
+        imgClientPhoto = view.findViewById(R.id.imgClientPhoto)
+        tvClientImageName = view.findViewById(R.id.tvClientImageName)
+        btnClientImageAction = view.findViewById(R.id.btnClientImageAction)
+        cardClientImageUpload = view.findViewById(R.id.cardClientImageUpload)
+        tvClientImageAction = view.findViewById(R.id.tvClientImageAction)
+        rowClientImagePreview = view.findViewById(R.id.rowClientImagePreview)
+        // The dashed card uploads/replaces; the pill's Remove only clears.
+        cardClientImageUpload?.setOnClickListener { openClientImageCamera() }
+        btnClientImageAction?.setOnClickListener {
+            clientImageStorageId = null
+            clientImageFileName = null
+            clientImageLocalUri = null
+            renderClientImage()
+        }
+        renderClientImage()
         etFormHomeAddress = view.findViewById(R.id.etFormHomeAddress)
         etFormPincode = view.findViewById(R.id.etFormPincode)
         etFormState = view.findViewById(R.id.etFormState)
@@ -1181,6 +1236,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // project has specialPaymentEnabled (project row or plot
             // prefill). Flexi keeps mapping to the freePayment flag the
             // backend already understands.
+            // If the trimmed project row left the Special gate unknown and
+            // the background resolve hasn't landed yet, kick it again so
+            // the next open reflects the real flag.
+            if (!specialPaymentAllowed() && bookingProject?.specialPaymentEnabled == null) {
+                resolveProjectSpecialPaymentFlag(bookingProject?.id)
+            }
             picker("Select Payment Plan", paymentPlanOptions()) {
                 payPlan = planFromLabel(it)
                 tvPayPlan?.text = it
@@ -2049,6 +2110,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etStaffRefName2" to et(etStaffRefName2),
             "etStaffRefMobile2" to et(etStaffRefMobile2),
             "etStaffRefProf2" to et(etStaffRefProf2),
+            // Object-backed selections — the labels above can't rebuild
+            // these on restore, and they feed the submit payload
+            // (projectId/plotId) plus the Special-plan gate.
+            "bookingProjectId" to bookingProject?.id,
+            "bookingUnitId" to bookingUnit?.id,
         )
     }
 
@@ -2140,8 +2206,71 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etStaffRefName2, "etStaffRefName2")
             et(etStaffRefMobile2, "etStaffRefMobile2")
             et(etStaffRefProf2, "etStaffRefProf2")
+            restoreBookingSelections(map)
         } finally {
             draftSuppressSave = false
+        }
+    }
+
+    /** Drafts persist view labels plus the selected project/plot ids.
+     *  Rebuild the object state that submit (projectId/plotId) and the
+     *  Special-plan gate depend on; drafts saved before the ids existed
+     *  fall back to matching the restored labels against the live lists. */
+    private fun restoreBookingSelections(map: Map<String, String?>) {
+        if (bookingProject != null) return // live prefill (CP/SV flow) wins
+        val projectLabel = map["tvBookProject"]?.trim()
+            ?.takeIf { it.isNotBlank() && !it.equals("Select Project", true) }
+        val plotLabel = map["tvBookPlot"]?.trim()
+            ?.takeIf { it.isNotBlank() && !it.equals("Select Plot", true) }
+        val projectId = map["bookingProjectId"]?.takeIf { it.isNotBlank() }
+        val unitId = map["bookingUnitId"]?.takeIf { it.isNotBlank() }
+
+        if (projectId != null) {
+            bookingProject = MarketingProject(id = projectId, name = projectLabel)
+            if (unitId != null) {
+                // Availability was checked when the draft captured it and the
+                // server re-validates on submit.
+                bookingUnit = InventoryUnit(
+                    id = unitId,
+                    projectId = projectId,
+                    unitNumber = plotLabel,
+                    status = "available",
+                )
+            }
+            resolveProjectSpecialPaymentFlag(projectId)
+            return
+        }
+
+        if (projectLabel == null) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val projects = bookingProjectCache.ifEmpty {
+                runCatching { api.getMarketingProjects(session.bearerToken) }
+                    .getOrNull()?.takeIf { it.success }?.projects.orEmpty()
+            }
+            if (projects.isNotEmpty()) bookingProjectCache = projects
+            val project = projects.firstOrNull {
+                it.name?.trim()?.equals(projectLabel, ignoreCase = true) == true
+            } ?: return@launch
+            if (!isAdded || bookingProject != null) return@launch
+            bookingProject = project
+            if (project.specialPaymentEnabled == null) {
+                resolveProjectSpecialPaymentFlag(project.id)
+            } else {
+                ensurePaymentPlanAllowed()
+            }
+            if (plotLabel == null || bookingUnit != null) return@launch
+            val units = runCatching {
+                api.listInventoryUnits(
+                    session.bearerToken, project.id, status = "available",
+                )
+            }.getOrNull()?.takeIf { it.success }?.units.orEmpty()
+            val unit = units.firstOrNull {
+                (it.unitNumber ?: it.id).trim().equals(plotLabel, ignoreCase = true)
+            } ?: return@launch
+            if (!isAdded || bookingUnit != null) return@launch
+            bookingUnit = unit
+            bookingUnitCacheProjectId = project.id
+            bookingUnitCache = units
         }
     }
 
@@ -2291,6 +2420,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         payOtherApplicable = true
         payPlan = "Regular"
         plotPrefillSpecialPayment = false
+        projectDetailSpecialPayment = false
+        clientImageStorageId = null
+        clientImageFileName = null
+        clientImageLocalUri = null
+        renderClientImage()
         staffSaveAs = SaveAs.DRAFT
         bookingSub = BookingSub.CLIENT
         bookingStep = BookingStep.CLIENT_FORM
@@ -2444,7 +2578,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             tvBookPlot?.text = "Select Plot"
             // A different project may not allow the Special plan.
             plotPrefillSpecialPayment = false
+            projectDetailSpecialPayment = false
             ensurePaymentPlanAllowed()
+            // Older backends trim the flag out of the picker rows — resolve
+            // it from the raw project doc.
+            if (project.specialPaymentEnabled == null) {
+                resolveProjectSpecialPaymentFlag(project.id)
+            }
         }
     }
 
@@ -2542,6 +2682,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bookingGstPercent = resp.project?.gstPercent
         plotPrefillSpecialPayment = resp.project?.specialPaymentEnabled == true
         ensurePaymentPlanAllowed()
+        // Older backends trim the flag out of the prefill — resolve it from
+        // the raw project doc instead.
+        if (resp.project?.specialPaymentEnabled == null) {
+            resolveProjectSpecialPaymentFlag(resp.project?.id ?: bookingProject?.id)
+        }
         val fields = resp.fields
         fun money(value: Double?): String? {
             if (value == null || !value.isFinite()) return null
@@ -3364,6 +3509,104 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * when the field is empty or holds the placeholder so callers
      * can fall back to today.
      */
+    // ── Client Image (web parity: optional client photo) ──
+
+    private fun openClientImageCamera() {
+        val ctx = context ?: return
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.CAMERA
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            showClientImageCamera()
+        } else {
+            clientImageCameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun showClientImageCamera() {
+        // Plain local, NOT .apply{} — inside apply the camera sheet becomes
+        // the implicit receiver and unqualified view/context resolve to IT
+        // (the documented crash pitfall from the daily-log form).
+        val camera = com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet()
+        camera.setListener(object :
+            com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet.CameraResultListener {
+            override fun onMediaCaptured(uri: Uri, isVideo: Boolean) {
+                if (!isVideo) uploadClientImage(uri)
+            }
+
+            override fun onGalleryClicked() {
+                pickClientImage.launch(
+                    PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                    )
+                )
+            }
+        })
+        camera.show(childFragmentManager, "client_image_camera")
+    }
+
+    private fun uploadClientImage(uri: Uri) {
+        val ctx = context ?: return
+        tvClientImageAction?.text = "Uploading…"
+        cardClientImageUpload?.isEnabled = false
+        btnClientImageAction?.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Off the main thread: copying a multi-MB camera photo through
+            // the ContentResolver on Main is an ANR risk.
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val cr = ctx.contentResolver
+                    val mime = cr.getType(uri) ?: "image/jpeg"
+                    val ext = when {
+                        mime.contains("png") -> "png"
+                        mime.contains("webp") -> "webp"
+                        else -> "jpg"
+                    }
+                    val tmp = java.io.File.createTempFile("client_", ".$ext", ctx.cacheDir)
+                    cr.openInputStream(uri).use { input ->
+                        tmp.outputStream().use { output -> input?.copyTo(output) }
+                    }
+                    val uploaded = StorageUploader.upload(
+                        api, session.bearerToken, tmp, contentType = mime,
+                    )
+                    tmp.delete()
+                    uploaded
+                }
+            }.getOrNull()
+            if (!isAdded) return@launch
+            cardClientImageUpload?.isEnabled = true
+            btnClientImageAction?.isEnabled = true
+            val storageId = result?.storageId
+            if (storageId.isNullOrBlank()) {
+                Toast.makeText(
+                    requireContext(),
+                    result?.errorMessage ?: "Couldn't upload the client image",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                clientImageStorageId = storageId
+                clientImageFileName = "client-photo.jpg"
+                clientImageLocalUri = uri
+            }
+            renderClientImage()
+        }
+    }
+
+    private fun renderClientImage() {
+        val hasImage = clientImageStorageId != null
+        tvClientImageAction?.text = if (hasImage) "Change Client Pic" else "Upload Client Pic"
+        rowClientImagePreview?.visibility = if (hasImage) View.VISIBLE else View.GONE
+        tvClientImageName?.text = clientImageFileName ?: "Client image uploaded"
+        val img = imgClientPhoto ?: return
+        img.clipToOutline = true
+        val local = clientImageLocalUri
+        if (hasImage && local != null) {
+            img.load(local)
+        } else {
+            img.load(R.drawable.ic_outcome_person)
+        }
+    }
+
     private fun bookingDateForApi(): String? {
         val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
         if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
@@ -3384,7 +3627,38 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun planFromLabel(label: String): String = label.substringBefore(" (").trim()
 
     private fun specialPaymentAllowed(): Boolean =
-        bookingProject?.specialPaymentEnabled == true || plotPrefillSpecialPayment
+        bookingProject?.specialPaymentEnabled == true ||
+            plotPrefillSpecialPayment ||
+            projectDetailSpecialPayment
+
+    /** The trimmed marketing-projects / plot-prefill responses only carry
+     *  specialPaymentEnabled on newer backends — /api/projects/get returns
+     *  the raw project doc on ANY deploy, so resolve the flag there whenever
+     *  the trimmed sources leave it unknown. Retries, because a single
+     *  silent failure on a flaky field network would permanently hide the
+     *  Special plan for this sheet. */
+    private fun resolveProjectSpecialPaymentFlag(projectId: String?) {
+        if (projectId.isNullOrBlank()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeat(3) { attempt ->
+                val resp = runCatching {
+                    api.getProjectDetail(session.bearerToken, projectId)
+                }.getOrNull()
+                val enabled = resp?.project?.specialPaymentEnabled
+                if (enabled != null) {
+                    if (!isAdded) return@launch
+                    // A late response for a project the user switched away
+                    // from must not gate the currently selected one.
+                    val current = bookingProject?.id
+                    if (current != null && current != projectId) return@launch
+                    projectDetailSpecialPayment = enabled
+                    ensurePaymentPlanAllowed()
+                    return@launch
+                }
+                if (attempt < 2) delay(1200L * (attempt + 1))
+            }
+        }
+    }
 
     /** Regular and Flexi always; Special only for enabled projects. */
     private fun paymentPlanOptions(): List<String> = buildList {
@@ -3526,6 +3800,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         return CreateBookingRequest(
             clientName = name,
             mobileNumber = phone,
+            clientImageStorageId = clientImageStorageId,
+            clientImageFileName = if (clientImageStorageId != null) clientImageFileName else null,
             bookingDate = bookingDateForApi() ?: SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 .format(Calendar.getInstance().time),
             leadId = prefilledLeadId,

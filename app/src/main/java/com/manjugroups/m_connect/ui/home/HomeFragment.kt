@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
@@ -44,7 +45,7 @@ class HomeFragment : Fragment() {
     private val api = ApiService.create()
     private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
     // VP / Management dashboard (replaces Today's Trip for vpDashboard.view holders).
-    private var vpDashboardData: com.manjugroups.m_connect.network.VpDashboardResponse? = null
+    private var vpDashboardData: com.manjugroups.m_connect.network.MobileDashboardResponse? = null
     private var vpDashboardLoading = false
     private var lastDashSignature: String? = null
     // Dashboard date filter: null = today. Every tile re-fetches for this day.
@@ -63,6 +64,9 @@ class HomeFragment : Fragment() {
     // visit skeleton so a refresh / attendance update never blanks the
     // trip card back to a skeleton or the empty state.
     private var homeVisitsResolved = false
+    // True once Home has painted real content at least once; gates the
+    // full-screen skeleton so later refreshes don't re-cover the Overview tabs.
+    private var hasRenderedHomeOnce = false
     // True once a real visits load cycle has begun (isVisitsLoading flipped
     // true). The flow starts at `false`, so without this guard the
     // collector's "load finished" branch fires on that initial replayed
@@ -123,6 +127,7 @@ class HomeFragment : Fragment() {
         startBannerAnimation()
 
         setupRoleAdaptiveView()
+        setupOverviewTabs()
         setupDriverTabs()
 
         setFragmentResultListener(DriverStartTripBottomSheet.RESULT_KEY) { _, bundle ->
@@ -163,6 +168,11 @@ class HomeFragment : Fragment() {
         // one gesture. The spinner is dismissed in collectState() when
         // the next "loaded" state lands.
         binding.homeRefresh.setupPullToRefresh {
+            // Dashboard users see the KPI overview, so a pull must refresh THAT
+            // (a single fast call) and the spinner is dismissed the moment it
+            // lands — instead of spinning for the slow visits/attendance chain
+            // they never even see.
+            if (session.hasPermission("vpDashboard.view")) loadVpDashboard(force = true)
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
             loadUnreadNotifications()
         }
@@ -177,6 +187,12 @@ class HomeFragment : Fragment() {
      *    never crosses into the status bar.
      * Effect saturates within ~140dp of scroll.
      */
+    // The Overview drawer's rounded-top background; its corner radius is
+    // animated 24dp → 0dp as the drawer reaches the scroll limit so it sits
+    // flush under the blue profile row, then re-rounds on scroll-back.
+    private var drawerBg: android.graphics.drawable.GradientDrawable? = null
+    private var drawerMaxRadiusPx = 0f
+
     /**
      * "Panel slides up over fixed header" scroll effect.
      * Home's blue header (with profile row + banner) stays anchored at
@@ -216,6 +232,75 @@ class HomeFragment : Fragment() {
             )
         }
         binding.whiteContentArea.background = whiteCardBg
+        drawerBg = whiteCardBg
+        drawerMaxRadiusPx = maxCornerRadiusPx
+
+        // Touch routing: the header is pinned behind the full-height scroll
+        // panel. Route touches above the visible-header line to the header (so
+        // its buttons work) and the rest to the scroll panel (so the tabs stay
+        // tappable and scrollable once the content covers the header).
+        binding.homeStickyColumn.headerView = binding.homeHeader
+        binding.homeStickyColumn.scrollContainer = binding.homeRefresh
+        binding.homeStickyColumn.coverLineProvider = {
+            val b = _binding
+            if (b == null) 0 else (b.homeHeader.height - b.homeContent.scrollY).coerceAtLeast(0)
+        }
+        // Keep the transparent spacer exactly the header's height so the white
+        // Overview panel sits just below the pinned header at rest.
+        val syncSpacer = {
+            val b = _binding
+            if (b != null) {
+                val h = b.homeHeader.height
+                if (h > 0) {
+                    if (b.homeHeaderSpacer.layoutParams.height != h) {
+                        b.homeHeaderSpacer.layoutParams =
+                            b.homeHeaderSpacer.layoutParams.apply { height = h }
+                        b.homeHeaderSpacer.requestLayout()
+                    }
+                    // homeRefresh is full-height, so the default pull spinner
+                    // lands over the header — drop it just below the header
+                    // instead (rests off-screen at top when idle).
+                    val d = resources.displayMetrics.density
+                    b.homeRefresh.setProgressViewOffset(false, (-40 * d).toInt(), (h + 24 * d).toInt())
+                    // Scroll limit: lift the drawer just enough to cover the
+                    // BANNER and sit flush under the profile row (avatar/name/
+                    // bell) — NOT past it. So the range = bannerHeight + the
+                    // 12dp drawer margin = (headerHeight + 12) − profileRowBottom.
+                    // The NestedScroll's paddingBottom(120dp) already adds range.
+                    val vp = b.homeContent.height
+                    val profileBottom = runCatching {
+                        b.homeHeader.getHeaderBinding().homeProfileRow.bottom
+                    }.getOrDefault(0)
+                    if (vp > 0 && profileBottom > 0) {
+                        val sLimit = h + (12 * d).toInt() - profileBottom
+                        val target = (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
+                        if (b.homeScrollContent.minimumHeight != target) {
+                            b.homeScrollContent.minimumHeight = target
+                        }
+                        // Allow scrolling PAST the limit only as far as needed to
+                        // reveal cards hidden below the fold (stage 2 — the tabs pin
+                        // and the cards scroll under). Only the CARD area scrolls (the
+                        // header pins), so overflow = cardsHeight − the space between
+                        // the pinned header's bottom and the nav bar. If the grid fits
+                        // at the limit, overflow is 0 and it stops there.
+                        val headerH = b.root.findViewById<View>(R.id.overviewHeader)?.height ?: 0
+                        val cardsH = b.root.findViewById<View>(R.id.overviewCardsArea)?.height ?: 0
+                        val navHeight = (110 * d).toInt()
+                        val availableCards = vp - navHeight - profileBottom - headerH
+                        val overflow = (cardsH - availableCards).coerceAtLeast(0)
+                        b.homeContent.maxScrollY =
+                            if (session.hasPermission("vpDashboard.view")) sLimit + overflow
+                            else Int.MAX_VALUE
+                    }
+                }
+            }
+        }
+        binding.homeHeader.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        binding.homeContent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        // The grid's height changes when the Marketing/HR tab toggles, so recompute
+        // the scroll range then too.
+        binding.whiteContentArea.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncSpacer() }
+        binding.homeHeader.post { syncSpacer() }
 
         binding.homeContent.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
             val dy = scrollY - oldScrollY
@@ -223,6 +308,38 @@ class HomeFragment : Fragment() {
                 (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(false)
             } else if (scrollY <= 10) {
                 (activity as? com.manjugroups.m_connect.MainActivity)?.setBottomNavScrollState(true)
+            }
+            // Straighten the drawer's top corners as it nears the scroll limit
+            // (so it sits flush under the blue profile row), then re-round the
+            // moment it scrolls back down.
+            val b = _binding
+            val bg = drawerBg
+            if (b != null && bg != null) {
+                val den = resources.displayMetrics.density
+                val profileBottom = runCatching {
+                    b.homeHeader.getHeaderBinding().homeProfileRow.bottom
+                }.getOrDefault(0)
+                if (profileBottom > 0) {
+                    val sLimit = b.homeHeader.height + 12f * den - profileBottom
+                    val fade = 36f * den // straighten over the last 36dp of travel
+                    val frac = ((sLimit - scrollY) / fade).coerceIn(0f, 1f) // 1 far → 0 at limit
+                    val r = drawerMaxRadiusPx * frac
+                    bg.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+
+                    // Two-stage scroll (dashboard only): once past the limit, pin
+                    // the drawer top + sticky header at the profile row and let the
+                    // card grid scroll UNDER them, so cards hidden behind the bottom
+                    // nav on short screens stay reachable.
+                    if (session.hasPermission("vpDashboard.view")) {
+                        val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
+                        b.whiteContentArea.translationY = overshoot
+                        b.root.findViewById<View>(R.id.overviewCardsArea)
+                            ?.translationY = -overshoot
+                        b.root.findViewById<View>(R.id.overviewHeader)
+                            ?.translationZ = if (overshoot > 0f) 20f * den else 0f
+                        b.whiteContentArea.clipChildren = overshoot > 0f
+                    }
+                }
             }
         })
     }
@@ -283,12 +400,15 @@ class HomeFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is HomeUiState.Loading -> {
-                            // Don't paint over the skeleton while a pull-refresh
-                            // is in flight — the swipe spinner already signals
-                            // "loading" so the full-screen skeleton would
-                            // double up. The skeleton is only useful for the
-                            // initial open.
-                            if (!binding.homeRefresh.isRefreshing) {
+                            // The full-screen skeleton is ONLY for the very first
+                            // open (nothing on screen yet). On any later refresh —
+                            // returning to the Home tab, a background reload — we
+                            // keep the already-rendered content up; the opaque
+                            // skeleton would otherwise re-cover the Overview and
+                            // its Marketing/HR tabs, making them feel "unclickable"
+                            // until the reload finished. Pull-refresh has its own
+                            // spinner, so skip the skeleton there too.
+                            if (!hasRenderedHomeOnce && !binding.homeRefresh.isRefreshing) {
                                 SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
                                 // The sticky header + scroll content are now siblings
                                 // under homeStickyColumn — hide the WHOLE column so the
@@ -302,6 +422,9 @@ class HomeFragment : Fragment() {
                             SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                             binding.homeRefresh.dismissRefresh()
                             binding.homeStickyColumn.visibility = View.VISIBLE
+                            // Content is on screen now — future Loading emits keep
+                            // it visible instead of flashing the full-screen skeleton.
+                            hasRenderedHomeOnce = true
                             renderSummary()
                             // Paint the trip card only once visits have
                             // resolved (or we already have some to show) AND
@@ -310,8 +433,13 @@ class HomeFragment : Fragment() {
                             // initial load would flash the empty view before
                             // the visit skeleton appears.
                             val hasVisits = state.todayVisits.any { it.status != "cancelled" }
-                            if ((homeVisitsResolved || hasVisits) &&
-                                !viewModel.isVisitsLoading.value
+                            // Dashboard users get the KPI overview, which comes
+                            // from the dashboard endpoint and not the visits
+                            // fetch — render it immediately instead of waiting
+                            // on that call (keeps Home Overview loading reliably).
+                            if (session.hasPermission("vpDashboard.view") ||
+                                ((homeVisitsResolved || hasVisits) &&
+                                    !viewModel.isVisitsLoading.value)
                             ) {
                                 renderVisitCard(state)
                             }
@@ -471,13 +599,15 @@ class HomeFragment : Fragment() {
             applyDashHeader()
             // The globe icon belongs to the "Today's Trip" view, not the KPI
             // dashboard — hide it so the header reads cleanly, and surface
-            // the date filter in its place.
+            // the date filter in its place. Visibility is set unconditionally
+            // (even before the numbers land) so the overview + its tabs show
+            // immediately; bindDashboardData() fills the counts when ready.
             binding.ivVisitTitleGlobe.visibility = View.GONE
             binding.tvVisitCountBadge.visibility = View.GONE
             binding.btnDashDateFilter.visibility = View.VISIBLE
             binding.visitListContent.visibility = View.VISIBLE
             binding.visitEmptyContent.visibility = View.GONE
-            renderVpDashboard()
+            bindDashboardData()
             return
         }
         // Home shows today's visits only.
@@ -615,27 +745,52 @@ class HomeFragment : Fragment() {
 
     // ── VP / Management Dashboard ───────────────────────────────────────────
 
+    private fun dashCacheKey(date: String?): String =
+        "dash:${session.staffId.orEmpty()}:${date ?: "today"}"
+
     private fun loadVpDashboard(force: Boolean = false) {
         if (vpDashboardLoading && !force) return
         vpDashboardLoading = true
         val requestedDate = vpSelectedDate
+        // Cache-first: paint the last-known numbers immediately so the overview
+        // never sits blank while the network round-trips.
+        if (vpDashboardData == null) {
+            LocalCache.get<com.manjugroups.m_connect.network.MobileDashboardResponse>(
+                requireContext(), dashCacheKey(requestedDate),
+            )?.let { cached ->
+                vpDashboardData = cached
+                bindDashboardData()
+            }
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             // Prefer the company-wide aggregate route; when it isn't deployed
             // (404), fall back to counting what the live per-screen endpoints
             // already expose (CP + Site visits for the selected day).
             val resp = runCatching {
-                api.getVpDashboard(session.bearerToken, requestedDate)
+                api.getMobileDashboard(session.bearerToken, requestedDate)
             }.getOrNull()
             val data = if (resp?.success == true) resp
                 else runCatching { computeVpFallback(requestedDate ?: indiaToday()) }.getOrNull()
             vpDashboardLoading = false
             if (view == null) return@launch
+            // Dashboard is the visible content for these users — drop the
+            // pull-to-refresh spinner as soon as it lands, not after the slow
+            // background visits/attendance load.
+            _binding?.homeRefresh?.dismissRefresh()
             // The user picked a different date while this was in flight —
             // that newer load owns the render; drop this stale result.
             if (requestedDate != vpSelectedDate) return@launch
             if (data != null) {
                 vpDashboardData = data
-                renderVpDashboard()
+                // Only the deployed aggregate route is worth caching; the
+                // thin CP/SV fallback would poison the next instant paint.
+                if (resp?.success == true) {
+                    LocalCache.put(
+                        requireContext(), dashCacheKey(requestedDate),
+                        data, System.currentTimeMillis(),
+                    )
+                }
+                bindDashboardData()
             }
         }
     }
@@ -688,44 +843,16 @@ class HomeFragment : Fragment() {
      * pending-verification queue, not the approved total) — those stay at -1
      * and render as "–". Returns null only if every call fails.
      */
-    private suspend fun computeVpFallback(day: String): com.manjugroups.m_connect.network.VpDashboardResponse? {
-        val cp = runCatching { geoApi.getMyMarketingCpVisits(session.bearerToken, day, day) }.getOrNull()
-        val sv = runCatching { geoApi.getMySiteVisits(session.bearerToken, day, day) }.getOrNull()
-        val att = runCatching { api.getAllAttendance(session.bearerToken, day, day) }.getOrNull()
-        val bk = runCatching { api.listMyBookings(session.bearerToken) }.getOrNull()
-
-        val cpOk = cp?.success == true
-        val svOk = sv?.success == true
-        val attOk = att?.success == true
-        val bkOk = bk?.success == true
-        if (!cpOk && !svOk && !attOk && !bkOk) return null
-
-        val cancelled = setOf("cancelled", "canceled", "cancel")
-        val completed = setOf("completed", "complete", "done", "closed")
-        val present = setOf("present", "half-day", "half day", "halfday")
-        fun onToday(s: String?) = s?.startsWith(day) == true
-        fun lc(s: String?) = (s ?: "").lowercase(java.util.Locale.US)
-
-        val cpRows = cp?.visits.orEmpty().filter { onToday(it.scheduledDate) }
-        val svRows = sv?.visits.orEmpty().filter { onToday(it.scheduledDate) }
-        val attRows = att?.records.orEmpty().filter { onToday(it.date) }
-        val bkRows = bk?.bookings.orEmpty()
-            .filter { onToday(it.bookingDate) && lc(it.status) !in cancelled && lc(it.status) != "draft" }
-
-        return com.manjugroups.m_connect.network.VpDashboardResponse(
+    private suspend fun computeVpFallback(date: String): com.manjugroups.m_connect.network.MobileDashboardResponse {
+        val cp = try { geoApi.getMyMarketingCpVisits(session.bearerToken, date, date) } catch (_: Exception) { null }
+        val sv = try { geoApi.getMySiteVisits(session.bearerToken, date, date) } catch (_: Exception) { null }
+        return com.manjugroups.m_connect.network.MobileDashboardResponse(
             success = true,
-            date = day,
-            present = if (attOk) attRows.count { lc(it.approvedAttendance) in present } else -1,
-            absent = if (attOk) attRows.count { lc(it.approvedAttendance) == "absent" } else -1,
-            incomingCalls = -1, outboundCalls = -1,
-            cpVisitsFixed = if (cpOk) cpRows.count { lc(it.status) !in cancelled } else -1,
-            cpVisitsCompleted = if (cpOk) cpRows.count { lc(it.status) in completed } else -1,
-            svVisitsFixed = if (svOk) svRows.count { lc(it.status) !in cancelled } else -1,
-            svVisitsCompleted = if (svOk) svRows.count { lc(it.status) in completed } else -1,
-            collectionTotal = -1.0,
-            collectionCount = -1,
-            bookingCount = if (bkOk) bkRows.size else -1,
-            registrationCount = -1,
+            totalStaff = 0,
+            present = 0,
+            absent = 0,
+            cpVisitsFixed = cp?.visits?.size ?: 0,
+            svVisitsFixed = sv?.visits?.size ?: 0
         )
     }
 
@@ -739,107 +866,33 @@ class HomeFragment : Fragment() {
      *  tile shows a count and opens its detail screen. Guarded by a value
      *  signature so the ~7 render flows don't rebuild it on every emit. */
     private fun renderVpDashboard() {
-        val ctx = context ?: return
-        val d = vpDashboardData
-        val signature = if (d == null) "loading" else buildString {
-            append("vp|").append(vpSelectedDate ?: "today").append('|')
-                .append(d.totalStaff).append('|')
-                .append(d.present).append('|').append(d.absent).append('|')
-                .append(d.cpVisitsFixed).append('|').append(d.cpVisitsCompleted).append('|')
-                .append(d.svVisitsFixed).append('|').append(d.svVisitsCompleted).append('|')
-                .append(d.incomingCalls).append('|').append(d.outboundCalls).append('|')
-                .append(d.collectionTotal).append('|').append(d.bookingCount).append('|')
-                .append(d.registrationCount)
-        }
-        if (signature == lastDashSignature && binding.visitListContent.childCount > 0) return
-        lastDashSignature = signature
+        // The VP dashboard is rendered statically via layoutHr/layoutMarketing;
+        // bindDashboardData() writes the live counts into those views.
+        bindDashboardData()
+    }
 
-        val tiles = if (d == null) {
-            // No data yet (endpoint pending on prod): still show the full
-            // coloured design with "–" placeholders, and keep every tile
-            // tappable so the redirects work before the counts land.
-            listOf(
-                DashTile(R.drawable.ic_chat_users, "Present", "–", null, "#0F6E56", "#E1F5EE", "#04342C") {
-                    openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
-                },
-                DashTile(R.drawable.ic_cp_staff, "CP Visits", "–", null, "#185FA5", "#E6F1FB", "#042C53") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
-                },
-                DashTile(R.drawable.ic_map_pin, "Site Visits", "–", null, "#534AB7", "#EEEDFE", "#26215C") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
-                },
-                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", "–", null, "#3B6D11", "#EAF3DE", "#173404") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
-                },
-                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", "–", null, "#993C1D", "#FAECE7", "#4A1B0C") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
-                },
-                DashTile(R.drawable.ic_cash_bills, "Collections", "–", null, "#854F0B", "#FAEEDA", "#412402") {
-                    openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
-                },
-                DashTile(R.drawable.ic_booking_calendar, "Bookings", "–", null, "#993556", "#FBEAF0", "#4B1528") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment())
-                },
-                DashTile(R.drawable.ic_loan_document, "Registrations", "–", null, "#A32D2D", "#FCEBEB", "#501313") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.RegistrationsFragment.newInstance())
-                },
-            )
-        } else {
-            val inr = java.text.NumberFormat.getIntegerInstance(java.util.Locale("en", "IN"))
-            // -1 means "not available from a live endpoint yet" → show "–".
-            fun nz(v: Int): String = if (v < 0) "–" else v.toString()
-            fun sec(v: Int, suffix: String): String? = if (v < 0) null else "$v $suffix"
-            val collText = if (d.collectionTotal < 0) "–" else "₹${inr.format(d.collectionTotal.toLong())}"
-            // "173 present of 1000 staff" — the aggregate route reports the
-            // company-wide active headcount; the fallback path doesn't, so
-            // it degrades to the plain absent count.
-            val presentSec = when {
-                d.present < 0 -> null
-                d.totalStaff > 0 -> "of ${d.totalStaff} · ${d.absent} absent"
-                else -> sec(d.absent, "absent")
-            }
-            listOf(
-                DashTile(R.drawable.ic_chat_users, "Present", nz(d.present), presentSec, "#0F6E56", "#E1F5EE", "#04342C") {
-                    openScreen(com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment())
-                },
-                DashTile(R.drawable.ic_cp_staff, "CP Visits", nz(d.cpVisitsFixed), sec(d.cpVisitsCompleted, "completed"), "#185FA5", "#E6F1FB", "#042C53") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.CpVisitsFragment())
-                },
-                DashTile(R.drawable.ic_map_pin, "Site Visits", nz(d.svVisitsFixed), sec(d.svVisitsCompleted, "completed"), "#534AB7", "#EEEDFE", "#26215C") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment())
-                },
-                DashTile(R.drawable.ic_chat_phone, "Incoming Calls", nz(d.incomingCalls), null, "#3B6D11", "#EAF3DE", "#173404") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("INBOUND", "Incoming Calls"))
-                },
-                DashTile(R.drawable.ic_custom_phone, "Outbound Calls", nz(d.outboundCalls), null, "#993C1D", "#FAECE7", "#4A1B0C") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.CallsReportFragment.newInstance("OUTBOUND", "Outbound Calls"))
-                },
-                DashTile(R.drawable.ic_cash_bills, "Collections", collText, sec(d.collectionCount, "receipts"), "#854F0B", "#FAEEDA", "#412402") {
-                    openScreen(com.manjugroups.m_connect.ui.library.collections.CollectionsFragment())
-                },
-                DashTile(R.drawable.ic_booking_calendar, "Bookings", nz(d.bookingCount), null, "#993556", "#FBEAF0", "#4B1528") {
-                    openScreen(com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment())
-                },
-                DashTile(R.drawable.ic_loan_document, "Registrations", nz(d.registrationCount), null, "#A32D2D", "#FCEBEB", "#501313") {
-                    openScreen(com.manjugroups.m_connect.ui.dashboard.RegistrationsFragment.newInstance())
-                },
-            )
+    /** Writes the current [vpDashboardData] counts into the static HR +
+     *  Marketing overview layouts. Safe to call any time (no-op until data
+     *  lands) so a late network result still repaints without waiting for the
+     *  next visits emit. */
+    private fun bindDashboardData() {
+        val root = _binding?.root ?: return
+        val d = vpDashboardData ?: return
+        fun set(id: Int, value: Int) {
+            root.findViewById<android.widget.TextView>(id)?.text = value.toString()
         }
-
-        binding.visitListContent.removeAllViews()
-        var i = 0
-        while (i < tiles.size) {
-            val row = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { if (i > 0) topMargin = dpx(8) }
-            }
-            row.addView(dashTile(ctx, tiles[i], 0))
-            if (i + 1 < tiles.size) row.addView(dashTile(ctx, tiles[i + 1], dpx(8)))
-            binding.visitListContent.addView(row)
-            i += 2
-        }
+        set(R.id.numStaff, d.totalStaff)
+        set(R.id.numPresent, d.present)
+        set(R.id.numAbsent, d.absent)
+        set(R.id.numLeave, d.leave)
+        set(R.id.numCalls, d.totalCalls)
+        set(R.id.numIncoming, d.incomingCalls)
+        set(R.id.numOutgoing, d.outboundCalls)
+        set(R.id.numHot, d.hot)
+        set(R.id.numWarm, d.warm)
+        set(R.id.numCold, d.cold)
+        set(R.id.numSv, d.svVisitsFixed)
+        set(R.id.numCp, d.cpVisitsFixed)
     }
 
     private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {
@@ -1395,6 +1448,39 @@ class HomeFragment : Fragment() {
     }
 
     private var selectedTab = "all"
+
+    private fun setupOverviewTabs() {
+        val tabHr = _binding?.root?.findViewById<TextView>(R.id.tabHr) ?: return
+        val tabMarketing = _binding?.root?.findViewById<TextView>(R.id.tabMarketing) ?: return
+        val layoutHr = _binding?.root?.findViewById<View>(R.id.layoutHr) ?: return
+        val layoutMarketing = _binding?.root?.findViewById<View>(R.id.layoutMarketing) ?: return
+
+        tabHr.setOnClickListener {
+            layoutHr.visibility = View.VISIBLE
+            layoutMarketing.visibility = View.GONE
+            
+            tabHr.setBackgroundResource(R.drawable.bg_loans_segment_active)
+            tabHr.setTextColor(Color.parseColor("#FFFFFF"))
+            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
+            
+            tabMarketing.setBackgroundResource(0)
+            tabMarketing.setTextColor(Color.parseColor("#475467"))
+            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+        }
+
+        tabMarketing.setOnClickListener {
+            layoutHr.visibility = View.GONE
+            layoutMarketing.visibility = View.VISIBLE
+            
+            tabMarketing.setBackgroundResource(R.drawable.bg_loans_segment_active)
+            tabMarketing.setTextColor(Color.parseColor("#FFFFFF"))
+            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
+            
+            tabHr.setBackgroundResource(0)
+            tabHr.setTextColor(Color.parseColor("#475467"))
+            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+        }
+    }
 
     private fun setupDriverTabs() {
         val clickListener = View.OnClickListener { v ->

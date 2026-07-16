@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Frame 3: full client details form (10 personal fields). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/bodyBookingClientForm"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -138,6 +139,115 @@
             android:textColor="#101828"
             android:textColorHint="#94A3B8"
             android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Client Image — mirrors the web booking form's optional client photo
+         (Client Details tab), styled like the web profile-pic uploader:
+         dashed action card + helper line, with a compact uploaded pill.
+         The storage id rides the create payload and lands on the clients
+         master row server-side. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:text="Client Image"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/cardClientImageUpload"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_dash_upload"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="16dp">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_header_camera_outline"
+            app:tint="#0B61CA" />
+
+        <TextView
+            android:id="@+id/tvClientImageAction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:text="Upload Client Pic"
+            android:textColor="#0B61CA"
+            android:textSize="13.5sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="Optional · Supports: JPG, PNG"
+        android:textColor="#98A2B3"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:id="@+id/rowClientImagePreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/imgClientPhoto"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_input"
+            android:contentDescription="Client photo"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_outcome_person" />
+
+        <TextView
+            android:id="@+id/tvClientImageName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="middle"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="client-photo.jpg"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btnClientImageAction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_pagination_size_pill"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:paddingStart="12dp"
+            android:paddingTop="7dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="7dp"
+            android:text="Remove"
+            android:textColor="#B42318"
+            android:textSize="12.5sp" />
     </LinearLayout>
 
     <TextView

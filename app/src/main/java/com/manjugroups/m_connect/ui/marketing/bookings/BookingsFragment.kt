@@ -61,6 +61,13 @@ class BookingsFragment : Fragment() {
     private var allBookings: List<Booking> = emptyList()
     private var hasLoadedOnce: Boolean = false
 
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
+    private var bkWindowCtx: String? = null
+    private var bkFilteredCount: Int = 0
+    private val bkPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderList() },
+    )
+
     // Views
     private var listContainer: LinearLayout? = null
     private var emptyState: View? = null
@@ -123,6 +130,11 @@ class BookingsFragment : Fragment() {
         refreshLayout = view.findViewById<SwipeRefreshLayout>(R.id.bkRefresh).apply {
             setColorSchemeColors(0xFF0B61CA.toInt())
             setOnRefreshListener { loadBookings(showSkeleton = false) }
+        }
+
+        // Infinite scroll: render the next 20 rows as the user nears the end.
+        view.findViewById<NestedScrollView>(R.id.bkScroll)?.let { scroll ->
+            bkPager.bindNestedScroll(scroll, totalCount = { bkFilteredCount })
         }
 
         pillAll = view.findViewById(R.id.pillBkAll)
@@ -283,7 +295,17 @@ class BookingsFragment : Fragment() {
                     b.projectName?.lowercase(Locale.getDefault())?.contains(q) == true
             }
         }
+        bkFilteredCount = rows.size
 
+        // Reset the scroll window whenever the filter / search / data changes.
+        val windowCtx =
+            "$activeFilter|$q|${System.identityHashCode(allBookings)}"
+        if (windowCtx != bkWindowCtx) {
+            bkWindowCtx = windowCtx
+            bkPager.reset()
+        }
+
+        // Empty-state stays keyed off the FULL filtered size, not the window.
         if (rows.isEmpty()) {
             list.visibility = View.GONE
             emptyState?.visibility = View.VISIBLE
@@ -291,7 +313,8 @@ class BookingsFragment : Fragment() {
             list.visibility = View.VISIBLE
             emptyState?.visibility = View.GONE
             val inflater = LayoutInflater.from(requireContext())
-            for (booking in rows) {
+            // Attach only the current window's rows (20, +20 on scroll).
+            for (booking in rows.take(bkPager.limit)) {
                 val row = inflater.inflate(R.layout.item_booking, list, false)
                 bindRow(row, booking)
                 list.addView(row)

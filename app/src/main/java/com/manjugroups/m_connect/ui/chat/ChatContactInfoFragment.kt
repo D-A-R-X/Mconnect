@@ -176,11 +176,8 @@ class ChatContactInfoFragment : Fragment() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
     }
-
-    override fun onPause() {
-        (activity as? MainActivity)?.setTabBarVisible(true)
-        super.onPause()
-    }
+    // No onPause restore — MainActivity's backstack listener owns the tab
+    // bar on pop; restoring it here raced the incoming screen's hide.
 
     private suspend fun loadChannelInfo(channelId: String, fallbackTitle: String) {
         runCatching {
@@ -400,7 +397,7 @@ class ChatContactInfoFragment : Fragment() {
 
     override fun onDestroyView() {
         SkeletonUtils.stopAll()
-        (activity as? MainActivity)?.setTabBarVisible(true)
+        // Tab bar restore is owned by MainActivity's backstack listener.
         super.onDestroyView()
         _binding = null
     }

@@ -45,8 +45,9 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     private val gson = Gson()
 
     // Fallback used only when the HR policy can't be fetched; the live list
-    // comes from the policy (see loadLeaveTypes) and mirrors the web default.
-    private var leaveTypes = listOf("casual", "sick", "earned", "unpaid", "compensatory")
+    // comes from the policy allocations (see loadLeaveTypes) and mirrors the
+    // web defaults (casual 12 / sick 12 / earned 15 — all enabled).
+    private var leaveTypes = listOf("casual", "sick", "earned", "unpaid", "half_day")
     private var selectedLeaveType: String = "casual"
     private var selectedFromMillis: Long? = null
     private var selectedToMillis: Long? = null
@@ -206,23 +207,30 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             try {
                 val policy = api.getPolicy(session.bearerToken)
                 val lp = policy.policy?.leave
-                // Leave types are defined by HR policy — the same source the web
-                // dropdown uses — consumed verbatim so enabling/disabling a type
-                // in HR settings reflects on mobile too, in the same order as web.
-                // The half_day option is always appended for the half-day flow.
-                val types = lp?.types?.map { it.trim() }?.filter { it.isNotEmpty() }
-                    ?.toMutableList() ?: mutableListOf()
-                if (!types.contains("half_day")) {
-                    types.add("half_day")
-                }
-                if (types.isNotEmpty()) {
+                if (lp != null) {
+                    // Same rule as the web Apply Leave dropdown: a tracked type
+                    // is offered only while its HR-policy allocation is > 0
+                    // (an explicit 0 disables the category); a missing value
+                    // falls back to the web defaults (12/12/15). Unpaid has no
+                    // allocation and is always available.
+                    val types = mutableListOf<String>()
+                    if ((lp.casualPerYear ?: 12) > 0) types.add("casual")
+                    if ((lp.sickPerYear ?: 12) > 0) types.add("sick")
+                    if ((lp.earnedPerYear ?: 15) > 0) types.add("earned")
+                    types.add("unpaid")
+                    // Compensatory Off is deliberately left out: the apply
+                    // endpoint rejects it (web spends comp-off credits through
+                    // a separate flow that has no mobile route yet).
+                    // half_day is submitted as a casual half-day, so it is only
+                    // meaningful while casual leave is enabled.
+                    if (types.contains("casual")) types.add("half_day")
                     leaveTypes = types
                 }
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (_: Exception) {
                 // Keep defaults when policy isn't available.
-                leaveTypes = listOf("casual", "sick", "earned", "half_day")
+                leaveTypes = listOf("casual", "sick", "earned", "unpaid", "half_day")
             }
 
             selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"

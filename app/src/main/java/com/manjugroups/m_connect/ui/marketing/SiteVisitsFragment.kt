@@ -57,6 +57,12 @@ class SiteVisitsFragment : Fragment() {
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     private var pendingEntryAnimation = true
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
+    private var svWindowCtx: String? = null
+    private var svVisibleCount = 0
+    private val svPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderList() },
+    )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_site_visits, container, false)
@@ -79,6 +85,10 @@ class SiteVisitsFragment : Fragment() {
 
         setupSearch(view)
         setupFilterPills(view)
+        // Infinite scroll: render the next 20 rows as the user nears the end.
+        view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
+            svPager.bindNestedScroll(scroll, totalCount = { svVisibleCount })
+        }
 
         // NOTE: this fragment INFLATES fragment_cp_visits.xml (see
         // onCreateView), so the swipe-refresh container id is
@@ -273,6 +283,14 @@ class SiteVisitsFragment : Fragment() {
                 listOf(v.placeName, v.leadName, v.placeAddress)
                     .any { it?.lowercase(Locale.US)?.contains(needle) == true }
             }
+        svVisibleCount = visible.size
+
+        // Reset the scroll window whenever the filter / search / data changes.
+        val windowCtx = "$currentFilter|$needle|${System.identityHashCode(allVisits)}"
+        if (windowCtx != svWindowCtx) {
+            svWindowCtx = windowCtx
+            svPager.reset()
+        }
 
         if (visible.isEmpty()) {
             list.visibility = View.GONE
@@ -294,7 +312,7 @@ class SiteVisitsFragment : Fragment() {
 
         empty.visibility = View.GONE
         list.visibility = View.VISIBLE
-        visible.forEach { list.addView(createRow(it, list)) }
+        visible.take(svPager.limit).forEach { list.addView(createRow(it, list)) }
     }
 
     private fun showLoadError(message: String) {

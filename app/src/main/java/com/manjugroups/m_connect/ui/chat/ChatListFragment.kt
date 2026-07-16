@@ -35,6 +35,7 @@ import com.manjugroups.m_connect.network.CreateChannelRequest
 import com.manjugroups.m_connect.network.CreateGroupConversationRequest
 import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.dismissRefresh
@@ -441,13 +442,39 @@ class ChatListFragment : Fragment() {
 
     private var isLoadingChats = false
 
+    /** Cached snapshot of the three lists that make up the chat overview. */
+    private data class ChatListSnapshot(
+        val conversations: List<ConversationData> = emptyList(),
+        val channels: List<ChannelData> = emptyList(),
+        val staff: List<StaffData> = emptyList(),
+    )
+
+    private fun chatCacheKey(): String = "chatlist:${session.staffId.orEmpty()}"
+
     private fun loadData() {
         if (isLoadingChats) return
         isLoadingChats = true
         viewLifecycleOwner.lifecycleScope.launch {
             if (!hasLoadedOnce) {
-                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-                binding.rvChatList.visibility = View.GONE
+                // Cache-first: paint the last-known chat list INSTANTLY (no
+                // skeleton) and let the network refresh in the background. Only
+                // show the skeleton when there's genuinely nothing cached — this
+                // is what stops Chat from sitting on a long blank/skeleton wait.
+                val cached = runCatching {
+                    LocalCache.get<ChatListSnapshot>(requireContext(), chatCacheKey())
+                }.getOrNull()
+                if (cached != null && _binding != null) {
+                    allConversations = cached.conversations
+                    allChannels = cached.channels
+                    activeStaffCache = cached.staff
+                    hasLoadedOnce = true
+                    SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                    binding.rvChatList.visibility = View.VISIBLE
+                    renderCurrentList()
+                } else {
+                    SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                    binding.rvChatList.visibility = View.GONE
+                }
             }
             var conversations: List<ConversationData> = emptyList()
             var channels: List<ChannelData> = emptyList()
@@ -484,7 +511,16 @@ class ChatListFragment : Fragment() {
                 allChannels = channels
                 activeStaffCache = staffList
                 hasLoadedOnce = true
+                // Persist for the next cold open's instant paint.
+                runCatching {
+                    LocalCache.put(
+                        requireContext(), chatCacheKey(),
+                        ChatListSnapshot(conversations, channels, staffList),
+                        System.currentTimeMillis(),
+                    )
+                }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+                binding.rvChatList.visibility = View.VISIBLE
                 renderCurrentList()
 
                 // Background-fetch profile photos for conversation
@@ -708,7 +744,13 @@ class ChatListFragment : Fragment() {
 
         val conversationItems = allConversations.mapNotNull { conversation ->
             val id = conversation.id ?: return@mapNotNull null
-            val title = conversation.displayName?.ifBlank { null } ?: "Chat"
+            // Group-dm conversations are legacy groups: they carry a group
+            // name and 3+ participants, and must never render like a DM
+            // (arbitrary member photo/presence).
+            val isGroupConversation = conversation.type == "group-dm" ||
+                (conversation.participants?.size ?: 0) > 2
+            val title = conversation.displayName?.ifBlank { null }
+                ?: if (isGroupConversation) "Group" else "Chat"
             // Look up photo from conversation participants, fallback to activeStaffCache,
             // then in-memory photo map (populated by background fetch), then disk cache
             val participant = conversation.participants?.firstOrNull { it.id != null && it.id != session.staffId }
@@ -745,8 +787,8 @@ class ChatListFragment : Fragment() {
             } ?: MessagePreviewResult("No messages yet", null)
 
             val lastActive = conversation.lastMessageAt ?: 0L
-            val isOnline = System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
-
+            val isOnline = !isGroupConversation &&
+                System.currentTimeMillis() - lastActive < 5L * 60L * 1000L
 
             ChatListItem(
                 id = id,
@@ -760,7 +802,9 @@ class ChatListFragment : Fragment() {
                 isMuted = conversation.muted ?: false,
                 isOnline = isOnline,
                 previewIconRes = previewResult.iconResId,
-                photoUrl = resolvedPhoto
+                // A group has its own identity — never one member's photo.
+                photoUrl = if (isGroupConversation) null else resolvedPhoto,
+                isGroup = isGroupConversation,
             )
         }
 
@@ -790,10 +834,12 @@ class ChatListFragment : Fragment() {
                 subtitle = previewResult.text,
                 timestamp = channel.lastMessageAt,
                 unreadCount = channel.unreadCount ?: 0,
-                avatarText = "#",
+                avatarText = initialsFor(title),
                 avatarSeed = title.length + 7,
                 isMuted = channel.muted ?: false,
-                previewIconRes = previewResult.iconResId
+                previewIconRes = previewResult.iconResId,
+                photoUrl = channel.avatarUrl,
+                isGroup = true,
             )
         }
 
@@ -804,8 +850,8 @@ class ChatListFragment : Fragment() {
                 when (activeFilter) {
                     ChatFilter.ALL -> true
                     ChatFilter.UNREAD -> item.unreadCount > 0
-                    ChatFilter.GROUPS -> item.kind == ChatListItem.Kind.CHANNEL
-                    ChatFilter.DM -> item.kind == ChatListItem.Kind.DIRECT
+                    ChatFilter.GROUPS -> item.isGroup
+                    ChatFilter.DM -> item.kind == ChatListItem.Kind.DIRECT && !item.isGroup
                     ChatFilter.FAVOURITES -> item.isFavourite
                 }
             }
@@ -1378,11 +1424,16 @@ class ChatListFragment : Fragment() {
                 return@setOnClickListener
             }
             val name = etGroupName.text?.toString()?.trim().orEmpty()
+            if (name.isBlank()) {
+                toast("Give the group a name")
+                return@setOnClickListener
+            }
             dialog.dismiss()
-            createGroupConversation(
-                memberIds = selectedIds.toList(),
-                displayName = name.takeIf { it.isNotBlank() }
-            )
+            // Groups ride on private channels — that's the backend with the
+            // full WhatsApp-style surface (members, admin roles, leave,
+            // rename, photo, system messages). The old group-dm
+            // conversations stay readable as legacy groups.
+            createChannel(name = name, type = "private", memberIds = selectedIds.toList())
         }
         searchField.doAfterTextChanged { renderPeopleList() }
 
