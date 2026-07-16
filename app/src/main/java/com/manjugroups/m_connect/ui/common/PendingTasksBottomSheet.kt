@@ -46,16 +46,26 @@ class PendingTasksBottomSheet(
         dialog.setOnShowListener {
             val d = it as BottomSheetDialog
             val bottomSheet = d.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) as FrameLayout?
-            bottomSheet?.let {
-                val behavior = BottomSheetBehavior.from(it)
+            bottomSheet?.let { sheet ->
+                val behavior = BottomSheetBehavior.from(sheet)
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
-                it.setBackgroundColor(Color.TRANSPARENT)
-                it.elevation = 0f
+                sheet.setBackgroundColor(Color.TRANSPARENT)
+                sheet.elevation = 0f
             }
+            // The dialog window can't extend under the system nav bar on
+            // targetSdk 36, so the window-wide dim was darkening the page BEHIND
+            // the sheet and that dimmed page showed through the (transparent)
+            // nav bar as a murky strip. Drop the window dim to 0 and instead
+            // scrim only the `touch_outside` region (everything ABOVE the sheet),
+            // so the modal backdrop stays but the nav-bar area below the sheet
+            // shows the undimmed (light) page instead of a see-through dark band.
+            d.findViewById<View>(com.google.android.material.R.id.touch_outside)
+                ?.setBackgroundColor(0x66101828.toInt())
             d.window?.let { window ->
-                window.navigationBarColor = Color.WHITE
-                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
+                window.setDimAmount(0f)
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                    .isAppearanceLightNavigationBars = true
             }
         }
         return dialog
@@ -67,7 +77,7 @@ class PendingTasksBottomSheet(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         val tvSubtitle = view.findViewById<TextView>(R.id.tvSubtitle)
         tvSubtitle.text = "You have $totalPending pending tasks"
         
