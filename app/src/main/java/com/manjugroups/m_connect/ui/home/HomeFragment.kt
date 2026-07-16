@@ -163,6 +163,12 @@ class HomeFragment : Fragment() {
                 .any { session.hasPermission(it) }
         ) {
             setupEdgeDragQr()
+        } else {
+            // No frontdesk access — hide the edge-QR handle/panel so it isn't a
+            // dead, non-functional tab on the home edge (it had no touch
+            // listener, so tapping it did nothing).
+            binding.edgeDragHandle.visibility = View.GONE
+            binding.edgeQrPanel.visibility = View.GONE
         }
     }
 
@@ -375,10 +381,17 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Defensive: restore tab bar in case a child fragment hid it, unless onboarding or QR panel is visible.
-        val showTabBar = session.hasSeenEdgeQrTooltip && 
-                (_binding == null || binding.edgeQrPanel.visibility != android.view.View.VISIBLE)
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(showTabBar)
+        // Restore the tab bar unless the edge-QR panel or its onboarding
+        // tooltip is ACTIVELY on screen. The old `hasSeenEdgeQrTooltip && …`
+        // gate hid the nav FOREVER for any user who never sees that tooltip —
+        // e.g. anyone without frontdesk permissions, where the edge-QR flow
+        // never runs — so their bottom navigation disappeared entirely.
+        val edgeQrActive = _binding != null && (
+            binding.edgeQrPanel.visibility == android.view.View.VISIBLE ||
+                binding.edgeQrTooltip.visibility == android.view.View.VISIBLE ||
+                binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE
+            )
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(!edgeQrActive)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
             Color.parseColor("#0B61CA"),
             false,
