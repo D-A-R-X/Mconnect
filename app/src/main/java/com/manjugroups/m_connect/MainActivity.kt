@@ -808,10 +808,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         taskNudgeBackCallback.isEnabled = false
-        // Fall back to the collapsed tab so pending work stays discoverable
-        // (Home root only).
-        updateNavTasksPeekVisibility()
-        if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) return
+        if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
+            // Already hidden — just make sure the collapsed tab reflects the
+            // current pending count (overlay is GONE, so its gate passes).
+            updateNavTasksPeekVisibility()
+            return
+        }
         // Restore accessibility reach immediately (not in the end action —
         // a cancelled animation would skip it).
         fragmentContainer.importantForAccessibility =
@@ -826,6 +828,12 @@ class MainActivity : AppCompatActivity() {
                 tabBarContainer.setRenderEffect(null)
                 if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
             }
+            // Reveal the collapsed tab ONLY now that the overlay is actually
+            // gone. Calling this earlier (while the overlay was still VISIBLE)
+            // was the bug: the peek's own gate is `overlay != VISIBLE`, so it
+            // stayed hidden and the pending-tasks reminder vanished entirely
+            // after any dismiss until the next navigation refreshed it.
+            updateNavTasksPeekVisibility()
         }.start()
     }
 
