@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small Overview stat card (bottom row of the mock). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/statSmallRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_stat_card_neutral"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <ImageView
+        android:id="@+id/ivSmallArt"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="6dp"
+        android:layout_marginBottom="8dp"
+        android:alpha="0.9"
+        android:importantForAccessibility="no"
+        tools:src="@drawable/img_stat_wfh" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_stat_icon_chip">
+
+        <ImageView
+            android:id="@+id/ivSmallIcon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            app:tint="#667085"
+            tools:src="@drawable/ic_calendar_days" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvSmallLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#344054"
+        android:textSize="11.5sp"
+        tools:text="Week Off" />
+
+    <TextView
+        android:id="@+id/tvSmallValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:fontFamily="@font/inter_bold"
+        android:includeFontPadding="false"
+        android:textColor="#101828"
+        android:textSize="20sp"
+        tools:text="0" />
+
+    <TextView
+        android:id="@+id/tvSmallPill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_stat_pill_neutral"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="7dp"
+        android:paddingVertical="3dp"
+        android:textColor="#475467"
+        android:textSize="10.5sp"
+        tools:text="No Data" />
+    </LinearLayout>
+</FrameLayout>

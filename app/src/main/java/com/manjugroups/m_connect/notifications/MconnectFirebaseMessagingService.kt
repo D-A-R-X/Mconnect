@@ -21,6 +21,35 @@ import android.util.Log
 
 class MconnectFirebaseMessagingService : FirebaseMessagingService() {
 
+    private companion object {
+        // The backend used to double-push chat messages (in-app notification
+        // hook + explicit chat push) with divergent payloads, which hashed to
+        // two different notification ids — the user saw the same "Hi" twice.
+        // Collapse look-alike pushes that arrive close together onto one
+        // notification id so a duplicate replaces rather than stacks.
+        const val DEDUPE_WINDOW_MS = 20_000L
+        const val DEDUPE_MAX_ENTRIES = 32
+        val recentPushes = object : LinkedHashMap<String, Pair<Int, Long>>(
+            DEDUPE_MAX_ENTRIES, 0.75f, true
+        ) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, Pair<Int, Long>>?
+            ): Boolean = size > DEDUPE_MAX_ENTRIES
+        }
+
+        fun dedupedNotifId(key: String, freshId: Int): Int = synchronized(recentPushes) {
+            val now = System.currentTimeMillis()
+            val prior = recentPushes[key]
+            if (prior != null && now - prior.second <= DEDUPE_WINDOW_MS) {
+                recentPushes[key] = prior.first to now
+                prior.first
+            } else {
+                recentPushes[key] = freshId to now
+                freshId
+            }
+        }
+    }
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         val session = SessionManager(applicationContext)
@@ -132,7 +161,13 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         val notifKey = message.data["messageId"]
             ?: message.data["eventId"]
             ?: ((body) + ":" + message.sentTime)
-        val notifId = notifKey.hashCode()
+        // Same title+body+type arriving within the dedupe window reuses the
+        // prior notification id — a server double-send replaces instead of
+        // showing the identical notification twice.
+        val notifId = dedupedNotifId(
+            key = "$title|$body|${message.data["type"].orEmpty()}",
+            freshId = notifKey.hashCode(),
+        )
 
         val pendingIntent = PendingIntent.getActivity(
             this,

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Big Overview stat card (mock parity): icon chip + label + big number +
+     status pill on the left, large art on the right, chevron top-right. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/statCardRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_stat_card_blue"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    android:padding="14dp">
+
+    <ImageView
+        android:id="@+id/ivStatChevron"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_gravity="top|end"
+        android:importantForAccessibility="no"
+        android:rotation="180"
+        android:src="@drawable/ic_back_chevron"
+        app:tint="#98A2B3" />
+
+    <ImageView
+        android:id="@+id/ivStatArt"
+        android:layout_width="68dp"
+        android:layout_height="68dp"
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="4dp"
+        android:importantForAccessibility="no"
+        tools:src="@drawable/ic_chat_users" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:id="@+id/statIconChip"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_stat_icon_chip">
+
+            <ImageView
+                android:id="@+id/ivStatIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_chat_users" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvStatLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#344054"
+            android:textSize="13sp"
+            tools:text="Total Active Staff" />
+
+        <TextView
+            android:id="@+id/tvStatValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_bold"
+            android:includeFontPadding="false"
+            android:textColor="#101828"
+            android:textSize="30sp"
+            tools:text="276" />
+
+        <TextView
+            android:id="@+id/tvStatPill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_stat_pill_blue"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            tools:text="All Departments" />
+    </LinearLayout>
+</FrameLayout>

@@ -315,15 +315,4 @@
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Web-style rows-per-page footer (10/25/50/100). Sits below the
-         weight-1 list container so it pins to the screen bottom; hides
-         itself while the list is small enough to not need paging. -->
-    <com.manjugroups.m_connect.ui.common.PaginationBarView
-        android:id="@+id/paginationBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#FFFFFF"
-        android:elevation="6dp"
-        android:paddingBottom="6dp"
-        android:visibility="gone" />
 </LinearLayout>

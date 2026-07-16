@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One member row in the group info screen: photo/initials avatar, name +
+     designation, and a WhatsApp-style "Admin" badge. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="10dp">
+
+    <FrameLayout
+        android:id="@+id/memberAvatarContainer"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_chat_avatar_circle">
+
+        <ImageView
+            android:id="@+id/ivMemberPhoto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvMemberInitials"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_bold"
+            android:textColor="#0B61CA"
+            android:textSize="14sp"
+            tools:text="DB" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvMemberName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:textColor="#101828"
+            android:textSize="14sp"
+            tools:text="Dhivagar B" />
+
+        <TextView
+            android:id="@+id/tvMemberSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_regular"
+            android:maxLines="1"
+            android:textColor="#667085"
+            android:textSize="12sp"
+            tools:text="AI Developer" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvAdminBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_pagination_size_pill"
+        android:fontFamily="@font/inter_semibold"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:text="Admin"
+        android:textColor="#067647"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:visibility="visible" />
+</LinearLayout>

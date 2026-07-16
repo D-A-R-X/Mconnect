@@ -67,12 +67,13 @@ interface ApiService {
         @Query("year") year: Int? = null,
     ): FinesListResponse
 
-    // ── VP / Management Dashboard ──
-    @GET("api/dashboard/vp")
-    suspend fun getVpDashboard(
+    // ── Overview / Management Dashboard (not VP-only — served to anyone
+    // granted the vpDashboard.view IAM key, which predates the rename) ──
+    @GET("api/dashboard/overview")
+    suspend fun getOverviewDashboard(
         @Header("Authorization") token: String,
         @Query("date") date: String? = null,
-    ): VpDashboardResponse
+    ): OverviewDashboardResponse
 
     @GET("api/mobile/dashboard")
     suspend fun getMobileDashboard(
@@ -674,6 +675,13 @@ interface ApiService {
         @Body body: ChannelIdRequest
     ): SimpleResponse
 
+    // Hard delete — creator-only, and only once every other member has left.
+    @POST("api/chat/channels/delete")
+    suspend fun deleteChannel(
+        @Header("Authorization") token: String,
+        @Body body: ChannelIdRequest
+    ): SimpleResponse
+
     @POST("api/chat/channels/add-member")
     suspend fun addChannelMember(
         @Header("Authorization") token: String,
@@ -722,6 +730,19 @@ interface ApiService {
     suspend fun removeConversationMember(
         @Header("Authorization") token: String,
         @Body body: ConversationMemberRequest
+    ): SimpleResponse
+
+    // Group-dm parity: rename/description + admin roles for legacy groups.
+    @POST("api/chat/conversations/update")
+    suspend fun updateGroupConversation(
+        @Header("Authorization") token: String,
+        @Body body: UpdateGroupConversationRequest
+    ): SimpleResponse
+
+    @POST("api/chat/conversations/set-role")
+    suspend fun setConversationRole(
+        @Header("Authorization") token: String,
+        @Body body: SetConversationRoleRequest
     ): SimpleResponse
 
     @POST("api/chat/conversations/hide")
@@ -1944,12 +1965,26 @@ data class StaffPaginatedResponse(
     val isDone: Boolean = true,
     val continueCursor: String? = null
 )
-data class StaffCountResponse(
-    val success: Boolean,
+data class StaffCounts(
     val all: Int = 0,
     val active: Int = 0,
-    val inactive: Int = 0
+    val inactive: Int = 0,
 )
+
+data class StaffCountResponse(
+    val success: Boolean,
+    // Current backend nests the breakdown under `counts` and puts the grand
+    // total at top level; older shape had the counts flat. Support both.
+    val counts: StaffCounts? = null,
+    val total: Int = 0,
+    val all: Int = 0,
+    val active: Int = 0,
+    val inactive: Int = 0,
+) {
+    val activeCount: Int get() = counts?.active ?: active
+    val inactiveCount: Int get() = counts?.inactive ?: inactive
+    val allCount: Int get() = counts?.all ?: total.takeIf { it > 0 } ?: all
+}
 
 // Staff detail
 data class StaffDetailResponse(val success: Boolean, val staff: StaffFullData?)
@@ -1994,14 +2029,18 @@ data class ChannelData(
     val muted: Boolean?,
     val lastMessageAt: Long? = null,
     val lastMessagePreview: String? = null,
-    val mentionCount: Int? = null
+    val mentionCount: Int? = null,
+    // Group avatar (resolved storage URL) + creator — WhatsApp-style groups.
+    val avatarUrl: String? = null,
+    val createdBy: String? = null,
 )
 data class ChannelDetailResponse(val success: Boolean, val channel: ChannelData?)
 data class CreateChannelRequest(
     val name: String,
     val description: String? = null,
     val type: String,
-    val memberIds: List<String>? = null
+    val memberIds: List<String>? = null,
+    val avatarStorageId: String? = null,
 )
 data class CreateChannelResponse(val success: Boolean, val channelId: String?)
 data class ConversationsResponse(val success: Boolean, val conversations: List<ConversationData> = emptyList())
@@ -2014,12 +2053,18 @@ data class ConversationData(
     val lastMessageAt: Long?,
     val lastMessagePreview: String? = null,
     val lastMessageSenderId: String? = null,
+    // Group-dm parity: creator is always an admin; description is editable
+    // by admins from the group info screen.
+    val createdBy: String? = null,
+    val description: String? = null,
     val participants: List<ParticipantData>?
 )
 data class ParticipantData(
     @SerializedName("_id") val id: String?,
     val name: String?,
-    val photo: String? = null
+    val photo: String? = null,
+    // "admin" | "member" (absent = member; creator implicitly admin).
+    val role: String? = null,
 )
 data class MessagesResponse(
     val success: Boolean,
@@ -2040,6 +2085,9 @@ data class MessageData(
     val channelId: String?, val conversationId: String?,
     val isDeleted: Boolean?, val isEdited: Boolean?,
     val replyCount: Int?, val parentMessageId: String?,
+    // "system" for server-generated group events ("X added Y", "X left") —
+    // rendered as a centered pill, not a bubble.
+    val kind: String? = null,
     val attachments: List<MessageAttachmentData>? = null,
     val reactions: List<ReactionData>? = null,
     // Local-only optimistic-send fields. Never serialised back to the
@@ -2156,7 +2204,8 @@ data class UpdateChannelRequest(
     val channelId: String,
     val name: String? = null,
     val description: String? = null,
-    val type: String? = null
+    val type: String? = null,
+    val avatarStorageId: String? = null,
 )
 
 data class ChannelMemberRequest(
@@ -2181,6 +2230,18 @@ data class SetChannelRoleRequest(
 data class ConversationMemberRequest(
     val conversationId: String,
     val staffId: String
+)
+
+data class UpdateGroupConversationRequest(
+    val conversationId: String,
+    val name: String? = null,
+    val description: String? = null,
+)
+
+data class SetConversationRoleRequest(
+    val conversationId: String,
+    val targetStaffId: String,
+    val role: String,
 )
 
 // ── Chat message edit/delete/unread models ──────────────────────────────────
@@ -3656,7 +3717,7 @@ data class FineDeductionItem(
 )
 
 // ── VP / Management Dashboard models ──
-data class VpDashboardResponse(
+data class OverviewDashboardResponse(
     val success: Boolean = false,
     val date: String? = null,
     val present: Int = 0,
@@ -3674,6 +3735,15 @@ data class VpDashboardResponse(
     val collectionCount: Int = 0,
     val bookingCount: Int = 0,
     val registrationCount: Int = 0,
+    // Extended HR + lead-temperature fields — nullable so the overview tiles
+    // render "–" until the extended /api/dashboard/overview route is deployed.
+    val leaveApproved: Int? = null,
+    val weekOff: Int? = null,
+    val permissionCount: Int? = null,
+    val wfhApproved: Int? = null,
+    val leadsHot: Int? = null,
+    val leadsWarm: Int? = null,
+    val leadsCold: Int? = null,
     val error: String? = null,
 )
 

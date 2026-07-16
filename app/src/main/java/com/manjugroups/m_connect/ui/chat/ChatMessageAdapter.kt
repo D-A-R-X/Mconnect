@@ -31,6 +31,8 @@ import java.util.*
 sealed class ChatItem {
     data class Message(val data: MessageData, val isMine: Boolean, val showAvatar: Boolean, val showName: Boolean) : ChatItem()
     data class DateSeparator(val date: String) : ChatItem()
+    /** Server-generated group event ("X added Y", "X left") — centered pill. */
+    data class System(val text: String) : ChatItem()
 }
 
 class ChatMessageAdapter(
@@ -214,6 +216,7 @@ class ChatMessageAdapter(
         const val TYPE_SENT = 0
         const val TYPE_RECEIVED = 1
         const val TYPE_DATE = 2
+        const val TYPE_SYSTEM = 3
 
         @Volatile
         private var fontRegular: android.graphics.Typeface? = null
@@ -249,6 +252,7 @@ class ChatMessageAdapter(
         return when (val item = getItem(position)) {
             is ChatItem.Message -> if (item.isMine) TYPE_SENT else TYPE_RECEIVED
             is ChatItem.DateSeparator -> TYPE_DATE
+            is ChatItem.System -> TYPE_SYSTEM
         }
     }
 
@@ -258,6 +262,7 @@ class ChatMessageAdapter(
             TYPE_SENT -> SentViewHolder(ItemChatMessageSentBinding.inflate(inflater, parent, false))
             TYPE_RECEIVED -> ReceivedViewHolder(ItemChatMessageReceivedBinding.inflate(inflater, parent, false))
             TYPE_DATE -> DateViewHolder(ItemChatDateSeparatorBinding.inflate(inflater, parent, false))
+            TYPE_SYSTEM -> SystemViewHolder(ItemChatDateSeparatorBinding.inflate(inflater, parent, false))
             else -> throw IllegalArgumentException("Unknown view type")
         }
     }
@@ -269,6 +274,15 @@ class ChatMessageAdapter(
                 else if (holder is ReceivedViewHolder) holder.bind(item)
             }
             is ChatItem.DateSeparator -> (holder as DateViewHolder).bind(item)
+            is ChatItem.System -> (holder as SystemViewHolder).bind(item)
+        }
+    }
+
+    /** Same centered-pill chrome as the date separator, different text. */
+    inner class SystemViewHolder(val binding: ItemChatDateSeparatorBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: ChatItem.System) {
+            binding.tvDateLabel.text = item.text
         }
     }
 

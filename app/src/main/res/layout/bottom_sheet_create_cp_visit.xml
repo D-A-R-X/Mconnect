@@ -40,581 +40,650 @@
             android:textColor="#667085"
             android:textSize="13sp" />
 
-        <!-- Client Phone Number -->
+        <!-- ══════════════ CLIENT DETAILS ══════════════ -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Client Phone Number *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
+            android:fontFamily="@font/inter_bold"
+            android:text="Client Details"
+            android:textColor="#101828"
+            android:textSize="15sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_cp_section_card"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_phone_outline" />
+            <!-- Client Phone Number -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="Client Phone Number *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-            <EditText
-                android:id="@+id/etClientPhone"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_phone_outline" />
+
+                <EditText
+                    android:id="@+id/etClientPhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:digits="0123456789+ "
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="e.g. +91 88888 88888"
+                    android:inputType="phone"
+                    android:maxLength="18"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Client Name -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="Enter Client Number"
-                android:inputType="phone"
-                android:maxLength="10"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Client Name"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Field Staff -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Field Staff *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_staff" />
-
-            <EditText
-                android:id="@+id/etFieldStaff"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:background="@null"
-                android:clickable="true"
-                android:focusable="false"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Select Staff"
-                android:inputType="none"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_chevron_down"
-                app:tint="#667085" />
-        </LinearLayout>
-
-        <!-- Project -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Project *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_project" />
-
-            <EditText
-                android:id="@+id/etProject"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:background="@null"
-                android:clickable="true"
-                android:focusable="false"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Select Projects"
-                android:inputType="none"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_chevron_down"
-                app:tint="#667085" />
-        </LinearLayout>
-
-        <!-- CP Type — visit intent classifier (SV cum CP / Follow-up /
-             Booking CP / Collection CP / Old Client / Gift Distribution).
-             Click opens a searchable picker that maps to the same
-             cpType enum the web form posts; optional, defaults to none. -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="CP Type"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_project" />
-
-            <EditText
-                android:id="@+id/etCpType"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:background="@null"
-                android:clickable="true"
-                android:focusable="false"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Select CP type"
-                android:inputType="none"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_chevron_down"
-                app:tint="#667085" />
-        </LinearLayout>
-
-        <!-- Date & Time -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Date &amp; Time"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_datetime" />
-
-            <EditText
-                android:id="@+id/etDateTime"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
-                android:clickable="true"
-                android:focusable="false"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_staff" />
+
+                <EditText
+                    android:id="@+id/etClientName"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Enter Client Name"
+                    android:inputType="textPersonName|textCapWords"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Door No -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="Select Date and Time"
-                android:inputType="none"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Door No"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Door No -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Door No"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_door" />
-
-            <EditText
-                android:id="@+id/etDoorNo"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_door" />
+
+                <EditText
+                    android:id="@+id/etDoorNo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Enter Door No"
+                    android:inputType="text"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Street -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="Enter Door No"
-                android:inputType="text"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Street"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Street -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Street"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_locality" />
-
-            <EditText
-                android:id="@+id/etStreet"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_locality" />
+
+                <EditText
+                    android:id="@+id/etStreet"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="e.g. Yercaud Main Road"
+                    android:inputType="text"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Address Line 1 (paste a full address here to auto-fill) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="e.g. Yercaud Main Road"
-                android:inputType="text"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Address Line 1 *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Address Line 1 (paste a full address here to auto-fill) -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Address Line 1 *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="top|start"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_address" />
-
-            <EditText
-                android:id="@+id/etAddressLine1"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
-                android:fontFamily="@font/inter_medium"
+                android:layout_height="72dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
                 android:gravity="top|start"
-                android:hint="Layout / building / locality (paste full address to auto-fill below)"
-                android:inputType="textMultiLine|textCapSentences"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="10dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_address" />
+
+                <EditText
+                    android:id="@+id/etAddressLine1"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="top|start"
+                    android:hint="Layout / building / locality (paste full address to auto-fill below)"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvAddressParseStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_medium"
+                android:text=""
+                android:textColor="#667085"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <!-- Address Line 2 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Address Line 2"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_district" />
+
+                <EditText
+                    android:id="@+id/etAddressLine2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Landmark / area / nearby place"
+                    android:inputType="text"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- City -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="City *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_city" />
+
+                <EditText
+                    android:id="@+id/etCity"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="e.g. Salem"
+                    android:inputType="text"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- State -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="State"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_state" />
+
+                <EditText
+                    android:id="@+id/etState"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="e.g. Tamil Nadu"
+                    android:inputType="text"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Pincode -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Pincode *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_pincode" />
+
+                <EditText
+                    android:id="@+id/etPincode"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="6 digits"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Drop pin on map (address search + draggable location). -->
+            <Button
+                android:id="@+id/btnDropPin"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_edit_btn_outline"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Drop pin on map"
+                android:textAllCaps="false"
+                android:textColor="#0B61CA"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvPinLocation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="@font/inter_medium"
+                android:text=""
+                android:textColor="#667085"
+                android:textSize="11sp"
+                android:visibility="gone" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tvAddressParseStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:fontFamily="@font/inter_medium"
-            android:text=""
-            android:textColor="#667085"
-            android:textSize="11sp"
-            android:visibility="gone" />
-
-        <!-- Address Line 2 -->
+        <!-- ══════════════ CP DETAILS ══════════════ -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Address Line 2"
-            android:textColor="#344054"
-            android:textSize="13sp" />
+            android:layout_marginTop="20dp"
+            android:fontFamily="@font/inter_bold"
+            android:text="CP Details"
+            android:textColor="#101828"
+            android:textSize="15sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_district" />
-
-            <EditText
-                android:id="@+id/etAddressLine2"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
-                android:fontFamily="@font/inter_medium"
-                android:hint="Landmark / area / nearby place"
-                android:inputType="text"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
-
-        <!-- City -->
-        <TextView
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="City *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_cp_section_card"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_city" />
-
-            <EditText
-                android:id="@+id/etCity"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+            <!-- Field Staff -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
-                android:hint="e.g. Salem"
-                android:inputType="text"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Field Staff *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- State -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="State"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_state" />
-
-            <EditText
-                android:id="@+id/etState"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_staff" />
+
+                <EditText
+                    android:id="@+id/etFieldStaff"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Select Staff"
+                    android:inputType="none"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="#667085" />
+            </LinearLayout>
+
+            <!-- Project -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="e.g. Tamil Nadu"
-                android:inputType="text"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="Project *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Pincode -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Pincode *"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_pincode" />
-
-            <EditText
-                android:id="@+id/etPincode"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_project" />
+
+                <EditText
+                    android:id="@+id/etProject"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Select Projects"
+                    android:inputType="none"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="#667085" />
+            </LinearLayout>
+
+            <!-- CP Type -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:hint="6 digits"
-                android:inputType="number"
-                android:maxLength="6"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
-        </LinearLayout>
+                android:text="CP Type"
+                android:textColor="#344054"
+                android:textSize="13sp" />
 
-        <!-- Pin-drop placeholder. The map widget + searchable Places picker
-             land in a follow-up; this button is a clear marker of where
-             the drop-pin UX will live so the form keeps the same flow
-             as the web one. -->
-        <Button
-            android:id="@+id/btnDropPin"
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_edit_btn_outline"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Drop pin on map (coming soon)"
-            android:textAllCaps="false"
-            android:textColor="#475467"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/tvPinLocation"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="@font/inter_medium"
-            android:text=""
-            android:textColor="#667085"
-            android:textSize="11sp"
-            android:visibility="gone" />
-
-        <!-- Notes -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Notes"
-            android:textColor="#344054"
-            android:textSize="13sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_cp_creation_input_box"
-            android:gravity="top|start"
-            android:orientation="horizontal"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_cp_notes" />
-
-            <EditText
-                android:id="@+id/etNotes"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="10dp"
-                android:background="@null"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_project" />
+
+                <EditText
+                    android:id="@+id/etCpType"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Select CP type"
+                    android:inputType="none"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="#667085" />
+            </LinearLayout>
+
+            <!-- Date & Time -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
+                android:text="Date &amp; Time"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_datetime" />
+
+                <EditText
+                    android:id="@+id/etDateTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Select Date and Time"
+                    android:inputType="none"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Notes -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Notes"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
                 android:gravity="top|start"
-                android:hint="Enter Notes"
-                android:inputType="textMultiLine"
-                android:textColor="#101828"
-                android:textColorHint="#9CA3AF"
-                android:textSize="14sp" />
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="10dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_notes" />
+
+                <EditText
+                    android:id="@+id/etNotes"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="top|start"
+                    android:hint="Enter Notes"
+                    android:inputType="textMultiLine"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="24dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton

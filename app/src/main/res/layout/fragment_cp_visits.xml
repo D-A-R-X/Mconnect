@@ -316,16 +316,4 @@
             android:clickable="false"
             android:focusable="false" />
     </FrameLayout>
-
-    <!-- Web-style rows-per-page footer (10/25/50/100). Pinned below the
-         weight-1 content area so it stays fixed while the list scrolls;
-         hides itself while the list is small enough to not need paging. -->
-    <com.manjugroups.m_connect.ui.common.PaginationBarView
-        android:id="@+id/cpvPaginationBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#FFFFFF"
-        android:elevation="6dp"
-        android:paddingBottom="6dp"
-        android:visibility="gone" />
 </LinearLayout>

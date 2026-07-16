@@ -98,6 +98,24 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var pinLat: Double? = null
     private var pinLng: Double? = null
     private var pinMapsLink: String = ""
+    private val mapApi = com.manjugroups.m_connect.network.MapServiceApi.create()
+
+    /** Show the current pin (from a web lead or a fresh drop) in the form,
+     *  reverse-geocoding the coordinates into a readable address. */
+    private fun renderPinLocation(view: View) {
+        val lat = pinLat ?: return
+        val lng = pinLng ?: return
+        val tv = view.findViewById<android.widget.TextView>(R.id.tvPinLocation) ?: return
+        tv.visibility = View.VISIBLE
+        tv.text = "Pinned: ${String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng)}"
+        viewLifecycleOwner.lifecycleScope.launch {
+            val addr = runCatching {
+                mapApi.reverseGeocode(lat, lng).results.firstOrNull()?.address
+            }.getOrNull()
+            if (!isAdded) return@launch
+            if (!addr.isNullOrBlank()) tv.text = "Pinned: $addr"
+        }
+    }
 
     // Address-line-1 OpenAI parse guard — same idea as the web's
     // lastParsedRef. Stops us re-firing for every keystroke once a
@@ -141,6 +159,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // writes share the same shape: doorNo · street · addressLine1 ·
         // addressLine2 · city · state · pincode. Pin-drop will fill
         // lat/lng/googleMapsLink in a follow-up turn.
+        val etClientName = view.findViewById<EditText>(R.id.etClientName)
         val etDoorNo = view.findViewById<EditText>(R.id.etDoorNo)
         val etStreet = view.findViewById<EditText>(R.id.etStreet)
         val etAddressLine1 = view.findViewById<EditText>(R.id.etAddressLine1)
@@ -256,14 +275,24 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         })
 
         btnDropPin.setOnClickListener {
-            // Pin-drop bottom sheet (map + Places search + draggable
-            // marker) is the next deliverable. Surface a toast for now
-            // so the placeholder doesn't read as a broken button.
-            Toast.makeText(
-                requireContext(),
-                "Map pin-drop launching in the next update",
-                Toast.LENGTH_SHORT,
-            ).show()
+            // Map pin-drop with address search + suggestions (map service).
+            // Seed at the current pin if one was already set.
+            val sheet = com.manjugroups.m_connect.ui.common.MapPinDropBottomSheet
+                .newInstance(pinLat, pinLng)
+            sheet.setListener { result ->
+                pinLat = result.lat
+                pinLng = result.lng
+                pinMapsLink = result.googleMapsLink
+                tvPinLocation.text = result.address.ifBlank { "Location set" }
+                tvPinLocation.visibility = View.VISIBLE
+                // Fill Address Line 1 when empty so the existing paste-to-parse
+                // splits it into the canonical fields; never overwrite what the
+                // user already typed.
+                if (etAddressLine1.text.isNullOrBlank() && result.address.isNotBlank()) {
+                    etAddressLine1.setText(result.address)
+                }
+            }
+            sheet.show(parentFragmentManager, "map_pin_drop")
         }
 
         btnCancel.setOnClickListener { dismissAllowingStateLoss() }
@@ -363,6 +392,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
                         CreateCpVisitRequest(
+                            clientName = etClientName.text.toString().trim().takeIf { it.isNotBlank() },
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
                             scheduledDate = selectedDate,
@@ -441,6 +471,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (et.text?.toString()?.isBlank() != false) et.setText(value)
         }
 
+        // Client name from the lead (blank-only, like the address fields).
+        val clientName = pickFirst(lead.contactName, ai?.clientName, mp?.clientName)
+        fillIfBlank(R.id.etClientName, clientName)
         fillIfBlank(R.id.etDoorNo, doorNo)
         fillIfBlank(R.id.etAddressLine1, addressLine1)
         fillIfBlank(R.id.etAddressLine2, addressLine2)
@@ -456,6 +489,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (pinMapsLink.isBlank() && !lead.suggestedGoogleMapsLink.isNullOrBlank()) {
             pinMapsLink = lead.suggestedGoogleMapsLink!!
         }
+        // Surface the web-dropped pin so the user sees the existing location
+        // (and can re-drop it from the map if it needs adjusting).
+        renderPinLocation(view)
 
         // Project — auto-pick if the lead carries one and the user
         // hasn't picked yet. Falls back gracefully if the project

@@ -379,7 +379,7 @@ class MainActivity : AppCompatActivity() {
                                         tabBarContainer.setRenderEffect(null)
                                         if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
                                     }
-                                    navTasksPeek.visibility = android.view.View.VISIBLE
+                                    updateNavTasksPeekVisibility()
                                     taskNudgeBackCallback.isEnabled = false
                                 }.start()
                                 taskNudgePager.animate()
@@ -590,6 +590,9 @@ class MainActivity : AppCompatActivity() {
         if (!force && !openTasksOnNextRefresh &&
             now - lastTasksBannerFetchAt < TASKS_BANNER_TTL_MS
         ) {
+            // Even when the fetch is throttled, navigation still needs the
+            // collapsed tab rescoped — it must vanish off the Home root.
+            updateNavTasksPeekVisibility()
             return
         }
         lastTasksBannerFetchAt = now
@@ -648,9 +651,7 @@ class MainActivity : AppCompatActivity() {
                     dueSoon > 0 -> "$pending pending · $dueSoon due"
                     else -> "$pending pending"
                 }
-                if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
-                    navTasksPeek.visibility = android.view.View.VISIBLE
-                }
+                updateNavTasksPeekVisibility()
                 val onHomeRoot =
                     currentTab == TAB_HOME && supportFragmentManager.backStackEntryCount == 0
                 val reopenDue = taskNudgeDismissedAt == 0L ||
@@ -662,10 +663,22 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 taskNudgePendingCount = 0
-                navTasksPeek.visibility = android.view.View.GONE
+                updateNavTasksPeekVisibility()
                 hideTaskNudgeOverlay(markDismissed = false)
             }
         }
+    }
+
+    /** The collapsed pending-tasks tab lives on every ROOT tab (Home,
+     *  Attendance, Chat, Apps) but never on pushed screens — a chat thread
+     *  or a form must stay clean. */
+    private fun updateNavTasksPeekVisibility() {
+        if (!::navTasksPeek.isInitialized) return
+        val show = taskNudgePendingCount > 0 &&
+            taskNudgeOverlay.visibility != android.view.View.VISIBLE &&
+            supportFragmentManager.backStackEntryCount == 0 &&
+            isBottomNavVisible
+        navTasksPeek.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun showTaskNudgeOverlay() {
@@ -767,10 +780,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         taskNudgeBackCallback.isEnabled = false
-        // Fall back to the collapsed tab so pending work stays discoverable.
-        if (taskNudgePendingCount > 0) {
-            navTasksPeek.visibility = android.view.View.VISIBLE
-        }
+        // Fall back to the collapsed tab so pending work stays discoverable
+        // (Home root only).
+        updateNavTasksPeekVisibility()
         if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) return
         // Restore accessibility reach immediately (not in the end action —
         // a cancelled animation would skip it).
@@ -1266,6 +1278,13 @@ class MainActivity : AppCompatActivity() {
         updateTabUi(index)
         applyTopBarForTab(index)
         setTabBarVisible(true)
+        // Switching tabs while the task carousel is up counts as dismissing
+        // it — otherwise its "visible" state keeps the collapsed tab hidden
+        // on the new tab (and back on Home) until the next forced refresh.
+        if (taskNudgeOverlay.visibility == android.view.View.VISIBLE) {
+            hideTaskNudgeOverlay(markDismissed = true)
+        }
+        updateNavTasksPeekVisibility()
 
         val fragment = existingTarget ?: createRootFragment(index)
         val transaction = supportFragmentManager.beginTransaction()

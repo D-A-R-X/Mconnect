@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home "Overview" section (mock parity): big title, Marketing/HR
+     segmented toggle, and a card grid per tab. Cards are inflated
+     programmatically by HomeFragment from item_overview_stat_card /
+     item_overview_stat_small. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tvOverviewTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Overview"
+        android:textColor="#101828"
+        android:textSize="24sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_overview_toggle_track"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <TextView
+            android:id="@+id/btnTabMarketing"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="Marketing"
+            android:textColor="#344054"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/btnTabHr"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_overview_toggle_thumb"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="HR"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/overviewCardsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="vertical" />
+</LinearLayout>

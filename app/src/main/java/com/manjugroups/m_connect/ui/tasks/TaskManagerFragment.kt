@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
@@ -45,6 +46,13 @@ class TaskManagerFragment : Fragment() {
     private var moduleFilter: String = "All"
     private var moduleTabsList: List<String> = listOf("All")
     private var allTasks: List<DailyTaskData> = emptyList()
+    // Infinite scroll: render 20, extend by 20 near the end. The filtered
+    // list is cached so the scroll listener doesn't re-filter on every tick.
+    private var currentFiltered: List<DailyTaskData> = emptyList()
+    private var taskLayoutManager: LinearLayoutManager? = null
+    private val pager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { render() },
+    )
     // Cache the module label per task id — moduleOf() parses the actionUrl,
     // so re-deriving it on every filter switch / bind was a real cost.
     private val moduleCache = HashMap<String, String>()
@@ -81,10 +89,13 @@ class TaskManagerFragment : Fragment() {
         ViewCompat.requestApplyInsets(view)
 
         recycler = view.findViewById<RecyclerView>(R.id.taskManagerRecycler).apply {
-            layoutManager = LinearLayoutManager(requireContext())
+            val lm = LinearLayoutManager(requireContext())
+            taskLayoutManager = lm
+            layoutManager = lm
             adapter = this@TaskManagerFragment.adapter
             setHasFixedSize(true)
             itemAnimator = null // no cross-fade churn on filter switches
+            pager.bindRecyclerView(this, lm) { currentFiltered.size }
         }
         skeleton = view.findViewById(R.id.taskManagerSkeleton)
         emptyState = view.findViewById(R.id.taskManagerEmpty)
@@ -99,12 +110,16 @@ class TaskManagerFragment : Fragment() {
         statusTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 status = statusOrder.getOrElse(index) { Status.ALL }
+                pager.reset()
+                recycler?.scrollToPosition(0)
                 render()
             }
         })
         moduleTabs?.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 moduleFilter = moduleTabsList.getOrElse(index) { "All" }
+                pager.reset()
+                recycler?.scrollToPosition(0)
                 render()
             }
         })
@@ -138,7 +153,34 @@ class TaskManagerFragment : Fragment() {
         super.onDestroyView()
     }
 
+    private fun tasksCacheKey(): String = "tasks:${session.staffId.orEmpty()}"
+
+    /** Applies a task payload (cached or fresh) to the UI. */
+    private fun applyTasksData(resp: com.manjugroups.m_connect.network.TaskManagerResponse) {
+        allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
+        teamIds = resp.teamIds.toSet()
+        scope = resp.scope
+        // Rebuild the module cache once per load.
+        moduleCache.clear()
+        for (t in allTasks) moduleCache[t.id] = computeModule(t)
+
+        renderStats()
+        renderModuleTabs()
+        pager.reset() // fresh data → back to the first window
+        render()
+        recycler?.visibility = View.VISIBLE
+    }
+
     private fun loadTasks(showSkeleton: Boolean) {
+        // Cache-first: paint the last-known tasks INSTANTLY so the skeleton
+        // only ever shows on a genuine first load with nothing cached.
+        if (allTasks.isEmpty()) {
+            runCatching {
+                LocalCache.get<com.manjugroups.m_connect.network.TaskManagerResponse>(
+                    requireContext(), tasksCacheKey(),
+                )
+            }.getOrNull()?.let { applyTasksData(it) }
+        }
         if (showSkeleton && allTasks.isEmpty()) {
             skeleton?.visibility = View.VISIBLE
             skeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
@@ -152,17 +194,12 @@ class TaskManagerFragment : Fragment() {
             try {
                 todayStr = apiDateFmt.format(System.currentTimeMillis())
                 val resp = api.getTaskManagerTasks(session.bearerToken, todayStr)
-                allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
-                teamIds = resp.teamIds.toSet()
-                scope = resp.scope
-                // Rebuild the module cache once per load.
-                moduleCache.clear()
-                for (t in allTasks) moduleCache[t.id] = computeModule(t)
-
-                renderStats()
-                renderModuleTabs()
-                render()
-                recycler?.visibility = View.VISIBLE
+                runCatching {
+                    LocalCache.put(
+                        requireContext(), tasksCacheKey(), resp, System.currentTimeMillis(),
+                    )
+                }
+                applyTasksData(resp)
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -256,11 +293,13 @@ class TaskManagerFragment : Fragment() {
         return System.currentTimeMillis() - created >= 24L * 60 * 60 * 1000
     }
 
-    /** Filter + push to the adapter — no re-inflation, RecyclerView recycles. */
+    /** Filter, then push only the current window (20, +20 on scroll). */
     private fun render() {
-        val list = visibleTasks()
-        adapter.submit(list)
-        emptyState?.visibility = if (list.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
+        val full = visibleTasks()
+        currentFiltered = full
+        adapter.submit(full.take(pager.limit))
+        // Empty state keyed off the FULL filtered size, not the window.
+        emptyState?.visibility = if (full.isEmpty() && hasLoadedOnce) View.VISIBLE else View.GONE
     }
 
     private fun bindRow(h: TaskAdapter.VH, task: DailyTaskData) {

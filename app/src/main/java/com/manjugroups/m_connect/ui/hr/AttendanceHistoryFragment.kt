@@ -22,7 +22,6 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
-import com.manjugroups.m_connect.ui.common.PaginationBarView
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
@@ -55,9 +54,14 @@ class AttendanceHistoryFragment : Fragment() {
     // Web-style rows-per-page pagination (10/25/50/100). The page resets
     // whenever the tab / search / date-filter context changes — tracked by
     // signature in submitPagedList so no listener needs to remember to.
-    private var listPage = 1
-    private var listPageSize = 10
+    // Infinite scroll: render 20, extend by 20 near the end of the list.
     private var lastPageContext: String? = null
+    private var attendanceFilteredCount = 0
+    private val attendancePager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = {
+            filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
+        },
+    )
     // All-time bounds for HR Review (which shows the entire review backlog).
     // The "All" tab now honors the date filter instead (filterFromDate/To),
     // so "Last month" and friends actually apply there.
@@ -117,19 +121,10 @@ class AttendanceHistoryFragment : Fragment() {
         session = SessionManager(requireContext())
 
         attendanceAdapter = AttendanceAdapter()
-        binding.rvAttendance.layoutManager = LinearLayoutManager(requireContext())
+        val attLm = LinearLayoutManager(requireContext())
+        binding.rvAttendance.layoutManager = attLm
         binding.rvAttendance.adapter = attendanceAdapter
-
-        binding.paginationBar.onPageChange = { p ->
-            listPage = p
-            filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
-            binding.rvAttendance.scrollToPosition(0)
-        }
-        binding.paginationBar.onPageSizeChange = { size ->
-            listPageSize = size
-            filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
-            binding.rvAttendance.scrollToPosition(0)
-        }
+        attendancePager.bindRecyclerView(binding.rvAttendance, attLm) { attendanceFilteredCount }
 
         binding.btnBack.setOnClickListener { navigateUp() }
 
@@ -524,7 +519,6 @@ class AttendanceHistoryFragment : Fragment() {
         if (isFetchingData && activeTabBackingIsEmpty()) {
             binding.rvAttendance.visibility = View.GONE
             binding.emptyState.visibility = View.GONE
-            binding.paginationBar.visibility = View.GONE
             SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
             return
         }
@@ -1417,21 +1411,17 @@ class AttendanceHistoryFragment : Fragment() {
         }
     }
 
-    /** Slice the display list to the current page and sync the footer bar. */
+    /** Submit only the current scroll window (20, +20 near the end). */
     private fun submitPagedList(display: List<Any>, query: String) {
+        attendanceFilteredCount = display.size
         val pageCtx =
-            "$activeTab|$activeSubTab|$query|$filterFromDate|$filterToDate|$listPageSize"
+            "$activeTab|$activeSubTab|$query|$filterFromDate|$filterToDate"
         if (pageCtx != lastPageContext) {
             lastPageContext = pageCtx
-            listPage = 1
+            attendancePager.reset()
+            binding.rvAttendance.scrollToPosition(0)
         }
-        listPage = listPage.coerceIn(
-            1, PaginationBarView.maxPage(display.size, listPageSize)
-        )
-        binding.paginationBar.bind(display.size, listPage, listPageSize)
-        attendanceAdapter.submitList(
-            PaginationBarView.pageOf(display, listPage, listPageSize)
-        )
+        attendanceAdapter.submitList(display.take(attendancePager.limit))
     }
 
     private inner class AttendanceAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {

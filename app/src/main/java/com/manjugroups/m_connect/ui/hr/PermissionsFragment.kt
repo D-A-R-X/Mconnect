@@ -53,6 +53,13 @@ class PermissionsFragment : Fragment() {
     // Gates the skeleton to the first load so a refresh doesn't blank the
     // list back to placeholders.
     private var hasRenderedPermissionsOnce = false
+    // Infinite scroll: render pager.limit rows, extend by a page as the list
+    // nears its end. reset() on mode/scope/tab/source change.
+    private var permWindowCtx: String? = null
+    private var permFilteredCount = 0
+    private val permPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderState(viewModel.uiState.value) },
+    )
 
     companion object {
         private const val ARG_MODE = "mode"
@@ -146,6 +153,10 @@ class PermissionsFragment : Fragment() {
             setupFilterTabs()
             updateScopeUi()
         }
+
+        // Infinite scroll: render the next page of rows as the manual
+        // permissionList (inside contentScroll) nears its end.
+        permPager.bindNestedScroll(binding.contentScroll, totalCount = { permFilteredCount })
 
         collectState()
         collectEvents()
@@ -319,6 +330,25 @@ class PermissionsFragment : Fragment() {
             // All = every request company-wide (backend gates to admins/viewAll).
             Scope.ALL -> filterHistoryPermissions(state.allApprovals.distinctBy { it.id })
         }
+
+        // Infinite-scroll windowing — key the window off the FULL filtered
+        // list. Reset whenever the mode / scope / tab or the underlying source
+        // list identity changes (a new fetch swaps the state lists), then below
+        // we render only displayPermissions.take(permPager.limit). Empty-state
+        // stays keyed off the FULL filtered size, not the window.
+        permFilteredCount = displayPermissions.size
+        val windowSource: Any = when {
+            screenMode == MODE_APPROVAL -> state.pendingApprovals
+            scope == Scope.MY -> state.myPermissions
+            scope == Scope.TEAM -> state.pendingApprovals
+            else -> state.allApprovals
+        }
+        val windowCtx = "$screenMode|$scope|$historyFilter|${System.identityHashCode(windowSource)}"
+        if (windowCtx != permWindowCtx) {
+            permWindowCtx = windowCtx
+            permPager.reset()
+        }
+
         val isLoading = state.isLoading
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
@@ -364,7 +394,7 @@ class PermissionsFragment : Fragment() {
         // when the user has the permission, so this is safe.
         val showApprovalActions = (screenMode == MODE_APPROVAL && canApprove)
             || (screenMode == MODE_HISTORY && (scope == Scope.TEAM || scope == Scope.ALL) && canApprove)
-        renderPermissions(displayPermissions, showApprovalActions)
+        renderPermissions(displayPermissions.take(permPager.limit), showApprovalActions)
     }
 
     private fun configureHistoryCard(isEmpty: Boolean) {

@@ -63,10 +63,12 @@ class CpVisitsFragment : Fragment() {
     private var rowViewCache = java.util.IdentityHashMap<TodayVisit, View>()
     private var rowsBuiltFor: List<TodayVisit>? = null
     private var rowsBuiltClockedIn: Boolean? = null
-    // Web-style rows-per-page pagination (10/25/50/100).
-    private var cpPage = 1
-    private var cpPageSize = 10
-    private var cpPageCtx: String? = null
+    // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
+    private var cpWindowCtx: String? = null
+    private var cpMatchedCount = 0
+    private val cpPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
+        onLoadMore = { renderList() },
+    )
     private var pendingEntryAnimation = true
     // True once the first CP-visit fetch has rendered. Gates the skeleton
     // so refreshes / re-opens with data already on screen don't flash the
@@ -96,24 +98,9 @@ class CpVisitsFragment : Fragment() {
         setupFilterPills(view)
         observeAttendanceState()
 
-        // Web-style rows-per-page footer; renderList slices to the page.
-        val paginationBar =
-            view.findViewById<com.manjugroups.m_connect.ui.common.PaginationBarView>(
-                R.id.cpvPaginationBar
-            )
-        val scrollToTop = {
-            view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)
-                .scrollTo(0, 0)
-        }
-        paginationBar.onPageChange = { p ->
-            cpPage = p
-            renderList()
-            scrollToTop()
-        }
-        paginationBar.onPageSizeChange = { size ->
-            cpPageSize = size
-            renderList()
-            scrollToTop()
+        // Infinite scroll: render the next 20 rows as the user nears the end.
+        view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
+            cpPager.bindNestedScroll(scroll, totalCount = { cpMatchedCount })
         }
 
         // Pull-to-refresh: re-runs the list load. The spinner is dismissed
@@ -467,11 +454,6 @@ class CpVisitsFragment : Fragment() {
         val emptyTitle = root.findViewById<TextView>(R.id.tvCpvEmptyTitle)
         val emptySubtitle = root.findViewById<TextView>(R.id.tvCpvEmptySubtitle)
 
-        val paginationBar =
-            root.findViewById<com.manjugroups.m_connect.ui.common.PaginationBarView>(
-                R.id.cpvPaginationBar
-            )
-
         // Invalidate the row cache only when the data set is replaced (new
         // fetch) or the clock-in gate flips (row action buttons depend on it).
         if (rowsBuiltFor !== allVisits || rowsBuiltClockedIn != isClockedIn) {
@@ -488,29 +470,23 @@ class CpVisitsFragment : Fragment() {
                 .any { it?.lowercase(Locale.US)?.contains(needle) == true }
         }
         val matched = allVisits.filter { matches(it) }
+        cpMatchedCount = matched.size
 
-        // Page resets whenever the filter / search / data context changes.
-        val pageCtx =
-            "$currentFilter|$needle|${System.identityHashCode(allVisits)}|$cpPageSize"
-        if (pageCtx != cpPageCtx) {
-            cpPageCtx = pageCtx
-            cpPage = 1
+        // Reset the scroll window whenever the filter / search / data changes.
+        val windowCtx =
+            "$currentFilter|$needle|${System.identityHashCode(allVisits)}"
+        if (windowCtx != cpWindowCtx) {
+            cpWindowCtx = windowCtx
+            cpPager.reset()
         }
-        cpPage = cpPage.coerceIn(
-            1,
-            com.manjugroups.m_connect.ui.common.PaginationBarView.maxPage(matched.size, cpPageSize),
-        )
-        paginationBar.bind(matched.size, cpPage, cpPageSize)
 
-        // Attach only the current page's rows.
+        // Attach only the current window's rows (20, +20 on scroll).
         list.removeAllViews()
-        com.manjugroups.m_connect.ui.common.PaginationBarView
-            .pageOf(matched, cpPage, cpPageSize)
-            .forEach { visit ->
-                val rowView = rowViewCache.getOrPut(visit) { createRow(visit, list) }
-                rowView.visibility = View.VISIBLE
-                list.addView(rowView)
-            }
+        matched.take(cpPager.limit).forEach { visit ->
+            val rowView = rowViewCache.getOrPut(visit) { createRow(visit, list) }
+            rowView.visibility = View.VISIBLE
+            list.addView(rowView)
+        }
 
         if (matched.isEmpty()) {
             list.visibility = View.GONE
