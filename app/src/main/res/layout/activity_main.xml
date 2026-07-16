@@ -36,6 +36,19 @@
             android:clickable="false"
             android:focusable="false" />
 
+        <!-- Solid fill behind the (transparent) system nav bar so scrolling
+             page content — cards, tab icons — can't show through the gap under
+             the nav buttons. Height is set to the nav-bar inset at runtime,
+             mirroring statusBarBackground at the top. -->
+        <View
+            android:id="@+id/navBarBackground"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="bottom"
+            android:background="#F1F3F8"
+            android:clickable="false"
+            android:focusable="false" />
+
         <!-- Floating pill bottom nav. Transparent background so the
              scrolling page content (the panel grey, or the cards
              themselves) shows through behind the pill's side / top

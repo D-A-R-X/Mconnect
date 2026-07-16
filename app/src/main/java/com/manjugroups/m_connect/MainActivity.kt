@@ -82,7 +82,12 @@ class MainActivity : AppCompatActivity() {
     private var inAppUpdateManager: InAppUpdateManager? = null
     private var currentTab = 0
     private var cachedTopInset = 0
+    private var cachedBottomInset = 0
     private var statusBarFullBleed = false
+    // The solid nav-bar fill is shown ONLY while the pending-task sheet is up
+    // (its transparent nav bar would otherwise reveal the page behind it);
+    // every other screen keeps the edge-to-edge transparent nav bar.
+    private var navBarSolid = false
     private var lastTrackingResumeSyncMs = 0L
     private var isBottomNavVisible = true
     // Periodic IAM polling job — runs while the activity is in the
@@ -151,6 +156,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fragmentContainer: FrameLayout
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
+    private lateinit var navBarBackground: View
     private lateinit var bottomNavFadeOverlay: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -231,6 +237,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         mainRoot = findViewById(R.id.mainRoot)
         statusBarBackground = findViewById(R.id.statusBarBackground)
+        navBarBackground = findViewById(R.id.navBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
@@ -364,6 +371,13 @@ class MainActivity : AppCompatActivity() {
                     height = cachedTopInset
                 }
             }
+            if (sys.bottom > 0) {
+                cachedBottomInset = sys.bottom
+            }
+            // Solid fill behind the nav bar, but ONLY while the task sheet is up
+            // (see navBarSolid) — its transparent nav bar would otherwise show
+            // the page bleeding through. Other screens stay edge-to-edge.
+            applyNavBarSolid()
             // When the floating tab bar is visible it already absorbs `sys.bottom`,
             // so the fragment only needs the *additional* IME height. When the tab
             // bar is hidden (chat thread, trip nav) the fragment owns the full
@@ -652,6 +666,23 @@ class MainActivity : AppCompatActivity() {
         navTasksPeek.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
     }
 
+    /** Fill the nav-bar area with a solid colour ONLY while the task sheet is
+     *  open — the sheet's transparent nav bar would otherwise reveal the page
+     *  behind it. Every other screen keeps the edge-to-edge transparent bar. */
+    private fun setNavBarSolid(solid: Boolean) {
+        if (navBarSolid == solid) return
+        navBarSolid = solid
+        applyNavBarSolid()
+    }
+
+    private fun applyNavBarSolid() {
+        if (!::navBarBackground.isInitialized) return
+        val target = if (navBarSolid) cachedBottomInset else 0
+        if (navBarBackground.layoutParams.height != target) {
+            navBarBackground.layoutParams = navBarBackground.layoutParams.apply { height = target }
+        }
+    }
+
     private fun showTaskNudgeOverlay() {
         if (pendingTasksList.isEmpty()) return
         // Don't stack a second sheet: a peek tap and a live refresh's auto-open
@@ -660,6 +691,8 @@ class MainActivity : AppCompatActivity() {
         // The collapsed peek is redundant while the sheet is up; it comes back
         // via onPendingSheetDismissed() when the sheet closes.
         navTasksPeek.visibility = android.view.View.GONE
+        // Fill the nav bar behind the sheet so the page can't bleed through it.
+        setNavBarSolid(true)
         com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount)
             .show(supportFragmentManager, TAG_PENDING_SHEET)
     }
@@ -672,6 +705,8 @@ class MainActivity : AppCompatActivity() {
      *  so this reduces to "set cool-off + re-show the peek". */
     fun onPendingSheetDismissed() {
         if (isFinishing || isDestroyed) return
+        // Sheet gone — drop the solid nav-bar fill back to transparent.
+        setNavBarSolid(false)
         hideTaskNudgeOverlay(markDismissed = true)
     }
 
