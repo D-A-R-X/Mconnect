@@ -29,6 +29,8 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         // notification id so a duplicate replaces rather than stacks.
         const val DEDUPE_WINDOW_MS = 20_000L
         const val DEDUPE_MAX_ENTRIES = 32
+        // Stable request code for the chat group-summary PendingIntent.
+        const val CHAT_SUMMARY_REQUEST = 0x5044D2
         val recentPushes = object : LinkedHashMap<String, Pair<Int, Long>>(
             DEDUPE_MAX_ENTRIES, 0.75f, true
         ) {
@@ -183,6 +185,49 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         val type = message.data["type"]
         val channelId = PushTokenManager.channelForType(type)
 
+        // Chat pushes carry a conversation identity — channelId for a group,
+        // conversationId for a DM. Collapse those per-conversation (MessagingStyle
+        // + a group summary) so a user or group that sends many messages shows as
+        // ONE expandable entry instead of one row per message.
+        val chatChannelId = message.data["channelId"]?.takeIf { it.isNotBlank() }
+        val chatConversationId = message.data["conversationId"]?.takeIf { it.isNotBlank() }
+        val convKey = chatChannelId ?: chatConversationId
+        if (convKey != null) {
+            if (!canPostNotifications()) return
+            val summaryIntent = PendingIntent.getActivity(
+                this,
+                CHAT_SUMMARY_REQUEST,
+                Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(
+                        WorkflowNotificationRoute.EXTRA_TARGET_TAB,
+                        WorkflowNotificationRoute.TAB_CHAT,
+                    )
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            ChatNotifications.postChatMessage(
+                ctx = this,
+                notifChannelId = channelId,
+                convKey = convKey,
+                isGroupChat = chatChannelId != null,
+                // The conversation's own name (channel/DM), not the display
+                // title (which for a mention is "X mentioned you").
+                conversationTitle = message.data["chatTitle"]?.takeIf { it.isNotBlank() }
+                    ?: title,
+                // Per-message sender — the backend now sends `senderName`; older
+                // payloads fall back to the title (which is the sender for a DM).
+                senderName = message.data["senderName"]?.takeIf { it.isNotBlank() }
+                    ?: title,
+                body = body,
+                sentTime = message.sentTime,
+                messageId = message.data["messageId"],
+                contentIntent = pendingIntent,
+                summaryIntent = summaryIntent,
+            )
+            return
+        }
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -201,22 +246,28 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         showNotification(notifId, notification)
     }
 
-    @SuppressLint("MissingPermission")
-    private fun showNotification(id: Int, notification: android.app.Notification) {
+    /** Shared gate for BOTH the chat-grouped path and the single-notification
+     *  path: honour the in-app notifications toggle and the runtime permission. */
+    private fun canPostNotifications(): Boolean {
         val session = com.manjugroups.m_connect.auth.SessionManager(this)
         if (!session.isNotificationEnabled) {
-            Log.w("MconnectFCM", "showNotification: skipped because notifications are toggled off in settings")
-            return
+            Log.w("MconnectFCM", "canPostNotifications: notifications toggled off in settings")
+            return false
         }
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            Log.w("MconnectFCM", "showNotification: skipped because POST_NOTIFICATIONS permission is not granted")
-            return
+            Log.w("MconnectFCM", "canPostNotifications: POST_NOTIFICATIONS not granted")
+            return false
         }
+        return true
+    }
 
+    @SuppressLint("MissingPermission")
+    private fun showNotification(id: Int, notification: android.app.Notification) {
+        if (!canPostNotifications()) return
         Log.d("MconnectFCM", "showNotification: calling notify for notification id=$id")
         NotificationManagerCompat.from(this).notify(id, notification)
     }
