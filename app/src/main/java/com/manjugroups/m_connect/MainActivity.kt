@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
     private var taskNudgeReopenJob: kotlinx.coroutines.Job? = null
     // Last open-task count, so hide() knows whether to show the peek tab.
     private var taskNudgePendingCount = 0
+    private var pendingTasksList: List<com.manjugroups.m_connect.network.DailyTaskData> = emptyList()
     // "Today" (yyyy-MM-dd) captured on the last task refresh — used by the
     // card binder to colour overdue/today deadlines.
     private var taskNudgeToday: String = ""
@@ -309,8 +310,6 @@ class MainActivity : AppCompatActivity() {
                         startY = event.rawY
                         startX = event.rawX
                         isDragging = false
-                        taskNudgeOverlay.animate().cancel()
-                        taskNudgePager.animate().cancel()
                         return true
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
@@ -318,82 +317,19 @@ class MainActivity : AppCompatActivity() {
                         val dx = event.rawX - startX
                         if (!isDragging && dy < -touchSlop && Math.abs(dy) > Math.abs(dx)) {
                             isDragging = true
-                            taskNudgeBackCallback.isEnabled = true
-                            if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
-                                taskNudgeOverlay.visibility = android.view.View.VISIBLE
-                                taskNudgeOverlay.alpha = 0f
-                                taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
-                                taskNudgePager.translationY = initialPagerY
-                                taskNudgePager.scaleX = 0.94f
-                                taskNudgePager.scaleY = 0.94f
-                                taskNudgePager.alpha = 0f
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                val blur = android.graphics.RenderEffect.createBlurEffect(
-                                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
-                                )
-                                fragmentContainer.setRenderEffect(blur)
-                                tabBarContainer.setRenderEffect(blur)
-                                if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur)
-                            }
-                            navTasksPeek.visibility = android.view.View.GONE
                         }
-                        if (isDragging) {
-                            val progress = Math.min(1.0f, Math.max(0f, -dy / maxDragDistance))
-                            taskNudgeOverlay.alpha = progress
-                            taskNudgePager.alpha = progress
-                            taskNudgePager.scaleX = 0.94f + (0.06f * progress)
-                            taskNudgePager.scaleY = 0.94f + (0.06f * progress)
-                            taskNudgePager.translationY = initialPagerY * (1.0f - progress)
-                        }
-                        return true
                     }
                     android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                         val dy = event.rawY - startY
                         if (isDragging) {
                             if (-dy > maxDragDistance * 0.3f) {
-                                // Snap fully open with overshoot
-                                taskNudgeOverlay.animate().alpha(1f).setDuration(250).start()
-                                taskNudgePager.animate()
-                                    .translationY(0f)
-                                    .alpha(1f)
-                                    .scaleX(1f)
-                                    .scaleY(1f)
-                                    .setDuration(350)
-                                    .setInterpolator(android.view.animation.OvershootInterpolator(1.1f))
-                                    .withEndAction {
-                                        scheduleTaskNudgeAutoAdvance()
-                                        fragmentContainer.importantForAccessibility =
-                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                                        tabBarContainer.importantForAccessibility =
-                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                                        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
-                                    }
-                                    .start()
-                            } else {
-                                // Animate back to hidden
-                                taskNudgeOverlay.animate().alpha(0f).setDuration(200).withEndAction {
-                                    taskNudgeOverlay.visibility = android.view.View.GONE
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        fragmentContainer.setRenderEffect(null)
-                                        tabBarContainer.setRenderEffect(null)
-                                        if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
-                                    }
-                                    updateNavTasksPeekVisibility()
-                                    taskNudgeBackCallback.isEnabled = false
-                                }.start()
-                                taskNudgePager.animate()
-                                    .translationY(initialPagerY)
-                                    .alpha(0f)
-                                    .scaleX(0.94f)
-                                    .scaleY(0.94f)
-                                    .setDuration(200)
-                                    .start()
+                                showTaskNudgeOverlay()
                             }
                         } else {
                             // Simple click/tap action
                             showTaskNudgeOverlay()
                         }
+                        isDragging = false
                         return true
                     }
                 }
@@ -644,6 +580,7 @@ class MainActivity : AppCompatActivity() {
                 val cards = open
                     .sortedByDescending { it.creationTime ?: 0.0 }
                     .take(MAX_NUDGE_CARDS)
+                pendingTasksList = cards
                 taskNudgeAdapter.submit(cards, pending, dueSoon)
                 // Collapsed tab mirrors the live count while the overlay is
                 // closed, so pending work stays visible on every root tab.
@@ -682,57 +619,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTaskNudgeOverlay() {
-        taskNudgeBackCallback.isEnabled = true
-        // Cancel any in-flight hide animation FIRST — ViewPropertyAnimator
-        // skips withEndAction on cancel, so a pending "set GONE + clear blur"
-        // can't land after this show.
-        taskNudgeOverlay.animate().cancel()
-        // Blur the page + nav behind the scrim on Android 12+; older
-        // devices just get the dim. Idempotent, so safe on re-show.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val blur = {
-                android.graphics.RenderEffect.createBlurEffect(
-                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
-                )
-            }
-            fragmentContainer.setRenderEffect(blur())
-            tabBarContainer.setRenderEffect(blur())
-            if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur())
-        }
-        if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
-            taskNudgeOverlay.alpha = 0f
-            taskNudgeOverlay.visibility = android.view.View.VISIBLE
-            // Open on the newest task, parked mid-way through the wrapped
-            // positions so cards peek in from BOTH sides and the user can
-            // swipe either direction immediately.
-            taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
-            // Entrance: the cards glide up with an ease-out settle (fast
-            // start, feather-soft landing) while the scrim fades in.
-            taskNudgePager.translationY = 64f * resources.displayMetrics.density
-            taskNudgePager.alpha = 0f
-            taskNudgePager.scaleX = 0.94f
-            taskNudgePager.scaleY = 0.94f
-            taskNudgePager.animate()
-                .translationY(0f)
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(450)
-                .setInterpolator(android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f))
-                .start()
-        }
-        taskNudgeOverlay.animate().alpha(1f).setDuration(240).start()
-        // Kick off the auto-carousel once the cards are up.
-        scheduleTaskNudgeAutoAdvance()
-        // The collapsed tab is redundant while the cards are up.
+        if (pendingTasksList.isEmpty()) return
+        
+        // Hide the old unused collapsed peek since we are showing bottom sheet
         navTasksPeek.visibility = android.view.View.GONE
-        // Modal for TalkBack too: the page + nav behind the scrim must not
-        // stay reachable while the cards are up.
-        fragmentContainer.importantForAccessibility =
-            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        tabBarContainer.importantForAccessibility =
-            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
+        
+        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount).show(supportFragmentManager, "PendingTasksBottomSheet")
     }
 
     /** Glide the carousel to the next card after a short dwell. */

@@ -2396,6 +2396,10 @@ data class DailyTaskData(
     val assignedBy: String? = null,
     val assignedToName: String? = null,
     val assignedByName: String? = null,
+    val assignedByRole: String? = null,
+    val assignedByDesignation: String? = null,
+    val creatorRole: String? = null,
+    val creatorDesignation: String? = null,
     val taskCategory: String? = null,
     val status: String? = null,
     // Module label ("HR", "Marketing", "Land Procurement", …) resolved by the

@@ -274,42 +274,23 @@
         </LinearLayout>
         </FrameLayout>
 
-        <!-- Modal task-nudge overlay: dimmed (and, on Android 12+, blurred)
-             backdrop with a swipeable carousel of pending-task cards floating
-             just above the nav pill. Tapping the backdrop or pressing back
-             dismisses it for the session; the pager's side padding lets the
-             neighbouring cards peek in like the reference mockup. -->
+
+        <!-- Dummy views for old taskNudge logic to prevent crashes -->
         <FrameLayout
             android:id="@+id/taskNudgeOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#66101828"
-            android:clipChildren="false"
-            android:visibility="gone">
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <View
+            android:id="@+id/taskNudgeScrim"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/taskNudgePager"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
-            <!-- Dismiss scrim BEHIND the pager: only touches that land outside
-                 the cards reach it, so a fling across the carousel can never
-                 end up dismissing the overlay (a full-screen clickable root
-                 would fire onClick at the end of a drag). -->
-            <View
-                android:id="@+id/taskNudgeScrim"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clickable="true"
-                android:contentDescription="Dismiss pending tasks"
-                android:focusable="true" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/taskNudgePager"
-                android:layout_width="match_parent"
-                android:layout_height="384dp"
-                android:layout_gravity="bottom"
-                android:layout_marginBottom="112dp"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:overScrollMode="never"
-                android:paddingStart="40dp"
-                android:paddingEnd="40dp" />
-        </FrameLayout>
     </FrameLayout>
 </LinearLayout>
