@@ -120,6 +120,7 @@ class HomeFragment : Fragment() {
             loadVpDashboard()
         }
         setupHomeScrollAnimation()
+        installHomeRestSettler()
         collectState()
         collectEvents()
         observeIamUpdates()
@@ -170,6 +171,36 @@ class HomeFragment : Fragment() {
             binding.edgeDragHandle.visibility = View.GONE
             binding.edgeQrPanel.visibility = View.GONE
         }
+    }
+
+    /**
+     * Belt-and-suspenders for the "banner stuck at the top" race: on some
+     * devices the header/content measure in an order that leaves
+     * homeHeaderSpacer at 0 (so the Overview/Trip drawer sits OVER the blue
+     * banner) or leaves an early scroll offset. On every layout pass for the
+     * first ~1.2s after the view is created, force the rest state — spacer =
+     * header height, scrollY 0, translations cleared — then stop so normal
+     * scrolling / the two-stage dashboard scroll aren't fought.
+     */
+    private fun installHomeRestSettler() {
+        val b = _binding ?: return
+        val observer = b.homeContent.viewTreeObserver
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            val bb = _binding ?: return@OnGlobalLayoutListener
+            val h = bb.homeHeader.height
+            if (h > 0 && bb.homeHeaderSpacer.layoutParams.height != h) {
+                bb.homeHeaderSpacer.layoutParams =
+                    bb.homeHeaderSpacer.layoutParams.apply { height = h }
+                bb.homeHeaderSpacer.requestLayout()
+            }
+            if (bb.homeContent.scrollY != 0) bb.homeContent.scrollTo(0, 0)
+            if (bb.whiteContentArea.translationY != 0f) bb.whiteContentArea.translationY = 0f
+        }
+        observer.addOnGlobalLayoutListener(listener)
+        b.homeContent.postDelayed({
+            _binding?.homeContent?.viewTreeObserver
+                ?.removeOnGlobalLayoutListener(listener)
+        }, 1200)
     }
 
     private fun setupPullToRefresh() {
@@ -406,11 +437,19 @@ class HomeFragment : Fragment() {
                 binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE
             )
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(!edgeQrActive)
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
-            Color.parseColor("#0B61CA"),
-            false,
-            fullBleed = true
-        )
+        // Home = full-bleed blue status bar with LIGHT (white) icons. Apply it
+        // now AND re-post it, so a screen we just returned from (e.g. the white
+        // Notifications header) can't win the race and leave a white status-bar
+        // strip with dark icons over the blue header.
+        val applyHomeTopBar = {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+                Color.parseColor("#0B61CA"),
+                false,
+                fullBleed = true,
+            )
+        }
+        applyHomeTopBar()
+        _binding?.root?.post { if (isResumed) applyHomeTopBar() }
         loadUnreadNotifications()
         // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)

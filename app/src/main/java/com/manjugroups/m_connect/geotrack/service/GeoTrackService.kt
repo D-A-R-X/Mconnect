@@ -967,11 +967,13 @@ class GeoTrackService : Service() {
                     eventType,
                     buildEventMetadata(),
                     signature = "tamper_$eventType",
-                    // 30 min (was 6h): a 6-hour per-type dedup window silently
-                    // dropped a genuine SECOND gps-off / airplane-mode toggle in
-                    // the same shift, so the RO was never told. 30 min still
-                    // suppresses rapid flapping but lets real repeats through.
-                    minIntervalMs = 30 * 60 * 1000L,
+                    // Report IMMEDIATELY. The 15s window only collapses the
+                    // duplicate system broadcasts a single toggle emits (Android
+                    // fires PROVIDERS_CHANGED / AIRPLANE_MODE_CHANGED more than
+                    // once) — the FIRST event still fires + syncs instantly, and
+                    // a real repeat later in the shift is NOT suppressed. (Was
+                    // 6h, which is why the RO wasn't being told.)
+                    minIntervalMs = 15 * 1000L,
                 )
             } else {
                 GeoTrackEventQueue.enqueue(this, eventType, buildEventMetadata())
