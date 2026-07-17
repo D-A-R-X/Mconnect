@@ -339,7 +339,10 @@ interface ApiService {
     suspend fun getMyLeaves(@Header("Authorization") token: String): MyLeavesResponse
 
     @GET("api/hr/leaves/pending-approvals")
-    suspend fun getPendingLeaveApprovals(@Header("Authorization") token: String): MyLeavesResponse
+    suspend fun getPendingLeaveApprovals(
+        @Header("Authorization") token: String,
+        @Query("teamOnly") teamOnly: Boolean? = null
+    ): MyLeavesResponse
 
     @POST("api/hr/leaves/apply")
     suspend fun applyLeave(
@@ -1003,6 +1006,14 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MarketingProjectsResponse
 
+    // Quick-create a project from the mobile daily-log picker (basics only;
+    // full editing happens on web).
+    @POST("api/marketing/projects/create")
+    suspend fun createProject(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectRequest,
+    ): CreateProjectResponse
+
     // Master material catalog (Project Management > Library > Material Catalog).
     @GET("api/materials")
     suspend fun getMaterials(
@@ -1498,7 +1509,15 @@ data class SessionData(
     // Source of the punch-out specifically (mobile clock-out on a biometric
     // punch-in, etc.). Falls back to `source` when absent.
     val punchOutSource: String? = null,
-    val totalMinutes: Int?
+    val totalMinutes: Int? = null,
+    // Where each punch happened: a reverse-geocoded address for mobile punches,
+    // or the biometric device / machine name (e.g. "NUTECH 2ND IN") for gate
+    // punches — mirrors the web punch log.
+    val punchInAddress: String? = null,
+    val punchOutAddress: String? = null,
+    // Storage IDs of the captured punch photos (mobile clock in/out).
+    val punchInPhoto: String? = null,
+    val punchOutPhoto: String? = null,
 )
 data class TodayShiftResponse(
     val success: Boolean? = null,
@@ -2946,6 +2965,20 @@ data class MarketingProject(
 data class MarketingProjectsResponse(
     val success: Boolean,
     val projects: List<MarketingProject> = emptyList(),
+    val error: String? = null,
+)
+
+data class CreateProjectRequest(
+    val name: String,
+    val description: String? = null,
+    val status: String = "proposed",
+    val startDate: String,
+    val endDate: String,
+    val budget: Double? = null,
+)
+data class CreateProjectResponse(
+    val success: Boolean = false,
+    val project: MarketingProject? = null,
     val error: String? = null,
 )
 
