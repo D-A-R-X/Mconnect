@@ -120,7 +120,7 @@ class HomeFragment : Fragment() {
             loadVpDashboard()
         }
         setupHomeScrollAnimation()
-        installHomeRestSettler()
+        armHomeSettle()
         collectState()
         collectEvents()
         observeIamUpdates()
@@ -182,25 +182,48 @@ class HomeFragment : Fragment() {
      * header height, scrollY 0, translations cleared — then stop so normal
      * scrolling / the two-stage dashboard scroll aren't fought.
      */
-    private fun installHomeRestSettler() {
+    /** Force the Home to its rest state: header spacer = header height (so the
+     *  drawer sits BELOW the blue banner, not over it), scroll at 0, and the
+     *  two-stage translations cleared. Called directly (resume) and from the
+     *  layout-pass settler below. */
+    private fun settleHomeToRest() {
         val b = _binding ?: return
+        val h = b.homeHeader.height
+        // Sync the spacer to the header height. Force it even when layoutParams
+        // already equals h — the VIEW can be laid out at a stale (smaller)
+        // height while layoutParams reads the right value, which left the drawer
+        // covering the banner. Re-request layout on the container so the scroll
+        // view actually re-measures the spacer.
+        if (h > 0 && (b.homeHeaderSpacer.layoutParams.height != h || b.homeHeaderSpacer.height != h)) {
+            b.homeHeaderSpacer.layoutParams =
+                b.homeHeaderSpacer.layoutParams.apply { height = h }
+            b.homeHeaderSpacer.requestLayout()
+            b.homeScrollContent.requestLayout()
+        }
+        if (b.homeContent.scrollY != 0) b.homeContent.scrollTo(0, 0)
+        if (b.whiteContentArea.translationY != 0f) b.whiteContentArea.translationY = 0f
+    }
+
+    // While elapsedRealtime() is below this, keep forcing the rest state. It
+    // covers the async loadHomeData → render → applyDashboardVisibility
+    // re-layout that lands AFTER a short one-shot window and would otherwise
+    // leave the Overview/Trip drawer stuck over the banner (esp. on resume from
+    // Notifications). collectState() also re-settles on Loaded while armed.
+    private var homeSettleDeadline = 0L
+
+    private fun armHomeSettle(durationMs: Long = 3000L) {
+        homeSettleDeadline = android.os.SystemClock.elapsedRealtime() + durationMs
+        settleHomeToRest()
+        val b = _binding ?: return
+        b.root.post { settleHomeToRest() }
         val observer = b.homeContent.viewTreeObserver
         val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            val bb = _binding ?: return@OnGlobalLayoutListener
-            val h = bb.homeHeader.height
-            if (h > 0 && bb.homeHeaderSpacer.layoutParams.height != h) {
-                bb.homeHeaderSpacer.layoutParams =
-                    bb.homeHeaderSpacer.layoutParams.apply { height = h }
-                bb.homeHeaderSpacer.requestLayout()
-            }
-            if (bb.homeContent.scrollY != 0) bb.homeContent.scrollTo(0, 0)
-            if (bb.whiteContentArea.translationY != 0f) bb.whiteContentArea.translationY = 0f
+            if (android.os.SystemClock.elapsedRealtime() <= homeSettleDeadline) settleHomeToRest()
         }
         observer.addOnGlobalLayoutListener(listener)
         b.homeContent.postDelayed({
-            _binding?.homeContent?.viewTreeObserver
-                ?.removeOnGlobalLayoutListener(listener)
-        }, 1200)
+            _binding?.homeContent?.viewTreeObserver?.removeOnGlobalLayoutListener(listener)
+        }, durationMs)
     }
 
     private fun setupPullToRefresh() {
@@ -426,6 +449,13 @@ class HomeFragment : Fragment() {
         // Clear any pull-refresh spinner left spinning from before (e.g. the
         // user opened Notifications mid-refresh and came back to a stuck loader).
         _binding?.homeRefresh?.dismissRefresh()
+        // Returning from a pushed screen (Notifications, Task Manager, …) KEEPS
+        // this fragment's view, so onViewCreated's rest-settler never re-runs —
+        // and the content came back scrolled up with the banner covered (spacer
+        // reset to 0). A layout pass may not fire on resume, so settle DIRECTLY
+        // now, again on the next frame, and once more after a beat (covers the
+        // case where the header re-measures late).
+        armHomeSettle()
         // Restore the tab bar unless the edge-QR panel or its onboarding
         // tooltip is ACTIVELY on screen. The old `hasSeenEdgeQrTooltip && …`
         // gate hid the nav FOREVER for any user who never sees that tooltip —
@@ -550,6 +580,14 @@ class HomeFragment : Fragment() {
                                     !viewModel.isVisitsLoading.value)
                             ) {
                                 renderVisitCard(state)
+                                // The render (+ applyDashboardVisibility) re-lays
+                                // the drawer out; if we're still in the post-resume
+                                // settle window, re-pin to rest so this late layout
+                                // can't leave the banner stuck at the top.
+                                if (android.os.SystemClock.elapsedRealtime() <= homeSettleDeadline) {
+                                    settleHomeToRest()
+                                    _binding?.root?.post { settleHomeToRest() }
+                                }
                             }
                             if (pendingEntryAnimation) {
                                 pendingEntryAnimation = false

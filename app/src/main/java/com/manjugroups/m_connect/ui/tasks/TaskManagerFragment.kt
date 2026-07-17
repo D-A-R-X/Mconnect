@@ -157,8 +157,19 @@ class TaskManagerFragment : Fragment() {
 
     /** Applies a task payload (cached or fresh) to the UI. */
     private fun applyTasksData(resp: com.manjugroups.m_connect.network.TaskManagerResponse) {
-        allTasks = resp.tasks.sortedByDescending { it.creationTime ?: 0.0 }
-        teamIds = resp.teamIds.toSet()
+        val tIds = resp.teamIds.toSet()
+        // The Task Manager feed is intentionally wide (own + assigned-by-me +
+        // supervised + CC'd + team). For a non-super-admin, only show tasks they
+        // actually own or that belong to their team — the assigned-by / CC'd
+        // rows were surfacing tasks unrelated to the user (e.g. a UI Designer
+        // seeing loan/asset-approval tasks assigned to others). Super-admins
+        // keep the full company feed.
+        val isSuper = session.isAdmin || session.role.equals("super-admin", ignoreCase = true)
+        val me = session.staffId
+        val scoped = if (isSuper) resp.tasks
+            else resp.tasks.filter { me != null && (it.assignedTo == me || it.assignedTo in tIds) }
+        allTasks = scoped.sortedByDescending { it.creationTime ?: 0.0 }
+        teamIds = tIds
         scope = resp.scope
         // Rebuild the module cache once per load.
         moduleCache.clear()

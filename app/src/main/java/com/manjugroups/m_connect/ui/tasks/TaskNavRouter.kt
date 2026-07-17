@@ -21,17 +21,33 @@ object TaskNavRouter {
     private const val WEB_APP_URL = "https://mg.theairix.com"
 
     fun open(activity: FragmentActivity, task: DailyTaskData) {
-        val fragment: Fragment? = when (task.sourceReferenceType?.trim()?.lowercase()) {
-            "staff-attendance" ->
+        val source = task.sourceReferenceType?.trim()?.lowercase().orEmpty()
+        val fragment: Fragment? = when {
+            source == "staff-attendance" ->
                 com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment()
-            "client_place_visit", "clientplacevisit" ->
+            source == "client_place_visit" || source == "clientplacevisit" ->
                 com.manjugroups.m_connect.ui.marketing.CpVisitsFragment()
-            "site_visit", "sitevisit" ->
+            source == "site_visit" || source == "sitevisit" ->
                 com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment()
-            "land-inspection", "landinspection", "landproperty" ->
+            source == "land-inspection" || source == "landinspection" || source == "landproperty" ->
                 com.manjugroups.m_connect.ui.library.land.LandInspectionFragment()
-            "issue" ->
+            source == "issue" ->
                 com.manjugroups.m_connect.ui.issues.IssuesFragment()
+            // Approval/request tasks — open the module screen where the work is
+            // actually done (approve / act on it) instead of dead-ending on an
+            // "open in web" dialog.
+            source == "leave" ->
+                com.manjugroups.m_connect.ui.hr.LeavesFragment.newInstance()
+            source == "permission" ->
+                com.manjugroups.m_connect.ui.hr.PermissionsFragment.newInstance()
+            source == "fine" || source == "fines" || source.startsWith("fine_") ->
+                com.manjugroups.m_connect.ui.hr.FinesDeductionsFragment()
+            source.startsWith("loan_") ->
+                com.manjugroups.m_connect.ui.library.loans.LoanDeskFragment()
+            source == "loan" || source.startsWith("loan") ->
+                com.manjugroups.m_connect.ui.library.loans.LoansFragment()
+            source.contains("booking") ->
+                com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment.newInstance()
             else -> null
         }
 
