@@ -194,14 +194,15 @@ class LeavesFragment : Fragment() {
             binding.dotScopeBadge.visibility = if (state.pendingApprovals.isNotEmpty()) View.VISIBLE else View.GONE
         }
 
-        // Team Leaves AND All Leaves both render the approvals dataset —
-        // the backend scopes it (hierarchy for approvers, everything for
-        // super admins / leaves.viewAll). Only My Leaves shows own history.
+        // My Leaves = own history. Team Leaves = reporting subtree only. All
+        // Leaves = every org leave (viewAll). Team and All are now DISTINCT
+        // datasets (previously both showed the all-leaves set, so Team was
+        // wrong for viewAll users).
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else {
             if (canApprove && activeScope != LeaveScope.MY) {
-                filterHistoryLeaves(state.pendingApprovals)
+                filterHistoryLeaves(scopedApprovals(state))
             } else {
                 filterHistoryLeaves(state.myLeaves)
             }
@@ -213,7 +214,7 @@ class LeavesFragment : Fragment() {
             // Cancelled leaves are dropped entirely — only Review / Approved /
             // Rejected are surfaced (matching the web).
             val listForCounts =
-                (if (canApprove && activeScope != LeaveScope.MY) state.pendingApprovals else state.myLeaves)
+                (if (canApprove && activeScope != LeaveScope.MY) scopedApprovals(state) else state.myLeaves)
                     .filterNot { it.status?.trim()?.lowercase(Locale.getDefault()) == "cancelled" }
             val reviewCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.REVIEW }
             val approvedCount = listForCounts.count { bucketForStatus(it.status) == StatusBucket.APPROVED }
@@ -271,7 +272,7 @@ class LeavesFragment : Fragment() {
         val sourceForWindow = if (screenMode == MODE_APPROVAL) {
             state.pendingApprovals
         } else if (canApprove && activeScope != LeaveScope.MY) {
-            state.pendingApprovals
+            scopedApprovals(state)
         } else {
             state.myLeaves
         }
@@ -312,6 +313,11 @@ class LeavesFragment : Fragment() {
             }
         }
     }
+
+    /** The approver dataset for the active scope: Team Leaves draws from the
+     *  reporting-subtree set, All Leaves from the full (viewAll) set. */
+    private fun scopedApprovals(state: LeavesState): List<LeaveData> =
+        if (activeScope == LeaveScope.TEAM) state.teamLeaves else state.pendingApprovals
 
     private fun filterHistoryLeaves(leaves: List<LeaveData>): List<LeaveData> {
         return leaves
@@ -729,7 +735,12 @@ class LeavesFragment : Fragment() {
         tvMenuTeam?.setTextColor(if (activeScope == LeaveScope.TEAM) activeColor else defaultColor)
         menuAll?.setTextColor(if (activeScope == LeaveScope.ALL) activeColor else defaultColor)
 
-        val pendingCount = viewModel.uiState.value.pendingApprovals.size
+        // Badge = the team's OPEN (awaiting-review) requests — the actionable
+        // number — not the raw size of the whole dataset (which counted every
+        // approved/rejected row too, e.g. the misleading "294").
+        val pendingCount = viewModel.uiState.value.teamLeaves.count {
+            bucketForStatus(it.status) == StatusBucket.REVIEW
+        }
         val dotBadge = popupView.findViewById<TextView>(R.id.dotTeamBadge)
         if (dotBadge != null) {
             if (pendingCount > 0) {

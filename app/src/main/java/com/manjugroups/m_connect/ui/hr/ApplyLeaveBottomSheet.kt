@@ -261,9 +261,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     if ((lp.sickPerYear ?: 12) > 0) types.add("sick")
                     if ((lp.earnedPerYear ?: 15) > 0) types.add("earned")
                     types.add("unpaid")
-                    // half_day is submitted as a casual half-day, so it is only
-                    // meaningful while casual leave is enabled.
-                    if (types.contains("casual")) types.add("half_day")
+                    // Half Day is always offered. It submits as a 0.5-day leave
+                    // of the user's first available base type (casual when the
+                    // user has it, otherwise unpaid) — see halfDayBaseType() —
+                    // so it works even for staff with no casual allocation.
+                    types.add("half_day")
                     // Compensatory Off spends earned comp-off credits through a
                     // separate flow (compoff/apply). Always offered — like web —
                     // and gated at submit-time by whether the user has credits.
@@ -418,6 +420,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * The real leave type a Half Day is booked against: the user's first
+     * available base type (casual → sick → earned → unpaid, in policy order),
+     * excluding the half_day and compensatory pseudo-categories. Falls back to
+     * unpaid so a half-day always has a valid, submittable base even when the
+     * user has no paid-leave allocation.
+     */
+    private fun halfDayBaseType(): String =
+        leaveTypes.firstOrNull { it != "half_day" && it != "compensatory" } ?: "unpaid"
+
     private fun submitLeave() {
         if (selectedLeaveType == "compensatory") {
             submitCompOff()
@@ -455,7 +467,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.applyLeave(
                     session.bearerToken,
                     ApplyLeaveRequest(
-                        leaveType = if (selectedLeaveType == "half_day") "casual" else selectedLeaveType,
+                        leaveType = if (selectedLeaveType == "half_day") halfDayBaseType() else selectedLeaveType,
                         fromDate = from,
                         toDate = to,
                         reason = if (selectedLeaveType == "half_day") "[$selectedSession] $reason".trim() else reason,
