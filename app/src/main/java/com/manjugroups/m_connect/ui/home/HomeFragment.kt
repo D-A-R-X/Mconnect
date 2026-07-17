@@ -202,6 +202,10 @@ class HomeFragment : Fragment() {
         }
         if (b.homeContent.scrollY != 0) b.homeContent.scrollTo(0, 0)
         if (b.whiteContentArea.translationY != 0f) b.whiteContentArea.translationY = 0f
+        // Clear any leftover two-stage card translation (Overview or Trip) so the
+        // section sits at its natural rest position under the header.
+        b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+        b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
     }
 
     // While elapsedRealtime() is below this, keep forcing the rest state. It
@@ -352,28 +356,37 @@ class HomeFragment : Fragment() {
                     }.getOrDefault(0)
                     if (vp > 0 && profileBottom > 0) {
                         val sLimit = h + (12 * d).toInt() - profileBottom
-                        // The extra scroll range (to lift the Overview drawer to
-                        // its limit) is only for dashboard users; a normal user's
-                        // Today's Trip view uses its natural height (no empty gap).
-                        val target = if (session.canViewVpDashboard())
-                            (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0) else 0
-                        if (b.homeScrollContent.minimumHeight != target) {
-                            b.homeScrollContent.minimumHeight = target
-                        }
-                        // Allow scrolling PAST the limit only as far as needed to
-                        // reveal cards hidden below the fold (stage 2 — the tabs pin
-                        // and the cards scroll under). Only the CARD area scrolls (the
-                        // header pins), so overflow = cardsHeight − the space between
-                        // the pinned header's bottom and the nav bar. If the grid fits
-                        // at the limit, overflow is 0 and it stops there.
-                        val headerH = b.root.findViewById<View>(R.id.overviewHeader)?.height ?: 0
-                        val cardsH = b.root.findViewById<View>(R.id.overviewCardsArea)?.height ?: 0
+                        // Both the dashboard Overview AND a normal user's Today's
+                        // Trip use the same two-stage scroll: the drawer lifts to
+                        // cover the banner (stage 1), then its sticky header pins
+                        // under the profile row and only the CARD area scrolls
+                        // under it (stage 2). Pick whichever section is live.
+                        val dashboard = session.canViewVpDashboard()
+                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
+                        // overflow = how far the cards extend past the pinned
+                        // header's bottom (space between it and the nav bar). If
+                        // they fit, overflow is 0 and the scroll stops at sLimit —
+                        // so the drawer NEVER rises above the profile/notify row.
+                        val headerH = b.root.findViewById<View>(stickyHeaderId)?.height ?: 0
+                        val cardsH = b.root.findViewById<View>(cardsAreaId)?.height ?: 0
                         val navHeight = (110 * d).toInt()
                         val availableCards = vp - navHeight - profileBottom - headerH
                         val overflow = (cardsH - availableCards).coerceAtLeast(0)
-                        b.homeContent.maxScrollY =
-                            if (session.canViewVpDashboard()) sLimit + overflow
-                            else Int.MAX_VALUE
+                        b.homeContent.maxScrollY = sLimit + overflow
+                        // Give the scroll view enough range to actually reach the
+                        // limit. Dashboard always reserves it; a normal user only
+                        // needs it when the trip list overflows the fold — a short
+                        // list keeps its natural height (no empty gap, no forced
+                        // banner-lift).
+                        val target = when {
+                            dashboard -> (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
+                            overflow > 0 -> (vp + sLimit + overflow).coerceAtLeast(0)
+                            else -> 0
+                        }
+                        if (b.homeScrollContent.minimumHeight != target) {
+                            b.homeScrollContent.minimumHeight = target
+                        }
                         // Establish the rest state ONCE, now that measurement is
                         // valid: undo any early auto-scroll (focus-driven) and
                         // clear the two-stage translations so the banner shows.
@@ -385,6 +398,8 @@ class HomeFragment : Fragment() {
                             b.whiteContentArea.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
+                            b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
                         }
                     }
                 }
@@ -421,17 +436,24 @@ class HomeFragment : Fragment() {
                     val r = drawerMaxRadiusPx * frac
                     bg.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
 
-                    // Two-stage scroll (dashboard only): once past the limit, pin
-                    // the drawer top + sticky header at the profile row and let the
-                    // card grid scroll UNDER them, so cards hidden behind the bottom
-                    // nav on short screens stay reachable.
-                    if (session.canViewVpDashboard()) {
+                    // Two-stage scroll: once past the limit, pin the drawer top +
+                    // sticky header at the profile row and let the cards scroll
+                    // UNDER them, so cards hidden behind the bottom nav stay
+                    // reachable AND the profile/notify header is never covered.
+                    // Applies to the dashboard Overview and the normal Today's Trip
+                    // list alike (whichever section is live).
+                    run {
+                        val dashboard = session.canViewVpDashboard()
+                        val cardsArea = b.root.findViewById<View>(
+                            if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
+                        )
+                        val stickyHeader = b.root.findViewById<View>(
+                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        )
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
-                        b.root.findViewById<View>(R.id.overviewCardsArea)
-                            ?.translationY = -overshoot
-                        b.root.findViewById<View>(R.id.overviewHeader)
-                            ?.translationZ = if (overshoot > 0f) 20f * den else 0f
+                        cardsArea?.translationY = -overshoot
+                        stickyHeader?.translationZ = if (overshoot > 0f) 20f * den else 0f
                         b.whiteContentArea.clipChildren = overshoot > 0f
                     }
                 }

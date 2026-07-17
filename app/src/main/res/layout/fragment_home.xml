@@ -98,6 +98,17 @@
                     android:visibility="gone"
                     android:orientation="vertical">
 
+                    <!-- Sticky trip header (title + tabs). Solid page-grey bg +
+                         a runtime elevation so the trip cards scroll UNDER it
+                         once the drawer reaches its limit — the profile/notify
+                         header above stays visible instead of being covered. -->
+                    <LinearLayout
+                        android:id="@+id/tripHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#F1F3F8"
+                        android:orientation="vertical">
+
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -251,6 +262,16 @@
                             android:textColor="#344054"
                             android:textSize="12sp" />
                     </LinearLayout>
+                    </LinearLayout><!-- /tripHeader -->
+
+                    <!-- Scrollable trip cards — slide up UNDER tripHeader once
+                         the drawer is pinned below the profile row. -->
+                    <LinearLayout
+                        android:id="@+id/tripCardsArea"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:clipChildren="false">
 
                     <LinearLayout
                         android:id="@+id/visitEmptyContent"
@@ -356,6 +377,7 @@
                                 android:background="@drawable/bg_attendance_skeleton_block" />
                         </LinearLayout>
                     </LinearLayout>
+                    </LinearLayout><!-- /tripCardsArea -->
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
