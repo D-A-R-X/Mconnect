@@ -9,6 +9,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.os.bundleOf
+import coil.load
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -35,6 +36,8 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         val timeIso: String,
         val kind: Kind,
         val source: String?,
+        val address: String?,
+        val photoId: String?,
     )
 
     private enum class Kind { IN, OUT }
@@ -64,24 +67,18 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val dateIso = arguments?.getString(ARG_DATE).orEmpty()
-        val sessionsJson = arguments?.getStringArrayList(ARG_SESSIONS) ?: arrayListOf()
+        val sessionsJson = arguments?.getString(ARG_SESSIONS).orEmpty()
         val hasOpen = arguments?.getBoolean(ARG_HAS_OPEN, false) ?: false
         val totalMinutes = arguments?.getInt(ARG_TOTAL_MIN, 0) ?: 0
 
-        // Reassemble the sessions list from the serialized strings the
-        // caller pushed in (Bundles can't carry arbitrary objects between
-        // fragments safely without Parcelable boilerplate, so we encode
-        // each session as "in|out|source").
-        val sessions: List<SessionData> = sessionsJson.map { raw ->
-            val parts = raw.split("|", limit = 4)
-            SessionData(
-                punchInTime = parts.getOrNull(0)?.takeIf { it.isNotEmpty() },
-                punchOutTime = parts.getOrNull(1)?.takeIf { it.isNotEmpty() },
-                source = parts.getOrNull(2)?.takeIf { it.isNotEmpty() },
-                punchOutSource = parts.getOrNull(3)?.takeIf { it.isNotEmpty() },
-                totalMinutes = null,
+        // Sessions are handed in as a Gson JSON blob (carries every field —
+        // source, address/machine, photo — without brittle pipe encoding).
+        val sessions: List<SessionData> = runCatching {
+            com.google.gson.Gson().fromJson<List<SessionData>>(
+                sessionsJson,
+                object : com.google.gson.reflect.TypeToken<List<SessionData>>() {}.type,
             )
-        }
+        }.getOrNull() ?: emptyList()
 
         view.findViewById<View>(R.id.btnPunchLogClose).setOnClickListener {
             dismissAllowingStateLoss()
@@ -152,6 +149,29 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
             }
             row.findViewById<TextView>(R.id.tvPunchEventSource).text =
                 (ev.source ?: "mobile").replaceFirstChar { c -> c.uppercase() }
+
+            // Where the punch happened — mobile address or biometric machine.
+            val addr = row.findViewById<TextView>(R.id.tvPunchEventAddress)
+            if (!ev.address.isNullOrBlank()) {
+                addr.text = ev.address
+                addr.visibility = View.VISIBLE
+            } else {
+                addr.visibility = View.GONE
+            }
+
+            // Captured punch photo (mobile clock in/out).
+            val photo = row.findViewById<ImageView>(R.id.ivPunchEventPhoto)
+            val pid = ev.photoId
+            if (!pid.isNullOrBlank()) {
+                photo.visibility = View.VISIBLE
+                photo.load(
+                    com.manjugroups.m_connect.BuildConfig.BASE_URL +
+                        "api/storage/serve?storageId=" + pid,
+                )
+            } else {
+                photo.visibility = View.GONE
+            }
+
             list.addView(row)
         }
     }
@@ -167,12 +187,14 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
     private fun flatten(sessions: List<SessionData>): List<Event> {
         val out = mutableListOf<Event>()
         sessions.forEach { s ->
-            s.punchInTime?.takeIf { it.isNotBlank() }?.let { out.add(Event(it, Kind.IN, s.source)) }
+            s.punchInTime?.takeIf { it.isNotBlank() }?.let {
+                out.add(Event(it, Kind.IN, s.source, s.punchInAddress, s.punchInPhoto))
+            }
             s.punchOutTime?.takeIf { it.isNotBlank() }?.let {
                 // The OUT event's chip is the punch-out's own source (e.g. a
                 // mobile clock-out on a biometric punch-in), falling back to
                 // the session source for historical rows without it.
-                out.add(Event(it, Kind.OUT, s.punchOutSource ?: s.source))
+                out.add(Event(it, Kind.OUT, s.punchOutSource ?: s.source, s.punchOutAddress, s.punchOutPhoto))
             }
         }
         return out.sortedBy { parseIsoMillis(it.timeIso) ?: Long.MAX_VALUE }
@@ -220,22 +242,14 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         private const val ARG_TOTAL_MIN = "total_min"
 
         fun newInstance(record: AttendanceRecord): AttendancePunchLogSheet {
-            // SessionData isn't Parcelable / Serializable — encode each
-            // row as "in|out|source" so we can hand it through the
-            // standard Bundle without dragging in a new dependency or a
-            // brittle hand-rolled Parcelable.
-            val encoded = ArrayList(record.sessions.orEmpty().map { s ->
-                listOf(
-                    s.punchInTime.orEmpty(),
-                    s.punchOutTime.orEmpty(),
-                    s.source.orEmpty(),
-                    s.punchOutSource.orEmpty(),
-                ).joinToString("|")
-            })
+            // SessionData isn't Parcelable — hand the sessions through as a
+            // Gson JSON blob so every field (source, address/machine, photo)
+            // survives without a brittle hand-rolled encoding.
+            val json = com.google.gson.Gson().toJson(record.sessions.orEmpty())
             return AttendancePunchLogSheet().apply {
                 arguments = bundleOf(
                     ARG_DATE to record.date.orEmpty(),
-                    ARG_SESSIONS to encoded,
+                    ARG_SESSIONS to json,
                     ARG_HAS_OPEN to (record.hasOpenSession == true),
                     ARG_TOTAL_MIN to (record.totalMinutes ?: 0),
                 )
