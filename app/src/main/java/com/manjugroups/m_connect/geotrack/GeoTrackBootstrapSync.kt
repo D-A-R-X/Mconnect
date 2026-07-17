@@ -71,6 +71,25 @@ object GeoTrackBootstrapSync {
         }.getOrNull()
 
         apply(context, bootstrap, allowPromptConsent)
+
+        // Fresh sign-in that landed inside a clock-in window → USER_LOGIN.
+        // Only consume the flag once we actually have a bootstrap result, so a
+        // failed fetch retries on the next sync instead of dropping the event.
+        // If the login was outside a tracking window (shouldTrackNow == false)
+        // we still consume it — a normal off-shift sign-in is not an event.
+        if (bootstrap != null && session.pendingLoginEvent) {
+            session.pendingLoginEvent = false
+            if (session.shouldTrackNow) {
+                runCatching {
+                    GeoTrackEventQueue.enqueue(
+                        appContext,
+                        "USER_LOGIN",
+                        GeoTrackDeviceMeta.capture(appContext),
+                    )
+                }
+            }
+        }
+
         runCatching { GeoTrackEventQueue.flush(appContext, api, session) }
         return session.shouldTrackNow
     }

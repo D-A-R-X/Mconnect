@@ -183,6 +183,16 @@ class SessionManager(context: Context) {
         get() = getCachedBoolean(KEY_SHOULD_TRACK_NOW, false)
         set(value) = setCachedBoolean(KEY_SHOULD_TRACK_NOW, value)
 
+    /**
+     * Set once at login (saveSession); consumed by the next GeoTrack bootstrap
+     * sync to raise a USER_LOGIN tamper event IF the user is inside their
+     * clock-in/tracking window. Lets us flag a mid-shift re-login without
+     * emitting an event on every ordinary morning sign-in.
+     */
+    var pendingLoginEvent: Boolean
+        get() = getCachedBoolean(KEY_PENDING_LOGIN_EVENT, false)
+        set(value) = setCachedBoolean(KEY_PENDING_LOGIN_EVENT, value)
+
     var designation: String?
         get() = getCachedString(KEY_DESIGNATION, null)
         set(value) = setCachedString(KEY_DESIGNATION, value)
@@ -419,6 +429,9 @@ class SessionManager(context: Context) {
         this.userPhone = phone
         this.mustChangePassword = false
         this.boundBaseUrl = com.manjugroups.m_connect.BuildConfig.BASE_URL
+        // Flag a fresh sign-in so the next tracking bootstrap can emit a
+        // USER_LOGIN event when it lands inside an active clock-in window.
+        this.pendingLoginEvent = true
     }
 
     fun clearSession() {
@@ -560,6 +573,7 @@ class SessionManager(context: Context) {
         private const val KEY_TRACKING_DEVICE_ID = "tracking_device_id"
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
+        private const val KEY_PENDING_LOGIN_EVENT = "pending_login_event"
         private const val KEY_BOUND_BASE_URL = "bound_base_url"
         private const val KEY_USER_PHOTO_URL = "user_photo_url"
         private const val KEY_REPORTING_TO_ID = "reporting_to_id"
