@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity() {
 
         private const val KEY_CURRENT_TAB = "current_tab"
         private const val KEY_NUDGE_DISMISSED_AT = "task_nudge_dismissed_at"
+        private const val TAG_PENDING_SHEET = "PendingTasksBottomSheet"
         private const val TAG_HOME = "root_tab_home"
         private const val TAG_HR = "root_tab_hr"
         private const val TAG_CHAT = "root_tab_chat"
@@ -81,7 +82,12 @@ class MainActivity : AppCompatActivity() {
     private var inAppUpdateManager: InAppUpdateManager? = null
     private var currentTab = 0
     private var cachedTopInset = 0
+    private var cachedBottomInset = 0
     private var statusBarFullBleed = false
+    // The solid nav-bar fill is shown ONLY while the pending-task sheet is up
+    // (its transparent nav bar would otherwise reveal the page behind it);
+    // every other screen keeps the edge-to-edge transparent nav bar.
+    private var navBarSolid = false
     private var lastTrackingResumeSyncMs = 0L
     private var isBottomNavVisible = true
     // Periodic IAM polling job — runs while the activity is in the
@@ -131,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private var taskNudgeReopenJob: kotlinx.coroutines.Job? = null
     // Last open-task count, so hide() knows whether to show the peek tab.
     private var taskNudgePendingCount = 0
+    private var pendingTasksList: List<com.manjugroups.m_connect.network.DailyTaskData> = emptyList()
     // "Today" (yyyy-MM-dd) captured on the last task refresh — used by the
     // card binder to colour overdue/today deadlines.
     private var taskNudgeToday: String = ""
@@ -149,6 +156,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fragmentContainer: FrameLayout
     private lateinit var mainRoot: LinearLayout
     private lateinit var statusBarBackground: View
+    private lateinit var navBarBackground: View
     private lateinit var bottomNavFadeOverlay: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -229,6 +237,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         mainRoot = findViewById(R.id.mainRoot)
         statusBarBackground = findViewById(R.id.statusBarBackground)
+        navBarBackground = findViewById(R.id.navBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
@@ -309,8 +318,6 @@ class MainActivity : AppCompatActivity() {
                         startY = event.rawY
                         startX = event.rawX
                         isDragging = false
-                        taskNudgeOverlay.animate().cancel()
-                        taskNudgePager.animate().cancel()
                         return true
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
@@ -318,82 +325,19 @@ class MainActivity : AppCompatActivity() {
                         val dx = event.rawX - startX
                         if (!isDragging && dy < -touchSlop && Math.abs(dy) > Math.abs(dx)) {
                             isDragging = true
-                            taskNudgeBackCallback.isEnabled = true
-                            if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
-                                taskNudgeOverlay.visibility = android.view.View.VISIBLE
-                                taskNudgeOverlay.alpha = 0f
-                                taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
-                                taskNudgePager.translationY = initialPagerY
-                                taskNudgePager.scaleX = 0.94f
-                                taskNudgePager.scaleY = 0.94f
-                                taskNudgePager.alpha = 0f
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                val blur = android.graphics.RenderEffect.createBlurEffect(
-                                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
-                                )
-                                fragmentContainer.setRenderEffect(blur)
-                                tabBarContainer.setRenderEffect(blur)
-                                if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur)
-                            }
-                            navTasksPeek.visibility = android.view.View.GONE
                         }
-                        if (isDragging) {
-                            val progress = Math.min(1.0f, Math.max(0f, -dy / maxDragDistance))
-                            taskNudgeOverlay.alpha = progress
-                            taskNudgePager.alpha = progress
-                            taskNudgePager.scaleX = 0.94f + (0.06f * progress)
-                            taskNudgePager.scaleY = 0.94f + (0.06f * progress)
-                            taskNudgePager.translationY = initialPagerY * (1.0f - progress)
-                        }
-                        return true
                     }
                     android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                         val dy = event.rawY - startY
                         if (isDragging) {
                             if (-dy > maxDragDistance * 0.3f) {
-                                // Snap fully open with overshoot
-                                taskNudgeOverlay.animate().alpha(1f).setDuration(250).start()
-                                taskNudgePager.animate()
-                                    .translationY(0f)
-                                    .alpha(1f)
-                                    .scaleX(1f)
-                                    .scaleY(1f)
-                                    .setDuration(350)
-                                    .setInterpolator(android.view.animation.OvershootInterpolator(1.1f))
-                                    .withEndAction {
-                                        scheduleTaskNudgeAutoAdvance()
-                                        fragmentContainer.importantForAccessibility =
-                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                                        tabBarContainer.importantForAccessibility =
-                                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                                        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
-                                    }
-                                    .start()
-                            } else {
-                                // Animate back to hidden
-                                taskNudgeOverlay.animate().alpha(0f).setDuration(200).withEndAction {
-                                    taskNudgeOverlay.visibility = android.view.View.GONE
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        fragmentContainer.setRenderEffect(null)
-                                        tabBarContainer.setRenderEffect(null)
-                                        if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(null)
-                                    }
-                                    updateNavTasksPeekVisibility()
-                                    taskNudgeBackCallback.isEnabled = false
-                                }.start()
-                                taskNudgePager.animate()
-                                    .translationY(initialPagerY)
-                                    .alpha(0f)
-                                    .scaleX(0.94f)
-                                    .scaleY(0.94f)
-                                    .setDuration(200)
-                                    .start()
+                                showTaskNudgeOverlay()
                             }
                         } else {
                             // Simple click/tap action
                             showTaskNudgeOverlay()
                         }
+                        isDragging = false
                         return true
                     }
                 }
@@ -427,6 +371,13 @@ class MainActivity : AppCompatActivity() {
                     height = cachedTopInset
                 }
             }
+            if (sys.bottom > 0) {
+                cachedBottomInset = sys.bottom
+            }
+            // Solid fill behind the nav bar, but ONLY while the task sheet is up
+            // (see navBarSolid) — its transparent nav bar would otherwise show
+            // the page bleeding through. Other screens stay edge-to-edge.
+            applyNavBarSolid()
             // When the floating tab bar is visible it already absorbs `sys.bottom`,
             // so the fragment only needs the *additional* IME height. When the tab
             // bar is hidden (chat thread, trip nav) the fragment owns the full
@@ -589,7 +540,10 @@ class MainActivity : AppCompatActivity() {
                 com.manjugroups.m_connect.ui.common.LocalCache.get<List<com.manjugroups.m_connect.network.DailyTaskData>>(
                     this, taskNudgeCacheKey(),
                 )
-            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { applyTaskNudge(it, fromCache = true) }
+            }.getOrNull()
+                ?.let { scopeToOwnTasks(it) }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { applyTaskNudge(it, fromCache = true) }
         }
         // This fires on every backstack change AND activity resume, each call
         // re-downloading the full task queue (hundreds of rows for admins) in
@@ -610,8 +564,10 @@ class MainActivity : AppCompatActivity() {
             val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 .format(java.util.Date())
             val open = runCatching {
-                api.getTaskManagerTasks(session.bearerToken, today)
-                    .tasks.filter { it.status == "pending" || it.status == "in-progress" }
+                scopeToOwnTasks(
+                    api.getTaskManagerTasks(session.bearerToken, today)
+                        .tasks.filter { it.status == "pending" || it.status == "in-progress" },
+                )
             }.getOrNull() ?: return@launch // network blip — the cache-painted state stays
             if (isFinishing || isDestroyed) return@launch
             // Persist for the next cold start / network blip.
@@ -625,6 +581,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun taskNudgeCacheKey(): String = "tasknudge:${session.staffId.orEmpty()}"
+
+    /**
+     * The pending-tasks nudge is a PERSONAL reminder, so a non-superadmin must
+     * only see tasks assigned to THEM. The Task Manager feed
+     * (`/api/dailyTasks/listForTaskManager`) is intentionally wider — it also
+     * returns tasks the user assigned, supervises, is CC'd on, or that belong
+     * to their team (the web splits it into tabs). Filtering only by status
+     * (as before) leaked others' tasks — e.g. a UI Designer seeing loan-approval
+     * tasks. Scope to `assignedTo == my staffId`. Super-admins keep the full
+     * feed (their nudge is company-wide by design).
+     */
+    private fun scopeToOwnTasks(
+        tasks: List<com.manjugroups.m_connect.network.DailyTaskData>,
+    ): List<com.manjugroups.m_connect.network.DailyTaskData> {
+        val isSuper = session.isAdmin || session.role.equals("super-admin", ignoreCase = true)
+        if (isSuper) return tasks
+        val me = session.staffId?.takeIf { it.isNotBlank() } ?: return emptyList()
+        return tasks.filter { it.assignedTo == me }
+    }
 
     /** Renders the pending-tasks warning (system notification, collapsed peek,
      *  and modal overlay) from an open-task list. [fromCache] paints only the
@@ -673,8 +648,10 @@ class MainActivity : AppCompatActivity() {
             val cards = open
                 .sortedByDescending { it.creationTime ?: 0.0 }
                 .take(MAX_NUDGE_CARDS)
+            // Feed the pending-tasks bottom sheet (Drazen's new UI).
+            pendingTasksList = cards
             taskNudgeAdapter.submit(cards, pending, dueSoon)
-            // Collapsed tab mirrors the live count while the overlay is
+            // Collapsed tab mirrors the live count while the sheet is
             // closed, so pending work stays visible on every root tab.
             tvNavTasksPeek.text = when {
                 dueSoon > 0 -> "$pending pending · $dueSoon due"
@@ -686,7 +663,11 @@ class MainActivity : AppCompatActivity() {
             val reopenDue = taskNudgeDismissedAt == 0L ||
                 android.os.SystemClock.elapsedRealtime() - taskNudgeDismissedAt >= NUDGE_REOPEN_MS
             when {
-                onHomeRoot && reopenDue -> showTaskNudgeOverlay()
+                // Auto-open the sheet only on a LIVE refresh — a cache-first
+                // paint just restores the collapsed peek; the sheet opens once
+                // real data confirms. This avoids popping a sheet from a
+                // possibly-stale cache and double-showing when the fetch lands.
+                !fromCache && onHomeRoot && reopenDue -> showTaskNudgeOverlay()
                 supportFragmentManager.backStackEntryCount > 0 ->
                     hideTaskNudgeOverlay(markDismissed = false)
             }
@@ -709,58 +690,48 @@ class MainActivity : AppCompatActivity() {
         navTasksPeek.visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
     }
 
+    /** Fill the nav-bar area with a solid colour ONLY while the task sheet is
+     *  open — the sheet's transparent nav bar would otherwise reveal the page
+     *  behind it. Every other screen keeps the edge-to-edge transparent bar. */
+    private fun setNavBarSolid(solid: Boolean) {
+        if (navBarSolid == solid) return
+        navBarSolid = solid
+        applyNavBarSolid()
+    }
+
+    private fun applyNavBarSolid() {
+        if (!::navBarBackground.isInitialized) return
+        val target = if (navBarSolid) cachedBottomInset else 0
+        if (navBarBackground.layoutParams.height != target) {
+            navBarBackground.layoutParams = navBarBackground.layoutParams.apply { height = target }
+        }
+    }
+
     private fun showTaskNudgeOverlay() {
-        taskNudgeBackCallback.isEnabled = true
-        // Cancel any in-flight hide animation FIRST — ViewPropertyAnimator
-        // skips withEndAction on cancel, so a pending "set GONE + clear blur"
-        // can't land after this show.
-        taskNudgeOverlay.animate().cancel()
-        // Blur the page + nav behind the scrim on Android 12+; older
-        // devices just get the dim. Idempotent, so safe on re-show.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val blur = {
-                android.graphics.RenderEffect.createBlurEffect(
-                    22f, 22f, android.graphics.Shader.TileMode.CLAMP
-                )
-            }
-            fragmentContainer.setRenderEffect(blur())
-            tabBarContainer.setRenderEffect(blur())
-            if (::bottomNavFadeOverlay.isInitialized) bottomNavFadeOverlay.setRenderEffect(blur())
-        }
-        if (taskNudgeOverlay.visibility != android.view.View.VISIBLE) {
-            taskNudgeOverlay.alpha = 0f
-            taskNudgeOverlay.visibility = android.view.View.VISIBLE
-            // Open on the newest task, parked mid-way through the wrapped
-            // positions so cards peek in from BOTH sides and the user can
-            // swipe either direction immediately.
-            taskNudgePager.scrollToPosition(taskNudgeAdapter.startPosition())
-            // Entrance: the cards glide up with an ease-out settle (fast
-            // start, feather-soft landing) while the scrim fades in.
-            taskNudgePager.translationY = 64f * resources.displayMetrics.density
-            taskNudgePager.alpha = 0f
-            taskNudgePager.scaleX = 0.94f
-            taskNudgePager.scaleY = 0.94f
-            taskNudgePager.animate()
-                .translationY(0f)
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(450)
-                .setInterpolator(android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f))
-                .start()
-        }
-        taskNudgeOverlay.animate().alpha(1f).setDuration(240).start()
-        // Kick off the auto-carousel once the cards are up.
-        scheduleTaskNudgeAutoAdvance()
-        // The collapsed tab is redundant while the cards are up.
+        if (pendingTasksList.isEmpty()) return
+        // Don't stack a second sheet: a peek tap and a live refresh's auto-open
+        // can otherwise both fire, and a config change re-adds the fragment.
+        if (supportFragmentManager.findFragmentByTag(TAG_PENDING_SHEET) != null) return
+        // The collapsed peek is redundant while the sheet is up; it comes back
+        // via onPendingSheetDismissed() when the sheet closes.
         navTasksPeek.visibility = android.view.View.GONE
-        // Modal for TalkBack too: the page + nav behind the scrim must not
-        // stay reachable while the cards are up.
-        fragmentContainer.importantForAccessibility =
-            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        tabBarContainer.importantForAccessibility =
-            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        ViewCompat.setAccessibilityPaneTitle(taskNudgeOverlay, "Pending tasks")
+        // Fill the nav bar behind the sheet so the page can't bleed through it.
+        setNavBarSolid(true)
+        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount)
+            .show(supportFragmentManager, TAG_PENDING_SHEET)
+    }
+
+    /** Called by [com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet]
+     *  when it is dismissed (close, complete, swipe-down, back). Restores the
+     *  collapsed peek so the pending-tasks reminder never vanishes, and starts
+     *  the cool-off so the sheet doesn't immediately auto-reopen on the next
+     *  refresh. hideTaskNudgeOverlay operates on the (now 0dp/dummy) overlay,
+     *  so this reduces to "set cool-off + re-show the peek". */
+    fun onPendingSheetDismissed() {
+        if (isFinishing || isDestroyed) return
+        // Sheet gone — drop the solid nav-bar fill back to transparent.
+        setNavBarSolid(false)
+        hideTaskNudgeOverlay(markDismissed = true)
     }
 
     /** Glide the carousel to the next card after a short dwell. */

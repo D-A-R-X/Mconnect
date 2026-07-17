@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Card for the Task Pending Bottom Sheet -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="10dp"
+    android:paddingTop="10dp">
+
+<androidx.constraintlayout.widget.ConstraintLayout 
+    android:id="@+id/cardInner"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_task_card_inactive">
+
+    <!-- Top Row: Index Circle and Status Pill -->
+    <LinearLayout
+        android:id="@+id/rowTop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvIndex"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_task_index_circle"
+            android:fontFamily="@font/inter_bold"
+            android:gravity="center"
+            android:text="02"
+            android:textColor="#2D68FE"
+            android:textSize="14sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:background="@drawable/bg_task_status_pill"
+            android:fontFamily="@font/inter_medium"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="In Progress"
+            android:textColor="#2D68FE"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- 3D Illustration -->
+    <ImageView
+        android:id="@+id/ivIllustration"
+        android:layout_width="140dp"
+        android:layout_height="140dp"
+        android:src="@drawable/img_task_3d_blue"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/rowTop" />
+
+    <!-- Task Title -->
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_bold"
+        android:maxLines="1"
+        android:text="Land Inspection"
+        android:textColor="#111827"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/ivIllustration" />
+
+    <!-- 'For' Pill -->
+    <LinearLayout
+        android:id="@+id/rowFor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="For"
+            android:textColor="#111827"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvProject"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_task_project_pill"
+            android:fontFamily="@font/inter_medium"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:text="LP-245 Green Valley"
+            android:textColor="#475467"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/div1"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:background="#E5E7EB"
+        app:layout_constraintTop_toBottomOf="@id/rowFor" />
+
+    <!-- Created By -->
+    <LinearLayout
+        android:id="@+id/rowCreatedBy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/div1">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:text="Created by"
+            android:textColor="#475467"
+            android:textSize="10sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvAvatar"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_task_index_circle"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="U"
+                android:textColor="#2D68FE"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvCreatorName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Alox Jonn"
+                    android:textColor="#111827"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvCreatorRole"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Super Admin"
+                    android:textColor="#475467"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:id="@+id/div2"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:background="#E5E7EB"
+        app:layout_constraintTop_toBottomOf="@id/rowCreatedBy" />
+
+    <!-- Created On -->
+    <LinearLayout
+        android:id="@+id/rowCreatedOn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/div2"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:text="Created on"
+            android:textColor="#475467"
+            android:textSize="10sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_calendar_days"
+                app:tint="#F97316" />
+
+            <TextView
+                android:id="@+id/tvCreatedOn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/inter_bold"
+                android:text="14 May 2025"
+                android:textColor="#111827"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

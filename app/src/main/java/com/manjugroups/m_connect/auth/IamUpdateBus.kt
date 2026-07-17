@@ -77,13 +77,15 @@ object IamUpdateBus {
             val fresh = resp.permissions.toSet()
             val before = session.iamPermissions
             val adminBefore = session.isAdmin
+            val roleBefore = session.role
             session.iamPermissions = fresh
             session.isAdmin = resp.isAdmin
+            session.role = resp.role
             lastRefreshMs = now
             // Only fan out when something actually changed — avoids a
             // pointless re-render storm in subscribers when the user
             // bounces the app every few seconds.
-            if (fresh != before || resp.isAdmin != adminBefore) {
+            if (fresh != before || resp.isAdmin != adminBefore || resp.role != roleBefore) {
                 _updates.tryEmit(fresh)
             }
         }
