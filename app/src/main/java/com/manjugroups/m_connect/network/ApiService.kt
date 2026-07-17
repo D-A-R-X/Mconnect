@@ -353,6 +353,16 @@ interface ApiService {
         @Body body: IdRequest
     ): SimpleResponse
 
+    // Comp Off — the credit pool that backs Compensatory Off leave.
+    @GET("api/hr/compoff/credits")
+    suspend fun getCompOffCredits(@Header("Authorization") token: String): CompOffCreditsResponse
+
+    @POST("api/hr/compoff/apply")
+    suspend fun applyCompOff(
+        @Header("Authorization") token: String,
+        @Body body: ApplyCompOffRequest
+    ): ApplyCompOffResponse
+
     @POST("api/hr/staff/me/profile-photo")
     suspend fun setMyProfilePhoto(
         @Header("Authorization") token: String,
@@ -1686,6 +1696,23 @@ data class ApplyLeaveRequest(
     val halfDayType: String? = null
 )
 data class ApplyLeaveResponse(val success: Boolean, val leaveId: String?, val error: String? = null)
+
+// Comp Off models — an earned credit is valid only within its earned month
+// and is spent on a single day to create a "compensatory" leave.
+data class CompOffCredit(
+    @SerializedName("_id") val id: String,
+    val earnedDate: String? = null,
+    val expiresAt: String? = null,
+    val source: String? = null,
+    val status: String? = null
+)
+data class CompOffCreditsResponse(
+    val success: Boolean = false,
+    val credits: List<CompOffCredit> = emptyList(),
+    val error: String? = null
+)
+data class ApplyCompOffRequest(val creditId: String, val date: String)
+data class ApplyCompOffResponse(val success: Boolean, val leaveId: String? = null, val error: String? = null)
 
 // IAM models
 data class IamPermissionsResponse(
