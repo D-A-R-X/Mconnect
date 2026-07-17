@@ -311,21 +311,48 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickProject(root: View) {
-        if (projects.isEmpty()) {
-            if (projectsLoading) {
-                pendingProjectPick = true
-                root.findViewById<TextView>(R.id.tvProjectValue).text = "Loading projects…"
-            } else {
-                context?.let { Toast.makeText(it, "No projects", Toast.LENGTH_SHORT).show() }
-                loadProjects()
-            }
+        // Still fetching the first batch — wait, then open automatically.
+        if (projects.isEmpty() && projectsLoading) {
+            pendingProjectPick = true
+            root.findViewById<TextView>(R.id.tvProjectValue).text = "Loading projects…"
             return
         }
-        val options = projects.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
-        SearchableSelectionDialog.show(requireContext(), "Select project", options) { p ->
+        // Nothing loaded yet → kick a load, but still open the picker so the
+        // "Add project" action is reachable even with an empty list.
+        if (projects.isEmpty() && !projectsLoading) loadProjects()
+
+        // A new log can only be filed against an active project — completed
+        // projects are excluded from the picker (you don't log progress on a
+        // finished job). Missing/unknown projects can be created inline.
+        val selectable = projects.filterNot { it.status.equals("completed", ignoreCase = true) }
+        val options = selectable.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
+        SearchableSelectionDialog.show(
+            requireContext(),
+            "Select project",
+            options,
+            emptyMessage = "No active projects",
+            onCreateNew = { query -> openCreateProject(root, query) },
+            createLabel = "Add project",
+        ) { p ->
             if (view == null) return@show
             selectedProject = p
             root.findViewById<TextView>(R.id.tvProjectValue).text = p.name ?: "Project"
+            saveDraft(root)
+        }
+    }
+
+    /** Inline "quick create" for a project the user searched but couldn't find.
+     *  On success the new project is added to the list, selected, and the log
+     *  form continues — full editing happens later on the web. */
+    private fun openCreateProject(root: View, prefillName: String) {
+        QuickCreateProjectSheet.show(
+            requireContext(), viewLifecycleOwner, session, prefillName,
+        ) { created ->
+            if (view == null) return@show
+            val summary = ProjectSummary(id = created.id, name = created.name, status = created.status)
+            projects = projects + summary
+            selectedProject = summary
+            root.findViewById<TextView>(R.id.tvProjectValue).text = summary.name ?: "Project"
             saveDraft(root)
         }
     }
