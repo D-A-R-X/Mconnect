@@ -72,6 +72,37 @@ interface TravelDeskApi {
         @Body body: SetDriverStatusRequest
     ): TravelDeskSimpleResponse
 
+    // ── MMS (in-house) fleet dispatcher ───────────────────────────────────
+    // Same payload shapes as the agency routes above, but authenticated with an
+    // ordinary staff token and gated on marketing.fleet.* — the travel-desk
+    // routes only accept agency sessions and reject internal agencies outright.
+
+    @GET("api/mms-fleet/dispatch/pending")
+    suspend fun listMmsPending(
+        @Header("Authorization") token: String
+    ): TravelDeskTripsResponse
+
+    @GET("api/mms-fleet/dispatch/assigned")
+    suspend fun listMmsAssigned(
+        @Header("Authorization") token: String
+    ): TravelDeskTripsResponse
+
+    @POST("api/mms-fleet/dispatch/allocate")
+    suspend fun allocateMms(
+        @Header("Authorization") token: String,
+        @Body body: AllocateTripRequest
+    ): TravelDeskAllocateResponse
+
+    @GET("api/mms-fleet/dispatch/vehicles")
+    suspend fun listMmsVehicles(
+        @Header("Authorization") token: String
+    ): TravelDeskVehiclesResponse
+
+    @GET("api/mms-fleet/dispatch/drivers")
+    suspend fun listMmsDrivers(
+        @Header("Authorization") token: String
+    ): TravelDeskDriversResponse
+
     companion object {
         fun create(): TravelDeskApi {
             val logging = HttpLoggingInterceptor().apply {

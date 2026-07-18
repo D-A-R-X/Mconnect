@@ -52,6 +52,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /** New Daily Log form. Returns [RESULT_KEY] on save so the list reloads. */
 class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
@@ -231,7 +232,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                 )
             }
         })
-        camera.show(childFragmentManager, "daily_log_camera")
+        camera.showOnce(childFragmentManager, "daily_log_camera")
     }
 
     private fun renderAttachments(root: View) {
@@ -375,7 +376,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             )
             if (view != null) { root.findViewById<TextView>(R.id.tvDateValue).text = displayDate(date); saveDraft(root) }
         }
-        picker.show(childFragmentManager, "daily_log_date")
+        picker.showOnce(childFragmentManager, "daily_log_date")
     }
 
     /** Bottom-sheet list picker (the app's shared searchable selector). */

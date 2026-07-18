@@ -31,6 +31,7 @@ import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
@@ -65,6 +66,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -225,7 +232,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             }
             SubmitLeaveConfirmSheet
                 .newInstance()
-                .show(parentFragmentManager, "submit_leave_confirm")
+                .showOnce(parentFragmentManager, "submit_leave_confirm")
             return
         }
 
@@ -242,7 +249,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
         SubmitLeaveConfirmSheet
             .newInstance()
-            .show(parentFragmentManager, "submit_leave_confirm")
+            .showOnce(parentFragmentManager, "submit_leave_confirm")
     }
 
     private fun loadLeaveTypes() {
@@ -479,7 +486,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().show(parentFragmentManager, "leave_submitted_success")
+                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }
@@ -523,7 +530,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     com.manjugroups.m_connect.network.ApplyCompOffRequest(creditId = credit.id, date = date)
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().show(parentFragmentManager, "leave_submitted_success")
+                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }

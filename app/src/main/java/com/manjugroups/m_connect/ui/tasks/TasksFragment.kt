@@ -19,11 +19,13 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskData
 import com.manjugroups.m_connect.network.TaskSummaryData
+import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * "My Tasks" — lists tasks assigned to the authenticated staff across
@@ -33,7 +35,7 @@ import java.util.Locale
  */
 class TasksFragment : Fragment() {
 
-    private enum class Filter { ALL, IN_PROGRESS, COMPLETED }
+    private enum class Filter { ALL, IN_PROGRESS, PENDING, COMPLETED }
 
     private val api = ApiService.create()
     private lateinit var session: SessionManager
@@ -47,9 +49,6 @@ class TasksFragment : Fragment() {
     private var skeletonContainer: LinearLayout? = null
     private var skeletonAnimator: ObjectAnimator? = null
     private var emptyState: View? = null
-    private var tabAll: TextView? = null
-    private var tabInProgress: TextView? = null
-    private var tabCompleted: TextView? = null
     private var tvSummaryTotal: TextView? = null
     private var tvSummaryInProgress: TextView? = null
     private var tvSummaryCompleted: TextView? = null
@@ -107,9 +106,6 @@ class TasksFragment : Fragment() {
 
         taskListContainer = view.findViewById(R.id.taskList)
         emptyState = view.findViewById(R.id.emptyState)
-        tabAll = view.findViewById(R.id.tabAll)
-        tabInProgress = view.findViewById(R.id.tabInProgress)
-        tabCompleted = view.findViewById(R.id.tabCompleted)
 
         val tasksRefresh = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.tasksRefresh)
         tasksRefresh.isNestedScrollingEnabled = true
@@ -118,43 +114,27 @@ class TasksFragment : Fragment() {
         // the fields nullable so existing call-sites (`?.text`, `?: return`)
         // silently no-op. Re-introduce the views if the summary returns.
 
-        val chips = view.findViewById<com.google.android.material.chip.ChipGroup>(R.id.categoryPills)
-        chips.setOnCheckedStateChangeListener { _, checkedIds ->
-            val checkedId = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            filter = when (checkedId) {
-                R.id.tabInProgress -> Filter.IN_PROGRESS
-                R.id.tabPending -> Filter.ALL // Assuming Pending maps to All or similar in this context
-                R.id.tabCompleted -> Filter.COMPLETED
-                else -> Filter.ALL
+        // Shared tab component (Task Manager / Attendance History use the same
+        // one) so the filter row matches the rest of the app.
+        val filterTabs = view.findViewById<HorizontalTabLayout>(R.id.taskFilterTabs)
+        val filterOrder = listOf(
+            Filter.ALL to "All",
+            Filter.IN_PROGRESS to "In progress",
+            Filter.PENDING to "Pending",
+            Filter.COMPLETED to "Completed",
+        )
+        filterTabs.setTabs(
+            filterOrder.map { HorizontalTabLayout.Tab(it.second) },
+            defaultSelection = filterOrder.indexOfFirst { it.first == filter }.coerceAtLeast(0),
+        )
+        filterTabs.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
+            override fun onTabSelected(index: Int) {
+                filter = filterOrder[index].first
+                renderTasks()
             }
-            renderTasks()
-        }
+        })
 
         loadTasks()
-    }
-
-    private fun setFilter(next: Filter) {
-        if (filter == next) return
-        filter = next
-        applyTabStyles()
-        renderTasks()
-    }
-
-    private fun applyTabStyles() {
-        listOf(
-            tabAll to (filter == Filter.ALL),
-            tabInProgress to (filter == Filter.IN_PROGRESS),
-            tabCompleted to (filter == Filter.COMPLETED),
-        ).forEach { (tab, selected) ->
-            tab ?: return@forEach
-            if (selected) {
-                tab.setBackgroundResource(R.drawable.bg_task_status_pill_active)
-                tab.setTextColor(Color.WHITE)
-            } else {
-                tab.background = null
-                tab.setTextColor(Color.parseColor("#475467"))
-            }
-        }
     }
 
     fun loadTasks() {
@@ -267,6 +247,9 @@ class TasksFragment : Fragment() {
         val visible = when (filter) {
             Filter.ALL -> allTasks
             Filter.IN_PROGRESS -> allTasks.filter { it.status == "in-progress" }
+            // Previously mapped to ALL, so the Pending tab silently showed
+            // every task regardless of status.
+            Filter.PENDING -> allTasks.filter { it.status == "pending" }
             Filter.COMPLETED -> allTasks.filter { it.status == "completed" }
         }
         emptyState?.visibility = if (visible.isEmpty()) View.VISIBLE else View.GONE
@@ -358,7 +341,7 @@ class TasksFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun getDummyTasksList(): List<TaskData> {

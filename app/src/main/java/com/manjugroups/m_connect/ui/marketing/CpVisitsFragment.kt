@@ -41,6 +41,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class CpVisitsFragment : Fragment() {
     private val geoApi = GeoTrackApi.create()
@@ -863,7 +865,7 @@ class CpVisitsFragment : Fragment() {
             cpClientMet = null,
             cpOutcome = null,
             isSvFixedHint = isSvFixed,
-        ).show(parentFragmentManager, "CompleteCpVisitBottomSheet")
+        ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
     /**
@@ -885,7 +887,7 @@ class CpVisitsFragment : Fragment() {
                 com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openCompletedDetail(visit: TodayVisit) {
@@ -896,7 +898,7 @@ class CpVisitsFragment : Fragment() {
                 CompletedVisitDetailFragment.forVisit(visit),
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openVisit(visit: TodayVisit) {
@@ -921,7 +923,7 @@ class CpVisitsFragment : Fragment() {
                 )
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     // ---------- Formatting helpers ----------
@@ -1044,6 +1046,6 @@ class CpVisitsFragment : Fragment() {
                 loadVisits()
             }
         }
-        CreateCpVisitBottomSheet.newInstance().show(parentFragmentManager, "create_cp_visit")
+        CreateCpVisitBottomSheet.newInstance().showOnce(parentFragmentManager, "create_cp_visit")
     }
 }

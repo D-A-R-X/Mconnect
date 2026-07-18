@@ -28,6 +28,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class HomeHeaderView @JvmOverloads constructor(
     context: Context,
@@ -187,11 +188,11 @@ class HomeHeaderView @JvmOverloads constructor(
                 resolvedFragment?.parentFragmentManager?.beginTransaction()
                     ?.replace(R.id.fragmentContainer, ProfileFragment())
                     ?.addToBackStack(null)
-                    ?.commit() ?: run {
+                    ?.commitOnce() ?: run {
                         getFragmentActivity(context)?.supportFragmentManager?.beginTransaction()
                             ?.replace(R.id.fragmentContainer, ProfileFragment())
                             ?.addToBackStack(null)
-                            ?.commit()
+                            ?.commitOnce()
                     }
             }
         }
@@ -202,11 +203,11 @@ class HomeHeaderView @JvmOverloads constructor(
                 resolvedFragment?.parentFragmentManager?.beginTransaction()
                     ?.replace(R.id.fragmentContainer, NotificationsFragment())
                     ?.addToBackStack(null)
-                    ?.commit() ?: run {
+                    ?.commitOnce() ?: run {
                         getFragmentActivity(context)?.supportFragmentManager?.beginTransaction()
                             ?.replace(R.id.fragmentContainer, NotificationsFragment())
                             ?.addToBackStack(null)
-                            ?.commit()
+                            ?.commitOnce()
                     }
             }
         }
@@ -297,6 +298,9 @@ class HomeHeaderView @JvmOverloads constructor(
                 ).joinToString(" • ")
                 if (role.isNotBlank()) {
                     binding.tvHeaderRole.text = role
+                }
+                staff.department?.takeIf { it.isNotBlank() }?.let {
+                    session.department = it
                 }
                 staff.designation?.takeIf { it.isNotBlank() }?.let {
                     val previous = session.isDriverMode

@@ -107,11 +107,37 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
             }
             return
         }
-        val options = projects.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
-        SearchableSelectionDialog.show(requireContext(), "Select project", options) { p ->
+        // DPRs report daily site progress, so a finished job is never a valid
+        // target — same rule (and same inline "Add project" escape hatch) the
+        // new-entry form already applies.
+        val selectable = projects.filterNot { it.status.equals("completed", ignoreCase = true) }
+        val options = selectable.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
+        SearchableSelectionDialog.show(
+            requireContext(),
+            "Select project",
+            options,
+            emptyMessage = "No active projects",
+            onCreateNew = { query -> openCreateProject(root, query) },
+            createLabel = "Add project",
+        ) { p ->
             if (view == null) return@show
             projectId = p.id
             root.findViewById<TextView>(R.id.tvDprProjectValue).text = p.name ?: "Project"
+        }
+    }
+
+    /** Inline quick-create for a project the user searched but couldn't find. */
+    private fun openCreateProject(root: View, prefillName: String) {
+        QuickCreateProjectSheet.show(
+            requireContext(), viewLifecycleOwner, session, prefillName,
+        ) { created ->
+            if (view == null) return@show
+            val summary = com.manjugroups.m_connect.network.ProjectSummary(
+                id = created.id, name = created.name, status = created.status,
+            )
+            projects = projects + summary
+            projectId = summary.id
+            root.findViewById<TextView>(R.id.tvDprProjectValue).text = summary.name ?: "Project"
         }
     }
 
@@ -144,7 +170,29 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
             if (view == null) return@show
             staffId = s.id
             root.findViewById<TextView>(R.id.tvDprStaffValue).text = s.name ?: "Staff"
-            if (!s.phone.isNullOrBlank()) root.findViewById<EditText>(R.id.etDprPhone).setText(s.phone)
+            if (!s.phone.isNullOrBlank()) {
+                root.findViewById<EditText>(R.id.etDprPhone).setText(localMobile(s.phone))
+            }
+        }
+    }
+
+    /**
+     * Strip a stored number down to the 10-digit local mobile.
+     *
+     * Staff records hold phones inconsistently — some plain, some already
+     * carrying the 91 country code — so picking a staffer could drop
+     * "919840029084" into the field even though the same person reads as
+     * "9840029084" everywhere else. The backend prepends 91 itself
+     * (normalizeIndiaWhatsAppPhone), so send it the local form and let one
+     * place own the country code.
+     */
+    private fun localMobile(raw: String?): String {
+        val digits = raw?.filter { it.isDigit() }.orEmpty()
+        return when {
+            digits.length == 12 && digits.startsWith("91") -> digits.takeLast(10)
+            digits.length == 11 && digits.startsWith("0") -> digits.takeLast(10)
+            digits.length > 10 -> digits.takeLast(10)
+            else -> digits
         }
     }
 

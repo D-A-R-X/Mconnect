@@ -51,6 +51,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Bottom sheet for logging a new project expense — the "Expense Creation"
@@ -207,7 +208,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         etDate.setText(pickedDateIso)
         etDate.setOnClickListener {
             DateFilterBottomSheet.newInstance()
-                .show(parentFragmentManager, "date_filter")
+                .showOnce(parentFragmentManager, "date_filter")
             parentFragmentManager.setFragmentResultListener(
                 DateFilterBottomSheet.REQUEST_KEY,
                 viewLifecycleOwner,

@@ -42,6 +42,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 
 class AppLibraryFragment : Fragment() {
@@ -532,18 +533,23 @@ class AppLibraryFragment : Fragment() {
         ) { openScreen(com.manjugroups.m_connect.ui.library.land.QueriesFragment()) }
 
         // ── Fleet Management ──────────────────────────────────────────────
-        // Web parity: /fleet/my-trips is DRIVER-only (roster check on the
-        // web) — marketing.siteVisits.view used to leak a Fleet card to
-        // every marketing/telecaller role.
+        // Drivers (roster check, matching the web's /fleet/my-trips gate),
+        // super-admins, and anyone granted marketing.fleet.myTrips.view.
+        // marketing.siteVisits.view used to leak this card to every
+        // marketing/telecaller role, hence the narrow gate.
         bindIamEntry(
             row = binding.itemFleetMyTrips,
-            allowed = session.isDriverMode,
+            allowed = session.canViewFleetMyTrips(),
         ) {
             openScreen(MyTripsFragment())
         }
-        // Admin Fleet is a role-based portal for external fleet agencies only —
-        // they log in and land directly on it (handled in MainActivity). It is
-        // never surfaced as a tile in the staff app library, not even for admins.
+        // Agency-only portal: external fleet agencies land on it directly and
+        // never see this library (handled in MainActivity). Deliberately NOT
+        // surfaced to staff, even fleet administrators — every screen inside
+        // calls the travel-desk API, which authenticates agency session tokens
+        // only. A staff token 401s there, and the 401 watchdog treats that as
+        // an expired session and logs the user out. Opening it up needs those
+        // routes to accept staff tokens with the fleet IAM permissions first.
         bindIamEntry(
             row = binding.itemFleetAdminFleet,
             allowed = false,
@@ -864,7 +870,7 @@ class AppLibraryFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun comingSoon(feature: String) {
@@ -872,7 +878,7 @@ class AppLibraryFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, PlaceholderFragment.newInstance("$feature - Coming Soon"))
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     override fun onResume() {

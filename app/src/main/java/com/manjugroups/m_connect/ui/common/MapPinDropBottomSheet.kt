@@ -83,6 +83,12 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)

@@ -401,14 +401,16 @@ class HomeViewModel : ViewModel() {
                         if (driverTrips.isNotEmpty()) {
                             merged.addAll(driverTrips)
                         } else if (driverResp.trips.isEmpty()) {
-                            // Endpoint authorised the driver but returned
-                            // zero rows — most often a driverPhone mismatch
-                            // between the assigned siteVisit and the
-                            // staff phone we're logged in with.
+                            // Endpoint authorised the driver but returned zero
+                            // rows. Several filters can cause that, so prefer
+                            // the server's own account of which one did —
+                            // falling back to the generic phone-mismatch hint
+                            // against a backend that doesn't send diagnostics.
                             _driverTripsError.value =
-                                "No fleet trips found for your phone. " +
-                                "Make sure the dispatcher assigned the vehicle " +
-                                "to this driver's phone number."
+                                driverResp.diagnostics?.summary()
+                                    ?: ("No fleet trips found for your phone. " +
+                                        "Make sure the dispatcher assigned the vehicle " +
+                                        "to this driver's phone number.")
                         }
                     } else {
                         val msg = driverResp.error ?: "Unknown error"

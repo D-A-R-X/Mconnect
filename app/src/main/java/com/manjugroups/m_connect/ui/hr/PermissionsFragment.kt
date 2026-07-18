@@ -31,6 +31,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class PermissionsFragment : Fragment() {
 
@@ -122,7 +123,7 @@ class PermissionsFragment : Fragment() {
                     viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
                 }
             }
-            ApplyPermissionBottomSheet.newInstance().show(parentFragmentManager, "apply_permission_sheet")
+            ApplyPermissionBottomSheet.newInstance().showOnce(parentFragmentManager, "apply_permission_sheet")
         }
 
         val cal = Calendar.getInstance()
@@ -679,7 +680,7 @@ class PermissionsFragment : Fragment() {
             resultKey = REJECT_RESULT_KEY,
             title = "Reject permission request",
             buttonText = "Reject Permission",
-        ).show(childFragmentManager, "reject_permission")
+        ).showOnce(childFragmentManager, "reject_permission")
     }
 
     private fun resolveColor(attr: Int): Int {

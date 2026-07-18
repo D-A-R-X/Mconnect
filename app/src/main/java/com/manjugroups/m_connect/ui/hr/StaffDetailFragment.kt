@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class StaffDetailFragment : Fragment() {
 
@@ -267,7 +268,7 @@ class StaffDetailFragment : Fragment() {
                             .replace(R.id.fragmentContainer,
                                 ChatMessagesFragment.forConversation(dmResp.conversationId, name))
                             .addToBackStack(null)
-                            .commit()
+                            .commitOnce()
                     }
                 } catch (_: Exception) { }
             }

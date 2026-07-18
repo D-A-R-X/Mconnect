@@ -26,6 +26,8 @@ import com.manjugroups.m_connect.ui.profile.LanguageFragment
 import com.manjugroups.m_connect.ui.profile.LogoutBottomSheet
 import com.manjugroups.m_connect.ui.profile.ProfileEditBottomSheet
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class AdminFleetSettingsFragment : Fragment() {
 
@@ -163,7 +165,7 @@ class AdminFleetSettingsFragment : Fragment() {
 
         val openEditProfile = View.OnClickListener {
             val bottomSheet = ProfileEditBottomSheet.newInstance()
-            bottomSheet.show(childFragmentManager, "ProfileEditBottomSheet")
+            bottomSheet.showOnce(childFragmentManager, "ProfileEditBottomSheet")
         }
         binding.profileAvatarContainer.setOnClickListener(openEditProfile)
         binding.rowPersonalData.setOnClickListener(openEditProfile)
@@ -173,7 +175,7 @@ class AdminFleetSettingsFragment : Fragment() {
             requireActivity().supportFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, LanguageFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         binding.rowAppearance.setOnClickListener {
@@ -181,19 +183,19 @@ class AdminFleetSettingsFragment : Fragment() {
             requireActivity().supportFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, AppearanceFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         binding.rowRateSystem.setOnClickListener {
             val ratesSheet = ManageRatesBottomSheet.newInstance()
-            ratesSheet.show(childFragmentManager, "ManageRatesBottomSheet")
+            ratesSheet.showOnce(childFragmentManager, "ManageRatesBottomSheet")
         }
 
         bindNotificationToggle()
 
         binding.rowLogout.setOnClickListener {
             val logoutSheet = LogoutBottomSheet.newInstance()
-            logoutSheet.show(childFragmentManager, "LogoutBottomSheet")
+            logoutSheet.showOnce(childFragmentManager, "LogoutBottomSheet")
         }
     }
 

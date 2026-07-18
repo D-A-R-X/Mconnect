@@ -40,6 +40,7 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Library → Loan Desk. Role dropdown (Sales Team / Legal Team / Legal
@@ -62,6 +63,13 @@ import java.util.Locale
 class LoanDeskFragment : Fragment() {
 
     private enum class RoleMode { SALES, LEGAL_TEAM, LEGAL_MANAGER }
+
+    private companion object {
+        /** IAM key that grants the Loan Desk queue. Same key the App Library
+         *  entry is gated on; default-granted to Sales / Legal Team / Legal
+         *  Manager role templates on the server. */
+        const val LOAN_DESK_PERMISSION = "postSales.loanDesk.manage"
+    }
 
     private lateinit var rvLoanDesk: RecyclerView
     private lateinit var etSearchLoanDesk: EditText
@@ -108,7 +116,7 @@ class LoanDeskFragment : Fragment() {
                 initialFrom = dateFromYmd,
                 initialTo = dateToYmd,
                 resultKey = calendarResultKey,
-            ).show(parentFragmentManager, "LoanDeskCalendarRange")
+            ).showOnce(parentFragmentManager, "LoanDeskCalendarRange")
         }
         parentFragmentManager.setFragmentResultListener(
             calendarResultKey,
@@ -138,14 +146,15 @@ class LoanDeskFragment : Fragment() {
         tvSelectedRole = view.findViewById(R.id.tvSelectedRole)
         btnRoleSelector.visibility = View.GONE
 
-        val resolved = resolveRoleFromDesignation(session.designation, session.userName)
-        if (resolved != null) {
-            currentRole = resolved
-            hasAccess = true
-        } else {
-            hasAccess = false
-            toast("Loan Desk is only available for Sales / Legal Team / Legal Manager")
-        }
+        // Access is IAM-driven (postSales.loanDesk.manage) — the same key that
+        // gates the App Library entry — instead of hard-coding designations.
+        // The designation now only decides WHICH queue to open (Sales
+        // submission vs Legal review); a permitted user whose title doesn't
+        // match one of the three falls back to the Sales queue rather than
+        // being locked out with a toast.
+        hasAccess = session.hasPermission(LOAN_DESK_PERMISSION)
+        currentRole = resolveRoleFromDesignation(session.designation, session.userName)
+            ?: RoleMode.SALES
 
         rvLoanDesk = view.findViewById(R.id.rvLoanDesk)
         rvLoanDesk.layoutManager = LinearLayoutManager(requireContext())
@@ -166,7 +175,7 @@ class LoanDeskFragment : Fragment() {
             onAcceptClick = { item -> acceptCase(item) },
             onRejectClick = { item ->
                 LoanDeskRejectBottomSheet.newInstance(item.id)
-                    .show(parentFragmentManager, "LoanDeskRejectBottomSheet")
+                    .showOnce(parentFragmentManager, "LoanDeskRejectBottomSheet")
             },
             onRectifyClick = { item -> openUploadSheet(item, isViewMode = false) },
             onAssignClick = { item -> showAssignSheet(item) },
@@ -348,7 +357,7 @@ class LoanDeskFragment : Fragment() {
             if (currentRole != RoleMode.SALES) return@newInstance
             submitLoanFromSales(item, uploads)
         }
-        sheet.show(parentFragmentManager, "LoanDeskUploadBottomSheet")
+        sheet.showOnce(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }
 
     private fun submitLoanFromSales(

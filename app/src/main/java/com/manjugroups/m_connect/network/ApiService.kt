@@ -3826,6 +3826,16 @@ data class MobileDashboardResponse(
     val present: Int = 0,
     val absent: Int = 0,
     val leave: Int = 0,
+    // Same weekday one week earlier — the baseline for the tiles' trend pills.
+    // Nullable on purpose: a backend that predates these fields returns nothing
+    // at all (Gson → null) and the app hides the pills rather than inventing a
+    // delta. Do NOT give these defaults.
+    val prevTotalCalls: Int? = null,
+    val prevIncomingCalls: Int? = null,
+    val prevOutboundCalls: Int? = null,
+    val prevHot: Int? = null,
+    val prevWarm: Int? = null,
+    val prevCold: Int? = null,
     val error: String? = null,
 )
 

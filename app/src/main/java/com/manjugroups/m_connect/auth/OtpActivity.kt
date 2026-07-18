@@ -271,6 +271,11 @@ class OtpActivity : AppCompatActivity() {
         response.user?.designation?.takeIf { it.isNotBlank() }?.let {
             session.designation = it
         }
+        // Department too — it's what separates a Transport driver from a
+        // fleet-desk administrator, and MainActivity routes on it at startup.
+        response.user?.department?.takeIf { it.isNotBlank() }?.let {
+            session.department = it
+        }
 
         // Run network requests in parallel
         val jobFleet = launch {
@@ -299,6 +304,9 @@ class OtpActivity : AppCompatActivity() {
                         session.reportingToName = staff.reportingToName
                         staff.designation?.takeIf { it.isNotBlank() }?.let {
                             session.designation = it
+                        }
+                        staff.department?.takeIf { it.isNotBlank() }?.let {
+                            session.department = it
                         }
                     }
                 }

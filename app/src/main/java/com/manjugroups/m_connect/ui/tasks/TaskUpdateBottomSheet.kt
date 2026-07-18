@@ -42,6 +42,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Sheet for staff to update an assigned task — date, status, progress,
@@ -103,6 +104,13 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input visible above the soft
+        // keyboard. Without it the keyboard overlays the lower half of the
+        // sheet — Today's Update, Issues / Blockers and the Submit button all
+        // end up underneath it with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -237,7 +245,7 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
             initialFrom = initial,
             initialTo = initial,
             resultKey = RESULT_KEY_DATE,
-        ).show(parentFragmentManager, "task_update_date")
+        ).showOnce(parentFragmentManager, "task_update_date")
     }
 
     private fun refreshPhotoStrip() {

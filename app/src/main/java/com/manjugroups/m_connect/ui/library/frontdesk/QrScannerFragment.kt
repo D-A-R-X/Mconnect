@@ -50,6 +50,7 @@ import java.util.concurrent.Executors
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 
 class QrScannerFragment : Fragment() {
@@ -109,7 +110,7 @@ class QrScannerFragment : Fragment() {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, QrHistoryFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         binding.btnHistoryVerification.setOnClickListener {
@@ -122,7 +123,7 @@ class QrScannerFragment : Fragment() {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, QrHistoryFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->

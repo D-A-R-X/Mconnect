@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.databinding.FragmentFinesDeductionsBinding
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class FinesDeductionsFragment : Fragment() {
 
@@ -92,7 +93,7 @@ class FinesDeductionsFragment : Fragment() {
                     loadFines()
                 }
             })
-            sheet.show(parentFragmentManager, "create_fine_sheet")
+            sheet.showOnce(parentFragmentManager, "create_fine_sheet")
         }
 
         // Add search filtering

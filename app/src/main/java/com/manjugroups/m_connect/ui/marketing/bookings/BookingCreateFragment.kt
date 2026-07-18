@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * KOS-52: minimal booking-create form. The picker uses
@@ -303,7 +304,7 @@ class BookingCreateFragment : Fragment() {
             initialFrom = bookingDate,
             initialTo = bookingDate,
             resultKey = RESULT_KEY_DATE,
-        ).show(parentFragmentManager, "booking_create_calendar")
+        ).showOnce(parentFragmentManager, "booking_create_calendar")
     }
 
     private fun submitBooking(root: View) {

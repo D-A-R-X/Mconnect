@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Land Procurement > Inspection screen.
@@ -252,7 +253,7 @@ class LandInspectionFragment : Fragment() {
         lastFormOpenMs = now
         SiteInspectionBottomSheet
             .newInstance(propertyId, title)
-            .show(parentFragmentManager, "site_inspection")
+            .showOnce(parentFragmentManager, "site_inspection")
     }
 
     private fun acceptInspection(propertyId: String, title: String) {
@@ -327,7 +328,7 @@ class LandInspectionFragment : Fragment() {
             resultKey = RESULT_KEY_RESCHEDULE,
             // Reschedule is a single date — no range selection.
             singleSelect = true,
-        ).show(parentFragmentManager, "reschedule_calendar")
+        ).showOnce(parentFragmentManager, "reschedule_calendar")
     }
 
     private fun requestReschedule(propertyId: String, date: String) {
@@ -382,7 +383,7 @@ class LandInspectionFragment : Fragment() {
             initialFrom = initial,
             initialTo = initial,
             resultKey = RESULT_KEY_FILTER,
-        ).show(parentFragmentManager, "filter_calendar")
+        ).showOnce(parentFragmentManager, "filter_calendar")
     }
 
     private fun updateDateFilterChip() {

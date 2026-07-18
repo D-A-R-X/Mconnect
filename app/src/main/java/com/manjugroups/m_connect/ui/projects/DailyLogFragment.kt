@@ -47,6 +47,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Daily Log — loans-style page. The lists aggregate the caller's entries /
@@ -142,10 +143,10 @@ class DailyLogFragment : Fragment() {
     private fun onAddClicked() {
         if (onNewEntryTab) {
             CreateDailyLogBottomSheet.newInstance(null, null)
-                .show(childFragmentManager, "create_daily_log")
+                .showOnce(childFragmentManager, "create_daily_log")
         } else {
             DprAddRecipientBottomSheet.newInstance()
-                .show(childFragmentManager, "dpr_add")
+                .showOnce(childFragmentManager, "dpr_add")
         }
     }
 
@@ -210,6 +211,20 @@ class DailyLogFragment : Fragment() {
         return projects
     }
 
+    /** Which cards are open. Survives re-render so a refresh doesn't collapse them. */
+    private val expandedLogIds = mutableSetOf<String>()
+
+    /** A "Label: value" row for the expanded card, or null when there's nothing to show. */
+    private fun detailRow(ctx: android.content.Context, label: String, value: String?): View? {
+        val text = value?.trim()?.takeUnless { it.isEmpty() } ?: return null
+        return TextView(ctx).apply {
+            this.text = "$label: $text"
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#475467"))
+            setPadding(0, dp(8), 0, 0)
+        }
+    }
+
     private fun renderLogs(logs: List<DailyLogEntry>) {
         logsSkeleton?.cancel(); logsSkeleton = null
         // Window the full filtered list; empty-state + count stay keyed off the
@@ -256,7 +271,7 @@ class DailyLogFragment : Fragment() {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = dp(10) }
-                setOnClickListener { openLogDetail(log) }
+
             }
             val content = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
@@ -281,17 +296,29 @@ class DailyLogFragment : Fragment() {
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
+            val expanded = expandedLogIds.contains(log.id)
+            val chevron = ImageView(ctx).apply {
+                setImageResource(R.drawable.ic_back_chevron)
+                // Points down when collapsed, up when expanded.
+                rotation = if (expanded) 90f else 270f
+                layoutParams = LinearLayout.LayoutParams(dp(14), dp(14))
+                imageTintList = android.content.res.ColorStateList.valueOf(
+                    Color.parseColor("#98A2B3"),
+                )
+            }
+            header.addView(chevron)
             // Project now shown by the section header above, so no per-card chip.
             content.addView(header)
 
-            content.addView(TextView(ctx).apply {
+            val summary = TextView(ctx).apply {
                 text = log.workSummary?.trim().takeUnless { it.isNullOrBlank() } ?: "—"
                 textSize = 13f
                 setTextColor(Color.parseColor("#475467"))
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxLines = if (expanded) Int.MAX_VALUE else 2
+                ellipsize = if (expanded) null else android.text.TextUtils.TruncateAt.END
                 setPadding(0, dp(7), 0, 0)
-            })
+            }
+            content.addView(summary)
 
             val pills = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -313,7 +340,38 @@ class DailyLogFragment : Fragment() {
             }
             if (hasPill) content.addView(pills)
 
-            if (atts.isNotEmpty()) content.addView(buildAttachmentStrip(ctx, atts))
+            // Everything below only exists while the card is open. Built up
+            // front (these are cheap text rows) and toggled, so expanding is
+            // instant and doesn't re-run the whole list render.
+            val details = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = if (expanded) View.VISIBLE else View.GONE
+            }
+            if (atts.isNotEmpty()) details.addView(buildAttachmentStrip(ctx, atts))
+            detailRow(ctx, "Issues", log.issuesEncountered)?.let { details.addView(it) }
+            detailRow(ctx, "Safety", log.safetyObservations)?.let { details.addView(it) }
+            detailRow(ctx, "Supervisor", log.supervisorName)?.let { details.addView(it) }
+            details.addView(TextView(ctx).apply {
+                text = "View full details"
+                textSize = 12.5f
+                setTextColor(Color.parseColor("#0B61CA"))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(0, dp(12), 0, 0)
+                isClickable = true
+                setOnClickListener { openLogDetail(log) }
+            })
+            content.addView(details)
+
+            cardView.setOnClickListener {
+                val nowExpanded = !expandedLogIds.contains(log.id)
+                if (nowExpanded) expandedLogIds.add(log.id) else expandedLogIds.remove(log.id)
+                details.visibility = if (nowExpanded) View.VISIBLE else View.GONE
+                summary.maxLines = if (nowExpanded) Int.MAX_VALUE else 2
+                summary.ellipsize =
+                    if (nowExpanded) null else android.text.TextUtils.TruncateAt.END
+                chevron.animate().rotation(if (nowExpanded) 90f else 270f)
+                    .setDuration(160).start()
+            }
 
             cardView.addView(content)
             c.addView(cardView)
@@ -666,7 +724,7 @@ class DailyLogFragment : Fragment() {
         // Fold in device-cached media when the server has none (pre-deploy).
         val merged = log.copy(attachments = mergedAttachments(requireContext(), log))
         val json = runCatching { com.google.gson.Gson().toJson(merged) }.getOrNull() ?: return
-        DailyLogDetailBottomSheet.newInstance(json).show(childFragmentManager, "daily_log_detail")
+        DailyLogDetailBottomSheet.newInstance(json).showOnce(childFragmentManager, "daily_log_detail")
     }
 
     /** Server attachments if present, else the device-local cache for this log. */

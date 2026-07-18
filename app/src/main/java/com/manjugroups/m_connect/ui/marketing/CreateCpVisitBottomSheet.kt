@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
@@ -124,6 +125,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -292,7 +299,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     etAddressLine1.setText(result.address)
                 }
             }
-            sheet.show(parentFragmentManager, "map_pin_drop")
+            sheet.showOnce(parentFragmentManager, "map_pin_drop")
         }
 
         btnCancel.setOnClickListener { dismissAllowingStateLoss() }
@@ -722,7 +729,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             initialFrom = selectedDate.takeIf { it.isNotBlank() } ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time),
             initialTo = selectedDate.takeIf { it.isNotBlank() } ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time),
             resultKey = RESULT_KEY_DATE
-        ).show(parentFragmentManager, "cp_visit_create_calendar")
+        ).showOnce(parentFragmentManager, "cp_visit_create_calendar")
     }
 
     private fun toast(message: String) {

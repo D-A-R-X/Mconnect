@@ -44,6 +44,7 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 enum class NotificationCategory {
     CHATS, HR, TASKS, OPERATIONS, GENERAL
@@ -361,7 +362,7 @@ class NotificationsFragment : Fragment() {
                         .applySmoothTransitions()
                         .replace(R.id.fragmentContainer, fragment)
                         .addToBackStack(null)
-                        .commit()
+                        .commitOnce()
                 }
                 fragment != null -> {
                     Toast.makeText(

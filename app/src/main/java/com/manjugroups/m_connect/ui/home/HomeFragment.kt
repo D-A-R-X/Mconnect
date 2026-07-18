@@ -35,6 +35,10 @@ import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class HomeFragment : Fragment() {
 
@@ -879,9 +883,29 @@ class HomeFragment : Fragment() {
         if (displayCount == 0) {
             binding.visitListContent.visibility = View.GONE
             binding.visitEmptyContent.visibility = View.VISIBLE
-            // Match Frame 4 text exactly
-            binding.tvVisitEmptyTitle.text = "No Trips Available"
-            binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
+            // Drivers get the reason, not the generic copy. My Trips already
+            // surfaced this; Home didn't, so a driver whose fleet fetch failed
+            // (most often the dispatcher assigned the vehicle to a different
+            // phone number than the one they log in with) saw a bare "No Trips
+            // Available" with nothing to act on.
+            val driverErr = viewModel.driverTripsError.value
+            if (session.isDriverMode && !driverErr.isNullOrBlank()) {
+                binding.tvVisitEmptyTitle.text = "No Driver Trips"
+                // Name the number we actually searched with. "Check the phone
+                // number" is useless without it — this way the driver can hold
+                // the screen next to the dispatcher's Fleet row and see the
+                // mismatch immediately, instead of it being guesswork.
+                val phone = session.userPhone?.trim().orEmpty()
+                binding.tvVisitEmptySubtitle.text = if (phone.isNotEmpty()) {
+                    "$driverErr\n\nSearched for: $phone"
+                } else {
+                    driverErr
+                }
+            } else {
+                // Match Frame 4 text exactly
+                binding.tvVisitEmptyTitle.text = "No Trips Available"
+                binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
+            }
             return
         }
 
@@ -1075,7 +1099,7 @@ class HomeFragment : Fragment() {
             initialTo = initial,
             resultKey = DASH_DATE_RESULT_KEY,
             singleSelect = true,
-        ).show(parentFragmentManager, "dash_date_picker")
+        ).showOnce(parentFragmentManager, "dash_date_picker")
     }
 
     /** Header + date-chip copy for the current dashboard date. */
@@ -1160,6 +1184,52 @@ class HomeFragment : Fragment() {
         set(R.id.numCold, d.cold)
         set(R.id.numSv, d.svVisitsFixed)
         set(R.id.numCp, d.cpVisitsFixed)
+
+        // Trend pills. These were hardcoded strings with no ids ("↗ 12% vs
+        // last week" sat under a value of 0), so they were decoration that
+        // read as data. Now driven off the same-weekday-last-week baseline,
+        // and hidden outright when there is nothing true to say.
+        bindTrend(root, R.id.trendCalls, d.totalCalls, d.prevTotalCalls)
+        bindTrend(root, R.id.trendIncoming, d.incomingCalls, d.prevIncomingCalls)
+        bindTrend(root, R.id.trendOutgoing, d.outboundCalls, d.prevOutboundCalls)
+
+        // Present-vs-headcount needs no backend support — both numbers are
+        // already on this response.
+        root.findViewById<android.widget.TextView>(R.id.trendPresent)?.let { pill ->
+            if (d.totalStaff <= 0) {
+                pill.visibility = View.GONE
+            } else {
+                pill.visibility = View.VISIBLE
+                val pct = (d.present * 100.0 / d.totalStaff).roundToInt()
+                pill.text = "$pct% of Total"
+            }
+        }
+    }
+
+    /**
+     * Render a "vs last week" pill, or hide it. [previous] is null on a backend
+     * that predates the comparison fields — in that case showing any delta
+     * would be a guess, so the pill goes away.
+     */
+    private fun bindTrend(root: View, pillId: Int, current: Int, previous: Int?) {
+        val pill = root.findViewById<android.widget.TextView>(pillId) ?: return
+        if (previous == null || (previous == 0 && current == 0)) {
+            pill.visibility = View.GONE
+            return
+        }
+        pill.visibility = View.VISIBLE
+        pill.text = when {
+            previous == 0 -> "↗ new vs last week"
+            else -> {
+                val delta = (current - previous) * 100.0 / previous
+                val arrow = when {
+                    delta > 0 -> "↗"
+                    delta < 0 -> "↘"
+                    else -> "→"
+                }
+                "$arrow ${abs(delta).roundToInt()}% vs last week"
+            }
+        }
     }
 
     private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {
@@ -1259,7 +1329,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun createVisitItem(
@@ -1401,7 +1471,7 @@ class HomeFragment : Fragment() {
             if (isCompleted) {
                 val openDetail: (View) -> Unit = {
                     DriverTripCompletedBottomSheet.newInstance(visit.id)
-                        .show(parentFragmentManager, "driver_trip_completed")
+                        .showOnce(parentFragmentManager, "driver_trip_completed")
                 }
                 itemView.isClickable = true
                 itemView.isFocusable = true
@@ -1411,13 +1481,23 @@ class HomeFragment : Fragment() {
             } else if (!isInProgress && canStartTrip) {
                 val startTrip: (View) -> Unit = {
                     DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
-                        .show(parentFragmentManager, "driver_start_trip")
+                        .showOnce(parentFragmentManager, "driver_start_trip")
                 }
                 itemView.isClickable = true
                 itemView.isFocusable = true
                 itemView.setOnClickListener(startTrip)
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(startTrip)
+            } else if (!isInProgress && !canStartTrip) {
+                // The card says "Clock In First" — so take them there instead of
+                // opening trip navigation they can't act on yet. Same redirect
+                // CP Visits already uses for this state.
+                val goClockIn: (View) -> Unit = { openClockInForTrip() }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(goClockIn)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(goClockIn)
             } else {
                 val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
                 itemView.isClickable = true
@@ -1543,7 +1623,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openCompletedVisitDetail(visit: TodayVisit) {
@@ -1553,7 +1633,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     /**
@@ -1597,7 +1677,7 @@ class HomeFragment : Fragment() {
                 cpOutcome = visit.cpVisit?.outcome,
                 isSvFixedHint = visit.visitCategory == "sv_cum_cp",
             )
-            .show(parentFragmentManager, "cp_visit_complete")
+            .showOnce(parentFragmentManager, "cp_visit_complete")
     }
 
     private fun openTripNavigationForPlace(place: AssignedPlace) {
@@ -1612,7 +1692,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun applyItemSpacing(itemView: View, index: Int, total: Int) {
@@ -1747,6 +1827,26 @@ class HomeFragment : Fragment() {
             tabHr.setTextColor(Color.parseColor("#475467"))
             tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
         }
+    }
+
+    /**
+     * Send a driver whose trip is blocked on attendance to the clock-in screen.
+     * Mirrors CpVisitsFragment's handling of the same state.
+     */
+    private fun openClockInForTrip() {
+        android.widget.Toast.makeText(
+            requireContext(),
+            "Clock in to start your trip",
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+        parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
+            .replace(
+                R.id.fragmentContainer,
+                com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+            )
+            .addToBackStack(null)
+            .commitOnce()
     }
 
     private fun setupDriverTabs() {
@@ -1906,7 +2006,7 @@ class HomeFragment : Fragment() {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
     }
 

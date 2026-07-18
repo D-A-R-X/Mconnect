@@ -29,6 +29,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Sales executive's "My Collections" library screen.
@@ -149,7 +150,7 @@ class CollectionsFragment : Fragment() {
 
         binding.btnAddCollection.setOnClickListener {
             CollectionCreateBottomSheet.newInstance()
-                .show(parentFragmentManager, "CollectionCreateBottomSheet")
+                .showOnce(parentFragmentManager, "CollectionCreateBottomSheet")
         }
 
         binding.btnCollectionsCalendar.setOnClickListener {
@@ -159,7 +160,7 @@ class CollectionsFragment : Fragment() {
                 initialFrom = dateFromYmd,
                 initialTo = dateToYmd,
                 resultKey = calendarResultKey,
-            ).show(parentFragmentManager, "CollectionsCalendarRange")
+            ).showOnce(parentFragmentManager, "CollectionsCalendarRange")
         }
         parentFragmentManager.setFragmentResultListener(
             calendarResultKey,
@@ -221,7 +222,7 @@ class CollectionsFragment : Fragment() {
             item = item,
             caseId = row.caseId,
             bookingLabel = bookingLabel,
-        ).show(parentFragmentManager, "CollectionCreateBottomSheet")
+        ).showOnce(parentFragmentManager, "CollectionCreateBottomSheet")
     }
 
     private fun buildBookingLabel(row: CustomerCollectionRow): String {

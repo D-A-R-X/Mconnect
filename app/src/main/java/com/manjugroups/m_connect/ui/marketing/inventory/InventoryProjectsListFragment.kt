@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * KOS-52: lists projects available to this staff so they can drill into the
@@ -134,6 +135,6 @@ class InventoryProjectsListFragment : Fragment() {
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 }

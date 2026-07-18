@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class ProfileEditBottomSheet : BottomSheetDialogFragment() {
 
@@ -58,6 +59,12 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -129,7 +136,7 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
         val dialog = ProfilePhotoCropDialog()
         dialog.setSource(uri)
         dialog.setListener { bitmap -> uploadProfilePhoto(bitmap) }
-        dialog.show(childFragmentManager, "ProfilePhotoCrop")
+        dialog.showOnce(childFragmentManager, "ProfilePhotoCrop")
     }
 
     private fun uploadProfilePhoto(bitmap: Bitmap) {

@@ -197,13 +197,38 @@ class SessionManager(context: Context) {
         get() = getCachedString(KEY_DESIGNATION, null)
         set(value) = setCachedString(KEY_DESIGNATION, value)
 
+    /**
+     * Staff department. Needed alongside designation because the two driver
+     * populations are told apart by it: "Driver • Transport" drives, while
+     * "Driver • Administration" runs the fleet desk.
+     */
+    var department: String?
+        get() = getCachedString(KEY_DEPARTMENT, null)
+        set(value) = setCachedString(KEY_DEPARTMENT, value)
+
     var fleetDriverByBackend: Boolean
         get() = getCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, false)
         set(value) = setCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, value)
 
+    /**
+     * Fleet-desk staff: designation "Driver" but department "Administration".
+     *
+     * There are two driver populations. "Driver • Transport" actually drives and
+     * gets the trip UI; "Driver • Administration" runs the fleet desk and gets
+     * the Admin Fleet portal instead. Designation alone can't tell them apart,
+     * which is why department is now persisted on the session.
+     */
+    val isFleetAdminDriver: Boolean
+        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true) &&
+            (department ?: "").trim().equals("Administration", ignoreCase = true)
+
     val isDriverMode: Boolean
-        get() = fleetDriverByBackend ||
-            (designation ?: "").trim().equals("Driver", ignoreCase = true)
+        // A fleet administrator is never in driver mode — they have no trips of
+        // their own, and driver mode would put them on the "No Driver Trips"
+        // home instead of their portal.
+        get() = !isFleetAdminDriver &&
+            (fleetDriverByBackend ||
+                (designation ?: "").trim().equals("Driver", ignoreCase = true))
 
     var isNotificationEnabled: Boolean
         get() = getCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
@@ -389,6 +414,23 @@ class SessionManager(context: Context) {
         set(value) = setCachedString(KEY_BOUND_BASE_URL, value)
 
     fun hasPermission(perm: String): Boolean = isAdmin || iamPermissions.contains(perm)
+
+    /**
+     * Who sees Fleet Management → My Trips in the App Library.
+     *
+     * Drivers get it from their designation (the web's roster check), plus
+     * super-admins, plus anyone explicitly granted the IAM key.
+     *
+     * Deliberately does NOT use hasPermission(): until the key is actually
+     * granted to someone, that collapses to the blanket `isAdmin` flag, which
+     * is set for many non-admin roles — the same phantom-key leak documented
+     * on canViewVpDashboard.
+     */
+    fun canViewFleetMyTrips(): Boolean {
+        if (isDriverMode) return true
+        if ((role ?: "").trim().equals("super-admin", ignoreCase = true)) return true
+        return iamPermissions.contains("marketing.fleet.myTrips.view")
+    }
 
     /**
      * Who sees the company-wide Home dashboard (everyone else gets Today's Trip).
@@ -585,6 +627,7 @@ class SessionManager(context: Context) {
         // the migration path stays grep-able.
         private const val KEY_IS_DRIVER_MODE = "is_driver_mode"
         private const val KEY_DESIGNATION = "designation"
+        private const val KEY_DEPARTMENT = "department"
         private const val KEY_FLEET_DRIVER_BY_BACKEND = "fleet_driver_by_backend"
         private const val KEY_DRIVER_TRIPS = "driver_trips"
         private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"

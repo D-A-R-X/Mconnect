@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
 
@@ -249,7 +250,7 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
                 ),
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun createPunchPhotoFile(): File? {

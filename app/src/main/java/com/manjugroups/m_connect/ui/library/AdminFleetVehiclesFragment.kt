@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskVehicle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class AdminFleetVehiclesFragment : Fragment() {
 
@@ -31,6 +32,32 @@ class AdminFleetVehiclesFragment : Fragment() {
     private lateinit var adapter: VehiclesAdapter
     private var loadJob: Job? = null
     private var actionJob: Job? = null
+
+    /**
+     * True when the signed-in principal is in-house fleet staff rather than an
+     * external agency. Chooses which backend the portal talks to: agencies use
+     * the travel-desk routes, staff use the MMS dispatch routes (their token
+     * would 401 on the agency ones, which the watchdog reads as a dead session).
+     */
+    private val useMmsFleet: Boolean
+        get() = !session.designation.orEmpty()
+            .trim().equals("External Fleet", ignoreCase = true)
+
+    /**
+     * Human-readable load failure.
+     *
+     * A 404 here has one meaning: the MMS dispatch routes aren't on the server
+     * this build points at. Surfacing a bare "HTTP 404" makes that look like a
+     * bug in the screen rather than a backend that hasn't been deployed yet.
+     */
+    private fun loadErrorMessage(e: Exception): String {
+        val code = (e as? retrofit2.HttpException)?.code()
+        return when (code) {
+            404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
+            403 -> "You don't have fleet permissions (marketing.fleet.view)."
+            else -> e.message ?: "network error"
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -79,7 +106,7 @@ class AdminFleetVehiclesFragment : Fragment() {
                 plate, type, capacity, name, phone, _ ->
                 submitCreate(plate, type, capacity, name, phone)
             }
-            bottomSheet.show(parentFragmentManager, "CreateVehicleBottomSheet")
+            bottomSheet.showOnce(parentFragmentManager, "CreateVehicleBottomSheet")
         }
 
         refresh()
@@ -97,7 +124,7 @@ class AdminFleetVehiclesFragment : Fragment() {
         loadJob?.cancel()
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.listVehicles(token)
+                val resp = if (useMmsFleet) api.listMmsVehicles(token) else api.listVehicles(token)
                 if (_binding == null) return@launch
                 vehicles.clear()
                 vehicles.addAll(resp.rows.map { mapVehicle(it) })
@@ -109,7 +136,7 @@ class AdminFleetVehiclesFragment : Fragment() {
                 if (_binding == null) return@launch
                 Toast.makeText(
                     requireContext(),
-                    "Couldn't load vehicles: ${e.message ?: "network error"}",
+                    "Couldn't load vehicles: ${loadErrorMessage(e)}",
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -158,7 +185,7 @@ class AdminFleetVehiclesFragment : Fragment() {
                 if (_binding == null) return@launch
                 Toast.makeText(
                     requireContext(),
-                    "Couldn't create vehicle: ${e.message ?: "network error"}",
+                    "Couldn't create vehicle: ${loadErrorMessage(e)}",
                     Toast.LENGTH_LONG,
                 ).show()
             }

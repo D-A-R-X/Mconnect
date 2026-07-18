@@ -17,6 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Filter sheet for the My Attendance screen. Matches the design's "Filter" toast:
@@ -118,7 +119,7 @@ class AttendanceFilterSheet : BottomSheetDialogFragment() {
             initialTo = toDate.ifBlank { null },
             maxDate = today,
             resultKey = CAL_RESULT_KEY,
-        ).show(childFragmentManager, "cal_range")
+        ).showOnce(childFragmentManager, "cal_range")
     }
 
     // ---------- Presets ----------

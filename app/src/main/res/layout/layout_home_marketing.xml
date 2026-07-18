@@ -46,16 +46,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginEnd="12dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <TextView
                 android:id="@+id/titleCalls"
                 android:layout_width="wrap_content"
@@ -82,6 +72,7 @@
                 app:layout_constraintTop_toBottomOf="@id/titleCalls" />
 
             <TextView
+                android:id="@+id/trendCalls"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
@@ -130,16 +121,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginEnd="12dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <TextView
                 android:id="@+id/titleIncoming"
                 android:layout_width="wrap_content"
@@ -166,6 +147,7 @@
                 app:layout_constraintTop_toBottomOf="@id/titleIncoming" />
 
             <TextView
+                android:id="@+id/trendIncoming"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
@@ -224,16 +206,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginEnd="12dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <TextView
                 android:id="@+id/titleOutgoing"
                 android:layout_width="wrap_content"
@@ -260,6 +232,7 @@
                 app:layout_constraintTop_toBottomOf="@id/titleOutgoing" />
 
             <TextView
+                android:id="@+id/trendOutgoing"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
@@ -306,16 +279,6 @@
                 android:padding="8dp"
                 android:tint="#DC2626"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginEnd="12dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
@@ -402,16 +365,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="10dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <TextView
                 android:id="@+id/titleWarm"
                 android:layout_width="wrap_content"
@@ -484,16 +437,6 @@
                 android:padding="6dp"
                 android:tint="#64748B"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="10dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
@@ -579,16 +522,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="10dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <TextView
                 android:id="@+id/titleSv"
                 android:layout_width="wrap_content"
@@ -661,16 +594,6 @@
                 android:padding="6dp"
                 android:tint="#059669"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="10dp"
-                android:src="@drawable/ic_chevron_right"
-                android:tint="#94A3B8"
-                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <TextView

@@ -41,6 +41,12 @@ class ManageRatesBottomSheet : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the rate fields and the save button
+        // with no way to scroll them back into view.
+        dialog?.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         // Make the outer sheet container transparent so the drawable's rounded corners and drop shadow show up correctly
         val dialog = dialog as? com.google.android.material.bottomsheet.BottomSheetDialog
         val bottomSheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)

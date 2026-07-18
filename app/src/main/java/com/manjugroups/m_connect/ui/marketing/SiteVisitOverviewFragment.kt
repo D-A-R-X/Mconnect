@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
@@ -744,7 +745,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
         CompleteCpVisitBottomSheet
             .forSiteVisit(targetVisitId, outcome)
-            .show(parentFragmentManager, "site_visit_${outcome}_outcome")
+            .showOnce(parentFragmentManager, "site_visit_${outcome}_outcome")
     }
 
     private fun loadEnrichedDetail(id: String) {

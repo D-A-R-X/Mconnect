@@ -17,8 +17,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Full-screen crop dialog for the profile avatar. Forces a 1:1 aspect ratio
- * so the crop output fits the circular avatar tile.
+ * Full-screen crop dialog for avatars. Forces a 1:1 aspect ratio so the output
+ * fits a circular avatar tile.
+ *
+ * Despite the package, this is shared: the profile editor and the chat group
+ * info screen both route their picked image through it. Nothing here is
+ * profile-specific — it takes a Uri and hands back a cropped Bitmap.
  */
 class ProfilePhotoCropDialog : DialogFragment() {
 

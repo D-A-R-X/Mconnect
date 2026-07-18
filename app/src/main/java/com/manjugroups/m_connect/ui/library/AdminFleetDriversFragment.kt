@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.network.UpdateDriverRequest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class AdminFleetDriversFragment : Fragment() {
 
@@ -42,6 +43,32 @@ class AdminFleetDriversFragment : Fragment() {
     private lateinit var adapter: DriversAdapter
     private var loadJob: Job? = null
     private var actionJob: Job? = null
+
+    /**
+     * True when the signed-in principal is in-house fleet staff rather than an
+     * external agency. Chooses which backend the portal talks to: agencies use
+     * the travel-desk routes, staff use the MMS dispatch routes (their token
+     * would 401 on the agency ones, which the watchdog reads as a dead session).
+     */
+    private val useMmsFleet: Boolean
+        get() = !session.designation.orEmpty()
+            .trim().equals("External Fleet", ignoreCase = true)
+
+    /**
+     * Human-readable load failure.
+     *
+     * A 404 here has one meaning: the MMS dispatch routes aren't on the server
+     * this build points at. Surfacing a bare "HTTP 404" makes that look like a
+     * bug in the screen rather than a backend that hasn't been deployed yet.
+     */
+    private fun loadErrorMessage(e: Exception): String {
+        val code = (e as? retrofit2.HttpException)?.code()
+        return when (code) {
+            404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
+            403 -> "You don't have fleet permissions (marketing.fleet.view)."
+            else -> e.message ?: "network error"
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -71,7 +98,7 @@ class AdminFleetDriversFragment : Fragment() {
                     submitSetStatus(driver.id, nextStatus)
                 }
             )
-            bottomSheet.show(parentFragmentManager, "CreateDriverBottomSheet")
+            bottomSheet.showOnce(parentFragmentManager, "CreateDriverBottomSheet")
         }
         binding.rvAdminDrivers.adapter = adapter
 
@@ -98,7 +125,7 @@ class AdminFleetDriversFragment : Fragment() {
             val bottomSheet = CreateDriverBottomSheet.newInstance { name, phone, address ->
                 submitCreate(name, phone, address)
             }
-            bottomSheet.show(parentFragmentManager, "CreateDriverBottomSheet")
+            bottomSheet.showOnce(parentFragmentManager, "CreateDriverBottomSheet")
         }
 
         refresh()
@@ -116,7 +143,7 @@ class AdminFleetDriversFragment : Fragment() {
         loadJob?.cancel()
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.listDrivers(token)
+                val resp = if (useMmsFleet) api.listMmsDrivers(token) else api.listDrivers(token)
                 if (_binding == null) return@launch
                 allDrivers.clear()
                 allDrivers.addAll(resp.rows.map { mapDriver(it) })
@@ -129,7 +156,7 @@ class AdminFleetDriversFragment : Fragment() {
                 if (_binding == null) return@launch
                 Toast.makeText(
                     requireContext(),
-                    "Couldn't load drivers: ${e.message ?: "network error"}",
+                    "Couldn't load drivers: ${loadErrorMessage(e)}",
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -164,7 +191,7 @@ class AdminFleetDriversFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't create driver: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Couldn't create driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -198,7 +225,7 @@ class AdminFleetDriversFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't update driver: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Couldn't update driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -225,7 +252,7 @@ class AdminFleetDriversFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't change status: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Couldn't change status: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -235,7 +262,8 @@ class AdminFleetDriversFragment : Fragment() {
         return DriverItem(
             id = d.id,
             name = d.name,
-            phone = d.phone,
+            // Internal fleet drivers may have no phone on record.
+            phone = d.phone.orEmpty(),
             address = d.address ?: "",
             status = statusLabel,
         )

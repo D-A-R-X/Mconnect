@@ -33,6 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * "Expenses" screen — entry point for the on-site spend log. Lists
@@ -158,7 +159,7 @@ class ProjectExpensesFragment : Fragment() {
             }
             ExpenseCreateBottomSheet
                 .newInstance(projectId, selectedCategory)
-                .show(parentFragmentManager, "expense_create")
+                .showOnce(parentFragmentManager, "expense_create")
         }
 
         // Refresh list when create sheet OR detail-sheet mark-paid emits a result.
@@ -317,7 +318,7 @@ class ProjectExpensesFragment : Fragment() {
     }
 
     private fun showDateFilter() {
-        DateFilterBottomSheet.newInstance().show(parentFragmentManager, "date_filter")
+        DateFilterBottomSheet.newInstance().showOnce(parentFragmentManager, "date_filter")
         parentFragmentManager.setFragmentResultListener(DateFilterBottomSheet.REQUEST_KEY, viewLifecycleOwner) { _, bundle ->
             fromDate = bundle.getString(DateFilterBottomSheet.RESULT_FROM)
             toDate = bundle.getString(DateFilterBottomSheet.RESULT_TO)
@@ -485,7 +486,7 @@ class ProjectExpensesFragment : Fragment() {
                 itemView.setOnClickListener {
                     ExpenseDetailBottomSheet
                         .newInstance(item.id)
-                        .show(parentFragmentManager, "expense_detail")
+                        .showOnce(parentFragmentManager, "expense_detail")
                 }
             }
         }

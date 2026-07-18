@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.network.TravelDeskTrip
 import com.manjugroups.m_connect.network.TravelDeskVehicle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class AdminFleetTripsFragment : Fragment() {
 
@@ -42,6 +43,32 @@ class AdminFleetTripsFragment : Fragment() {
     private var activeVehicleCount: Int = 0
     private var loadJob: Job? = null
     private var allocateJob: Job? = null
+
+    /**
+     * True when the signed-in principal is in-house fleet staff rather than an
+     * external agency. Chooses which backend the portal talks to: agencies use
+     * the travel-desk routes, staff use the MMS dispatch routes (their token
+     * would 401 on the agency ones, which the watchdog reads as a dead session).
+     */
+    private val useMmsFleet: Boolean
+        get() = !session.designation.orEmpty()
+            .trim().equals("External Fleet", ignoreCase = true)
+
+    /**
+     * Human-readable load failure.
+     *
+     * A 404 here has one meaning: the MMS dispatch routes aren't on the server
+     * this build points at. Surfacing a bare "HTTP 404" makes that look like a
+     * bug in the screen rather than a backend that hasn't been deployed yet.
+     */
+    private fun loadErrorMessage(e: Exception): String {
+        val code = (e as? retrofit2.HttpException)?.code()
+        return when (code) {
+            404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
+            403 -> "You don't have fleet permissions (marketing.fleet.view)."
+            else -> e.message ?: "network error"
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -96,9 +123,9 @@ class AdminFleetTripsFragment : Fragment() {
         loadJob?.cancel()
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val pendingResp = api.listPending(token)
-                val assignedResp = api.listAssigned(token)
-                val vehiclesResp = api.listVehicles(token)
+                val pendingResp = if (useMmsFleet) api.listMmsPending(token) else api.listPending(token)
+                val assignedResp = if (useMmsFleet) api.listMmsAssigned(token) else api.listAssigned(token)
+                val vehiclesResp = if (useMmsFleet) api.listMmsVehicles(token) else api.listVehicles(token)
 
                 pendingTrips = pendingResp.rows
                 val assignedRows = assignedResp.rows
@@ -120,7 +147,7 @@ class AdminFleetTripsFragment : Fragment() {
                 if (_binding == null) return@launch
                 Toast.makeText(
                     requireContext(),
-                    "Couldn't load trips: ${e.message ?: "network error"}",
+                    "Couldn't load trips: ${loadErrorMessage(e)}",
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -195,7 +222,7 @@ class AdminFleetTripsFragment : Fragment() {
 
         AllocateVehicleBottomSheet.newInstance(options) { result ->
             submitAllocate(originalTrip, result)
-        }.show(parentFragmentManager, "AllocateVehicleBottomSheet")
+        }.showOnce(parentFragmentManager, "AllocateVehicleBottomSheet")
     }
 
     private fun submitAllocate(trip: TravelDeskTrip, result: AllocateVehicleResult) {
@@ -207,9 +234,7 @@ class AdminFleetTripsFragment : Fragment() {
         allocateJob?.cancel()
         allocateJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.allocate(
-                    token,
-                    AllocateTripRequest(
+                val request = AllocateTripRequest(
                         siteVisitId = trip.id,
                         vehicleId = result.vehicleId,
                         pickupTime = result.pickupTime,
@@ -218,8 +243,15 @@ class AdminFleetTripsFragment : Fragment() {
                         driverPhone = result.driverPhone,
                         kmRate = if (result.pricingMode == "km") result.amount else null,
                         packageAmount = if (result.pricingMode == "package") result.amount else null,
-                    ),
                 )
+                // MMS dispatch ignores the agency pricing fields (km rate /
+                // package) — internal trips aren't billed per-agency — but the
+                // request shape is shared, so they're simply unused there.
+                val resp = if (useMmsFleet) {
+                    api.allocateMms(token, request)
+                } else {
+                    api.allocate(token, request)
+                }
                 if (!resp.success) {
                     Toast.makeText(
                         requireContext(),
@@ -243,7 +275,7 @@ class AdminFleetTripsFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(
                     requireContext(),
-                    "Allocation failed: ${e.message ?: "network error"}",
+                    "Allocation failed: ${loadErrorMessage(e)}",
                     Toast.LENGTH_LONG,
                 ).show()
             }
