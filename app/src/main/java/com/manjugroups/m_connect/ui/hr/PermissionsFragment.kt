@@ -146,9 +146,14 @@ class PermissionsFragment : Fragment() {
             // scope with no extra control on screen.
             val canApprove = session.hasPermission("permissions.approve")
             if (canApprove) {
+                binding.dropdownScopeSelector.visibility = View.VISIBLE
                 binding.dropdownScopeSelector.setOnClickListener { showScopePopupMenu(it) }
             } else {
-                binding.ivScopeChevron.visibility = View.GONE
+                // Only one scope to choose from, so drop the whole control.
+                // Hiding just the chevron left a chip reading "My Permission"
+                // that looked tappable and did nothing. LeavesFragment already
+                // hides the selector outright; this matches it.
+                binding.dropdownScopeSelector.visibility = View.GONE
             }
             binding.tvScopeLabel.text = "My Permission"
             setupFilterTabs()
