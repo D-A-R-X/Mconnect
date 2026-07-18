@@ -106,19 +106,24 @@ class AdminFleetTripsFragment : Fragment() {
         }
         binding.homeHeader.post { _binding?.homeHeader?.playEntryAnimation() }
         setupRecyclerView()
-        tripsPager.bindNestedScroll(
-            binding.scrollAdminTrips,
-            totalCount = { filteredTrips.size },
-        )
         setupFilters()
 
-        binding.scrollAdminTrips.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+        // One listener doing both jobs. setOnScrollChangeListener holds a
+        // single listener, so binding the pager separately here would silently
+        // cancel this bottom-nav behaviour (or be cancelled by it, depending on
+        // registration order) — see InfiniteScrollPager.onHostScroll.
+        binding.scrollAdminTrips.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { view, _, scrollY, _, oldScrollY ->
             val dy = scrollY - oldScrollY
             if (dy > 10) {
                 (parentFragment as? AdminFleetContainerFragment)?.setBottomNavScrollState(false)
             } else if (scrollY <= 10) {
                 (parentFragment as? AdminFleetContainerFragment)?.setBottomNavScrollState(true)
             }
+            tripsPager.onHostScroll(
+                view as androidx.core.widget.NestedScrollView,
+                scrollY,
+                filteredTrips.size,
+            )
         })
 
         // Render whatever we already have, then trigger a refresh.
@@ -444,10 +449,19 @@ class AdminFleetTripsFragment : Fragment() {
                 val attendeesShort = item.attendees.replace(" Attendees", "").trim()
                 binding.tvAttendeesTag.text = attendeesShort
 
-                // Map vehicle type to short format (e.g., "Company Vehicle" -> "CV")
-                val vehicleShort = if (item.vehicleType.equals("Company Vehicle", ignoreCase = true))
-                    "CV" else item.vehicleType
-                binding.tvVehicleTag.text = vehicleShort
+                // The backend sends a snake_case enum ("company_vehicle"), which
+                // this only matched in its already-pretty form — so the raw
+                // value went straight to the pill. Humanise it instead of
+                // abbreviating; the pill now has the width for the full label.
+                binding.tvVehicleTag.text = item.vehicleType
+                    .replace('_', ' ')
+                    .trim()
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { word ->
+                        word.replaceFirstChar { it.uppercase() }
+                    }
+                    .ifBlank { "Vehicle" }
                 binding.tvTripStatus.text = item.status
 
                 when (item.status) {

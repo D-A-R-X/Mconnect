@@ -89,6 +89,27 @@ class InfiniteScrollPager(
         )
     }
 
+    /**
+     * Extend the window when [scrollView] is near its end, for hosts that
+     * already own the scroll listener.
+     *
+     * NestedScrollView.setOnScrollChangeListener holds a SINGLE listener, so
+     * calling [bindNestedScroll] on a view whose fragment also sets its own
+     * listener silently destroys one of them — whichever registered first.
+     * Screens that hide a bottom bar on scroll must call this from inside
+     * their own listener instead of binding.
+     */
+    fun onHostScroll(
+        scrollView: NestedScrollView,
+        scrollY: Int,
+        totalCount: Int,
+        rowHeightPx: Int = DEFAULT_ROW_HEIGHT_DP.dp(scrollView),
+    ) {
+        val child = scrollView.getChildAt(0) ?: return
+        val distanceToBottom = child.measuredHeight - (scrollY + scrollView.measuredHeight)
+        if (distanceToBottom <= nearEndThreshold * rowHeightPx) extend(totalCount)
+    }
+
     private fun Int.dp(view: android.view.View): Int =
         (this * view.resources.displayMetrics.density).toInt()
 
