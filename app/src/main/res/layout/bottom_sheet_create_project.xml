@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick "New Project" form. Fields scroll inside the capped NestedScrollView;
+     the Create button is pinned in the footer so it stays visible at any scroll. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="20dp">
+
+    <com.manjugroups.m_connect.ui.custom.MaxHeightNestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="520dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="4dp">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_chat_sheet_handle" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="New Project"
+                android:textColor="#101828"
+                android:textSize="19sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Basic details — edit the rest on the web later."
+                android:textColor="#667085"
+                android:textSize="12sp" />
+
+            <TextView style="@style/DailyLogLabel" android:text="Project Name *" />
+            <EditText
+                android:id="@+id/etProjectName"
+                style="@style/DailyLogInput"
+                android:hint="Enter project name"
+                android:inputType="textCapWords" />
+
+            <TextView style="@style/DailyLogLabel" android:text="Description" />
+            <EditText
+                android:id="@+id/etDescription"
+                style="@style/DailyLogMultiline"
+                android:hint="Brief description"
+                android:minHeight="72dp" />
+
+            <TextView style="@style/DailyLogLabel" android:text="Start Date *" />
+            <LinearLayout android:id="@+id/fieldStartDate" style="@style/DailyLogSelectField">
+                <TextView
+                    android:id="@+id/tvStartDateValue"
+                    style="@style/DailyLogSelectText"
+                    android:text="Select start date"
+                    android:textColor="#98A2B3" />
+                <ImageView style="@style/DailyLogSelectChevron" android:src="@drawable/ic_leave_duration_cal" />
+            </LinearLayout>
+
+            <TextView style="@style/DailyLogLabel" android:text="Duration (days) *" />
+            <EditText
+                android:id="@+id/etDuration"
+                style="@style/DailyLogInput"
+                android:hint="e.g. 30"
+                android:inputType="number" />
+
+            <TextView style="@style/DailyLogLabel" android:text="Status" />
+            <LinearLayout android:id="@+id/fieldStatus" style="@style/DailyLogSelectField">
+                <TextView
+                    android:id="@+id/tvStatusValue"
+                    style="@style/DailyLogSelectText"
+                    android:text="Proposed" />
+                <ImageView style="@style/DailyLogSelectChevron" />
+            </LinearLayout>
+
+            <TextView style="@style/DailyLogLabel" android:text="Budget (INR)" />
+            <EditText
+                android:id="@+id/etBudget"
+                style="@style/DailyLogInput"
+                android:hint="e.g. 5000000"
+                android:inputType="number" />
+        </LinearLayout>
+    </com.manjugroups.m_connect.ui.custom.MaxHeightNestedScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCreateProject"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#16A34A"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Create Project"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        app:cornerRadius="27dp"
+        app:elevation="0dp" />
+
+</LinearLayout>

@@ -51,6 +51,7 @@
             android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="blocksDescendants"
             android:fillViewport="true"
             android:overScrollMode="never"
             android:paddingBottom="120dp">
@@ -96,6 +97,17 @@
                     android:layout_height="wrap_content"
                     android:visibility="gone"
                     android:orientation="vertical">
+
+                    <!-- Sticky trip header (title + tabs). Solid page-grey bg +
+                         a runtime elevation so the trip cards scroll UNDER it
+                         once the drawer reaches its limit — the profile/notify
+                         header above stays visible instead of being covered. -->
+                    <LinearLayout
+                        android:id="@+id/tripHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#F1F3F8"
+                        android:orientation="vertical">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -250,6 +262,16 @@
                             android:textColor="#344054"
                             android:textSize="12sp" />
                     </LinearLayout>
+                    </LinearLayout><!-- /tripHeader -->
+
+                    <!-- Scrollable trip cards — slide up UNDER tripHeader once
+                         the drawer is pinned below the profile row. -->
+                    <LinearLayout
+                        android:id="@+id/tripCardsArea"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:clipChildren="false">
 
                     <LinearLayout
                         android:id="@+id/visitEmptyContent"
@@ -261,35 +283,9 @@
                         android:padding="0dp"
                         android:visibility="gone">
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="16dp"
-                            android:paddingTop="12dp"
-                            android:paddingEnd="16dp"
-                            android:paddingBottom="0dp">
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:fontFamily="@font/inter_semibold"
-                                android:includeFontPadding="false"
-                                android:lineHeight="20dp"
-                                android:text="Today Trip"
-                                android:textColor="#101828"
-                                android:textSize="14sp" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:fontFamily="@font/inter_regular"
-                                android:includeFontPadding="false"
-                                android:text="Your schedule for the day"
-                                android:textColor="#667085"
-                                android:textSize="12sp" />
-                        </LinearLayout>
+                        <!-- The "Today Trip / Your schedule for the day" header
+                             was removed here: it duplicated the "Today's Trip"
+                             section title just above the card. -->
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -381,6 +377,7 @@
                                 android:background="@drawable/bg_attendance_skeleton_block" />
                         </LinearLayout>
                     </LinearLayout>
+                    </LinearLayout><!-- /tripCardsArea -->
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>

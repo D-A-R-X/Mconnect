@@ -20,7 +20,11 @@ data class LeavesState(
     val sickTotal: Int = 0,
     val earnedTotal: Int = 0,
     val myLeaves: List<LeaveData> = emptyList(),
+    // pendingApprovals = the full "All Leaves" set (every org leave for a
+    // leaves.viewAll / super-admin caller; the caller's subtree otherwise).
+    // teamLeaves = the caller's reporting subtree only ("Team Leaves").
     val pendingApprovals: List<LeaveData> = emptyList(),
+    val teamLeaves: List<LeaveData> = emptyList(),
     val leaveTypes: List<String> = listOf("casual", "sick", "earned"),
     val isLoading: Boolean = false,
     val isApplying: Boolean = false
@@ -46,10 +50,17 @@ class LeavesViewModel : ViewModel() {
                 val pendingD = async {
                     if (canApprove) runCatching { api.getPendingLeaveApprovals(bearerToken) }.getOrNull() else null
                 }
+                // Team Leaves = reporting subtree only. For a non-viewAll
+                // approver this equals the full set; for a viewAll/super-admin
+                // it correctly narrows from "all org leaves" to just their team.
+                val teamD = async {
+                    if (canApprove) runCatching { api.getPendingLeaveApprovals(bearerToken, teamOnly = true) }.getOrNull() else null
+                }
                 val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
                 val balance = balanceD.await()
                 val history = historyD.await()
                 val pending = pendingD.await()
+                val team = teamD.await()
                 val policyResp = policyD.await()
 
                 val b = balance?.balance
@@ -84,6 +95,7 @@ class LeavesViewModel : ViewModel() {
                     earnedTotal = earnedAlloc,
                     myLeaves = history?.leaves ?: emptyList(),
                     pendingApprovals = pending?.leaves ?: emptyList(),
+                    teamLeaves = team?.leaves ?: emptyList(),
                     leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")
                 )
             } finally {

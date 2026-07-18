@@ -61,6 +61,24 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
 
     private fun performLogout() {
         viewLifecycleOwner.lifecycleScope.launch {
+            // Logging out mid-shift (inside a clock-in/tracking window) is a
+            // tamper signal — record it and push it to the RO chain BEFORE the
+            // session is cleared, then flush so it isn't stranded by the
+            // logout (flush needs a valid token). A normal off-shift logout
+            // (shouldTrackNow == false) is not flagged.
+            if (session.shouldTrackNow) {
+                runCatching {
+                    com.manjugroups.m_connect.geotrack.GeoTrackEventQueue.enqueue(
+                        requireContext(),
+                        "USER_LOGOUT",
+                        com.manjugroups.m_connect.geotrack.GeoTrackDeviceMeta.capture(requireContext()),
+                    )
+                    com.manjugroups.m_connect.geotrack.GeoTrackEventQueue.flush(
+                        requireContext(),
+                        session = session,
+                    )
+                }
+            }
             runCatching {
                 PushTokenManager.unregisterCurrentToken(requireContext(), session)
             }

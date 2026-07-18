@@ -788,6 +788,13 @@ class AppLibraryFragment : Fragment() {
                 pillRoot.visibility = if (isVisible) View.VISIBLE else View.GONE
             }
         }
+
+        // Once some section pills are hidden by IAM, the static 1dp separators
+        // between them double up (two hidden pills leave two adjacent dividers)
+        // or dangle at the strip's edge. Reuse the same one-divider-per-gap
+        // sweep as the tile rows — pills are LinearLayouts, separators are
+        // plain Views, so it applies unchanged.
+        pruneDanglingDividers(binding.libraryPillStrip)
     }
 
     /**

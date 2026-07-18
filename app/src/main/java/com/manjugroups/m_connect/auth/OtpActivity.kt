@@ -285,6 +285,7 @@ class OtpActivity : AppCompatActivity() {
             }.onSuccess { iam ->
                 session.iamPermissions = iam.permissions.toSet()
                 session.isAdmin = iam.isAdmin
+                session.role = iam.role
             }
         }
 

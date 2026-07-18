@@ -228,8 +228,23 @@ class DailyLogFragment : Fragment() {
         c.removeAllViews()
         binding.emptyLogs.visibility = if (logs.isEmpty()) View.VISIBLE else View.GONE
         binding.tvEntriesTitle.visibility = if (logs.isEmpty()) View.GONE else View.VISIBLE
-        logs.take(logsPager.limit).forEach { log ->
+        // Show logs BY PROJECT: group entries under a project header, ordering
+        // projects by their most-recent activity and entries newest-first
+        // within each. The window (pagination) is applied to this grouped order
+        // so scrolling reveals further projects/entries in the same grouping.
+        val ordered = logs
+            .groupBy { it.projectName?.trim().takeUnless { n -> n.isNullOrBlank() } ?: "Other" }
+            .toList()
+            .sortedByDescending { (_, entries) -> entries.maxOfOrNull { it.date ?: "" } ?: "" }
+            .flatMap { (_, entries) -> entries.sortedByDescending { it.date ?: "" } }
+        var lastProjectKey: String? = null
+        ordered.take(logsPager.limit).forEach { log ->
             val ctx = requireContext()
+            val projectKey = log.projectName?.trim().takeUnless { it.isNullOrBlank() } ?: "Other"
+            if (projectKey != lastProjectKey) {
+                lastProjectKey = projectKey
+                c.addView(projectSectionHeader(ctx, projectKey))
+            }
             val cardView = com.google.android.material.card.MaterialCardView(ctx).apply {
                 radius = dp(16).toFloat()
                 cardElevation = 0f
@@ -266,7 +281,7 @@ class DailyLogFragment : Fragment() {
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
-            log.projectName?.takeIf { it.isNotBlank() }?.let { header.addView(projectChip(ctx, it)) }
+            // Project now shown by the section header above, so no per-card chip.
             content.addView(header)
 
             content.addView(TextView(ctx).apply {
@@ -321,6 +336,21 @@ class DailyLogFragment : Fragment() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { marginEnd = dp(6) }
+        }
+
+    /** Section header preceding a project's run of log cards. */
+    private fun projectSectionHeader(ctx: android.content.Context, name: String): View =
+        TextView(ctx).apply {
+            text = name
+            textSize = 13f
+            setTextColor(Color.parseColor("#0B61CA"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(2), dp(16), dp(2), dp(2))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
         }
 
     private fun projectChip(ctx: android.content.Context, name: String): TextView = TextView(ctx).apply {
@@ -391,6 +421,48 @@ class DailyLogFragment : Fragment() {
         recips to reps
     }
 
+    /** White rounded card matching the entry-page log cards, for consistent
+     *  "neat card" handling across the New Entry and DPR tabs. */
+    private fun neatCard(ctx: android.content.Context): com.google.android.material.card.MaterialCardView =
+        com.google.android.material.card.MaterialCardView(ctx).apply {
+            radius = dp(14).toFloat()
+            cardElevation = 0f
+            strokeColor = Color.parseColor("#EAECF0")
+            strokeWidth = dp(1)
+            setCardBackgroundColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+        }
+
+    /** Round monogram avatar (first letter) for a recipient card. */
+    private fun avatarCircle(ctx: android.content.Context, name: String): TextView = TextView(ctx).apply {
+        text = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        gravity = Gravity.CENTER
+        textSize = 15f
+        setTextColor(Color.parseColor("#0B61CA"))
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+        layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) }
+        background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            setColor(Color.parseColor("#EAF2FE"))
+        }
+    }
+
+    /** Green (all-sent) / red (has failures) status pill for DPR history. */
+    private fun dprStatusPill(ctx: android.content.Context, sent: Int, failed: Int): TextView =
+        TextView(ctx).apply {
+            val ok = failed <= 0
+            text = "$sent sent · $failed failed"
+            textSize = 11f
+            setTextColor(Color.parseColor(if (ok) "#067647" else "#B42318"))
+            setPadding(dp(9), dp(4), dp(9), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(9).toFloat()
+                setColor(Color.parseColor(if (ok) "#ECFDF3" else "#FEF3F2"))
+            }
+        }
+
     private fun renderRecipients(list: List<DprRecipient>) {
         dprSkeleton?.cancel(); dprSkeleton = null
         val c = binding.recipientsContainer
@@ -402,35 +474,64 @@ class DailyLogFragment : Fragment() {
         binding.tvRecipientsCount.text = "${list.count { it.isActive }} active"
         list.forEach { r ->
             val ctx = requireContext()
+            val card = neatCard(ctx)
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_input)
-                setPadding(dp(12), dp(10), dp(8), dp(10))
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(8) }
+                setPadding(dp(12), dp(12), dp(8), dp(12))
             }
+            row.addView(avatarCircle(ctx, r.name ?: "?"))
+
             val info = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
-            info.addView(TextView(ctx).apply { text = r.name ?: "Recipient"; textSize = 14f; setTextColor(Color.parseColor("#101828")) })
-            val sub = listOfNotNull(
-                r.normalizedPhone ?: r.phone,
-                r.projectName?.takeIf { it.isNotBlank() },
-            ).joinToString(" · ")
-            info.addView(TextView(ctx).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#667085")) })
+            info.addView(TextView(ctx).apply {
+                text = r.name ?: "Recipient"
+                textSize = 14f
+                setTextColor(Color.parseColor("#101828"))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            })
+            val subRow = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(3), 0, 0)
+            }
+            (r.normalizedPhone ?: r.phone)?.takeIf { it.isNotBlank() }?.let {
+                subRow.addView(TextView(ctx).apply {
+                    text = it; textSize = 12f; setTextColor(Color.parseColor("#667085"))
+                })
+            }
+            r.projectName?.takeIf { it.isNotBlank() }?.let {
+                subRow.addView(projectChip(ctx, it).apply {
+                    (layoutParams as? LinearLayout.LayoutParams
+                        ?: LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        )).also { lp -> lp.marginStart = dp(6); layoutParams = lp }
+                })
+            }
+            info.addView(subRow)
             row.addView(info)
+
             row.addView(androidx.appcompat.widget.SwitchCompat(ctx).apply {
                 isChecked = r.isActive
                 setOnCheckedChangeListener { _, checked -> toggleRecipient(r.id, checked) }
             })
             row.addView(TextView(ctx).apply {
-                text = "✕"; textSize = 15f; setTextColor(Color.parseColor("#B42318")); setPadding(dp(10), dp(6), dp(4), dp(6))
+                text = "✕"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#B42318"))
+                layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(4) }
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Color.parseColor("#FEF3F2"))
+                }
                 setOnClickListener { removeRecipient(r.id) }
             })
-            c.addView(row)
+            card.addView(row)
+            c.addView(card)
         }
     }
 
@@ -439,21 +540,34 @@ class DailyLogFragment : Fragment() {
         c.removeAllViews()
         binding.tvHistoryEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         list.forEach { rep ->
-            val label = listOfNotNull(
-                displayDate(rep.date),
-                rep.projectName?.takeIf { it.isNotBlank() },
-                "${rep.sentCount ?: 0} sent / ${rep.failedCount ?: 0} failed",
-            ).joinToString("  ·  ")
-            c.addView(TextView(requireContext()).apply {
-                text = label
-                textSize = 12f
-                setTextColor(Color.parseColor("#475467"))
-                setBackgroundResource(R.drawable.bg_input)
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(8) }
+            val ctx = requireContext()
+            val card = neatCard(ctx)
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+            }
+            val left = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            left.addView(TextView(ctx).apply {
+                text = displayDate(rep.date)
+                textSize = 13f
+                setTextColor(Color.parseColor("#101828"))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
             })
+            rep.projectName?.takeIf { it.isNotBlank() }?.let {
+                left.addView(TextView(ctx).apply {
+                    text = it; textSize = 12f; setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(2), 0, 0)
+                    maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+            }
+            row.addView(left)
+            row.addView(dprStatusPill(ctx, rep.sentCount ?: 0, rep.failedCount ?: 0))
+            card.addView(row)
+            c.addView(card)
         }
     }
 

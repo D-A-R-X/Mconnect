@@ -33,6 +33,11 @@ object SearchableSelectionDialog {
         title: String,
         options: List<SearchableOption<T>>,
         emptyMessage: String = "No matching records",
+        // When provided, a "create new" action appears under the search field.
+        // It receives the current search text (e.g. the name the user typed but
+        // couldn't find) so the create form can pre-fill it.
+        onCreateNew: ((String) -> Unit)? = null,
+        createLabel: String = "Add",
         onSelected: (T) -> Unit
     ) {
         val dialog = BottomSheetDialog(context)
@@ -64,6 +69,19 @@ object SearchableSelectionDialog {
             setPadding(dp(context, 16), dp(context, 11), dp(context, 16), dp(context, 11))
             setBackgroundResource(R.drawable.bg_chip_inactive)
         }
+        // Optional "create new" action row (accent), shown only when onCreateNew
+        // is supplied. Its label reflects the current query so the user sees
+        // exactly what will be created.
+        val createRow = if (onCreateNew != null) TextView(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(Color.parseColor("#0B61CA"))
+            typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+            setBackgroundResource(R.drawable.bg_chip_inactive)
+            isClickable = true
+            isFocusable = true
+        } else null
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(context, 20), dp(context, 14), dp(context, 20), dp(context, 20))
@@ -90,6 +108,12 @@ object SearchableSelectionDialog {
                 topMargin = dp(context, 14)
                 bottomMargin = dp(context, 12)
             })
+            createRow?.let {
+                addView(it, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dp(context, 12) })
+            }
             addView(empty, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -111,8 +135,22 @@ object SearchableSelectionDialog {
                         .contains(q)
                 }
 
+            // The "create new" action only appears once the user has typed a
+            // name that ISN'T already an option — i.e. the thing they're
+            // searching for doesn't exist yet. Blank query or an exact match
+            // hides it.
+            val hasExactMatch = options.any { it.title.trim().equals(query.trim(), ignoreCase = true) }
+            val showCreate = createRow != null && q.isNotBlank() && !hasExactMatch
+            createRow?.let {
+                it.visibility = if (showCreate) View.VISIBLE else View.GONE
+                it.text = "$createLabel \"${query.trim()}\"  +"
+            }
+
             listContainer.removeAllViews()
-            empty.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+            // Empty copy shows only when there's nothing to pick AND nothing to
+            // create — otherwise the Add action leads.
+            empty.visibility =
+                if (filtered.isEmpty() && !showCreate) View.VISIBLE else View.GONE
             scroll.visibility = if (filtered.isEmpty()) View.GONE else View.VISIBLE
 
             filtered.forEachIndexed { index, option ->
@@ -138,6 +176,11 @@ object SearchableSelectionDialog {
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
+
+        createRow?.setOnClickListener {
+            dialog.dismiss()
+            onCreateNew?.invoke(search.text?.toString()?.trim().orEmpty())
+        }
 
         renderRows("")
         dialog.setContentView(content)
