@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.network.TravelDeskVehicle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.InfiniteScrollPager
 
 class AdminFleetTripsFragment : Fragment() {
 
@@ -28,6 +29,18 @@ class AdminFleetTripsFragment : Fragment() {
     private val binding get() = _binding!!
 
     private var activeFilter = "Pending"
+
+    /**
+     * Full rows for the active tab, plus a scroll window over them.
+     *
+     * rvAdminTrips is wrap_content with nestedScrollingEnabled=false inside a
+     * NestedScrollView, which switches RecyclerView recycling OFF — every row
+     * inflates up front. With ~68 pending trips that froze the main thread on
+     * load and again on every tab switch. Windowing keeps the inflated count
+     * bounded regardless.
+     */
+    private var filteredTrips: List<AdminTrip> = emptyList()
+    private val tripsPager = InfiniteScrollPager(onLoadMore = { renderTripWindow() })
     private lateinit var tripsAdapter: AdminTripsAdapter
     private lateinit var session: SessionManager
     private val api = TravelDeskApi.create()
@@ -93,6 +106,10 @@ class AdminFleetTripsFragment : Fragment() {
         }
         binding.homeHeader.post { _binding?.homeHeader?.playEntryAnimation() }
         setupRecyclerView()
+        tripsPager.bindNestedScroll(
+            binding.scrollAdminTrips,
+            totalCount = { filteredTrips.size },
+        )
         setupFilters()
 
         binding.scrollAdminTrips.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
@@ -330,7 +347,15 @@ class AdminFleetTripsFragment : Fragment() {
             else -> pendingTrips
         }.map { mapTrip(it, filter) }
 
-        tripsAdapter.submitList(rows)
+        filteredTrips = rows
+        tripsPager.reset()
+        renderTripWindow()
+    }
+
+    /** Render only the current window of the active tab's trips. */
+    private fun renderTripWindow() {
+        if (_binding == null) return
+        tripsAdapter.submitList(filteredTrips.take(tripsPager.limit))
     }
 
     private fun mapTrip(trip: TravelDeskTrip, statusLabel: String): AdminTrip {

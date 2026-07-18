@@ -172,14 +172,13 @@ class AdminFleetDriversFragment : Fragment() {
         actionJob?.cancel()
         actionJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.createDriver(
-                    token,
-                    CreateDriverRequest(
-                        name = name.trim(),
-                        phone = phone.trim(),
-                        address = address.trim().takeIf { it.isNotBlank() },
-                    ),
+                val request = CreateDriverRequest(
+                    name = name.trim(),
+                    phone = phone.trim(),
+                    address = address.trim().takeIf { it.isNotBlank() },
                 )
+                val resp = if (useMmsFleet) api.createMmsDriver(token, request)
+                    else api.createDriver(token, request)
                 if (_binding == null) return@launch
                 if (!resp.success) {
                     Toast.makeText(requireContext(), resp.error ?: "Couldn't create driver.", Toast.LENGTH_LONG).show()
@@ -205,15 +204,14 @@ class AdminFleetDriversFragment : Fragment() {
         actionJob?.cancel()
         actionJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.updateDriver(
-                    token,
-                    UpdateDriverRequest(
-                        id = id,
-                        name = name.trim().takeIf { it.isNotBlank() },
-                        phone = phone.trim().takeIf { it.isNotBlank() },
-                        address = address.trim().takeIf { it.isNotBlank() },
-                    ),
+                val request = UpdateDriverRequest(
+                    id = id,
+                    name = name.trim().takeIf { it.isNotBlank() },
+                    phone = phone.trim().takeIf { it.isNotBlank() },
+                    address = address.trim().takeIf { it.isNotBlank() },
                 )
+                val resp = if (useMmsFleet) api.updateMmsDriver(token, request)
+                    else api.updateDriver(token, request)
                 if (_binding == null) return@launch
                 if (!resp.success) {
                     Toast.makeText(requireContext(), resp.error ?: "Couldn't update driver.", Toast.LENGTH_LONG).show()
@@ -239,7 +237,9 @@ class AdminFleetDriversFragment : Fragment() {
         actionJob?.cancel()
         actionJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.setDriverStatus(token, SetDriverStatusRequest(id = id, status = status))
+                val req = SetDriverStatusRequest(id = id, status = status)
+                val resp = if (useMmsFleet) api.setMmsDriverStatus(token, req)
+                    else api.setDriverStatus(token, req)
                 if (_binding == null) return@launch
                 if (!resp.success) {
                     Toast.makeText(requireContext(), resp.error ?: "Couldn't change status.", Toast.LENGTH_LONG).show()

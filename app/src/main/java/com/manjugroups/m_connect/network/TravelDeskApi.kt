@@ -103,6 +103,24 @@ interface TravelDeskApi {
         @Header("Authorization") token: String
     ): TravelDeskDriversResponse
 
+    @POST("api/mms-fleet/dispatch/drivers/create")
+    suspend fun createMmsDriver(
+        @Header("Authorization") token: String,
+        @Body body: CreateDriverRequest
+    ): TravelDeskCreateResponse
+
+    @POST("api/mms-fleet/dispatch/drivers/update")
+    suspend fun updateMmsDriver(
+        @Header("Authorization") token: String,
+        @Body body: UpdateDriverRequest
+    ): TravelDeskSimpleResponse
+
+    @POST("api/mms-fleet/dispatch/drivers/set-status")
+    suspend fun setMmsDriverStatus(
+        @Header("Authorization") token: String,
+        @Body body: SetDriverStatusRequest
+    ): TravelDeskSimpleResponse
+
     companion object {
         fun create(): TravelDeskApi {
             val logging = HttpLoggingInterceptor().apply {

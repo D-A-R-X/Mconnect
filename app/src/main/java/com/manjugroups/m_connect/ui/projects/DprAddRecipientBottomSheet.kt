@@ -79,16 +79,28 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
         loadProjects()
     }
 
+    /**
+     * Projects offered in the picker.
+     *
+     * Must be the SAME scope the recipient list reads back, which is
+     * `/api/projects/dpr/mine` → projects.listAccessibleForStaff. This used to
+     * call /api/marketing/projects, which goes through projects.listForUser —
+     * a broader, differently-gated set. A user holding projects.view but not
+     * projects.viewAll could therefore pick a project they aren't linked to,
+     * add a recipient against it, and never see that recipient again: it was
+     * saved correctly, just outside the scope the list queries.
+     *
+     * /api/projects is the permissive "my projects" route backed by the exact
+     * same query as the aggregate, so picker and list can't disagree.
+     */
     private fun loadProjects() {
         if (projectsLoading) return
         projectsLoading = true
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
+            val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
             projectsLoading = false
             if (view == null) return@launch
-            projects = resp?.projects
-                ?.map { com.manjugroups.m_connect.network.ProjectSummary(id = it.id, name = it.name, status = it.status) }
-                ?: emptyList()
+            projects = resp?.projects ?: emptyList()
             if (pendingProjectPick && projects.isNotEmpty()) {
                 pendingProjectPick = false
                 view?.let { pickProject(it) }
