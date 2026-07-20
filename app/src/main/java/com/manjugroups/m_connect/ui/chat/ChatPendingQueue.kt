@@ -88,6 +88,8 @@ object ChatPendingQueue {
                         conversationId = msg.conversationId,
                         body = msg.body,
                         parentMessageId = msg.parentMessageId,
+                        mentionedStaffIds = emptyList(),
+                        attachments = emptyList()
                     ),
                 )
                 if (resp.success) {

@@ -90,6 +90,10 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             ?: message.data["content"]
             ?: message.data["desc"]
             ?: message.data["description"]
+            ?: message.data["chatBody"]
+            ?: message.data["msg"]
+            ?: message.data["messageBody"]
+            ?: message.data["messageText"]
             ?: message.notification?.body
 
         if (body.isNullOrBlank()) {

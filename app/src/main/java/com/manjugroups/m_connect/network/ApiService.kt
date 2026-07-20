@@ -2252,6 +2252,14 @@ data class UpdateChannelRequest(
     val description: String? = null,
     val type: String? = null,
     val avatarStorageId: String? = null,
+    val avatarUrl: String? = null,
+    val avatar: String? = null,
+    val profilePhoto: String? = null,
+    val photo: String? = null,
+    val image: String? = null,
+    val imageUrl: String? = null,
+    val photoUrl: String? = null,
+    val avatarId: String? = null,
 )
 
 data class ChannelMemberRequest(
