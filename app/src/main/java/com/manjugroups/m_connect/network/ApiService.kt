@@ -339,7 +339,11 @@ interface ApiService {
     suspend fun getMyLeaves(@Header("Authorization") token: String): MyLeavesResponse
 
     @GET("api/hr/leaves/pending-approvals")
-    suspend fun getPendingLeaveApprovals(@Header("Authorization") token: String): MyLeavesResponse
+    suspend fun getPendingLeaveApprovals(
+        @Header("Authorization") token: String,
+        @Query("teamOnly") teamOnly: Boolean? = null,
+        @Query("scope") scope: String? = null,
+    ): MyLeavesResponse
 
     @POST("api/hr/leaves/apply")
     suspend fun applyLeave(
@@ -458,8 +462,9 @@ interface ApiService {
     @GET("api/hr/permissions/pending-approvals")
     suspend fun getPendingPermissionApprovals(
         @Header("Authorization") token: String,
-        // all=true → every request company-wide (All Permission scope, admins
-        // only). Omitted/false → hierarchy-scoped Team Permission.
+        // scope=direct keeps Team Permission limited to the caller's direct
+        // reports. all=true returns every request company-wide when permitted.
+        @Query("scope") scope: String? = null,
         @Query("all") all: Boolean? = null,
     ): MyPermissionsResponse
 
@@ -1003,6 +1008,14 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MarketingProjectsResponse
 
+    // Quick-create a project from the mobile daily-log picker (basics only;
+    // full editing happens on web).
+    @POST("api/marketing/projects/create")
+    suspend fun createProject(
+        @Header("Authorization") token: String,
+        @Body body: CreateProjectRequest,
+    ): CreateProjectResponse
+
     // Master material catalog (Project Management > Library > Material Catalog).
     @GET("api/materials")
     suspend fun getMaterials(
@@ -1498,7 +1511,15 @@ data class SessionData(
     // Source of the punch-out specifically (mobile clock-out on a biometric
     // punch-in, etc.). Falls back to `source` when absent.
     val punchOutSource: String? = null,
-    val totalMinutes: Int?
+    val totalMinutes: Int? = null,
+    // Where each punch happened: a reverse-geocoded address for mobile punches,
+    // or the biometric device / machine name (e.g. "NUTECH 2ND IN") for gate
+    // punches — mirrors the web punch log.
+    val punchInAddress: String? = null,
+    val punchOutAddress: String? = null,
+    // Storage IDs of the captured punch photos (mobile clock in/out).
+    val punchInPhoto: String? = null,
+    val punchOutPhoto: String? = null,
 )
 data class TodayShiftResponse(
     val success: Boolean? = null,
@@ -2949,6 +2970,20 @@ data class MarketingProjectsResponse(
     val error: String? = null,
 )
 
+data class CreateProjectRequest(
+    val name: String,
+    val description: String? = null,
+    val status: String = "proposed",
+    val startDate: String,
+    val endDate: String,
+    val budget: Double? = null,
+)
+data class CreateProjectResponse(
+    val success: Boolean = false,
+    val project: MarketingProject? = null,
+    val error: String? = null,
+)
+
 data class MaterialCatalogItem(
     @SerializedName("_id") val id: String? = null,
     val name: String? = null,
@@ -3793,6 +3828,16 @@ data class MobileDashboardResponse(
     val present: Int = 0,
     val absent: Int = 0,
     val leave: Int = 0,
+    // Same weekday one week earlier — the baseline for the tiles' trend pills.
+    // Nullable on purpose: a backend that predates these fields returns nothing
+    // at all (Gson → null) and the app hides the pills rather than inventing a
+    // delta. Do NOT give these defaults.
+    val prevTotalCalls: Int? = null,
+    val prevIncomingCalls: Int? = null,
+    val prevOutboundCalls: Int? = null,
+    val prevHot: Int? = null,
+    val prevWarm: Int? = null,
+    val prevCold: Int? = null,
     val error: String? = null,
 )
 

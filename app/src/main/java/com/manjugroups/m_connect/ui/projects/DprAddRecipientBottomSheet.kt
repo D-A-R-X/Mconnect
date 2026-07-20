@@ -79,16 +79,28 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
         loadProjects()
     }
 
+    /**
+     * Projects offered in the picker.
+     *
+     * Must be the SAME scope the recipient list reads back, which is
+     * `/api/projects/dpr/mine` → projects.listAccessibleForStaff. This used to
+     * call /api/marketing/projects, which goes through projects.listForUser —
+     * a broader, differently-gated set. A user holding projects.view but not
+     * projects.viewAll could therefore pick a project they aren't linked to,
+     * add a recipient against it, and never see that recipient again: it was
+     * saved correctly, just outside the scope the list queries.
+     *
+     * /api/projects is the permissive "my projects" route backed by the exact
+     * same query as the aggregate, so picker and list can't disagree.
+     */
     private fun loadProjects() {
         if (projectsLoading) return
         projectsLoading = true
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
+            val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
             projectsLoading = false
             if (view == null) return@launch
-            projects = resp?.projects
-                ?.map { com.manjugroups.m_connect.network.ProjectSummary(id = it.id, name = it.name, status = it.status) }
-                ?: emptyList()
+            projects = resp?.projects ?: emptyList()
             if (pendingProjectPick && projects.isNotEmpty()) {
                 pendingProjectPick = false
                 view?.let { pickProject(it) }
@@ -107,11 +119,37 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
             }
             return
         }
-        val options = projects.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
-        SearchableSelectionDialog.show(requireContext(), "Select project", options) { p ->
+        // DPRs report daily site progress, so a finished job is never a valid
+        // target — same rule (and same inline "Add project" escape hatch) the
+        // new-entry form already applies.
+        val selectable = projects.filterNot { it.status.equals("completed", ignoreCase = true) }
+        val options = selectable.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
+        SearchableSelectionDialog.show(
+            requireContext(),
+            "Select project",
+            options,
+            emptyMessage = "No active projects",
+            onCreateNew = { query -> openCreateProject(root, query) },
+            createLabel = "Add project",
+        ) { p ->
             if (view == null) return@show
             projectId = p.id
             root.findViewById<TextView>(R.id.tvDprProjectValue).text = p.name ?: "Project"
+        }
+    }
+
+    /** Inline quick-create for a project the user searched but couldn't find. */
+    private fun openCreateProject(root: View, prefillName: String) {
+        QuickCreateProjectSheet.show(
+            requireContext(), viewLifecycleOwner, session, prefillName,
+        ) { created ->
+            if (view == null) return@show
+            val summary = com.manjugroups.m_connect.network.ProjectSummary(
+                id = created.id, name = created.name, status = created.status,
+            )
+            projects = projects + summary
+            projectId = summary.id
+            root.findViewById<TextView>(R.id.tvDprProjectValue).text = summary.name ?: "Project"
         }
     }
 
@@ -144,7 +182,29 @@ class DprAddRecipientBottomSheet : BottomSheetDialogFragment() {
             if (view == null) return@show
             staffId = s.id
             root.findViewById<TextView>(R.id.tvDprStaffValue).text = s.name ?: "Staff"
-            if (!s.phone.isNullOrBlank()) root.findViewById<EditText>(R.id.etDprPhone).setText(s.phone)
+            if (!s.phone.isNullOrBlank()) {
+                root.findViewById<EditText>(R.id.etDprPhone).setText(localMobile(s.phone))
+            }
+        }
+    }
+
+    /**
+     * Strip a stored number down to the 10-digit local mobile.
+     *
+     * Staff records hold phones inconsistently — some plain, some already
+     * carrying the 91 country code — so picking a staffer could drop
+     * "919840029084" into the field even though the same person reads as
+     * "9840029084" everywhere else. The backend prepends 91 itself
+     * (normalizeIndiaWhatsAppPhone), so send it the local form and let one
+     * place own the country code.
+     */
+    private fun localMobile(raw: String?): String {
+        val digits = raw?.filter { it.isDigit() }.orEmpty()
+        return when {
+            digits.length == 12 && digits.startsWith("91") -> digits.takeLast(10)
+            digits.length == 11 && digits.startsWith("0") -> digits.takeLast(10)
+            digits.length > 10 -> digits.takeLast(10)
+            else -> digits
         }
     }
 

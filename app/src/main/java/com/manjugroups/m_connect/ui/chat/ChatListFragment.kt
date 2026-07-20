@@ -48,6 +48,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class ChatListFragment : Fragment() {
 
@@ -150,7 +151,7 @@ class ChatListFragment : Fragment() {
                     .applySmoothTransitions()
                     .replace(R.id.fragmentContainer, fragment)
                     .addToBackStack(null)
-                    .commit()
+                    .commitOnce()
             },
             onItemLongClick = { _, item ->
                 toggleChatSelection(item.id)
@@ -1590,7 +1591,7 @@ class ChatListFragment : Fragment() {
                         )
                     )
                     .addToBackStack(null)
-                    .commit()
+                    .commitOnce()
             }.onFailure {
                 toast("Unable to start direct message")
             }
@@ -1623,7 +1624,7 @@ class ChatListFragment : Fragment() {
                         )
                     )
                     .addToBackStack(null)
-                    .commit()
+                    .commitOnce()
             }.onFailure {
                 toast("Unable to create conversation")
             }
@@ -1657,7 +1658,7 @@ class ChatListFragment : Fragment() {
                         )
                     )
                     .addToBackStack(null)
-                    .commit()
+                    .commitOnce()
             }.onFailure {
                 toast("Unable to create channel")
             }

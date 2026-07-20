@@ -2,23 +2,23 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="12dp"
+    android:layout_marginBottom="10dp"
     android:background="@drawable/bg_admin_fleet_card"
     android:orientation="horizontal"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="14dp">
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="12dp">
 
     <!-- Left: Filled blue circle icon with gradient -->
     <FrameLayout
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:layout_gravity="top"
         android:layout_marginTop="2dp"
         android:background="@drawable/bg_trip_circle_gradient">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_custom_trip_route"
             android:tint="#FFFFFF" />
@@ -28,7 +28,7 @@
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="14dp"
+        android:layout_marginStart="12dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -51,7 +51,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="5dp"
                 android:layout_weight="1"
+                android:ellipsize="end"
                 android:fontFamily="@font/inter_medium"
+                android:maxLines="1"
                 android:text="2026-06-13 • 13:00"
                 android:textColor="#4B5563"
                 android:textSize="12.5sp" />
@@ -76,15 +78,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
+            android:breakStrategy="high_quality"
             android:ellipsize="end"
             android:fontFamily="@font/inter_regular"
+            android:hyphenationFrequency="none"
             android:lineSpacingExtra="2dp"
             android:maxLines="2"
             android:text="1st Avenue, 83rd St, Ashok Nagar, Chennai, Tamil Nadu 600083"
             android:textColor="#374151"
             android:textSize="12sp" />
 
-        <!-- Row 3: Tags + Allocate button -->
+        <!-- Row 3: tags only. The Allocate button used to share this row behind
+             a weighted spacer, so a long vehicle label squeezed the button and
+             the pills ran into it. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -112,18 +118,21 @@
                     android:id="@+id/tvAttendeesTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="4dp"
                     android:fontFamily="@font/inter_medium"
+                    android:maxLines="1"
                     android:text="2 Attendees"
                     android:textColor="#1E3A8A"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- Vehicle Tag -->
+            <!-- Vehicle Tag. Weighted so a long label ellipsizes inside the
+                 pill instead of pushing the row wider than the card. -->
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
+                android:layout_weight="1"
                 android:background="@drawable/bg_trip_tag_pill"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -140,32 +149,34 @@
                     android:id="@+id/tvVehicleTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="4dp"
+                    android:ellipsize="end"
                     android:fontFamily="@font/inter_medium"
+                    android:maxLines="1"
                     android:text="Company Vehicle"
                     android:textColor="#1E3A8A"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <View
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-            <!-- Allocate Button -->
-            <TextView
-                android:id="@+id/btnAllocate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_admin_fleet_btn_allocate"
-                android:fontFamily="@font/inter_semibold"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="6dp"
-                android:text="Allocate  ›"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
         </LinearLayout>
+
+        <!-- Row 4: action, right-aligned on its own line so it always has room
+             and lines up across cards regardless of tag length. -->
+        <TextView
+            android:id="@+id/btnAllocate"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_gravity="end"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_admin_fleet_btn_allocate"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:minWidth="96dp"
+            android:paddingHorizontal="14dp"
+            android:text="Allocate ›"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
 
     </LinearLayout>
 

@@ -164,6 +164,10 @@ data class CreateDailyLogResponse(
 data class DailyLogEntry(
     @SerializedName("_id") val id: String,
     val date: String? = null,
+    // Convex stamps _creationTime (epoch ms) on every document and the /mine
+    // aggregate spreads the row, so the actual logged-at time is already on the
+    // wire. `date` is only the day the log is FOR — it carries no clock time.
+    @SerializedName("_creationTime") val creationTime: Double? = null,
     val weather: String? = null,
     val siteConditions: String? = null,
     val workSummary: String? = null,

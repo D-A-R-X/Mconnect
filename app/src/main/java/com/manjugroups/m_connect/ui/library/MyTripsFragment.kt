@@ -51,6 +51,8 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class MyTripsFragment : Fragment() {
 
@@ -433,7 +435,7 @@ class MyTripsFragment : Fragment() {
         if (session.isDriverMode) {
             if (isCompleted) {
                 DriverTripCompletedBottomSheet.newInstance(visit.id)
-                    .show(parentFragmentManager, "driver_trip_completed")
+                    .showOnce(parentFragmentManager, "driver_trip_completed")
             } else if (!isInProgress) {
                 // Future/Ready trip start bottom sheet
                 val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
@@ -441,7 +443,7 @@ class MyTripsFragment : Fragment() {
                     Toast.makeText(requireContext(), "This trip is scheduled for a future date.", Toast.LENGTH_SHORT).show()
                 } else {
                     DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
-                        .show(parentFragmentManager, "driver_start_trip")
+                        .showOnce(parentFragmentManager, "driver_start_trip")
                 }
             } else {
                 openTripNavigationForVisit(visit)
@@ -480,7 +482,7 @@ class MyTripsFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openCompletedVisitDetail(visit: TodayVisit) {
@@ -489,7 +491,7 @@ class MyTripsFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     override fun onResume() {

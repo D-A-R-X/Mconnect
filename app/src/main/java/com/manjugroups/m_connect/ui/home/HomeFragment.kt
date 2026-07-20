@@ -35,6 +35,10 @@ import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class HomeFragment : Fragment() {
 
@@ -53,6 +57,10 @@ class HomeFragment : Fragment() {
 
     private companion object {
         const val DASH_DATE_RESULT_KEY = "home_dash_date_result"
+        // Today's Trip infinite-scroll window: first page size + how many rows'
+        // worth of scroll from the bottom triggers the next page.
+        const val HOME_TRIP_PAGE = 15
+        const val HOME_TRIP_NEAR_END_ROWS = 4
     }
     private val visitEmptySubtitle =
         "It looks like you don’t have any meetings scheduled at the moment. " +
@@ -236,6 +244,15 @@ class HomeFragment : Fragment() {
         // one gesture. The spinner is dismissed in collectState() when
         // the next "loaded" state lands.
         binding.homeRefresh.setupPullToRefresh {
+            // Recover the rest state on every pull. The banner can get wedged
+            // under the white drawer (spacer laid out at ~0 while scrollY is
+            // already 0, so there's no scroll room to reveal it) and the user
+            // reported refresh couldn't fix it — because refresh only reloaded
+            // data. Reset the one-shot, snap to top, and re-arm the settler so
+            // the reloaded content re-pins to rest too.
+            homeRestInitialized = false
+            _binding?.homeContent?.scrollTo(0, 0)
+            armHomeSettle()
             // Dashboard users see the KPI overview, so a pull must refresh THAT
             // (a single fast call) and the spinner is dismissed the moment it
             // lands — instead of spinning for the slow visits/attendance chain
@@ -246,8 +263,9 @@ class HomeFragment : Fragment() {
             // Safety net: the spinner is normally dismissed when the next
             // "Loaded" state lands, but a refresh that produces IDENTICAL data
             // may not re-emit (StateFlow de-dups) and a stalled/slow request
-            // could otherwise spin forever. Force-dismiss after a hard cap.
-            binding.homeRefresh.postDelayed({ _binding?.homeRefresh?.dismissRefresh() }, 6000)
+            // could otherwise spin forever. Force-dismiss after a hard cap —
+            // kept short so the loader never appears to "load too much".
+            binding.homeRefresh.postDelayed({ _binding?.homeRefresh?.dismissRefresh() }, 3500)
         }
         // setupPullToRefresh() installs a generic inset listener that anchors
         // the spinner near the top — on the full-bleed Home header that lands
@@ -335,16 +353,29 @@ class HomeFragment : Fragment() {
             if (b != null) {
                 val h = b.homeHeader.height
                 if (h > 0) {
-                    if (b.homeHeaderSpacer.layoutParams.height != h) {
+                    // Self-heal the spacer on EVERY layout pass (this runs from
+                    // the header/content/whiteArea layout listeners), not just
+                    // when layoutParams differ. The spacer VIEW can be laid out
+                    // at a stale ~0 height while its layoutParams already read
+                    // the header height — that mismatch is what wedges the white
+                    // drawer over the banner at rest. Force both to h and
+                    // re-measure the scroll content so the fix actually takes.
+                    if (b.homeHeaderSpacer.layoutParams.height != h ||
+                        b.homeHeaderSpacer.height != h
+                    ) {
                         b.homeHeaderSpacer.layoutParams =
                             b.homeHeaderSpacer.layoutParams.apply { height = h }
                         b.homeHeaderSpacer.requestLayout()
+                        b.homeScrollContent.requestLayout()
                     }
                     // homeRefresh is full-height, so the default pull spinner
-                    // lands over the header — drop it just below the header
-                    // instead (rests off-screen at top when idle).
+                    // starts at the very top and sweeps DOWN over the blue
+                    // banner. Anchor it to emerge from just BELOW the banner
+                    // instead: it appears at the banner's bottom edge and pulls
+                    // a little further into the white area — never crossing the
+                    // banner.
                     val d = resources.displayMetrics.density
-                    b.homeRefresh.setProgressViewOffset(false, (-40 * d).toInt(), (h + 24 * d).toInt())
+                    b.homeRefresh.setProgressViewOffset(false, (h - 8 * d).toInt(), (h + 32 * d).toInt())
                     // Scroll limit: lift the drawer just enough to cover the
                     // BANNER and sit flush under the profile row (avatar/name/
                     // bell) — NOT past it. So the range = bannerHeight + the
@@ -458,6 +489,17 @@ class HomeFragment : Fragment() {
                     }
                 }
             }
+            // Self-heal: any time the scroll reaches the very top, force the
+            // rest state. If the drawer was wedged over the banner (stale spacer
+            // / leftover translation), scrolling back up — or the refresh snap —
+            // always restores it. settleHomeToRest is a cheap no-op when already
+            // correct (it only re-lays out when the spacer height is wrong).
+            if (scrollY <= 0) settleHomeToRest()
+
+            // Infinite-scroll: grow the Today's Trip window as the user nears
+            // the bottom (integrated here instead of the pager's own listener,
+            // which would clobber this scroll-animation listener).
+            maybeExtendTripWindow(scrollY)
         })
     }
 
@@ -603,10 +645,17 @@ class HomeFragment : Fragment() {
                             ) {
                                 renderVisitCard(state)
                                 // The render (+ applyDashboardVisibility) re-lays
-                                // the drawer out; if we're still in the post-resume
-                                // settle window, re-pin to rest so this late layout
-                                // can't leave the banner stuck at the top.
-                                if (android.os.SystemClock.elapsedRealtime() <= homeSettleDeadline) {
+                                // the drawer out and can leave the banner wedged.
+                                // Re-pin to rest if we're still in the post-resume
+                                // settle window OR the user is simply at the top
+                                // (scrollY 0) — the latter covers a SLOW load that
+                                // lands after the 3s window, which was the main
+                                // "stuck most times" trigger. Guarded on at-rest so
+                                // we never yank a user who has scrolled down.
+                                val atRest = (_binding?.homeContent?.scrollY ?: 0) <= 0
+                                if (atRest ||
+                                    android.os.SystemClock.elapsedRealtime() <= homeSettleDeadline
+                                ) {
                                     settleHomeToRest()
                                     _binding?.root?.post { settleHomeToRest() }
                                 }
@@ -755,6 +804,15 @@ class HomeFragment : Fragment() {
     // skip the re-inflation when nothing visible changed.
     private var lastVisitRenderSignature: String? = null
 
+    // Infinite-scroll window for the Today's Trip list. The visits endpoint
+    // returns the whole day in one shot; rendering a card per trip up-front is
+    // slow for staff with many stops, so we render only a growing window and
+    // extend it as the user nears the bottom (see the scroll listener). Reset
+    // to the first page whenever the underlying list/tab changes.
+    private var homeTripLimit = HOME_TRIP_PAGE
+    private var homeTripTotal = 0
+    private var lastVisitBaseSignature: String? = null
+
     /**
      * Show the company Overview ONLY for dashboard users; everyone else sees
      * the "Today's Trip" section. The Overview include (`homeOverviewInclude`)
@@ -825,9 +883,29 @@ class HomeFragment : Fragment() {
         if (displayCount == 0) {
             binding.visitListContent.visibility = View.GONE
             binding.visitEmptyContent.visibility = View.VISIBLE
-            // Match Frame 4 text exactly
-            binding.tvVisitEmptyTitle.text = "No Trips Available"
-            binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
+            // Drivers get the reason, not the generic copy. My Trips already
+            // surfaced this; Home didn't, so a driver whose fleet fetch failed
+            // (most often the dispatcher assigned the vehicle to a different
+            // phone number than the one they log in with) saw a bare "No Trips
+            // Available" with nothing to act on.
+            val driverErr = viewModel.driverTripsError.value
+            if (session.isDriverMode && !driverErr.isNullOrBlank()) {
+                binding.tvVisitEmptyTitle.text = "No Driver Trips"
+                // Name the number we actually searched with. "Check the phone
+                // number" is useless without it — this way the driver can hold
+                // the screen next to the dispatcher's Fleet row and see the
+                // mismatch immediately, instead of it being guesswork.
+                val phone = session.userPhone?.trim().orEmpty()
+                binding.tvVisitEmptySubtitle.text = if (phone.isNotEmpty()) {
+                    "$driverErr\n\nSearched for: $phone"
+                } else {
+                    driverErr
+                }
+            } else {
+                // Match Frame 4 text exactly
+                binding.tvVisitEmptyTitle.text = "No Trips Available"
+                binding.tvVisitEmptySubtitle.text = "It looks like you don't have any meetings scheduled at the moment.\nThis space will be updated as new meetings are added!"
+            }
             return
         }
 
@@ -842,15 +920,25 @@ class HomeFragment : Fragment() {
             return
         }
 
-        // Only re-inflate when the visible list actually changed. The childCount
-        // check also forces a rebuild after view recreation (fresh empty
-        // container) even if the signature happens to match.
-        val signature = buildString {
+        // Reset the infinite-scroll window whenever the underlying list or tab
+        // changes (a new fetch / tab switch) so a fresh view starts at page 1.
+        val baseSignature = buildString {
             append(state.hasOpenSession).append('|').append(selectedTab).append('|')
             visits.forEach { append(it.id).append(':').append(it.status).append(';') }
         }
+        if (baseSignature != lastVisitBaseSignature) {
+            lastVisitBaseSignature = baseSignature
+            homeTripLimit = HOME_TRIP_PAGE
+        }
+        homeTripTotal = displayCount
+        val shown = minOf(homeTripLimit, displayCount)
+
+        // Only re-inflate when the visible window actually changed. The
+        // childCount check forces a rebuild after view recreation (fresh empty
+        // container) and after the window grows on scroll (same list, more rows).
+        val signature = "$baseSignature#$shown"
         if (signature == lastVisitRenderSignature &&
-            binding.visitListContent.childCount == displayCount
+            binding.visitListContent.childCount == shown
         ) {
             return
         }
@@ -858,9 +946,25 @@ class HomeFragment : Fragment() {
 
         binding.visitListContent.removeAllViews()
 
-        visits.forEachIndexed { index, visit ->
+        visits.take(shown).forEachIndexed { index, visit ->
             val itemView = createVisitItem(visit, index, displayCount, state.hasOpenSession)
             binding.visitListContent.addView(itemView)
+        }
+    }
+
+    /** Grow the Today's Trip window when the user nears the bottom, then
+     *  re-render the (now larger) window. No-op for dashboard/admin views and
+     *  when the whole list is already shown. Called from the scroll listener. */
+    private fun maybeExtendTripWindow(scrollY: Int) {
+        if (session.canViewVpDashboard() || session.isAdmin) return
+        if (homeTripLimit >= homeTripTotal) return
+        val b = _binding ?: return
+        val child = b.homeContent.getChildAt(0) ?: return
+        val rowH = (84 * resources.displayMetrics.density).toInt()
+        val distanceToBottom = child.measuredHeight - (scrollY + b.homeContent.measuredHeight)
+        if (distanceToBottom <= HOME_TRIP_NEAR_END_ROWS * rowH) {
+            homeTripLimit += HOME_TRIP_PAGE
+            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
         }
     }
 
@@ -995,7 +1099,7 @@ class HomeFragment : Fragment() {
             initialTo = initial,
             resultKey = DASH_DATE_RESULT_KEY,
             singleSelect = true,
-        ).show(parentFragmentManager, "dash_date_picker")
+        ).showOnce(parentFragmentManager, "dash_date_picker")
     }
 
     /** Header + date-chip copy for the current dashboard date. */
@@ -1080,6 +1184,52 @@ class HomeFragment : Fragment() {
         set(R.id.numCold, d.cold)
         set(R.id.numSv, d.svVisitsFixed)
         set(R.id.numCp, d.cpVisitsFixed)
+
+        // Trend pills. These were hardcoded strings with no ids ("↗ 12% vs
+        // last week" sat under a value of 0), so they were decoration that
+        // read as data. Now driven off the same-weekday-last-week baseline,
+        // and hidden outright when there is nothing true to say.
+        bindTrend(root, R.id.trendCalls, d.totalCalls, d.prevTotalCalls)
+        bindTrend(root, R.id.trendIncoming, d.incomingCalls, d.prevIncomingCalls)
+        bindTrend(root, R.id.trendOutgoing, d.outboundCalls, d.prevOutboundCalls)
+
+        // Present-vs-headcount needs no backend support — both numbers are
+        // already on this response.
+        root.findViewById<android.widget.TextView>(R.id.trendPresent)?.let { pill ->
+            if (d.totalStaff <= 0) {
+                pill.visibility = View.GONE
+            } else {
+                pill.visibility = View.VISIBLE
+                val pct = (d.present * 100.0 / d.totalStaff).roundToInt()
+                pill.text = "$pct% of Total"
+            }
+        }
+    }
+
+    /**
+     * Render a "vs last week" pill, or hide it. [previous] is null on a backend
+     * that predates the comparison fields — in that case showing any delta
+     * would be a guess, so the pill goes away.
+     */
+    private fun bindTrend(root: View, pillId: Int, current: Int, previous: Int?) {
+        val pill = root.findViewById<android.widget.TextView>(pillId) ?: return
+        if (previous == null || (previous == 0 && current == 0)) {
+            pill.visibility = View.GONE
+            return
+        }
+        pill.visibility = View.VISIBLE
+        pill.text = when {
+            previous == 0 -> "↗ new vs last week"
+            else -> {
+                val delta = (current - previous) * 100.0 / previous
+                val arrow = when {
+                    delta > 0 -> "↗"
+                    delta < 0 -> "↘"
+                    else -> "→"
+                }
+                "$arrow ${abs(delta).roundToInt()}% vs last week"
+            }
+        }
     }
 
     private fun dashTile(ctx: android.content.Context, t: DashTile, startMargin: Int): View {
@@ -1179,7 +1329,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun createVisitItem(
@@ -1321,7 +1471,7 @@ class HomeFragment : Fragment() {
             if (isCompleted) {
                 val openDetail: (View) -> Unit = {
                     DriverTripCompletedBottomSheet.newInstance(visit.id)
-                        .show(parentFragmentManager, "driver_trip_completed")
+                        .showOnce(parentFragmentManager, "driver_trip_completed")
                 }
                 itemView.isClickable = true
                 itemView.isFocusable = true
@@ -1331,13 +1481,23 @@ class HomeFragment : Fragment() {
             } else if (!isInProgress && canStartTrip) {
                 val startTrip: (View) -> Unit = {
                     DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
-                        .show(parentFragmentManager, "driver_start_trip")
+                        .showOnce(parentFragmentManager, "driver_start_trip")
                 }
                 itemView.isClickable = true
                 itemView.isFocusable = true
                 itemView.setOnClickListener(startTrip)
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(startTrip)
+            } else if (!isInProgress && !canStartTrip) {
+                // The card says "Clock In First" — so take them there instead of
+                // opening trip navigation they can't act on yet. Same redirect
+                // CP Visits already uses for this state.
+                val goClockIn: (View) -> Unit = { openClockInForTrip() }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(goClockIn)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(goClockIn)
             } else {
                 val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
                 itemView.isClickable = true
@@ -1463,7 +1623,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openCompletedVisitDetail(visit: TodayVisit) {
@@ -1473,7 +1633,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     /**
@@ -1517,7 +1677,7 @@ class HomeFragment : Fragment() {
                 cpOutcome = visit.cpVisit?.outcome,
                 isSvFixedHint = visit.visitCategory == "sv_cum_cp",
             )
-            .show(parentFragmentManager, "cp_visit_complete")
+            .showOnce(parentFragmentManager, "cp_visit_complete")
     }
 
     private fun openTripNavigationForPlace(place: AssignedPlace) {
@@ -1532,7 +1692,7 @@ class HomeFragment : Fragment() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun applyItemSpacing(itemView: View, index: Int, total: Int) {
@@ -1667,6 +1827,26 @@ class HomeFragment : Fragment() {
             tabHr.setTextColor(Color.parseColor("#475467"))
             tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
         }
+    }
+
+    /**
+     * Send a driver whose trip is blocked on attendance to the clock-in screen.
+     * Mirrors CpVisitsFragment's handling of the same state.
+     */
+    private fun openClockInForTrip() {
+        android.widget.Toast.makeText(
+            requireContext(),
+            "Clock in to start your trip",
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+        parentFragmentManager.beginTransaction()
+            .applySmoothTransitions()
+            .replace(
+                R.id.fragmentContainer,
+                com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+            )
+            .addToBackStack(null)
+            .commitOnce()
     }
 
     private fun setupDriverTabs() {
@@ -1826,7 +2006,7 @@ class HomeFragment : Fragment() {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
     }
 

@@ -50,6 +50,8 @@
 
         <!-- Driver Name -->
         <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
             android:id="@+id/tvDriverName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -72,6 +74,8 @@
                 android:tint="#6B7280" />
 
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvDriverPhone"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -118,6 +122,8 @@
 
         <!-- Status Badge -->
         <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
             android:id="@+id/tvDriverStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -140,12 +146,16 @@
 
     <!-- Compatibility views (invisible but kept so any other HR/chat screens compiled don't crash if they share/refer) -->
     <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
         android:id="@+id/tvDriverRating"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:visibility="gone" />
 
     <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
         android:id="@+id/tvDriverLicense"
         android:layout_width="0dp"
         android:layout_height="0dp"

@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * KOS-52: project-detail screen that lists inventoryUnits with filter chips
@@ -249,7 +250,7 @@ class ProjectInventoryFragment : Fragment() {
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openLayoutMap() {
@@ -260,7 +261,7 @@ class ProjectInventoryFragment : Fragment() {
         parentFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun prettyScope(scope: String): String = when (scope) {

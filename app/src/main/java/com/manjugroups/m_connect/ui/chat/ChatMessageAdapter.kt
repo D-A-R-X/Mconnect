@@ -27,6 +27,7 @@ import com.manjugroups.m_connect.network.MessageData
 import com.manjugroups.m_connect.network.ReactionData
 import java.text.SimpleDateFormat
 import java.util.*
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 sealed class ChatItem {
     data class Message(val data: MessageData, val isMine: Boolean, val showAvatar: Boolean, val showName: Boolean) : ChatItem()
@@ -402,7 +403,7 @@ class ChatMessageAdapter(
                         activity.supportFragmentManager.beginTransaction()
                             .replace(R.id.fragmentContainer, mapFragment)
                             .addToBackStack(null)
-                            .commit()
+                            .commitOnce()
                     } else {
                         val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
@@ -611,7 +612,7 @@ class ChatMessageAdapter(
                         activity.supportFragmentManager.beginTransaction()
                             .replace(R.id.fragmentContainer, mapFragment)
                             .addToBackStack(null)
-                            .commit()
+                            .commitOnce()
                     } else {
                         val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))

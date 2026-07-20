@@ -56,6 +56,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
 
@@ -607,7 +608,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
                 ),
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private suspend fun fetchLocationOrNull(): Location? {

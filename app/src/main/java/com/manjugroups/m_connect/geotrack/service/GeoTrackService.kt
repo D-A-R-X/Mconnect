@@ -197,6 +197,28 @@ class GeoTrackService : Service() {
         }
     }
 
+    private val shutdownReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            Log.i(TAG, "Device shutdown broadcast: ${intent?.action}")
+            // The process is about to die, so we can't rely on the coroutine
+            // scope surviving — persist the event SYNCHRONOUSLY to Room (a fast
+            // local insert). It replays to the server on the next boot/connect
+            // via GeoTrackEventQueue, and DEVICE_SHUTDOWN is in the backend's
+            // always-notify-on-replay set so the RO is still alerted.
+            try {
+                kotlinx.coroutines.runBlocking {
+                    GeoTrackEventQueue.enqueue(
+                        this@GeoTrackService,
+                        "DEVICE_SHUTDOWN",
+                        buildEventMetadataQuick(),
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Shutdown enqueue failed: ${e.message}")
+            }
+        }
+    }
+
     // ── Location callback ──
 
     private val locationCallback = object : LocationCallback() {
@@ -1055,6 +1077,22 @@ class GeoTrackService : Service() {
         return metadata
     }
 
+    /**
+     * Synchronous variant of buildEventMetadata for events that must be
+     * captured without awaiting anything (e.g. DEVICE_SHUTDOWN, where the
+     * process is being torn down). Skips the fused last-location await; keeps
+     * the battery/network/gps/airplane snapshot.
+     */
+    private fun buildEventMetadataQuick(): Map<String, Any?> = mapOf(
+        "batteryPct" to getBatteryLevel(),
+        "networkType" to getNetworkType(),
+        "gpsEnabled" to isGpsEnabled(),
+        "airplaneMode" to isAirplaneModeOn(),
+        "backgroundLocationPermission" to hasBackgroundLocationPermission(),
+        "activityRecognitionPermission" to hasActivityRecognitionPermission(),
+        "batteryOptimizationIgnored" to isIgnoringBatteryOptimizations(),
+    )
+
     private suspend fun markNetworkOfflineIfNeeded() {
         val now = System.currentTimeMillis()
         if (!offlineStartedAt.compareAndSet(0L, now)) return
@@ -1095,18 +1133,32 @@ class GeoTrackService : Service() {
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun registerReceivers() {
+        // Device power-off: ACTION_SHUTDOWN is the standard signal; the
+        // QUICKBOOT_POWEROFF actions cover OEM "fast shutdown" paths (HTC/
+        // Samsung/others) that skip ACTION_SHUTDOWN. These are protected
+        // system broadcasts, so a dynamically-registered NOT_EXPORTED receiver
+        // is the only reliable way to catch them (manifest receivers are not
+        // delivered for shutdown).
+        val shutdownFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SHUTDOWN)
+            addAction("android.intent.action.QUICKBOOT_POWEROFF")
+            addAction("com.htc.intent.action.QUICKBOOT_POWEROFF")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(airplaneReceiver, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED), RECEIVER_NOT_EXPORTED)
             registerReceiver(gpsReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION), RECEIVER_NOT_EXPORTED)
+            registerReceiver(shutdownReceiver, shutdownFilter, RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(airplaneReceiver, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
             registerReceiver(gpsReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION))
+            registerReceiver(shutdownReceiver, shutdownFilter)
         }
     }
 
     private fun unregisterReceivers() {
         try { unregisterReceiver(airplaneReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(gpsReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(shutdownReceiver) } catch (_: Exception) {}
     }
 
     // ── Notification ──

@@ -59,6 +59,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Outcome Information bottom sheet — full Booking flow (7 sub-tabs).
@@ -3542,7 +3543,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
             }
         })
-        camera.show(childFragmentManager, "client_image_camera")
+        camera.showOnce(childFragmentManager, "client_image_camera")
     }
 
     private fun uploadClientImage(uri: Uri) {
@@ -4785,7 +4786,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         RejectReasonBottomSheet
             .newInstance(cpVisitId)
-            .show(parentFragmentManager, "cp_reject_reason")
+            .showOnce(parentFragmentManager, "cp_reject_reason")
     }
 
     companion object {

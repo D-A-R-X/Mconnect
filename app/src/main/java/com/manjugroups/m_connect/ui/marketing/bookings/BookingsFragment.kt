@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Marketing > Bookings list screen.
@@ -348,7 +349,7 @@ class BookingsFragment : Fragment() {
         row.setOnClickListener {
             BookingDetailBottomSheet
                 .newInstance(b.id)
-                .show(parentFragmentManager, "booking_detail_${b.id}")
+                .showOnce(parentFragmentManager, "booking_detail_${b.id}")
         }
     }
 
@@ -423,7 +424,7 @@ class BookingsFragment : Fragment() {
         }
         com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
             .forStandaloneBooking()
-            .show(parentFragmentManager, "bookings_create_outcome")
+            .showOnce(parentFragmentManager, "bookings_create_outcome")
     }
 
     companion object {

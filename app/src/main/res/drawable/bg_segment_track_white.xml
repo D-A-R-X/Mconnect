@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Segmented-control track, white variant of bg_loans_segment.
+
+  The loans version is #F2F4F7 because it sits inside a white card and needs to
+  darken slightly. On a page-grey panel that reads as invisible, so the track is
+  white here and the panel provides the contrast instead. Same 10dp radius, so
+  the blue active pill (bg_loans_segment_active) drops straight in.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <corners android:radius="10dp" />
+</shape>

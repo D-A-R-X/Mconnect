@@ -362,6 +362,30 @@ class AttendanceFlowViewModel(
                         // midnight) and for any bootstrap-driven restart.
                         SessionManager(appCtx).shouldTrackNow = false
                         GeoTrackService.stop(appCtx)
+                        // Clocking out also ends any active On-Duty trip — a
+                        // forgotten on-duty must not keep accumulating travel
+                        // routes past the shift. Clear it locally (immediate UI)
+                        // and close it server-side. The backend also closes it on
+                        // ANY punch (incl. biometric) as the authoritative bound.
+                        val sm = SessionManager(appCtx)
+                        if (sm.isOnDuty) {
+                            val tripId = sm.onDutyTripId
+                            sm.clearOnDutyDetails()
+                            com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(appCtx)
+                            runCatching {
+                                api.completeOnDutyTrip(
+                                    token,
+                                    com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
+                                        tripId = tripId,
+                                        lat = null,
+                                        lng = null,
+                                        address = null,
+                                        proofPhotoIds = null,
+                                        proofNote = null,
+                                    ),
+                                )
+                            }
+                        }
                     } else {
                         val bootstrap = response.trackingBootstrap ?: runCatching {
                             geoApi.getTrackingBootstrap(token, deviceId ?: SessionManager(ctx).trackingDeviceId).data
@@ -598,8 +622,15 @@ class AttendanceFlowViewModel(
                 }
                 s.punchOutTime?.takeIf { it.isNotBlank() }?.let { iso ->
                     parseMillis(iso)?.let { t ->
-                        val outSource = s.punchOutSource ?: s.source
-                        if (outSource.equals("mobile", ignoreCase = true)) {
+                        // Only an EXPLICIT mobile punch-out counts as a mobile
+                        // clock-out. Do NOT fall back to the session's punch-IN
+                        // source — a session punched IN via mobile and OUT at a
+                        // biometric gate has no punchOutSource on older rows, and
+                        // the fallback mis-read that gate punch-out as a MOBILE
+                        // clock-out, flipping the app to "clocked out" (the
+                        // reported bug). Unknown/biometric out = activity, not a
+                        // mobile clock-out.
+                        if (s.punchOutSource.equals("mobile", ignoreCase = true)) {
                             if (latestMobileOutMs == null || t > latestMobileOutMs!!) latestMobileOutMs = t
                         } else {
                             if (latestActivityMs == null || t > latestActivityMs!!) latestActivityMs = t

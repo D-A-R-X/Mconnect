@@ -31,6 +31,7 @@ import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
@@ -65,6 +66,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -225,7 +232,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             }
             SubmitLeaveConfirmSheet
                 .newInstance()
-                .show(parentFragmentManager, "submit_leave_confirm")
+                .showOnce(parentFragmentManager, "submit_leave_confirm")
             return
         }
 
@@ -242,7 +249,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
         SubmitLeaveConfirmSheet
             .newInstance()
-            .show(parentFragmentManager, "submit_leave_confirm")
+            .showOnce(parentFragmentManager, "submit_leave_confirm")
     }
 
     private fun loadLeaveTypes() {
@@ -261,9 +268,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     if ((lp.sickPerYear ?: 12) > 0) types.add("sick")
                     if ((lp.earnedPerYear ?: 15) > 0) types.add("earned")
                     types.add("unpaid")
-                    // half_day is submitted as a casual half-day, so it is only
-                    // meaningful while casual leave is enabled.
-                    if (types.contains("casual")) types.add("half_day")
+                    // Half Day is always offered. It submits as a 0.5-day leave
+                    // of the user's first available base type (casual when the
+                    // user has it, otherwise unpaid) — see halfDayBaseType() —
+                    // so it works even for staff with no casual allocation.
+                    types.add("half_day")
                     // Compensatory Off spends earned comp-off credits through a
                     // separate flow (compoff/apply). Always offered — like web —
                     // and gated at submit-time by whether the user has credits.
@@ -418,6 +427,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * The real leave type a Half Day is booked against: the user's first
+     * available base type (casual → sick → earned → unpaid, in policy order),
+     * excluding the half_day and compensatory pseudo-categories. Falls back to
+     * unpaid so a half-day always has a valid, submittable base even when the
+     * user has no paid-leave allocation.
+     */
+    private fun halfDayBaseType(): String =
+        leaveTypes.firstOrNull { it != "half_day" && it != "compensatory" } ?: "unpaid"
+
     private fun submitLeave() {
         if (selectedLeaveType == "compensatory") {
             submitCompOff()
@@ -455,7 +474,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.applyLeave(
                     session.bearerToken,
                     ApplyLeaveRequest(
-                        leaveType = if (selectedLeaveType == "half_day") "casual" else selectedLeaveType,
+                        leaveType = if (selectedLeaveType == "half_day") halfDayBaseType() else selectedLeaveType,
                         fromDate = from,
                         toDate = to,
                         reason = if (selectedLeaveType == "half_day") "[$selectedSession] $reason".trim() else reason,
@@ -467,7 +486,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().show(parentFragmentManager, "leave_submitted_success")
+                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }
@@ -511,7 +530,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     com.manjugroups.m_connect.network.ApplyCompOffRequest(creditId = credit.id, date = date)
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().show(parentFragmentManager, "leave_submitted_success")
+                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
                     Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
                 }

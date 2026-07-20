@@ -51,6 +51,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.Calendar
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class HrDashboardFragment : Fragment() {
 
@@ -121,6 +123,12 @@ class HrDashboardFragment : Fragment() {
     private var homeFence: HomeFenceData? = null
     private var isInsideHomeFence: Boolean = false
     private var geofenceWatcherJob: Job? = null
+
+    // Re-polls today's attendance while the dashboard is visible so a punch
+    // made OUTSIDE the app — a biometric gate punch in particular — flips the
+    // clocked-in/out header without the staff having to leave and come back.
+    // The status is server-authoritative; this just keeps it fresh.
+    private var clockStatusWatcherJob: Job? = null
     // Live diagnostic for the fence — captured each watcher tick so the
     // subtitle can surface WHY enforcement isn't firing when staff
     // expect it (policy off / no GPS / outside radius / etc.).
@@ -240,7 +248,7 @@ class HrDashboardFragment : Fragment() {
                 .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, ClockInAreaFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         binding.btnOnDutyDisabled.setOnClickListener {
@@ -255,7 +263,7 @@ class HrDashboardFragment : Fragment() {
             if (session.isOnDuty) {
                 completeOnDutyTrip()
             } else {
-                OnDutyFormBottomSheet.newInstance().show(parentFragmentManager, "on_duty_form")
+                OnDutyFormBottomSheet.newInstance().showOnce(parentFragmentManager, "on_duty_form")
             }
         }
 
@@ -308,7 +316,7 @@ class HrDashboardFragment : Fragment() {
             ClockOutConfirmBottomSheet.newInstance(
                 todayMinutes = today,
                 overtimeMinutes = overtime,
-            ).show(parentFragmentManager, "clock_out_confirm")
+            ).showOnce(parentFragmentManager, "clock_out_confirm")
         }
 
         parentFragmentManager.setFragmentResultListener(
@@ -330,10 +338,10 @@ class HrDashboardFragment : Fragment() {
                 PunchMode.PUNCH_OUT -> {
                     session.clearOnDutyDetails()
                     ClockOutSuccessBottomSheet()
-                        .show(parentFragmentManager, "clock_out_success")
+                        .showOnce(parentFragmentManager, "clock_out_success")
                 }
                 PunchMode.PUNCH_IN -> {
-                    ClockInSuccessBottomSheet().show(parentFragmentManager, "clock_in_success")
+                    ClockInSuccessBottomSheet().showOnce(parentFragmentManager, "clock_in_success")
                 }
                 null -> Unit
             }
@@ -505,11 +513,13 @@ class HrDashboardFragment : Fragment() {
         // then start the periodic watcher.
         loadHomeFence()
         startGeofenceWatcher()
+        startClockStatusWatcher()
     }
 
     override fun onPause() {
         super.onPause()
         stopGeofenceWatcher()
+        stopClockStatusWatcher()
     }
 
     private fun collectState() {
@@ -1110,7 +1120,7 @@ class HrDashboardFragment : Fragment() {
                     editBtn.visibility = View.VISIBLE
                     editBtn.setOnClickListener {
                         EditAttendanceBottomSheet.newInstance(record)
-                            .show(parentFragmentManager, "edit_attendance")
+                            .showOnce(parentFragmentManager, "edit_attendance")
                     }
                 }
             }
@@ -1238,7 +1248,7 @@ class HrDashboardFragment : Fragment() {
             session.onDutyVehicleType.equals("Public Transport", ignoreCase = true) ||
                 session.onDutyVehicleOwnership.equals("Public Vehicle", ignoreCase = true)
         if (isPublicTransport) {
-            OnDutyProofBottomSheet.newInstance().show(parentFragmentManager, "on_duty_proof")
+            OnDutyProofBottomSheet.newInstance().showOnce(parentFragmentManager, "on_duty_proof")
             return
         }
         finishOnDuty(proofPhotoIds = null, proofNote = null)
@@ -1416,6 +1426,26 @@ class HrDashboardFragment : Fragment() {
         geofenceWatcherJob = null
     }
 
+    /** Keep the clocked-in/out header in step with the server while the
+     *  dashboard is on screen. A biometric gate punch never goes through the
+     *  app, so without this the header stays stale until the fragment is
+     *  resumed again. Re-loads are painted in place (no skeleton flash). */
+    private fun startClockStatusWatcher() {
+        if (clockStatusWatcherJob?.isActive == true) return
+        clockStatusWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && _binding != null) {
+                delay(20_000L)
+                if (_binding == null) break
+                flowViewModel.loadTodayAttendance(session.bearerToken)
+            }
+        }
+    }
+
+    private fun stopClockStatusWatcher() {
+        clockStatusWatcherJob?.cancel()
+        clockStatusWatcherJob = null
+    }
+
     /** Great-circle distance in meters — mirrors convex/lib/geo.ts. */
     private fun haversineMeters(
         lat1: Double, lng1: Double, lat2: Double, lng2: Double,
@@ -1464,7 +1494,7 @@ class HrDashboardFragment : Fragment() {
                 ),
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun updateAttendanceLoadingUi() {

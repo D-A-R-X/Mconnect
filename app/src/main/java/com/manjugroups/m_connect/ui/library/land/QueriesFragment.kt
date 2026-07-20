@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Land Procurement > Queries screen.
@@ -248,7 +249,7 @@ class QueriesFragment : Fragment() {
             initialFrom = initial,
             initialTo = initial,
             resultKey = RESULT_KEY_FILTER,
-        ).show(parentFragmentManager, "queries_filter_calendar")
+        ).showOnce(parentFragmentManager, "queries_filter_calendar")
     }
 
     private fun updateDateFilterChip() {

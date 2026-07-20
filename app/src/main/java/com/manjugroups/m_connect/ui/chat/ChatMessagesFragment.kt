@@ -80,6 +80,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import android.animation.ValueAnimator
 import android.animation.ArgbEvaluator
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
@@ -430,7 +432,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
                 val actions = ChatMessageActionsFragment.newInstance(message.id ?: "", bodyText)
                 actions.setCallback(this)
-                actions.show(childFragmentManager, "MessageActions")
+                actions.showOnce(childFragmentManager, "MessageActions")
             },
             onReactionPillClick = { message: MessageData, anchor: View -> showReactionRemovePopup(message, anchor) },
             onAttachmentClick = { url: String, mime: String, storageId: String?, fileName: String? ->
@@ -489,7 +491,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                                 )
                             )
                             .addToBackStack(null)
-                            .commit()
+                            .commitOnce()
                     }.onFailure {
                         toast("Unable to start direct message")
                     }
@@ -935,7 +937,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             })
         }
-        previewSheet.show(parentFragmentManager, "media_preview")
+        previewSheet.showOnce(parentFragmentManager, "media_preview")
     }
 
     private fun playVoiceMessage(url: String, mime: String = "audio/mp4", storageId: String? = null) {
@@ -1296,7 +1298,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             popup.dismiss()
             val actions = ChatMessageActionsFragment.newInstance(message.id ?: "", message.body ?: "")
             actions.setCallback(this)
-            actions.show(childFragmentManager, "MessageActions")
+            actions.showOnce(childFragmentManager, "MessageActions")
         }
 
         popupView.measure(
@@ -1816,7 +1818,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             isEdited = msg.isEdited == true,
             replyCount = msg.replyCount ?: 0,
             attachmentCount = msg.attachments?.size ?: 0
-        ).show(childFragmentManager, "ChatMessageInfo")
+        ).showOnce(childFragmentManager, "ChatMessageInfo")
     }
 
     private fun openForwardPicker(toForward: List<MessageData>) {
@@ -1892,7 +1894,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             }
         })
-        picker.show(childFragmentManager, "ChatForwardPicker")
+        picker.showOnce(childFragmentManager, "ChatForwardPicker")
     }
 
     private fun openAttachmentUrl(url: String, mime: String = "") {
@@ -2165,7 +2167,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                     }
                 })
             }
-            cameraSheet.show(parentFragmentManager, "custom_camera")
+            cameraSheet.showOnce(parentFragmentManager, "custom_camera")
         }
     }
 
@@ -2214,7 +2216,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 }
             })
         }
-        sheet.show(parentFragmentManager, "location_share_sheet")
+        sheet.showOnce(parentFragmentManager, "location_share_sheet")
     }
 
     private fun sendLocationMessage(locationString: String) {
@@ -2639,6 +2641,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         channelType
                     }
                     initials = chatTitle.take(1).uppercase()
+                    // Group avatar. The chat list already renders this; the
+                    // header was falling back to initials because it never
+                    // read the field. resolve() also repairs dev/localhost
+                    // storage URLs the backend can hand back.
+                    photoUrl = com.manjugroups.m_connect.ui.common.ProfilePhotos
+                        .resolve(channel?.avatarUrl)
                 }
 
                 conversationId != null -> {
@@ -2866,7 +2874,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, fragment)
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun handlePickedAttachments(uris: List<Uri>) {

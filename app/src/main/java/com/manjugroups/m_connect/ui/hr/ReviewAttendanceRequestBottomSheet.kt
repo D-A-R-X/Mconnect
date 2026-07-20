@@ -14,6 +14,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.databinding.BottomSheetReviewAttendanceRequestBinding
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
+import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -70,8 +71,11 @@ class ReviewAttendanceRequestBottomSheet : BottomSheetDialogFragment() {
         
         val rec = record ?: return
         
-        // Header & Name
+        // Header & Name. The avatar was never bound, so the sheet always showed
+        // the bare placeholder drawable even though the record carries a
+        // resolved photo URL (the list cards behind it render it fine).
         binding.tvStaffName.text = rec.staffName?.trim().orEmpty()
+        binding.ivUserAvatar.loadUserAvatar(rec.staffPhotoUrl, rec.staffName)
         binding.tvRequestDate.text = formatDateLabel(rec.date) ?: rec.date.orEmpty()
 
         // Recorded (actual) punches — "--" when the day has none, never a

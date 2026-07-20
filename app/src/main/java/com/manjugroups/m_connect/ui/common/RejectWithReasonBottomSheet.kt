@@ -14,6 +14,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Shared "reject with reason" bottom sheet — a reason input + red Reject
@@ -29,7 +30,7 @@ import com.manjugroups.m_connect.R
  *       val id = b.getString(KEY_ITEM_ID); val reason = b.getString(KEY_REASON)
  *   }
  *   RejectWithReasonBottomSheet.newInstance(id, REQUEST_KEY, title = "Reject leave request")
- *       .show(childFragmentManager, "reject")
+ *       .showOnce(childFragmentManager, "reject")
  */
 class RejectWithReasonBottomSheet : BottomSheetDialogFragment() {
 

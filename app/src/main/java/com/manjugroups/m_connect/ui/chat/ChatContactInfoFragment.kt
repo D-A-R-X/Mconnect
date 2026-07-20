@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class ChatContactInfoFragment : Fragment() {
 
@@ -82,7 +83,7 @@ class ChatContactInfoFragment : Fragment() {
                     ChatMediaFragment.newInstance(channelId, conversationId, title, subtitle)
                 )
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
         
         // Search button in header behaves same as search row
@@ -93,7 +94,7 @@ class ChatContactInfoFragment : Fragment() {
                     ChatSearchFragment.newInstance(channelId, conversationId, title)
                 )
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         // Phone button in header dial digits

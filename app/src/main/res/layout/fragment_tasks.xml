@@ -123,68 +123,13 @@
                         android:src="@drawable/ic_cpv_search" />
                 </FrameLayout>
 
-                <!-- Filter Pills -->
-                <HorizontalScrollView
+                <!-- Filter tabs: shared component, same as Task Manager /
+                     Attendance History. -->
+                <com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+                    android:id="@+id/taskFilterTabs"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:scrollbars="none">
-
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/categoryPills"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:paddingHorizontal="20dp"
-                        app:chipSpacingHorizontal="8dp"
-                        app:singleSelection="true"
-                        app:selectionRequired="true">
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/tabAll"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="true"
-                            android:text="All"
-                            android:textColor="@color/chip_filter_text"
-                            app:chipBackgroundColor="@color/chip_tasks_bg"
-                            app:chipStrokeWidth="0dp"
-                            app:checkedIconVisible="false" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/tabInProgress"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="In progress"
-                            android:textColor="@color/chip_filter_text"
-                            app:chipBackgroundColor="@color/chip_tasks_bg"
-                            app:chipStrokeWidth="0dp"
-                            app:checkedIconVisible="false" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/tabPending"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Pending"
-                            android:textColor="@color/chip_filter_text"
-                            app:chipBackgroundColor="@color/chip_tasks_bg"
-                            app:chipStrokeWidth="0dp"
-                            app:checkedIconVisible="false" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/tabCompleted"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Completed"
-                            android:textColor="@color/chip_filter_text"
-                            app:chipBackgroundColor="@color/chip_tasks_bg"
-                            app:chipStrokeWidth="0dp"
-                            app:checkedIconVisible="false" />
-                    </com.google.android.material.chip.ChipGroup>
-                </HorizontalScrollView>
+                    android:layout_marginTop="12dp" />
 
                 <!-- Task list -->
                 <LinearLayout

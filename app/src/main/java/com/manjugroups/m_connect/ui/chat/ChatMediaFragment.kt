@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * Lists all attachments and links shared in a channel or DM. Hits the message list endpoint
@@ -119,7 +120,7 @@ class ChatMediaFragment : Fragment() {
                     ChatSearchFragment.newInstance(channelId, conversationId, title)
                 )
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         // Tab Views

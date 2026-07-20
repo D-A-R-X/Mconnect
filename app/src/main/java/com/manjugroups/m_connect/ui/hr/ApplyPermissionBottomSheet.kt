@@ -26,6 +26,7 @@ import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
 
@@ -45,6 +46,12 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // ADJUST_RESIZE keeps the focused input above the soft keyboard;
+        // without it the keyboard covers the lower fields and the submit
+        // button with no way to scroll them back into view.
+        dialog.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+        )
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -117,13 +124,13 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
             initialFrom = current,
             initialTo = current,
             resultKey = RESULT_KEY_DATE,
-        ).show(parentFragmentManager, "apply_permission_calendar")
+        ).showOnce(parentFragmentManager, "apply_permission_calendar")
     }
 
     private fun showDurationPicker() {
         PermDurationPickerBottomSheet
             .newInstance(selectedFromTime, selectedToTime)
-            .show(parentFragmentManager, "perm_duration_picker")
+            .showOnce(parentFragmentManager, "perm_duration_picker")
     }
 
     private fun updateDateLabel() {

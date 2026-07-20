@@ -33,6 +33,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class IssuesFragment : Fragment() {
 
@@ -156,7 +157,7 @@ class IssuesFragment : Fragment() {
                     submitIssueToBackend(projectId, title, description, audioPath, audioDurationMs)
                 }
             })
-            bottomSheet.show(parentFragmentManager, "CreateIssueBottomSheet")
+            bottomSheet.showOnce(parentFragmentManager, "CreateIssueBottomSheet")
         }
 
         // Search issues filtering

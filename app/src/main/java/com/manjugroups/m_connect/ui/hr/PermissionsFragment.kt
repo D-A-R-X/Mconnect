@@ -31,6 +31,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class PermissionsFragment : Fragment() {
 
@@ -122,7 +123,7 @@ class PermissionsFragment : Fragment() {
                     viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
                 }
             }
-            ApplyPermissionBottomSheet.newInstance().show(parentFragmentManager, "apply_permission_sheet")
+            ApplyPermissionBottomSheet.newInstance().showOnce(parentFragmentManager, "apply_permission_sheet")
         }
 
         val cal = Calendar.getInstance()
@@ -145,9 +146,14 @@ class PermissionsFragment : Fragment() {
             // scope with no extra control on screen.
             val canApprove = session.hasPermission("permissions.approve")
             if (canApprove) {
+                binding.dropdownScopeSelector.visibility = View.VISIBLE
                 binding.dropdownScopeSelector.setOnClickListener { showScopePopupMenu(it) }
             } else {
-                binding.ivScopeChevron.visibility = View.GONE
+                // Only one scope to choose from, so drop the whole control.
+                // Hiding just the chevron left a chip reading "My Permission"
+                // that looked tappable and did nothing. LeavesFragment already
+                // hides the selector outright; this matches it.
+                binding.dropdownScopeSelector.visibility = View.GONE
             }
             binding.tvScopeLabel.text = "My Permission"
             setupFilterTabs()
@@ -237,7 +243,7 @@ class PermissionsFragment : Fragment() {
         // Each badge = the PENDING (actionable) count in that scope. Team is
         // already pending-only from the server; the company-wide All feed also
         // carries approved/rejected rows, so filter to pending here. Team is
-        // hierarchy-scoped server-side, so it's genuinely 0 for a no-team user.
+        // direct-report scoped server-side, so it's genuinely 0 for a no-team user.
         val state = viewModel.uiState.value
         setScopeBadge(popupView.findViewById(R.id.dotTeamBadge), state.pendingApprovals.count { isPending(it) })
         setScopeBadge(
@@ -325,7 +331,7 @@ class PermissionsFragment : Fragment() {
             state.pendingApprovals
         } else when (scope) {
             Scope.MY -> filterHistoryPermissions(mineOnly)
-            // Team = hierarchy-scoped only (empty when the user has no team).
+            // Team = direct reports only (empty when the user has no team).
             Scope.TEAM -> filterHistoryPermissions(state.pendingApprovals)
             // All = every request company-wide (backend gates to admins/viewAll).
             Scope.ALL -> filterHistoryPermissions(state.allApprovals.distinctBy { it.id })
@@ -679,7 +685,7 @@ class PermissionsFragment : Fragment() {
             resultKey = REJECT_RESULT_KEY,
             title = "Reject permission request",
             buttonText = "Reject Permission",
-        ).show(childFragmentManager, "reject_permission")
+        ).showOnce(childFragmentManager, "reject_permission")
     }
 
     private fun resolveColor(attr: Int): Int {

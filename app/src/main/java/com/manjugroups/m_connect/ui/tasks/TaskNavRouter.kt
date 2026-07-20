@@ -5,6 +5,7 @@ import androidx.fragment.app.FragmentActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * Routes a daily task to the place the user can actually DO it.
@@ -56,7 +57,7 @@ object TaskNavRouter {
                 .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, fragment)
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         } else {
             showWebTaskDialog(activity, task)
         }
