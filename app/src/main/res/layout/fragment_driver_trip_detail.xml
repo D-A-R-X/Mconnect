@@ -106,6 +106,77 @@
                     android:textColor="#344054"
                     android:textSize="13sp" />
 
+                <!-- Same map + stats presentation the CP trip screen uses. -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="170dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_trip_detail_map_card"
+                    android:clipToOutline="true">
+
+                    <com.google.android.gms.maps.MapView
+                        android:id="@+id/mapViewTripDetail"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="Distance"
+                            android:textColor="#667085"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripDetailDistance"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="Calculating…"
+                            android:textColor="#111827"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_medium"
+                            android:text="ETA"
+                            android:textColor="#667085"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripDetailEta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="@font/inter_semibold"
+                            android:text="After start"
+                            android:textColor="#111827"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <FrameLayout
                     android:id="@+id/btnTripDetailMap"
                     android:layout_width="match_parent"

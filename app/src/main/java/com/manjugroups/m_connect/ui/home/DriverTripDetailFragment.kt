@@ -13,6 +13,12 @@ import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResult
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MarkerOptions
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -27,12 +33,13 @@ import com.manjugroups.m_connect.ui.common.showOnce
  * straight into the start sheet, so the driver can check the address and the
  * stage they're at first.
  */
-class DriverTripDetailFragment : Fragment() {
+class DriverTripDetailFragment : Fragment(), OnMapReadyCallback {
 
     private var _binding: FragmentDriverTripDetailBinding? = null
     private val binding get() = _binding!!
 
     private lateinit var session: SessionManager
+    private var mapView: MapView? = null
 
     private val visitId get() = requireArguments().getString(ARG_VISIT_ID).orEmpty()
     private val title get() = requireArguments().getString(ARG_TITLE).orEmpty()
@@ -52,6 +59,29 @@ class DriverTripDetailFragment : Fragment() {
         return binding.root
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        mapView?.onDestroy()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapView?.onLowMemory()
+    }
+
+    override fun onMapReady(map: GoogleMap) {
+        val destination = destinationLatLng() ?: return
+        map.uiSettings.isMapToolbarEnabled = false
+        map.uiSettings.isZoomControlsEnabled = false
+        map.addMarker(
+            MarkerOptions().position(destination).title(title.ifBlank { "Destination" }),
+        )
+        map.moveCamera(CameraUpdateFactory.newLatLngZoom(destination, 14f))
+    }
+
+    private fun destinationLatLng(): LatLng? =
+        if (!lat.isNaN() && !lng.isNaN()) LatLng(lat, lng) else null
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
@@ -66,18 +96,81 @@ class DriverTripDetailFragment : Fragment() {
 
         binding.btnTripDetailMap.setOnClickListener { openMaps() }
 
+        mapView = binding.mapViewTripDetail
+        mapView?.onCreate(savedInstanceState)
+        if (destinationLatLng() != null) {
+            mapView?.getMapAsync(this)
+        }
+        renderDistance()
         renderStages()
         renderAction()
     }
 
+    /**
+     * Straight-line distance from the last known fix. Deliberately not a
+     * routed distance: this screen is a pre-trip glance and the routed
+     * figure only becomes meaningful once tracking is running.
+     */
+    private fun renderDistance() {
+        val destination = destinationLatLng()
+        if (destination == null) {
+            binding.tvTripDetailDistance.text = "Not mapped"
+            return
+        }
+        val last = lastKnownLocation()
+        if (last == null) {
+            binding.tvTripDetailDistance.text = "—"
+            return
+        }
+        val metres = FloatArray(1)
+        android.location.Location.distanceBetween(
+            last.latitude, last.longitude,
+            destination.latitude, destination.longitude,
+            metres,
+        )
+        val km = metres[0] / 1000f
+        binding.tvTripDetailDistance.text =
+            if (km < 1f) "${metres[0].toInt()} m" else String.format("%.1f km", km)
+    }
+
+    private fun lastKnownLocation(): android.location.Location? {
+        val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+        val granted = { p: String ->
+            androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), p) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (!granted(fine) && !granted(coarse)) return null
+        val manager = requireContext()
+            .getSystemService(android.content.Context.LOCATION_SERVICE)
+                as? android.location.LocationManager ?: return null
+        return runCatching {
+            manager.getProviders(true)
+                .mapNotNull { manager.getLastKnownLocation(it) }
+                .maxByOrNull { it.time }
+        }.getOrNull()
+    }
+
     override fun onResume() {
         super.onResume()
+        mapView?.onResume()
         (activity as? MainActivity)?.setTabBarVisible(false)
     }
 
     override fun onPause() {
         super.onPause()
+        mapView?.onPause()
         (activity as? MainActivity)?.setTabBarVisible(true)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mapView?.onStart()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapView?.onStop()
     }
 
     /** Same order the SV stepper and the travel-desk portal use. */
@@ -211,6 +304,7 @@ class DriverTripDetailFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        mapView = null
         _binding = null
     }
 
