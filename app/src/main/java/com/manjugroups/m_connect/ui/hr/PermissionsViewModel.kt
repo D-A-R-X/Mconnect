@@ -17,7 +17,7 @@ data class PermissionsState(
     val limitHours: Int = 0,
     val count: Int = 0,
     val myPermissions: List<PermissionData> = emptyList(),
-    // Team Permission scope — hierarchy-scoped pending approvals.
+    // Team Permission scope — direct-report pending approvals.
     val pendingApprovals: List<PermissionData> = emptyList(),
     // All Permission scope — every request company-wide (admins / viewAll).
     val allApprovals: List<PermissionData> = emptyList(),
@@ -43,12 +43,24 @@ class PermissionsViewModel : ViewModel() {
                 val usageD = async { runCatching { api.getPermissionUsage(bearerToken) }.getOrNull() }
                 val historyD = async { runCatching { api.getMyPermissions(bearerToken) }.getOrNull() }
                 val pendingD = async {
-                    if (canApprove) runCatching { api.getPendingPermissionApprovals(bearerToken) }.getOrNull() else null
+                    if (canApprove) {
+                        runCatching {
+                            api.getPendingPermissionApprovals(bearerToken, scope = "direct")
+                        }.getOrNull()
+                    } else null
                 }
                 // All-scope dataset (company-wide) — backend gates it to admins
                 // / permissions.viewAll and falls back to team scope otherwise.
                 val allD = async {
-                    if (canApprove) runCatching { api.getPendingPermissionApprovals(bearerToken, all = true) }.getOrNull() else null
+                    if (canApprove) {
+                        runCatching {
+                            api.getPendingPermissionApprovals(
+                                bearerToken,
+                                scope = "direct",
+                                all = true,
+                            )
+                        }.getOrNull()
+                    } else null
                 }
                 val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
                 val usage = usageD.await()

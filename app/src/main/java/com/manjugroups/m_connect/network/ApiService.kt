@@ -341,7 +341,8 @@ interface ApiService {
     @GET("api/hr/leaves/pending-approvals")
     suspend fun getPendingLeaveApprovals(
         @Header("Authorization") token: String,
-        @Query("teamOnly") teamOnly: Boolean? = null
+        @Query("teamOnly") teamOnly: Boolean? = null,
+        @Query("scope") scope: String? = null,
     ): MyLeavesResponse
 
     @POST("api/hr/leaves/apply")
@@ -461,8 +462,9 @@ interface ApiService {
     @GET("api/hr/permissions/pending-approvals")
     suspend fun getPendingPermissionApprovals(
         @Header("Authorization") token: String,
-        // all=true → every request company-wide (All Permission scope, admins
-        // only). Omitted/false → hierarchy-scoped Team Permission.
+        // scope=direct keeps Team Permission limited to the caller's direct
+        // reports. all=true returns every request company-wide when permitted.
+        @Query("scope") scope: String? = null,
         @Query("all") all: Boolean? = null,
     ): MyPermissionsResponse
 
