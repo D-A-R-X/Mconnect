@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Read-only detail view for a CP visit that has already been completed.
@@ -429,7 +430,7 @@ class CompletedVisitDetailFragment : Fragment() {
             cpClientMet = null,
             cpOutcome = null,
             isSvFixedHint = isSvFixedHint,
-        ).show(parentFragmentManager, "CompleteCpVisitBottomSheet")
+        ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
     private fun bindEnriched(root: View, visit: CpVisitDetail) {

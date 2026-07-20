@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class HrStaffFragment : Fragment() {
 
@@ -137,7 +138,7 @@ class HrStaffFragment : Fragment() {
                 parentFragmentManager.beginTransaction()
                     .replace(R.id.fragmentContainer, StaffDetailFragment.newInstance(staff.id))
                     .addToBackStack(null)
-                    .commit()
+                    .commitOnce()
             }
 
             binding.staffList.addView(card)

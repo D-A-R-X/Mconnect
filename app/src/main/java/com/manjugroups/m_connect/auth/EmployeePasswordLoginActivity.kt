@@ -139,6 +139,11 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             user.designation?.takeIf { it.isNotBlank() }?.let {
                 session.designation = it
             }
+            // Department too — separates a Transport driver from a fleet-desk
+            // administrator, which MainActivity routes on at startup.
+            user.department?.takeIf { it.isNotBlank() }?.let {
+                session.department = it
+            }
 
             // Backend fleet-driver probe — see OtpActivity for context.
             // Lets the app honour the backend's "fleetDrivers row by
@@ -168,6 +173,9 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                         // login payload above.
                         staff.designation?.takeIf { it.isNotBlank() }?.let {
                             session.designation = it
+                        }
+                        staff.department?.takeIf { it.isNotBlank() }?.let {
+                            session.department = it
                         }
                     }
                 }

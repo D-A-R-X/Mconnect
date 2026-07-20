@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class LeavesFragment : Fragment() {
 
@@ -124,7 +125,7 @@ class LeavesFragment : Fragment() {
                     viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
                 }
             }
-            ApplyLeaveBottomSheet.newInstance().show(parentFragmentManager, "apply_leave_sheet")
+            ApplyLeaveBottomSheet.newInstance().showOnce(parentFragmentManager, "apply_leave_sheet")
         }
 
         val year = Calendar.getInstance().get(Calendar.YEAR)
@@ -638,7 +639,7 @@ class LeavesFragment : Fragment() {
             resultKey = REJECT_RESULT_KEY,
             title = "Reject leave request",
             buttonText = "Reject Leave",
-        ).show(childFragmentManager, "reject_leave")
+        ).showOnce(childFragmentManager, "reject_leave")
     }
 
     private fun showCancelLeaveDialog(leaveId: String) {

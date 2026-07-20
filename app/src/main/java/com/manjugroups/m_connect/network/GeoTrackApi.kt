@@ -1394,8 +1394,37 @@ data class ProposedSiteVisit(
 data class MmsFleetDriverTripsResponse(
     val success: Boolean = false,
     val trips: List<MmsFleetDriverTrip> = emptyList(),
+    // Sent only when trips is empty — says which filter dropped the rows.
+    // Null against a backend that predates it.
+    val diagnostics: MmsFleetDriverTripsDiagnostics? = null,
     val error: String? = null,
 )
+
+/** Counts explaining an empty driver trip list. See diagnoseForStaff. */
+data class MmsFleetDriverTripsDiagnostics(
+    val searchedPhone: String? = null,
+    val indexedRows: Int? = null,
+    val scannedRows: Int? = null,
+    val phoneMatched: Int? = null,
+    val droppedCancelled: Int? = null,
+    val droppedNoVehicle: Int? = null,
+    val droppedExternalAgency: Int? = null,
+    val kept: Int? = null,
+) {
+    /** One-line summary for the empty state. */
+    fun summary(): String = when {
+        (phoneMatched ?: 0) == 0 ->
+            "No trip is assigned to $searchedPhone (checked ${scannedRows ?: 0} visits)."
+        (droppedExternalAgency ?: 0) > 0 ->
+            "${droppedExternalAgency} trip(s) matched your number but their travel " +
+                "agency is marked External, so they belong to the Travel Desk, not the fleet."
+        (droppedCancelled ?: 0) > 0 ->
+            "${droppedCancelled} matching trip(s) are cancelled."
+        (droppedNoVehicle ?: 0) > 0 ->
+            "${droppedNoVehicle} matching trip(s) have no vehicle assigned yet."
+        else -> "Matched ${phoneMatched} trip(s) but none are active fleet trips."
+    }
+}
 
 data class MmsFleetDriverActionResponse(
     val success: Boolean = false,

@@ -39,6 +39,8 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
  * WhatsApp-style group info for both group kinds. Channels get the full
@@ -83,7 +85,7 @@ class GroupInfoFragment : Fragment() {
 
     private val pickGroupPhoto =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            if (uri != null) uploadGroupPhoto(uri)
+            if (uri != null) launchGroupPhotoCrop(uri)
         }
 
     // Unified across both group kinds: channel roles come from the members
@@ -115,7 +117,7 @@ class GroupInfoFragment : Fragment() {
                     ChatMediaFragment.newInstance(channelId, conversationId, currentTitle(), ""),
                 )
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
         setupMuteRow()
         binding.btnEditGroup.setOnClickListener { showEditNameDescription() }
@@ -350,7 +352,7 @@ class GroupInfoFragment : Fragment() {
                     ChatMessagesFragment.forConversation(convId, member.staffName ?: "Chat"),
                 )
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
     }
 
@@ -500,7 +502,19 @@ class GroupInfoFragment : Fragment() {
         }
     }
 
-    private fun uploadGroupPhoto(uri: Uri) {
+    /**
+     * Square-crop the picked image before upload, so the group avatar isn't
+     * an arbitrary centre-crop of whatever the user chose. Same dialog the
+     * profile editor uses.
+     */
+    private fun launchGroupPhotoCrop(uri: Uri) {
+        val dialog = com.manjugroups.m_connect.ui.profile.ProfilePhotoCropDialog()
+        dialog.setSource(uri)
+        dialog.setListener { bitmap -> uploadGroupPhoto(bitmap) }
+        dialog.showOnce(childFragmentManager, "GroupPhotoCrop")
+    }
+
+    private fun uploadGroupPhoto(bitmap: android.graphics.Bitmap) {
         val chId = channelId ?: return
         val ctx = context ?: return
         binding.avatarUploadOverlay.visibility = View.VISIBLE
@@ -508,14 +522,14 @@ class GroupInfoFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    val cr = ctx.contentResolver
-                    val mime = cr.getType(uri) ?: "image/jpeg"
-                    val tmp = java.io.File.createTempFile("group_", ".img", ctx.cacheDir)
-                    cr.openInputStream(uri).use { input ->
-                        tmp.outputStream().use { output -> input?.copyTo(output) }
+                    // The crop dialog hands back a Bitmap, so re-encode rather
+                    // than streaming the original file through.
+                    val tmp = java.io.File.createTempFile("group_", ".jpg", ctx.cacheDir)
+                    tmp.outputStream().use { out ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
                     }
                     val uploaded = StorageUploader.upload(
-                        api, session.bearerToken, tmp, contentType = mime,
+                        api, session.bearerToken, tmp, contentType = "image/jpeg",
                     )
                     tmp.delete()
                     uploaded

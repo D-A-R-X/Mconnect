@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Task detail screen — fetches `/api/projects/tasks/get` and renders.
@@ -56,7 +57,7 @@ class TaskDetailFragment : Fragment() {
         view.findViewById<View>(R.id.btnDetailTimeline).setOnClickListener {
             val id = taskId ?: return@setOnClickListener
             TaskTimelineBottomSheet.newInstance(id)
-                .show(parentFragmentManager, "task_timeline")
+                .showOnce(parentFragmentManager, "task_timeline")
         }
 
         setFragmentResultListener(TaskUpdateBottomSheet.RESULT_KEY) { _, bundle ->
@@ -350,7 +351,7 @@ class TaskDetailFragment : Fragment() {
             currentTodaysUpdate = task.todaysUpdate,
             currentBlocker = task.blocker,
             currentTomorrowsPlan = task.tomorrowsPlan
-        ).show(parentFragmentManager, "task_update")
+        ).showOnce(parentFragmentManager, "task_update")
     }
 
     private fun startSkeleton(target: View) {

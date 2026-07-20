@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class LoansFragment : Fragment() {
 
@@ -88,13 +90,13 @@ class LoansFragment : Fragment() {
                     // approval sheet for the tracker + nominee context.
                     loan.currentStage?.lowercase()?.trim() == "nominee_pending" ->
                         AcceptLoanBottomSheet(loan) { loadPendingApprovals() }
-                            .show(childFragmentManager, "AcceptLoanBottomSheet")
+                            .showOnce(childFragmentManager, "AcceptLoanBottomSheet")
                     else ->
                         GmApprovalBottomSheet(
                             loan = loan,
                             onAccepted = { loadPendingApprovals() },
                             onRejected = { loadPendingApprovals() },
-                        ).show(childFragmentManager, "GmApprovalBottomSheet")
+                        ).showOnce(childFragmentManager, "GmApprovalBottomSheet")
                 }
             },
             onRejectClick = { loan ->
@@ -834,7 +836,7 @@ class LoansFragment : Fragment() {
         // uses). It collects the required remarks and returns them via a
         // fragment result; performRejectLoan() then submits the rejection.
         LoanDeskRejectBottomSheet.newInstance(id)
-            .show(childFragmentManager, "LoanRejectBottomSheet")
+            .showOnce(childFragmentManager, "LoanRejectBottomSheet")
     }
 
     private fun performRejectLoan(loanId: String, reason: String) {
@@ -947,17 +949,17 @@ class LoansFragment : Fragment() {
                 RepaymentHistoryFragment.newInstance(loan.id, loan.status)
             )
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     private fun openCreateLoanSheet() {
         CreateLoanBottomSheet.newInstance()
-            .show(parentFragmentManager, "create_loan")
+            .showOnce(parentFragmentManager, "create_loan")
     }
 
     private fun openCreateSalaryAdvanceSheet() {
         CreateSalaryAdvanceBottomSheet.newInstance()
-            .show(parentFragmentManager, "create_salary_advance")
+            .showOnce(parentFragmentManager, "create_salary_advance")
     }
 
     override fun onResume() {

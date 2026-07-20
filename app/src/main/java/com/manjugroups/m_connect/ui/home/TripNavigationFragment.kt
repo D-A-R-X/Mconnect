@@ -71,6 +71,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * In-app navigation page for an active site visit.
@@ -1220,7 +1221,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             arrivalConfirmedForProgress = true
             applyStatusPill("Reaching")
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            CpClientSeenBottomSheet().show(parentFragmentManager, "cp_client_seen")
+            CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
         }
     }
 
@@ -1301,7 +1302,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         lat = effLat,
                         lng = effLng,
                         arrivalPhotoStorageId = null,
-                    ).show(parentFragmentManager, "arrival_otp")
+                    ).showOnce(parentFragmentManager, "arrival_otp")
                     return@launch
                 }
                 swipeArrived?.lockAsBusy("Opening camera…")
@@ -1414,7 +1415,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // which left the web admin showing "No arrival photo
                 // yet" for the entire in-flight window.
                 arrivalPhotoStorageId = pendingArrivalStorageId,
-            ).show(parentFragmentManager, "arrival_otp")
+            ).showOnce(parentFragmentManager, "arrival_otp")
         }
     }
 
@@ -1512,7 +1513,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // manager, so the listener never fires and the visit never
         // completes after Submit.
         OldClientRemarksBottomSheet.newInstance()
-            .show(parentFragmentManager, "old_client_remarks")
+            .showOnce(parentFragmentManager, "old_client_remarks")
     }
 
     /** Finalises an Old Client CP after remarks are captured. Same
@@ -1645,7 +1646,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // the old-client remarks sheet) — otherwise the collection
                 // visit never completes after Submit.
                 CollectionPaymentEntryBottomSheet.newInstance(resp.cases)
-                    .show(parentFragmentManager, "collection_payment_entry")
+                    .showOnce(parentFragmentManager, "collection_payment_entry")
             } catch (e: Exception) {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
@@ -1971,7 +1972,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 btnCompleteCpDetails?.text = "End Trip"
                 btnCompleteCpDetails?.setOnClickListener {
                     DriverEndTripBottomSheet.newInstance(visitId!!)
-                        .show(parentFragmentManager, "driver_end_trip")
+                        .showOnce(parentFragmentManager, "driver_end_trip")
                 }
             } else {
                 btnCompleteCpDetails?.visibility = View.GONE
@@ -2111,7 +2112,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpOutcome = cpOutcome,
                 isSvFixedHint = svFix,
             )
-            .show(parentFragmentManager, "cp_visit_complete")
+            .showOnce(parentFragmentManager, "cp_visit_complete")
     }
 
     /**
@@ -2134,7 +2135,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         CompleteCpVisitBottomSheet
             .forSiteVisit(svId)
-            .show(parentFragmentManager, "sv_outcome")
+            .showOnce(parentFragmentManager, "sv_outcome")
     }
 
     // KOS-52: After the user confirms "Yes, I saw the client" we still need
@@ -2298,7 +2299,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 )
                 if (showClientNotSeenCompletion) {
                     showClientNotSeenCompletion = false
-                    CpTripCompletedBottomSheet().show(parentFragmentManager, "cp_trip_completed")
+                    CpTripCompletedBottomSheet().showOnce(parentFragmentManager, "cp_trip_completed")
                 } else {
                     Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
                     navigateUp()

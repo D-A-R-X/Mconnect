@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Lists every site visit assigned to the authenticated staff (any status,
@@ -239,6 +240,6 @@ class SiteVisitsListFragment : Fragment() {
     }
 
     private fun openVisit(v: TodayVisit) {
-        SiteVisitOverviewFragment.forVisit(v).show(parentFragmentManager, "site_visit_overview")
+        SiteVisitOverviewFragment.forVisit(v).showOnce(parentFragmentManager, "site_visit_overview")
     }
 }

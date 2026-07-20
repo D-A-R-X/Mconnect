@@ -40,6 +40,8 @@
             android:orientation="horizontal">
 
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvVehiclePlate"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -51,6 +53,8 @@
 
             <!-- Hidden for screenshot layout but kept for compile compatibility -->
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvVehicleStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -61,6 +65,8 @@
 
         <!-- Row 2: Name/Specs (e.g. Innova / SUV / Diesel) -->
         <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
             android:id="@+id/tvVehicleName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -85,6 +91,8 @@
                 android:tint="#6B7280" />
 
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvDriverName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -95,6 +103,8 @@
                 android:textSize="12sp" />
 
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvDriverDivider"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -111,6 +121,8 @@
                 android:tint="#6B7280" />
 
             <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
                 android:id="@+id/tvDriverPhone"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -134,12 +146,16 @@
 
     <!-- Compile-compatibility views hidden from UI -->
     <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
         android:id="@+id/tvVehicleCapacity"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:visibility="gone" />
 
     <TextView
+            android:ellipsize="end"
+            android:maxLines="1"
         android:id="@+id/tvVehicleFuel"
         android:layout_width="0dp"
         android:layout_height="0dp"

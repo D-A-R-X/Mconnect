@@ -99,7 +99,9 @@ data class CreateVehicleRequest(
 data class TravelDeskDriver(
     @SerializedName("_id") val id: String,
     val name: String,
-    val phone: String,
+    // Nullable: the internal fleetDrivers table allows a driver with no phone,
+    // and Gson writes null straight through a non-null declaration.
+    val phone: String? = null,
     val address: String? = null,
     val status: String = "active",
 )

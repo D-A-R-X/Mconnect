@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Loans content sheet: the page-grey surface that curves up over the blue
+     header. Cards inside it are pure white so they read as cards (matching
+     Home / Daily Log / Attendance). Using the page grey also means the sheet
+     blends into the page below instead of ending in a hard white-to-grey seam. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F1F3F8" />
+    <corners
+        android:topLeftRadius="30dp"
+        android:topRightRadius="30dp" />
+</shape>

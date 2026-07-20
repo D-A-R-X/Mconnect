@@ -47,6 +47,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Daily Log — loans-style page. The lists aggregate the caller's entries /
@@ -135,19 +136,44 @@ class DailyLogFragment : Fragment() {
     }
 
     private fun styleTab(tab: TextView, active: Boolean) {
-        tab.setBackgroundResource(if (active) R.drawable.bg_loans_segment_active else android.R.color.transparent)
+        tab.setBackgroundResource(
+            if (active) R.drawable.bg_loans_segment_active else android.R.color.transparent,
+        )
         tab.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#475467"))
     }
 
     private fun onAddClicked() {
         if (onNewEntryTab) {
             CreateDailyLogBottomSheet.newInstance(null, null)
-                .show(childFragmentManager, "create_daily_log")
+                .showOnce(childFragmentManager, "create_daily_log")
         } else {
             DprAddRecipientBottomSheet.newInstance()
-                .show(childFragmentManager, "dpr_add")
+                .showOnce(childFragmentManager, "dpr_add")
         }
     }
+
+    /**
+     * Run a /mine aggregate, falling back ONLY when the route genuinely isn't
+     * on the server (404).
+     *
+     * This used to be a bare runCatching{}.getOrNull(), so ANY failure — a
+     * dropped packet, a timeout — silently swapped to the client-side
+     * per-project aggregation, which walks a different, 30-project-capped set.
+     * The screen then showed a different subset of the same data with nothing
+     * indicating why, which is a large part of why this page looked like it
+     * "sometimes works".
+     */
+    private suspend fun <T> aggregateOrNull(call: suspend () -> T): T? =
+        runCatching { call() }.fold(
+            onSuccess = { it },
+            onFailure = { err ->
+                val missingRoute = (err as? retrofit2.HttpException)?.code() == 404
+                if (!missingRoute) {
+                    android.util.Log.w("DailyLog", "aggregate failed: ${err.message}")
+                }
+                null
+            },
+        )
 
     private fun loadProjects() {
         if (projectsLoading) return
@@ -180,7 +206,7 @@ class DailyLogFragment : Fragment() {
             // (older prod returns 404 → null), fall back to aggregating the
             // still-deployed per-project route client-side so entries show
             // without waiting on a backend deploy.
-            val mine = runCatching { dprApi.listMyDailyLogs(session.bearerToken) }.getOrNull()
+            val mine = aggregateOrNull { dprApi.listMyDailyLogs(session.bearerToken) }
             val logs = mine?.logs ?: aggregateLogs()
             if (_binding == null) return@launch
             renderLogs(logs)
@@ -203,11 +229,34 @@ class DailyLogFragment : Fragment() {
     }
 
     /** Load projects once (the picker pre-warm may already have them). */
+    /**
+     * Projects for the pickers AND for the client-side aggregate fallback.
+     *
+     * Uses /api/projects (projects.listAccessibleForStaff) — the same query
+     * behind the /mine aggregates this screen reads back. /api/marketing/projects
+     * routes through projects.listForUser instead, a broader set, so a picker
+     * fed from it could offer a project whose entries and DPR recipients the
+     * list would never return.
+     */
     private suspend fun ensureProjects(): List<ProjectSummary> {
         if (projects.isNotEmpty()) return projects
-        val resp = runCatching { api.getMarketingProjects(session.bearerToken) }.getOrNull()
-        projects = resp?.projects?.map { ProjectSummary(id = it.id, name = it.name, status = it.status) } ?: projects
+        val resp = runCatching { api.getMyProjects(session.bearerToken) }.getOrNull()
+        projects = resp?.projects ?: projects
         return projects
+    }
+
+    /** Which project cards are open. Survives re-render so a refresh doesn't collapse them. */
+    private val expandedProjects = mutableSetOf<String>()
+
+    /** A "Label: value" row for the expanded card, or null when there's nothing to show. */
+    private fun detailRow(ctx: android.content.Context, label: String, value: String?): View? {
+        val text = value?.trim()?.takeUnless { it.isEmpty() } ?: return null
+        return TextView(ctx).apply {
+            this.text = "$label: $text"
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#475467"))
+            setPadding(0, dp(8), 0, 0)
+        }
     }
 
     private fun renderLogs(logs: List<DailyLogEntry>) {
@@ -228,96 +277,223 @@ class DailyLogFragment : Fragment() {
         c.removeAllViews()
         binding.emptyLogs.visibility = if (logs.isEmpty()) View.VISIBLE else View.GONE
         binding.tvEntriesTitle.visibility = if (logs.isEmpty()) View.GONE else View.VISIBLE
-        // Show logs BY PROJECT: group entries under a project header, ordering
-        // projects by their most-recent activity and entries newest-first
-        // within each. The window (pagination) is applied to this grouped order
-        // so scrolling reveals further projects/entries in the same grouping.
-        val ordered = logs
+        // One card PER PROJECT, expanding to reveal that project's entries.
+        // Projects are ordered by most-recent activity, entries newest-first
+        // within each. The scroll window caps entries, and a project appears as
+        // soon as any of its entries fall inside it.
+        val windowed = logs
             .groupBy { it.projectName?.trim().takeUnless { n -> n.isNullOrBlank() } ?: "Other" }
             .toList()
             .sortedByDescending { (_, entries) -> entries.maxOfOrNull { it.date ?: "" } ?: "" }
-            .flatMap { (_, entries) -> entries.sortedByDescending { it.date ?: "" } }
-        var lastProjectKey: String? = null
-        ordered.take(logsPager.limit).forEach { log ->
-            val ctx = requireContext()
-            val projectKey = log.projectName?.trim().takeUnless { it.isNullOrBlank() } ?: "Other"
-            if (projectKey != lastProjectKey) {
-                lastProjectKey = projectKey
-                c.addView(projectSectionHeader(ctx, projectKey))
-            }
-            val cardView = com.google.android.material.card.MaterialCardView(ctx).apply {
-                radius = dp(16).toFloat()
-                cardElevation = 0f
-                strokeColor = Color.parseColor("#EAECF0")
-                strokeWidth = dp(1)
-                setCardBackgroundColor(Color.WHITE)
-                isClickable = true
-                isFocusable = true
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(10) }
-                setOnClickListener { openLogDetail(log) }
-            }
-            val content = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(14), dp(14), dp(14), dp(14))
-            }
+            .flatMap { (name, entries) -> entries.sortedByDescending { it.date ?: "" }.map { name to it } }
+            .take(logsPager.limit)
 
-            val header = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+        // Already ordered by most-recent activity, so the first group is the
+        // freshest — flagged so it can carry the "Recent" badge.
+        windowed.groupBy({ it.first }, { it.second })
+            .entries
+            .forEachIndexed { index, (projectName, entries) ->
+                c.addView(
+                    projectCard(requireContext(), projectName, entries, isMostRecent = index == 0),
+                )
             }
-            weatherIcon(log.weather).takeIf { it != 0 }?.let { wIcon ->
-                header.addView(ImageView(ctx).apply {
-                    setImageResource(wIcon)
-                    layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
-                        .apply { marginEnd = dp(7) }
-                })
-            }
-            header.addView(TextView(ctx).apply {
-                text = displayDate(log.date)
-                textSize = 14f
-                setTextColor(Color.parseColor("#101828"))
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            // Project now shown by the section header above, so no per-card chip.
-            content.addView(header)
+    }
 
-            content.addView(TextView(ctx).apply {
-                text = log.workSummary?.trim().takeUnless { it.isNullOrBlank() } ?: "—"
-                textSize = 13f
-                setTextColor(Color.parseColor("#475467"))
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, dp(7), 0, 0)
-            })
+    /**
+     * A project's card: name + entry count, expanding to list its entries.
+     *
+     * Replaces the old flat list of one card per entry under a plain project
+     * header — with several projects in play that read as an undifferentiated
+     * stream, and there was no way to collapse a project you weren't reading.
+     */
+    private fun projectCard(
+        ctx: android.content.Context,
+        projectName: String,
+        entries: List<DailyLogEntry>,
+        isMostRecent: Boolean,
+    ): View {
+        val expanded = expandedProjects.contains(projectName)
 
-            val pills = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, dp(10), 0, 0)
-            }
-            var hasPill = false
-            log.labourCount?.let {
-                pills.addView(metaPill(ctx, R.drawable.ic_chat_users, "$it")); hasPill = true
-            }
-            log.labourHours?.let {
-                pills.addView(metaPill(ctx, R.drawable.ic_clock, "${trimNum(it)} hrs")); hasPill = true
-            }
-            log.siteConditions?.takeIf { it.isNotBlank() }?.let {
-                pills.addView(metaPill(ctx, 0, it.replaceFirstChar(Char::uppercase))); hasPill = true
-            }
-            val atts = mergedAttachments(ctx, log)
-            if (atts.isNotEmpty()) {
-                pills.addView(metaPill(ctx, R.drawable.ic_attach_image, "${atts.size}")); hasPill = true
-            }
-            if (hasPill) content.addView(pills)
-
-            if (atts.isNotEmpty()) content.addView(buildAttachmentStrip(ctx, atts))
-
-            cardView.addView(content)
-            c.addView(cardView)
+        val card = com.google.android.material.card.MaterialCardView(ctx).apply {
+            radius = dp(18).toFloat()
+            cardElevation = dp(2).toFloat()
+            strokeWidth = 0
+            setCardBackgroundColor(Color.WHITE)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
         }
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        // Name + count stacked, so the count reads as the card's headline
+        // figure rather than a caption tucked against the chevron.
+        val titleBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val nameRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        nameRow.addView(TextView(ctx).apply {
+            text = projectName
+            textSize = 17f
+            setTextColor(Color.parseColor("#101828"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        if (isMostRecent) {
+            nameRow.addView(TextView(ctx).apply {
+                text = "Recent"
+                textSize = 10.5f
+                setTextColor(Color.parseColor("#067647"))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setBackgroundResource(R.drawable.bg_daily_log_recent_badge)
+                setPadding(dp(8), dp(3), dp(8), dp(3))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = dp(8) }
+            })
+        }
+        titleBox.addView(nameRow)
+        titleBox.addView(TextView(ctx).apply {
+            text = if (entries.size == 1) "1 entry" else entries.size.toString() + " entries"
+            textSize = 13f
+            setTextColor(Color.parseColor("#0B61CA"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, dp(4), 0, 0)
+        })
+        // Latest activity on this project: the day the log is FOR, plus the
+        // time it was actually filed (from _creationTime — `date` has no clock).
+        lastActivityLabel(entries)?.let { label ->
+            titleBox.addView(TextView(ctx).apply {
+                text = label
+                textSize = 12f
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(3), 0, 0)
+            })
+        }
+        header.addView(titleBox)
+        val chevron = ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_back_chevron)
+            rotation = if (expanded) 90f else 270f
+            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
+            imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#98A2B3"))
+        }
+        header.addView(chevron)
+        content.addView(header)
+
+        val entriesBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (expanded) View.VISIBLE else View.GONE
+        }
+        entries.forEach { log ->
+            // Each entry is its own tinted block inside the white card, so
+            // multiple entries read as separate records rather than one wall
+            // of text separated by hairlines.
+            entriesBox.addView(entryRow(ctx, log))
+        }
+        content.addView(entriesBox)
+
+        card.setOnClickListener {
+            val open = !expandedProjects.contains(projectName)
+            if (open) expandedProjects.add(projectName) else expandedProjects.remove(projectName)
+            entriesBox.visibility = if (open) View.VISIBLE else View.GONE
+            chevron.animate().rotation(if (open) 90f else 270f).setDuration(160).start()
+        }
+
+        card.addView(content)
+        return card
+    }
+
+    private val logTimeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
+
+    /** "Last: 11 Jul 2026 - 4:32 PM", or null when there's nothing to date. */
+    private fun lastActivityLabel(entries: List<DailyLogEntry>): String? {
+        val latest = entries.maxByOrNull { it.date ?: "" } ?: return null
+        val day = displayDate(latest.date).takeUnless { it.isBlank() } ?: return null
+        val time = latest.creationTime?.let { ms ->
+            runCatching { logTimeFormatter.format(java.util.Date(ms.toLong())) }.getOrNull()
+        }
+        return if (time != null) "Last: " + day + " - " + time else "Last: " + day
+    }
+
+    /** One entry inside a project card: date, summary, meta pills, attachments. */
+    private fun entryRow(ctx: android.content.Context, log: DailyLogEntry): View {
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setBackgroundResource(R.drawable.bg_daily_log_entry_block)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openLogDetail(log) }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
+        }
+
+        val head = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        weatherIcon(log.weather).takeIf { it != 0 }?.let { wIcon ->
+            head.addView(ImageView(ctx).apply {
+                setImageResource(wIcon)
+                layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
+                    .apply { marginEnd = dp(7) }
+            })
+        }
+        head.addView(TextView(ctx).apply {
+            text = displayDate(log.date)
+            textSize = 14f
+            setTextColor(Color.parseColor("#101828"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        row.addView(head)
+
+        row.addView(TextView(ctx).apply {
+            text = log.workSummary?.trim().takeUnless { it.isNullOrBlank() } ?: "-"
+            textSize = 13f
+            setTextColor(Color.parseColor("#475467"))
+            setPadding(0, dp(6), 0, 0)
+        })
+
+        val pills = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(9), 0, 0)
+        }
+        var hasPill = false
+        log.labourCount?.let {
+            pills.addView(metaPill(ctx, R.drawable.ic_chat_users, it.toString())); hasPill = true
+        }
+        log.labourHours?.let {
+            pills.addView(metaPill(ctx, R.drawable.ic_clock, trimNum(it) + " hrs")); hasPill = true
+        }
+        log.siteConditions?.takeIf { it.isNotBlank() }?.let {
+            pills.addView(metaPill(ctx, 0, it.replaceFirstChar(Char::uppercase))); hasPill = true
+        }
+        val atts = mergedAttachments(ctx, log)
+        if (atts.isNotEmpty()) {
+            pills.addView(metaPill(ctx, R.drawable.ic_attach_image, atts.size.toString())); hasPill = true
+        }
+        if (hasPill) row.addView(pills)
+        if (atts.isNotEmpty()) row.addView(buildAttachmentStrip(ctx, atts))
+
+        detailRow(ctx, "Issues", log.issuesEncountered)?.let { row.addView(it) }
+        detailRow(ctx, "Safety", log.safetyObservations)?.let { row.addView(it) }
+        return row
     }
 
     private fun weatherIcon(w: String?): Int = when (w?.lowercase(Locale.US)) {
@@ -379,7 +555,7 @@ class DailyLogFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             // Same graceful-degradation as loadLogs: aggregate route first,
             // else fan out over the deployed per-project recipient/report routes.
-            val mine = runCatching { dprApi.getMyDpr(session.bearerToken) }.getOrNull()
+            val mine = aggregateOrNull { dprApi.getMyDpr(session.bearerToken) }
             val recipients: List<DprRecipient>
             val reports: List<DprReport>
             if (mine != null) {
@@ -469,8 +645,12 @@ class DailyLogFragment : Fragment() {
         c.alpha = 1f
         c.removeAllViews()
         binding.tvRecipientsEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-        // No recipients → hide Send + history (the add form above stays).
-        binding.dprManageSection.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+        // History is always visible — it's a record of what went out, and hiding
+        // it whenever the recipient list happens to be empty made past sends
+        // look like they never happened. Only the Send action is conditional,
+        // since there's nobody to send to.
+        binding.dprManageSection.visibility = View.VISIBLE
+        binding.btnSendDpr.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
         binding.tvRecipientsCount.text = "${list.count { it.isActive }} active"
         list.forEach { r ->
             val ctx = requireContext()
@@ -535,40 +715,162 @@ class DailyLogFragment : Fragment() {
         }
     }
 
+    /** Which DPR history project cards are open. */
+    private val expandedDprProjects = mutableSetOf<String>()
+
+    /**
+     * DPR history as one expandable card per project, mirroring Recent Entries.
+     *
+     * It used to be a flat run of date rows with the project name as a subtitle,
+     * so several projects' sends interleaved into an undifferentiated list.
+     */
     private fun renderReports(list: List<DprReport>) {
         val c = binding.historyContainer
         c.removeAllViews()
         binding.tvHistoryEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-        list.forEach { rep ->
-            val ctx = requireContext()
-            val card = neatCard(ctx)
+        if (list.isEmpty()) return
+
+        list
+            .groupBy { it.projectName?.trim().takeUnless { n -> n.isNullOrBlank() } ?: "Other" }
+            .toList()
+            .sortedByDescending { (_, reports) -> reports.maxOfOrNull { it.date ?: "" } ?: "" }
+            .forEachIndexed { index, (projectName, reports) ->
+                c.addView(
+                    dprProjectCard(
+                        requireContext(),
+                        projectName,
+                        reports.sortedByDescending { it.date ?: "" },
+                        isMostRecent = index == 0,
+                    ),
+                )
+            }
+    }
+
+    private fun dprProjectCard(
+        ctx: android.content.Context,
+        projectName: String,
+        reports: List<DprReport>,
+        isMostRecent: Boolean,
+    ): View {
+        val expanded = expandedDprProjects.contains(projectName)
+
+        val card = com.google.android.material.card.MaterialCardView(ctx).apply {
+            radius = dp(18).toFloat()
+            cardElevation = dp(2).toFloat()
+            strokeWidth = 0
+            setCardBackgroundColor(Color.WHITE)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
+        }
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val titleBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val nameRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        nameRow.addView(TextView(ctx).apply {
+            text = projectName
+            textSize = 17f
+            setTextColor(Color.parseColor("#101828"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        if (isMostRecent) {
+            nameRow.addView(TextView(ctx).apply {
+                text = "Recent"
+                textSize = 10.5f
+                setTextColor(Color.parseColor("#067647"))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setBackgroundResource(R.drawable.bg_daily_log_recent_badge)
+                setPadding(dp(8), dp(3), dp(8), dp(3))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = dp(8) }
+            })
+        }
+        titleBox.addView(nameRow)
+        titleBox.addView(TextView(ctx).apply {
+            text = if (reports.size == 1) "1 report" else reports.size.toString() + " reports"
+            textSize = 13f
+            setTextColor(Color.parseColor("#0B61CA"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, dp(4), 0, 0)
+        })
+        reports.firstOrNull()?.date?.let { latest ->
+            displayDate(latest).takeUnless { it.isBlank() }?.let { day ->
+                titleBox.addView(TextView(ctx).apply {
+                    text = "Last sent: " + day
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(3), 0, 0)
+                })
+            }
+        }
+        header.addView(titleBox)
+
+        val chevron = ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_back_chevron)
+            rotation = if (expanded) 90f else 270f
+            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
+            imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#98A2B3"))
+        }
+        header.addView(chevron)
+        content.addView(header)
+
+        val reportsBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (expanded) View.VISIBLE else View.GONE
+        }
+        reports.forEach { rep ->
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(12), dp(14), dp(12))
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setBackgroundResource(R.drawable.bg_daily_log_entry_block)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(12) }
             }
-            val left = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            left.addView(TextView(ctx).apply {
+            row.addView(TextView(ctx).apply {
                 text = displayDate(rep.date)
                 textSize = 13f
                 setTextColor(Color.parseColor("#101828"))
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                )
             })
-            rep.projectName?.takeIf { it.isNotBlank() }?.let {
-                left.addView(TextView(ctx).apply {
-                    text = it; textSize = 12f; setTextColor(Color.parseColor("#667085"))
-                    setPadding(0, dp(2), 0, 0)
-                    maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
-                })
-            }
-            row.addView(left)
             row.addView(dprStatusPill(ctx, rep.sentCount ?: 0, rep.failedCount ?: 0))
-            card.addView(row)
-            c.addView(card)
+            reportsBox.addView(row)
         }
+        content.addView(reportsBox)
+
+        card.setOnClickListener {
+            val open = !expandedDprProjects.contains(projectName)
+            if (open) expandedDprProjects.add(projectName) else expandedDprProjects.remove(projectName)
+            reportsBox.visibility = if (open) View.VISIBLE else View.GONE
+            chevron.animate().rotation(if (open) 90f else 270f).setDuration(160).start()
+        }
+
+        card.addView(content)
+        return card
     }
 
     private fun toggleRecipient(id: String, active: Boolean) {
@@ -666,7 +968,7 @@ class DailyLogFragment : Fragment() {
         // Fold in device-cached media when the server has none (pre-deploy).
         val merged = log.copy(attachments = mergedAttachments(requireContext(), log))
         val json = runCatching { com.google.gson.Gson().toJson(merged) }.getOrNull() ?: return
-        DailyLogDetailBottomSheet.newInstance(json).show(childFragmentManager, "daily_log_detail")
+        DailyLogDetailBottomSheet.newInstance(json).showOnce(childFragmentManager, "daily_log_detail")
     }
 
     /** Server attachments if present, else the device-local cache for this log. */

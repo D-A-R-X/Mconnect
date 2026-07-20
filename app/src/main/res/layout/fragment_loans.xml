@@ -19,7 +19,7 @@
             android:id="@+id/loansEmptyHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FEFEFE"
+            android:background="#FFFFFF"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="16dp"
@@ -170,7 +170,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="-44dp"
-                android:background="@drawable/bg_loan_hero_card"
+                android:background="@drawable/bg_loans_sheet"
                 android:orientation="vertical"
                 android:paddingBottom="16dp">
 

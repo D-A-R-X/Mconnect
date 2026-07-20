@@ -24,6 +24,8 @@ import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class ProfileFragment : Fragment() {
 
@@ -157,7 +159,7 @@ class ProfileFragment : Fragment() {
 
         val openEditProfile = View.OnClickListener {
             val bottomSheet = ProfileEditBottomSheet.newInstance()
-            bottomSheet.show(childFragmentManager, "ProfileEditBottomSheet")
+            bottomSheet.showOnce(childFragmentManager, "ProfileEditBottomSheet")
         }
         binding.profileAvatarContainer.setOnClickListener(openEditProfile)
         binding.rowPersonalData.setOnClickListener(openEditProfile)
@@ -167,7 +169,7 @@ class ProfileFragment : Fragment() {
                 .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, LanguageFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         binding.rowAppearance.setOnClickListener {
@@ -175,14 +177,14 @@ class ProfileFragment : Fragment() {
                 .applySmoothTransitions()
                 .replace(R.id.fragmentContainer, AppearanceFragment())
                 .addToBackStack(null)
-                .commit()
+                .commitOnce()
         }
 
         bindNotificationToggle()
 
         binding.rowLogout.setOnClickListener {
             val logoutSheet = LogoutBottomSheet.newInstance()
-            logoutSheet.show(childFragmentManager, "LogoutBottomSheet")
+            logoutSheet.showOnce(childFragmentManager, "LogoutBottomSheet")
         }
     }
 

@@ -7,7 +7,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FEFEFE">
+    android:background="#F1F3F8">
 
     <androidx.core.widget.NestedScrollView
         android:id="@+id/dailyLogScroll"
@@ -83,12 +83,16 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- ── White wrapper overlapping the hero ── -->
+            <!-- ── Panel overlapping the hero ──
+                 Page grey, not white: the entry cards below are pure white and
+                 need something to sit ON. bg_loan_hero_card is #FFFFFF and is
+                 shared with other sheets, so this references the grey sheet
+                 drawable rather than changing it. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="-44dp"
-                android:background="@drawable/bg_loan_hero_card"
+                android:background="@drawable/bg_loans_sheet"
                 android:orientation="vertical"
                 android:paddingBottom="24dp">
 
@@ -101,13 +105,16 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
+                    <!-- Loans-style segmented switch, white track (the panel
+                         behind it is page grey, so the loans #F2F4F7 track
+                         would disappear into it). -->
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="38dp"
+                        android:layout_height="42dp"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_loans_segment"
+                        android:background="@drawable/bg_segment_track_white"
                         android:orientation="horizontal"
-                        android:padding="3dp">
+                        android:padding="4dp">
 
                         <TextView
                             android:id="@+id/tabNewEntry"
@@ -182,10 +189,14 @@
                         android:textColor="#101828"
                         android:textSize="16sp" />
 
+                    <!-- clipToPadding=false so the cards' elevation shadow isn't
+                         sliced off at the container's padding edge. -->
                     <LinearLayout
                         android:id="@+id/logsContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
                         android:orientation="vertical"
                         android:paddingHorizontal="16dp" />
 

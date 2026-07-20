@@ -41,6 +41,8 @@ import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.common.commitOnce
 
 class MainActivity : AppCompatActivity() {
 
@@ -120,6 +122,26 @@ class MainActivity : AppCompatActivity() {
     )
     private lateinit var tabs: List<TabConfig>
     private lateinit var tabBarContainer: FrameLayout
+    private lateinit var tabBar: com.manjugroups.m_connect.ui.custom.GlassNavBar
+    private lateinit var swipePager: com.manjugroups.m_connect.ui.custom.SwipePagerLayout
+
+    /**
+     * Tab highlighted under the finger during a nav scrub, or -1. Purely
+     * visual — the real switch only happens when the finger lifts, so
+     * scrubbing across four tabs doesn't spin up four fragments.
+     */
+    private var previewedTab = -1
+    private var thumbAnimator: android.animation.Animator? = null
+
+    /** Where the thumb is currently headed, so redundant moves are dropped. */
+    private var thumbTargetX = Float.NaN
+
+    /**
+     * True while a swipe's release is committing the tab switch. The pages and
+     * the pill have already been moved by the gesture, so every animation the
+     * normal tap path would run has to be skipped.
+     */
+    private var swipeCommitInProgress = false
     // Modal task-nudge overlay: dim/blur backdrop + swipeable card carousel.
     private lateinit var taskNudgeOverlay: FrameLayout
     private lateinit var taskNudgePager: androidx.recyclerview.widget.RecyclerView
@@ -240,6 +262,8 @@ class MainActivity : AppCompatActivity() {
         navBarBackground = findViewById(R.id.navBarBackground)
         fragmentContainer = findViewById(R.id.fragmentContainer)
         tabBarContainer = findViewById(R.id.tabBarContainer)
+        tabBar = findViewById(R.id.tabBar)
+        swipePager = findViewById(R.id.fragmentContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
 
         // Pending-tasks nudge docked on the nav — count of incomplete My
@@ -440,10 +464,15 @@ class MainActivity : AppCompatActivity() {
         // Initialize all tabs with inactive icon variant.
         tabs.forEach { it.icon.setImageResource(it.inactiveIconRes) }
 
-        // Tab click listeners
+        // Tab click listeners. Taps still land on the tab itself — GlassNavBar
+        // only steals the gesture once it becomes a scrub — so this stays the
+        // path for both plain taps and TalkBack activation.
         tabs.forEachIndexed { index, config ->
             config.tab.setOnClickListener { selectTab(index) }
         }
+
+        setUpGlassNav()
+        setUpSwipePaging()
 
         // Defensive: keep the floating nav restricted to root tabs.
         // When a child fragment is pushed onto the back stack, hide the bar;
@@ -466,12 +495,16 @@ class MainActivity : AppCompatActivity() {
             taskNudgeDismissedAt = 0L
         }
 
-        // External-fleet agency principals (designation = "External Fleet")
-        // live in a single-screen portal: the Admin Fleet container, with its
-        // own bottom nav (Trips / Vehicles / Driver / Settings). Skip the
-        // normal MainActivity tab bar entirely so they never see Home / HR /
-        // Chat / Profile, which assume a real staff record they don't have.
-        if (isExternalFleetPrincipal()) {
+        // Fleet-portal principals live in a single-screen portal: the Admin
+        // Fleet container, with its own bottom nav (Trips / Vehicles / Driver /
+        // Settings). Skip the normal MainActivity tab bar entirely.
+        //
+        // Covers external agencies (designation "External Fleet"), who have no
+        // staff record and would break on Home / HR / Chat / Profile, and
+        // in-house fleet-desk staff ("Driver • Administration"), whose whole
+        // job is this screen — they were landing on the driver home and seeing
+        // "No Driver Trips" because they have no trips of their own.
+        if (isFleetPortalPrincipal()) {
             setTabBarVisible(false)
             if (savedInstanceState == null) {
                 supportFragmentManager.beginTransaction()
@@ -524,7 +557,7 @@ class MainActivity : AppCompatActivity() {
             .applySmoothTransitions()
             .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
             .addToBackStack(null)
-            .commit()
+            .commitOnce()
     }
 
     fun refreshTasksBanner(force: Boolean = false) {
@@ -718,7 +751,7 @@ class MainActivity : AppCompatActivity() {
         // Fill the nav bar behind the sheet so the page can't bleed through it.
         setNavBarSolid(true)
         com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount)
-            .show(supportFragmentManager, TAG_PENDING_SHEET)
+            .showOnce(supportFragmentManager, TAG_PENDING_SHEET)
     }
 
     /** Called by [com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet]
@@ -1296,6 +1329,11 @@ class MainActivity : AppCompatActivity() {
         val fragment = existingTarget ?: createRootFragment(index)
         val transaction = supportFragmentManager.beginTransaction()
             .setReorderingAllowed(true)
+        if (swipeCommitInProgress) {
+            // The swipe already put both pages where they belong; any transition
+            // here would re-animate a page that is visually already in place.
+            transaction.setTransition(androidx.fragment.app.FragmentTransaction.TRANSIT_NONE)
+        }
 
         rootTabTags().forEach { tag ->
             supportFragmentManager.findFragmentByTag(tag)?.let(transaction::hide)
@@ -1308,6 +1346,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         transaction.commit()
+        prewarmNeighbours()
     }
 
     private fun applyTopBarForTab(index: Int) {
@@ -1335,6 +1374,260 @@ class MainActivity : AppCompatActivity() {
                 if (::bottomNavFadeOverlay.isInitialized) {
                     bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_white)
                 }
+            }
+        }
+    }
+
+    // ── Glass nav: blurred backdrop, sliding thumb, hold-and-scrub ──────────
+
+    private fun setUpGlassNav() {
+        // Children have no width until the first layout pass.
+        tabBar.post { moveThumbTo(currentTab, animate = false) }
+
+        tabBar.scrubListener = object :
+            com.manjugroups.m_connect.ui.custom.GlassNavBar.ScrubListener {
+
+            override fun onScrubStart(x: Float) {
+                thumbAnimator?.cancel()
+                // Thumb swells slightly so it reads as "picked up".
+                animateThumbScale(1.12f)
+                previewTab(tabBar.tabIndexAt(x))
+            }
+
+            override fun onScrubMove(x: Float) {
+                previewTab(tabBar.tabIndexAt(x))
+            }
+
+            override fun onScrubEnd(x: Float) {
+                val target = tabBar.tabIndexAt(x)
+                animateThumbScale(1f)
+                clearPreview()
+                selectTab(target)
+            }
+
+            override fun onScrubCancel() {
+                animateThumbScale(1f)
+                clearPreview()
+                moveThumbTo(currentTab, animate = true)
+            }
+        }
+    }
+
+    /**
+     * Paint [index] as if selected and glide the thumb to it, without touching
+     * the fragment stack. Idempotent, so it is safe to call on every move.
+     */
+    private fun previewTab(index: Int) {
+        if (index !in tabs.indices || index == previewedTab) return
+        previewedTab = index
+
+        val activeColor = Color.parseColor("#1BCA0B")
+        val inactiveColor = Color.parseColor("#D0D5DD")
+        tabs.forEachIndexed { i, config ->
+            val tint = if (i == index) activeColor else inactiveColor
+            config.icon.imageTintList = ColorStateList.valueOf(tint)
+            config.text.setTextColor(tint)
+            config.icon.animate().cancel()
+            config.icon.animate()
+                .scaleX(if (i == index) 1.14f else 1f)
+                .scaleY(if (i == index) 1.14f else 1f)
+                .translationY(if (i == index) -4f else 0f)
+                .setDuration(130)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
+        }
+
+        moveThumbTo(index, animate = true)
+        try {
+            tabBar.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        } catch (_: Exception) {
+            // Haptics are a nicety; never let them break the gesture.
+        }
+    }
+
+    private fun clearPreview() {
+        previewedTab = -1
+        tabs.forEach { config ->
+            config.icon.animate().cancel()
+            config.icon.scaleX = 1f
+            config.icon.scaleY = 1f
+            config.icon.translationY = 0f
+        }
+    }
+
+    private fun moveThumbTo(index: Int, animate: Boolean) {
+        if (index !in tabs.indices) return
+        val tab = tabs[index].tab
+        if (tab.width == 0) return
+        val centerX = (tab.left + tab.right) / 2f
+        // Near the full tab width: the pill has to be wider than it is tall or
+        // its capsule ends flatten out into a rounded square.
+        val width = tab.width * 0.95f
+
+        // selectTab and onSwipeSettled can both land here for the same commit.
+        // Without this the second call cancels a mid-flight animator and
+        // restarts it, which reads as the pill stuttering at the end of a swipe.
+        if (thumbTargetX == centerX && thumbAnimator?.isRunning == true) return
+
+        thumbAnimator?.cancel()
+        thumbTargetX = centerX
+        if (!animate || tabBar.thumbWidth == 0f) {
+            tabBar.thumbWidth = width
+            tabBar.thumbCenterX = centerX
+            return
+        }
+        tabBar.thumbWidth = width
+        thumbAnimator = android.animation.ObjectAnimator
+            .ofFloat(tabBar, "thumbCenterX", tabBar.thumbCenterX, centerX)
+            .apply {
+                duration = 240
+                interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+                start()
+            }
+    }
+
+    /**
+     * Add the tabs either side of the current one, hidden, once things are
+     * idle. Without this the first swipe toward an unvisited tab has to
+     * inflate that fragment synchronously mid-drag, which drops frames exactly
+     * when the gesture needs them.
+     */
+    private fun prewarmNeighbours() {
+        swipePager.removeCallbacks(prewarmRunnable)
+        swipePager.postDelayed(prewarmRunnable, 600)
+    }
+
+    private val prewarmRunnable = Runnable {
+        if (isFinishing || supportFragmentManager.isStateSaved) return@Runnable
+        listOf(currentTab - 1, currentTab + 1)
+            .filter { it in 0 until 4 }
+            .forEach { index ->
+                val tag = tabTag(index)
+                if (supportFragmentManager.findFragmentByTag(tag) != null) return@forEach
+                runCatching {
+                    val fragment = createRootFragment(index)
+                    supportFragmentManager.beginTransaction()
+                        .setReorderingAllowed(true)
+                        .add(R.id.fragmentContainer, fragment, tag)
+                        .hide(fragment)
+                        .commit()
+                }
+            }
+    }
+
+    private fun animateThumbScale(scale: Float) {
+        android.animation.ObjectAnimator
+            .ofFloat(tabBar, "thumbScale", tabBar.thumbScale, scale)
+            .apply {
+                duration = 160
+                interpolator = android.view.animation.DecelerateInterpolator()
+                start()
+            }
+    }
+
+    // ── Swipe paging between root tabs ──────────────────────────────────────
+
+    private fun setUpSwipePaging() {
+        swipePager.callbacks = object :
+            com.manjugroups.m_connect.ui.custom.SwipePagerLayout.Callbacks {
+
+            // Only the four root tabs page. Once a detail screen is pushed the
+            // nav is hidden anyway, and swiping there would be a hidden way to
+            // navigate out from under it.
+            override fun canSwipe(): Boolean =
+                supportFragmentManager.backStackEntryCount == 0 && isBottomNavVisible
+
+            override fun hasTabInDirection(direction: Int): Boolean =
+                (currentTab + direction) in tabs.indices
+
+            override fun currentPageView(): View? =
+                supportFragmentManager.findFragmentByTag(tabTag(currentTab))?.view
+
+            override fun prepareNeighbour(direction: Int): View? {
+                val target = currentTab + direction
+                if (target !in tabs.indices) return null
+                val tag = tabTag(target)
+
+                // A tab that has never been opened has no view yet. Commit it
+                // synchronously (hidden) so the drag has something real to
+                // pull in — costs one inflation the first time that tab is
+                // swiped to, versus dragging against an empty gap every time.
+                var fragment = supportFragmentManager.findFragmentByTag(tag)
+                if (fragment == null) {
+                    // commitNow throws if the FragmentManager happens to be
+                    // mid-transaction. Falling back to no preview is fine —
+                    // the swipe just won't arm this time.
+                    fragment = runCatching {
+                        val created = createRootFragment(target)
+                        supportFragmentManager.beginTransaction()
+                            .setReorderingAllowed(true)
+                            .add(R.id.fragmentContainer, created, tag)
+                            .hide(created)
+                            .commitNow()
+                        created
+                    }.getOrNull() ?: return null
+                }
+
+                // The FragmentManager keeps hidden fragments' views GONE. Show
+                // it for the duration of the drag; selectTab (on commit) or
+                // releaseNeighbour (on cancel) puts the state back.
+                return fragment.view?.apply { visibility = View.VISIBLE }
+            }
+
+            override fun releaseNeighbour(view: View) {
+                view.visibility = View.GONE
+            }
+
+            override fun onSwipeProgress(fraction: Float, direction: Int) {
+                // Glide the thumb toward the incoming tab in step with the
+                // drag, so the nav reads as attached to the page.
+                val target = currentTab + direction
+                if (target !in tabs.indices) return
+                val from = tabs[currentTab].tab
+                val to = tabs[target].tab
+                if (from.width == 0 || to.width == 0) return
+                thumbAnimator?.cancel()
+                // Hand-positioned, so clear the animator target — otherwise
+                // the settle afterwards would be dropped as redundant.
+                thumbTargetX = Float.NaN
+                val fromX = (from.left + from.right) / 2f
+                val toX = (to.left + to.right) / 2f
+                tabBar.thumbCenterX = fromX + (toX - fromX) * fraction
+            }
+
+            override fun onSwipeCommitStarted(direction: Int, durationMs: Long) {
+                // Run the pill's remaining travel alongside the page slide.
+                // Left until after the swap it would animate straight into the
+                // FragmentTransaction's layout pass, which is what made it
+                // stutter on swipe but not on a nav scrub.
+                val target = currentTab + direction
+                if (target !in tabs.indices) return
+                val tab = tabs[target].tab
+                if (tab.width == 0) return
+                thumbAnimator?.cancel()
+                thumbTargetX = (tab.left + tab.right) / 2f
+                thumbAnimator = android.animation.ObjectAnimator
+                    .ofFloat(tabBar, "thumbCenterX", tabBar.thumbCenterX, thumbTargetX)
+                    .apply {
+                        duration = durationMs
+                        interpolator = android.view.animation.DecelerateInterpolator(1.4f)
+                        start()
+                    }
+            }
+
+            override fun onSwipeCommit(direction: Int) {
+                // The pill is already at its destination and the pages are
+                // already in place, so the swap must not re-animate anything.
+                swipeCommitInProgress = true
+                try {
+                    selectTab(currentTab + direction)
+                } finally {
+                    swipeCommitInProgress = false
+                }
+            }
+
+            override fun onSwipeSettled() {
+                moveThumbTo(currentTab, animate = true)
             }
         }
     }
@@ -1369,6 +1662,18 @@ class MainActivity : AppCompatActivity() {
         val activeColor = Color.parseColor("#1BCA0B")
         val inactiveColor = Color.parseColor("#D0D5DD")
 
+        // Taps and deep links move the thumb too, not just scrubs. Deferred so
+        // it still lands correctly when called before the bar has been laid out.
+        // On a swipe commit the pill was already animated in step with the page
+        // (onSwipeCommitStarted), so it only needs pinning to the exact centre.
+        if (::tabBar.isInitialized) {
+            if (tabBar.width == 0) {
+                tabBar.post { moveThumbTo(index, animate = false) }
+            } else {
+                moveThumbTo(index, animate = !swipeCommitInProgress)
+            }
+        }
+
         tabs.forEachIndexed { i, config ->
             val isActive = i == index
             config.tab.background = null
@@ -1382,7 +1687,10 @@ class MainActivity : AppCompatActivity() {
             config.text.setTextColor(tint)
             
             if (isActive) {
-                animateIcon(i, config.icon)
+                // The icon's jump-and-settle is the tap affordance. On a swipe
+                // the gesture itself is the feedback, and running it here would
+                // just be more animation competing with the page slide.
+                if (!swipeCommitInProgress) animateIcon(i, config.icon)
                 try {
                     config.tab.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                 } catch (e: Exception) {
@@ -1423,6 +1731,23 @@ class MainActivity : AppCompatActivity() {
      */
     private fun isExternalFleetPrincipal(): Boolean =
         session.designation?.trim()?.equals("External Fleet", ignoreCase = true) == true
+
+    /**
+     * Who opens straight into the Admin Fleet portal.
+     *
+     * External agencies (no staff record) plus in-house fleet-desk staff —
+     * "Driver • Administration", as opposed to "Driver • Transport" who drive
+     * and get the trip UI.
+     *
+     * The two groups talk to different backends. Agencies use the travel-desk
+     * routes; staff use the MMS dispatch routes, because travel-desk auth
+     * accepts agency session tokens only and its requireAgencySession rejects
+     * internal agencies outright. Sending staff at the agency routes 401s every
+     * call, and the 401 watchdog reads that as a dead session and logs them
+     * out — see AdminFleetTripsFragment.useMmsFleet for the split.
+     */
+    private fun isFleetPortalPrincipal(): Boolean =
+        isExternalFleetPrincipal() || session.isFleetAdminDriver
 
     private suspend fun refreshSessionContext() {
         runCatching {

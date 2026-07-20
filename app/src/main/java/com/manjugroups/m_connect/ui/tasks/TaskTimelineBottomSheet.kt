@@ -19,12 +19,11 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.TaskTimelineEntry
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import coil.load
 
 /**
  * "Time Line" bottom sheet — opened from the clock-history icon on
@@ -209,7 +208,11 @@ class TaskTimelineBottomSheet : BottomSheetDialogFragment() {
                         iv.background = ctx.getDrawable(R.drawable.bg_task_inner_card)
                         iv.clipToOutline = true
                         photosStrip.addView(iv)
-                        img.url?.takeIf { it.isNotBlank() }?.let { loadInto(iv, it) }
+                        // `url` is optional on TaskUpdateImage while storageId is
+                        // required — the backend often sends only the id, and
+                        // keying off url alone left an empty grey tile. resolve()
+                        // turns either form into a servable URL.
+                        loadInto(iv, img.url?.takeIf { it.isNotBlank() } ?: img.storageId)
                     }
                 }
             }
@@ -221,17 +224,22 @@ class TaskTimelineBottomSheet : BottomSheetDialogFragment() {
                 }.getOrDefault(iso)
             }
 
-            private fun loadInto(target: ImageView, url: String) {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val bmp = withContext(Dispatchers.IO) {
-                        val bytes = runCatching {
-                            java.net.URL(url).openStream().use { it.readBytes() }
-                        }.getOrNull() ?: return@withContext null
-                        runCatching {
-                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        }.getOrNull()
-                    }
-                    if (bmp != null) target.setImageBitmap(bmp)
+            /**
+             * Load through Coil like the rest of the app.
+             *
+             * This used to hand-roll `java.net.URL(...).openStream()` on an IO
+             * dispatcher: no disk/memory cache, no redirect or content-type
+             * handling, no cancellation when the row is recycled (so a slow
+             * response could paint onto whichever entry the view now holds),
+             * and every failure swallowed by getOrNull() — which is why a
+             * broken image was indistinguishable from an empty one.
+             */
+            private fun loadInto(target: ImageView, rawUrl: String?) {
+                val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(rawUrl)
+                target.load(resolved) {
+                    crossfade(true)
+                    placeholder(R.drawable.bg_task_inner_card)
+                    error(R.drawable.bg_task_inner_card)
                 }
             }
         }

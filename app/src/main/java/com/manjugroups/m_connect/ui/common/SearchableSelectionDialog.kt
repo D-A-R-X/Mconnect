@@ -12,9 +12,10 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.R
@@ -25,7 +26,15 @@ data class SearchableOption<T>(
     val title: String,
     val subtitle: String? = null,
     val keywords: String = ""
-)
+) {
+    /**
+     * Lowercased title + subtitle + keywords, built once. The filter used to
+     * allocate three strings per option on every keystroke.
+     */
+    internal val haystack: String by lazy(LazyThreadSafetyMode.NONE) {
+        "$title ${subtitle.orEmpty()} $keywords".lowercase(Locale.US)
+    }
+}
 
 object SearchableSelectionDialog {
     fun <T> show(
@@ -41,8 +50,13 @@ object SearchableSelectionDialog {
         onSelected: (T) -> Unit
     ) {
         val dialog = BottomSheetDialog(context)
-        val listContainer = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
+        // RecyclerView, not a LinearLayout in a ScrollView. The previous version
+        // inflated one view per option (plus a divider) on EVERY keystroke, so
+        // a few hundred staff meant ~600 views rebuilt per character typed —
+        // which is what made this dialog crawl and, on big lists, ANR.
+        val adapter = RowAdapter(options) { item ->
+            onSelected(item)
+            dialog.dismiss()
         }
         val empty = TextView(context).apply {
             text = emptyMessage
@@ -52,15 +66,10 @@ object SearchableSelectionDialog {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(Color.parseColor("#667085"))
         }
-        val scroll = ScrollView(context).apply {
-            isFillViewport = false
-            addView(
-                listContainer,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            )
+        val scroll = RecyclerView(context).apply {
+            layoutManager = LinearLayoutManager(context)
+            setHasFixedSize(true)
+            this.adapter = adapter
         }
         val search = EditText(context).apply {
             hint = "Search..."
@@ -128,12 +137,7 @@ object SearchableSelectionDialog {
             val q = query.trim().lowercase(Locale.US)
             val filtered =
                 if (q.isEmpty()) options
-                else options.filter { option ->
-                    listOf(option.title, option.subtitle.orEmpty(), option.keywords)
-                        .joinToString(" ")
-                        .lowercase(Locale.US)
-                        .contains(q)
-                }
+                else options.filter { it.haystack.contains(q) }
 
             // The "create new" action only appears once the user has typed a
             // name that ISN'T already an option — i.e. the thing they're
@@ -146,27 +150,12 @@ object SearchableSelectionDialog {
                 it.text = "$createLabel \"${query.trim()}\"  +"
             }
 
-            listContainer.removeAllViews()
             // Empty copy shows only when there's nothing to pick AND nothing to
             // create — otherwise the Add action leads.
             empty.visibility =
                 if (filtered.isEmpty() && !showCreate) View.VISIBLE else View.GONE
             scroll.visibility = if (filtered.isEmpty()) View.GONE else View.VISIBLE
-
-            filtered.forEachIndexed { index, option ->
-                listContainer.addView(makeRow(context, option) {
-                    onSelected(option.item)
-                    dialog.dismiss()
-                })
-                if (index != filtered.lastIndex) {
-                    listContainer.addView(View(context).apply {
-                        setBackgroundColor(Color.parseColor("#EAECF0"))
-                    }, LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        1
-                    ))
-                }
-            }
+            adapter.submit(filtered)
         }
 
         search.addTextChangedListener(object : TextWatcher {
@@ -202,30 +191,78 @@ object SearchableSelectionDialog {
         dialog.show()
     }
 
-    private fun <T> makeRow(
-        context: Context,
-        option: SearchableOption<T>,
-        onClick: () -> Unit
-    ): View {
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            isClickable = true
-            isFocusable = true
-            setPadding(dp(context, 4), dp(context, 12), dp(context, 4), dp(context, 12))
-            setOnClickListener { onClick() }
-            addView(TextView(context).apply {
-                text = option.title
+    /**
+     * Recycling adapter for the option rows. Views are built in code (matching
+     * the dialog's fully-programmatic style) but reused across binds, so
+     * filtering costs a rebind per visible row rather than a full re-inflate.
+     */
+    private class RowAdapter<T>(
+        initial: List<SearchableOption<T>>,
+        private val onClick: (T) -> Unit,
+    ) : RecyclerView.Adapter<RowAdapter<T>.VH>() {
+
+        private var rows: List<SearchableOption<T>> = initial
+
+        fun submit(next: List<SearchableOption<T>>) {
+            rows = next
+            notifyDataSetChanged()
+        }
+
+        override fun getItemCount(): Int = rows.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val context = parent.context
+            val title = TextView(context).apply {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setTextColor(Color.parseColor("#101828"))
                 typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
-            })
-            option.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
-                addView(TextView(context).apply {
-                    text = subtitle
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                    setTextColor(Color.parseColor("#667085"))
-                    setPadding(0, dp(context, 3), 0, 0)
-                })
+            }
+            val subtitle = TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(context, 3), 0, 0)
+            }
+            val divider = View(context).apply {
+                setBackgroundColor(Color.parseColor("#EAECF0"))
+            }
+            val root = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                isClickable = true
+                isFocusable = true
+                layoutParams = RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT,
+                    RecyclerView.LayoutParams.WRAP_CONTENT,
+                )
+                addView(title)
+                addView(subtitle)
+                addView(
+                    divider,
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1),
+                )
+            }
+            return VH(root, title, subtitle, divider)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val option = rows[position]
+            holder.title.text = option.title
+            val sub = option.subtitle?.takeIf { it.isNotBlank() }
+            holder.subtitle.text = sub.orEmpty()
+            holder.subtitle.visibility = if (sub != null) View.VISIBLE else View.GONE
+            holder.divider.visibility =
+                if (position == rows.lastIndex) View.GONE else View.VISIBLE
+            holder.itemView.setOnClickListener { onClick(option.item) }
+        }
+
+        inner class VH(
+            root: View,
+            val title: TextView,
+            val subtitle: TextView,
+            val divider: View,
+        ) : RecyclerView.ViewHolder(root) {
+            init {
+                val context = root.context
+                root.setPadding(dp(context, 4), dp(context, 12), dp(context, 4), 0)
             }
         }
     }

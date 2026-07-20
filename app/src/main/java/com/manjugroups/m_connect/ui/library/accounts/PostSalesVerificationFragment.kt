@@ -27,11 +27,14 @@ import com.manjugroups.m_connect.ui.library.collections.CollectionRejectBottomSh
 import com.manjugroups.m_connect.ui.library.collections.CollectionStatus
 import com.manjugroups.m_connect.ui.library.collections.CollectionType
 import com.manjugroups.m_connect.ui.library.collections.CollectionsAdapter
+import com.manjugroups.m_connect.ui.common.InfiniteScrollPager
+import com.manjugroups.m_connect.ui.common.SkeletonLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Accountant verification queue. Loads pending + recently-approved
@@ -59,6 +62,15 @@ class PostSalesVerificationFragment : Fragment() {
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
 
+    // The RecyclerView lives inside a NestedScrollView (wrap_content, nested
+    // scrolling off), so it can't recycle — every row would inflate up-front
+    // AND fire its own signed-URL fetch for the proof thumbnail. Render a
+    // growing window instead, extended as the user scrolls.
+    private val pager = InfiniteScrollPager(onLoadMore = { renderWindow() })
+    private var filteredCollections: List<CollectionItem> = emptyList()
+    private var skeletonAnim: android.animation.ObjectAnimator? = null
+    private var hasRenderedOnce = false
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -84,7 +96,7 @@ class PostSalesVerificationFragment : Fragment() {
             onAcceptClick = { item -> approveCollection(item) }
             onRejectClick = { item ->
                 CollectionRejectBottomSheet.newInstance(item.id)
-                    .show(parentFragmentManager, "CollectionRejectBottomSheet")
+                    .showOnce(parentFragmentManager, "CollectionRejectBottomSheet")
             }
             onRectifyClick = { /* No rectify on the accountant side */ }
             onImageClick = { item -> showFullscreenImagePreview(item) }
@@ -92,6 +104,33 @@ class PostSalesVerificationFragment : Fragment() {
         }
         binding.rvCollections.layoutManager = LinearLayoutManager(requireContext())
         binding.rvCollections.adapter = adapter
+        // Grow the window as the outer scroller nears the bottom.
+        pager.bindNestedScroll(
+            binding.postSalesScroll,
+            totalCount = { filteredCollections.size },
+        )
+    }
+
+    /** Render only the current window of the filtered list. */
+    private fun renderWindow() {
+        if (_binding == null) return
+        adapter.submit(filteredCollections.take(pager.limit))
+    }
+
+    private fun showSkeleton(show: Boolean) {
+        val b = _binding ?: return
+        if (show) {
+            b.rvCollections.visibility = View.GONE
+            b.skeletonCollections.visibility = View.VISIBLE
+            skeletonAnim?.cancel()
+            skeletonAnim = SkeletonLoader.show(b.skeletonCollections, 4)
+        } else {
+            skeletonAnim?.cancel()
+            skeletonAnim = null
+            b.skeletonCollections.removeAllViews()
+            b.skeletonCollections.visibility = View.GONE
+            b.rvCollections.visibility = View.VISIBLE
+        }
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
@@ -204,12 +243,16 @@ class PostSalesVerificationFragment : Fragment() {
     }
 
     private fun refreshFromApi() {
+        // Skeleton only on the cold load — an approve/reject refresh keeps the
+        // existing rows on screen instead of flashing placeholders.
+        if (!hasRenderedOnce) showSkeleton(true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     api.listCustomerCollectionsForAccounts(session.bearerToken)
                 }
                 if (!resp.success) {
+                    showSkeleton(false)
                     toast(resp.error ?: "Failed to load verification queue")
                     return@launch
                 }
@@ -217,8 +260,11 @@ class PostSalesVerificationFragment : Fragment() {
                 resp.collections.forEach { rowsById[it.id] = it }
                 masterList.clear()
                 masterList.addAll(resp.collections.map(CollectionMapper::map))
+                hasRenderedOnce = true
+                showSkeleton(false)
                 filterCollections()
             } catch (e: Exception) {
+                showSkeleton(false)
                 toast(e.message ?: "Failed to load verification queue")
             }
         }
@@ -283,7 +329,11 @@ class PostSalesVerificationFragment : Fragment() {
                 item.refId.contains(currentSearchQuery, ignoreCase = true)
             matchesTab && matchesSearch
         }
-        adapter.submit(filtered)
+        filteredCollections = filtered
+        // New tab/search/fetch → back to the first page of the window.
+        pager.reset()
+        renderWindow()
+        // Counts + total stay keyed off the FULL filtered set, not the window.
         updateSummaryBanner(filtered)
     }
 

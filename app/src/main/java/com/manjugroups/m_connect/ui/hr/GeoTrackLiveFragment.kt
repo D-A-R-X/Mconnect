@@ -38,6 +38,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
 
@@ -434,7 +435,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
             initialTo = current,
             maxDate = today,
             resultKey = RESULT_KEY_DATE,
-        ).show(parentFragmentManager, "geotrack_date_calendar")
+        ).showOnce(parentFragmentManager, "geotrack_date_calendar")
     }
 
     private fun formattedSelectedDate(): String {

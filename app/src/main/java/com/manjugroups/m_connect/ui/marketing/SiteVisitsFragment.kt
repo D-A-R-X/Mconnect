@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
  * Site Visits list — counterpart to [CpVisitsFragment] for client-comes-to-plot
@@ -498,7 +499,7 @@ class SiteVisitsFragment : Fragment() {
     }
 
     private fun openVisit(visit: TodayVisit) {
-        SiteVisitOverviewFragment.forVisit(visit).show(parentFragmentManager, "site_visit_overview")
+        SiteVisitOverviewFragment.forVisit(visit).showOnce(parentFragmentManager, "site_visit_overview")
     }
 
     // ---------- Entry animation (mirrors CpVisitsFragment cadence) ----------

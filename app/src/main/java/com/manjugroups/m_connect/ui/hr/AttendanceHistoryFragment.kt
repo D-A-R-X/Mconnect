@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
 import java.util.*
+import com.manjugroups.m_connect.ui.common.showOnce
 
 class AttendanceHistoryFragment : Fragment() {
 
@@ -171,7 +172,7 @@ class AttendanceHistoryFragment : Fragment() {
         binding.btnAttendanceFilter.setOnClickListener {
             AttendanceFilterSheet
                 .newInstance(filterFromDate, filterToDate)
-                .show(parentFragmentManager, "attendance_filter")
+                .showOnce(parentFragmentManager, "attendance_filter")
         }
 
         setFragmentResultListener(AttendanceFilterSheet.RESULT_KEY) { _, bundle ->
@@ -348,7 +349,7 @@ class AttendanceHistoryFragment : Fragment() {
         val reqCount: Int
         if (activeTab == 2) {
             attCount = teamApprovalAttendanceRows().size
-            reqCount = cachedTeamRequests.size
+            reqCount = teamApprovalRequestRows().size
         } else {
             attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
             reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
@@ -480,7 +481,7 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 updateBadgeFor(
                     2,
-                    teamApprovalAttendanceRows().size + cachedTeamRequests.size,
+                    teamApprovalAttendanceRows().size + teamApprovalRequestRows().size,
                 )
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
@@ -548,7 +549,7 @@ class AttendanceHistoryFragment : Fragment() {
             0 -> renderRecords(fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate), "")
             1 -> renderTeamAttendance(cachedTeamAttendance, showFines = false, "")
             2 -> renderApprovals(
-                if (activeSubTab == 1) cachedTeamRequests
+                if (activeSubTab == 1) teamApprovalRequestRows()
                 else teamApprovalAttendanceRows(),
                 ""
             )
@@ -578,11 +579,28 @@ class AttendanceHistoryFragment : Fragment() {
     private fun isRequestLinked(r: AttendanceApprovalRecord): Boolean =
         r.requestType == "remarks" || r.requestType == "correction"
 
-    /** Team Approval · Attendance rows: request shadows are filtered out
-     *  only once a real Requests feed exists to hold them. */
+    /**
+     * Team Approval · Attendance rows. Correction/remarks rows are ALWAYS
+     * excluded.
+     *
+     * This used to be gated on [teamRequestsSourced], the idea being not to
+     * hide request rows until a real Requests feed existed to hold them. But a
+     * backend that predates `?requests=true` then left them sitting in the
+     * Attendance list, where they render as attendance approvals that don't
+     * exist — tapping one opened the attendance review, while Approve opened
+     * the time-correction dialog. Deriving the Requests feed locally (see
+     * [teamApprovalRequestRows]) covers that case properly.
+     */
     private fun teamApprovalAttendanceRows(): List<AttendanceApprovalRecord> =
-        if (teamRequestsSourced) cachedApprovals.filterNot(::isRequestLinked)
-        else cachedApprovals
+        cachedApprovals.filterNot(::isRequestLinked)
+
+    /**
+     * Team Approval · Requests rows: the server feed when the backend supplies
+     * one, otherwise the request rows carried inside the approvals feed.
+     */
+    private fun teamApprovalRequestRows(): List<AttendanceApprovalRecord> =
+        if (teamRequestsSourced) cachedTeamRequests
+        else cachedApprovals.filter(::isRequestLinked)
 
     /** Whether the ACTIVE tab's backing cache has nothing to show yet. */
     private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
@@ -747,7 +765,7 @@ class AttendanceHistoryFragment : Fragment() {
             card.setOnClickListener {
                 AttendancePunchLogSheet
                     .newInstance(record)
-                    .show(parentFragmentManager, "attendance_punch_log")
+                    .showOnce(parentFragmentManager, "attendance_punch_log")
             }
 
             // Withdraw button is replaced by Edit button
@@ -765,7 +783,7 @@ class AttendanceHistoryFragment : Fragment() {
                 editBtn.visibility = View.VISIBLE
                 editBtn.setOnClickListener {
                     EditAttendanceBottomSheet.newInstance(record)
-                        .show(parentFragmentManager, "edit_attendance")
+                        .showOnce(parentFragmentManager, "edit_attendance")
                 }
             }
 
@@ -831,15 +849,22 @@ class AttendanceHistoryFragment : Fragment() {
         val amountMarginPx = (4 * density).toInt()
         val blue = android.graphics.Color.parseColor("#0B61CA")
         for (fine in visible) {
-            val row = android.widget.LinearLayout(requireContext()).apply {
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
+            val block = android.widget.LinearLayout(requireContext()).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
                 setPadding(padHPx, padVPx, padHPx, padVPx)
                 setBackgroundResource(R.drawable.bg_other_fine_banner)
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = topMarginPx }
+            }
+            val row = android.widget.LinearLayout(requireContext()).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
             }
             val icon = android.widget.ImageView(requireContext()).apply {
                 setImageResource(R.drawable.ic_clock)
@@ -880,7 +905,27 @@ class AttendanceHistoryFragment : Fragment() {
             row.addView(label)
             row.addView(receipt)
             row.addView(amount)
-            container.addView(row)
+            block.addView(row)
+            // The reason HR entered on the web (loss of property, indiscipline,
+            // late warning…) — shown beneath the fine so the staff sees WHY.
+            fine.notes?.trim()?.takeUnless { it.isEmpty() }?.let { reason ->
+                block.addView(TextView(requireContext()).apply {
+                    text = reason
+                    setTextColor(android.graphics.Color.parseColor("#5B7FA6"))
+                    textSize = 11f
+                    typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                        requireContext(), R.font.inter_regular,
+                    )
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply {
+                        topMargin = (3 * density).toInt()
+                        marginStart = iconPx + textMarginPx
+                    }
+                })
+            }
+            container.addView(block)
         }
     }
 
@@ -1216,7 +1261,7 @@ class AttendanceHistoryFragment : Fragment() {
                         showRejectDialog(recordId, isRequestRow)
                     }
                 })
-                sheet.show(parentFragmentManager, "review_attendance_request")
+                sheet.showOnce(parentFragmentManager, "review_attendance_request")
             }
             // Card body opens the journey review (map + travel + timeline)
             // for context; request rows have no journey, so they open the
@@ -1233,25 +1278,24 @@ class AttendanceHistoryFragment : Fragment() {
                         showHoldDialog(recordId)
                     }
                 })
-                sheet.show(parentFragmentManager, "attendance_review")
+                sheet.showOnce(parentFragmentManager, "attendance_review")
             }
 
-            if (isRequestRow) {
-                btnReject.visibility = View.GONE
-                btnApprove.visibility = View.GONE
-                btnHrReview.visibility = View.VISIBLE
+            // One button, one destination. Inline Approve/Reject used to open
+            // the compact decision modal while tapping the card opened the full
+            // journey review — two different forms for the same row, and the
+            // button's own label promised a decision it didn't actually make
+            // (it opened a dialog). A single "Actions" entry point that lands
+            // on the same sheet as the card removes both surprises; Approve /
+            // Reject / Hold all live inside that sheet.
+            val actionLabel = card.findViewById<TextView>(R.id.tvHrReviewActionLabel)
+            btnReject.visibility = View.GONE
+            btnApprove.visibility = View.GONE
+            btnHrReview.visibility = View.VISIBLE
+            actionLabel?.text = if (isRequestRow) "HR Review" else "Actions"
 
-                btnHrReview.setOnClickListener(openReviewModal)
-                card.setOnClickListener(openCardDetail)
-            } else {
-                btnReject.visibility = View.VISIBLE
-                btnApprove.visibility = View.VISIBLE
-                btnHrReview.visibility = View.GONE
-
-                card.setOnClickListener(openCardDetail)
-                btnApprove.setOnClickListener(openReviewModal)
-                btnReject.setOnClickListener(openReviewModal)
-            }
+            card.setOnClickListener(openCardDetail)
+            btnHrReview.setOnClickListener(openCardDetail)
     }
 
     private fun showApproveDialog(id: String) {
@@ -1271,7 +1315,7 @@ class AttendanceHistoryFragment : Fragment() {
             title = "Reject attendance",
             subtitle = "Add a reason for rejecting this attendance",
             buttonText = "Reject",
-        ).show(parentFragmentManager, "reject_attendance")
+        ).showOnce(parentFragmentManager, "reject_attendance")
     }
 
     private fun showHoldDialog(id: String) {
@@ -1346,7 +1390,7 @@ class AttendanceHistoryFragment : Fragment() {
         val originalList: List<Any> = when (activeTab) {
             0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
             1 -> cachedTeamAttendance
-            2 -> if (activeSubTab == 1) cachedTeamRequests
+            2 -> if (activeSubTab == 1) teamApprovalRequestRows()
                  else teamApprovalAttendanceRows()
             3 -> cachedAllApprovals.filterNot(::isRequestLinked)
             4 -> {
