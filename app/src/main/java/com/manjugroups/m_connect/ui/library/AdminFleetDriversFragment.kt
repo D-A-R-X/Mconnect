@@ -62,6 +62,15 @@ class AdminFleetDriversFragment : Fragment() {
      * bug in the screen rather than a backend that hasn't been deployed yet.
      */
     private fun loadErrorMessage(e: Exception): String {
+        // Connectivity first: a DNS/socket failure surfaces as
+        // "Unable to resolve host ...", which reads like a server fault when
+        // the phone simply has no working internet.
+        if (e is java.net.UnknownHostException ||
+            e is java.net.ConnectException ||
+            e is java.net.SocketTimeoutException
+        ) {
+            return "No internet connection. Check the network and pull to refresh."
+        }
         val code = (e as? retrofit2.HttpException)?.code()
         return when (code) {
             404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
@@ -154,6 +163,8 @@ class AdminFleetDriversFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
+                binding.tvDriversEmpty.visibility = View.VISIBLE
+                binding.tvDriversEmpty.text = loadErrorMessage(e)
                 Toast.makeText(
                     requireContext(),
                     "Couldn't load drivers: ${loadErrorMessage(e)}",

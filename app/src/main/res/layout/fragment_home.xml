@@ -206,6 +206,11 @@
                         -->
                     </LinearLayout>
 
+                    <!-- Trip filter. Transport drivers get All / Upcoming /
+                         Completed over their own trips; fleet administrators
+                         get Pending / Assigned / Completed over the whole
+                         allocation queue (relabelled + restyled at runtime as
+                         the segmented control used on the fleet screen). -->
                     <LinearLayout
                         android:id="@+id/layoutDriverTabs"
                         android:layout_width="match_parent"

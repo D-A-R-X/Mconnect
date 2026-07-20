@@ -72,6 +72,34 @@ interface TravelDeskApi {
         @Body body: SetDriverStatusRequest
     ): TravelDeskSimpleResponse
 
+    // ── Agency-owned driver ───────────────────────────────────────────────
+    // Same bearer token as the agency routes; the backend resolves the
+    // travelDeskSessions row to a *driver* principal and scopes the list to
+    // trips allocated to that driver.
+
+    @GET("api/travel-desk/trips/driver")
+    suspend fun listDriverTrips(
+        @Header("Authorization") token: String
+    ): TravelDeskDriverTripsResponse
+
+    @POST("api/travel-desk/trips/arrive")
+    suspend fun driverMarkArrived(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/start")
+    suspend fun driverStartTrip(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/on-site")
+    suspend fun driverMarkOnSite(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
     // ── MMS (in-house) fleet dispatcher ───────────────────────────────────
     // Same payload shapes as the agency routes above, but authenticated with an
     // ordinary staff token and gated on marketing.fleet.* — the travel-desk

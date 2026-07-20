@@ -40,6 +40,13 @@ class AdminFleetTripsFragment : Fragment() {
      * bounded regardless.
      */
     private var filteredTrips: List<AdminTrip> = emptyList()
+
+    /**
+     * Why the last load produced nothing, or null when it simply returned no
+     * rows. Kept so the empty state can state the reason — a toast fades and
+     * the user is left looking at blank space with no explanation.
+     */
+    private var lastLoadError: String? = null
     private val tripsPager = InfiniteScrollPager(onLoadMore = { renderTripWindow() })
     private lateinit var tripsAdapter: AdminTripsAdapter
     private lateinit var session: SessionManager
@@ -75,6 +82,15 @@ class AdminFleetTripsFragment : Fragment() {
      * bug in the screen rather than a backend that hasn't been deployed yet.
      */
     private fun loadErrorMessage(e: Exception): String {
+        // Connectivity first: a DNS/socket failure surfaces as
+        // "Unable to resolve host ...", which reads like a server fault when
+        // the phone simply has no working internet.
+        if (e is java.net.UnknownHostException ||
+            e is java.net.ConnectException ||
+            e is java.net.SocketTimeoutException
+        ) {
+            return "No internet connection. Check the network and pull to refresh."
+        }
         val code = (e as? retrofit2.HttpException)?.code()
         return when (code) {
             404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
@@ -105,6 +121,33 @@ class AdminFleetTripsFragment : Fragment() {
             (parentFragment as? AdminFleetContainerFragment)?.openTab(3)
         }
         binding.homeHeader.post { _binding?.homeHeader?.playEntryAnimation() }
+
+        // The banner is pinned behind the scroller, so the content needs a
+        // spacer exactly its height to start below it. Re-measured on every
+        // layout pass: the header grows once insets and the staff name land,
+        // and a stale spacer would leave the panel overlapping or floating.
+        binding.homeHeader.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val b = _binding ?: return@addOnLayoutChangeListener
+            val heroHeight = b.homeHeader.height
+            if (heroHeight <= 0) return@addOnLayoutChangeListener
+            // Stop line: the panel may rise until it meets the bottom of the
+            // profile row, then clips. Everything below that — the fleet
+            // artwork and stat cards — scrolls away, while the avatar / name /
+            // bell stay put. Implemented as scroller top padding (with the
+            // default clipToPadding=true) rather than a maxScrollY clamp: a
+            // clamp would cap the whole page and strand most of the trips.
+            val stop = b.homeHeader.profileRowBottom().coerceAtLeast(0)
+            if (b.scrollAdminTrips.paddingTop != stop) {
+                b.scrollAdminTrips.setPadding(0, stop, 0, 0)
+            }
+            // Spacer fills the gap between the stop line and the hero's base,
+            // so at rest the panel still starts below the whole banner.
+            val spacer = (heroHeight - stop).coerceAtLeast(0)
+            if (b.heroSpacer.layoutParams.height != spacer) {
+                b.heroSpacer.layoutParams = b.heroSpacer.layoutParams.apply { height = spacer }
+                b.heroSpacer.requestLayout()
+            }
+        }
         setupRecyclerView()
         setupFilters()
 
@@ -149,8 +192,12 @@ class AdminFleetTripsFragment : Fragment() {
                 val assignedResp = if (useMmsFleet) api.listMmsAssigned(token) else api.listAssigned(token)
                 val vehiclesResp = if (useMmsFleet) api.listMmsVehicles(token) else api.listVehicles(token)
 
-                pendingTrips = pendingResp.rows
-                val assignedRows = assignedResp.rows
+                lastLoadError = null
+                // Guard against a payload whose shape doesn't match (an id-less
+                // row can't be opened or allocated anyway) so one odd record
+                // can't take the whole screen down.
+                pendingTrips = pendingResp.rows.filter { !it.id.isNullOrBlank() }
+                val assignedRows = assignedResp.rows.filter { !it.id.isNullOrBlank() }
                 // Trips with an end timestamp from travel-desk are "Completed";
                 // everything else under "assigned" is in-flight ("Assigned").
                 assignedActive = assignedRows.filter { tripEndedAt(it) == null }
@@ -167,9 +214,12 @@ class AdminFleetTripsFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
+                lastLoadError = loadErrorMessage(e)
+                // Surface it on the screen too, not just as a toast.
+                applyFilter(activeFilter)
                 Toast.makeText(
                     requireContext(),
-                    "Couldn't load trips: ${loadErrorMessage(e)}",
+                    "Couldn't load trips: ${lastLoadError}",
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -242,7 +292,9 @@ class AdminFleetTripsFragment : Fragment() {
                 )
             }
 
-        AllocateVehicleBottomSheet.newInstance(options) { result ->
+        // Internal (MMS) allocations price per trip; external agencies
+        // carry a contracted rate on the agency record instead.
+        AllocateVehicleBottomSheet.newInstance(options, showPricing = useMmsFleet) { result ->
             submitAllocate(originalTrip, result)
         }.showOnce(parentFragmentManager, "AllocateVehicleBottomSheet")
     }
@@ -253,11 +305,17 @@ class AdminFleetTripsFragment : Fragment() {
             Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
             return
         }
+        // No id means the row didn't parse as a real site visit; allocating
+        // against it would fail server-side anyway.
+        val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: run {
+            Toast.makeText(requireContext(), "This trip can't be allocated.", Toast.LENGTH_SHORT).show()
+            return
+        }
         allocateJob?.cancel()
         allocateJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val request = AllocateTripRequest(
-                        siteVisitId = trip.id,
+                        siteVisitId = siteVisitId,
                         vehicleId = result.vehicleId,
                         pickupTime = result.pickupTime,
                         pricingMode = result.pricingMode,
@@ -361,6 +419,16 @@ class AdminFleetTripsFragment : Fragment() {
     private fun renderTripWindow() {
         if (_binding == null) return
         tripsAdapter.submitList(filteredTrips.take(tripsPager.limit))
+
+        val error = lastLoadError
+        binding.tvTripsEmpty.visibility =
+            if (filteredTrips.isEmpty()) View.VISIBLE else View.GONE
+        binding.tvTripsEmpty.text = when {
+            error != null -> error
+            activeFilter == "Pending" -> "No trips waiting for allocation."
+            activeFilter == "Assigned" -> "No trips are currently assigned."
+            else -> "No completed trips yet."
+        }
     }
 
     private fun mapTrip(trip: TravelDeskTrip, statusLabel: String): AdminTrip {
@@ -384,7 +452,7 @@ class AdminFleetTripsFragment : Fragment() {
         // future iteration needs them, surface only the fields the adapter
         // reads instead of mirroring the whole trip.
         return AdminTrip(
-            id = trip.id,
+            id = trip.id.orEmpty(),
             time = timeLabel,
             address = addressLine,
             attendees = attendees,

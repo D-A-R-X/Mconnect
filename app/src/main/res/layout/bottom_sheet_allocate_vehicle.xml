@@ -156,8 +156,10 @@
         android:textColorHint="#9CA3AF"
         android:textSize="14sp" />
 
-    <!-- Pricing Tabs -->
+    <!-- Pricing. Hidden for external agencies: their rate is contracted on the
+         agency record in the web app, not set per allocation. -->
     <TextView
+        android:id="@+id/tvPricingLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
@@ -167,6 +169,7 @@
         android:textSize="13sp" />
 
     <LinearLayout
+        android:id="@+id/rowPricingToggle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"

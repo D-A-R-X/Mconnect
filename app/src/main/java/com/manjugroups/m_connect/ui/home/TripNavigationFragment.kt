@@ -212,6 +212,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tripLineSegment2: View? = null
     private var tripLineSegment3: View? = null
     private var arrivalConfirmedForProgress = false
+    /** Driver tapped "Picked from Site" — the return leg has begun. */
+    private var pickedFromSiteConfirmed = false
 
     private val arrivalCameraLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -1189,6 +1191,50 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /**
+     * The return pickup: the client is done at the site and back in the
+     * vehicle. Sits between on-site and end-trip so the SV timeline records
+     * when the return leg actually started instead of inferring it from the
+     * drop.
+     */
+    private fun markDriverPickedFromSite() {
+        val id = visitId ?: run {
+            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            return
+        }
+        btnCompleteCpDetails?.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoApi.markMmsFleetDriverPickedFromSite(
+                    session.bearerToken,
+                    MmsFleetDriverSiteVisitRequest(id),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(
+                        response.error ?: "Failed to mark picked from site"
+                    )
+                }
+                pickedFromSiteConfirmed = true
+                session.saveDriverTripPickedFromSite(id)
+                applyStatusPill("Picked from Site")
+                renderArrivalPhase(alreadyArrived = true)
+                Toast.makeText(
+                    requireContext(),
+                    "Picked from site",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    "Failed to mark picked from site: ${e.message ?: "Network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                btnCompleteCpDetails?.isEnabled = true
+            }
+        }
+    }
+
     private fun checkReachingAndAskClientSeen() {
         swipeArrived?.lockAsBusy("Checking location...")
         viewLifecycleOwner.lifecycleScope.launch {
@@ -1967,12 +2013,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         if (session.isDriverMode) {
             if (alreadyArrived) {
+                // A reopened screen has to recover the return-pickup state,
+                // otherwise the driver would be asked to mark it twice.
+                if (!pickedFromSiteConfirmed) {
+                    pickedFromSiteConfirmed = visitId
+                        ?.let { session.getDriverTrip(it)?.status }
+                        ?.equals("picked_from_site", ignoreCase = true) == true
+                }
                 swipeArrived?.visibility = View.GONE
                 btnCompleteCpDetails?.visibility = View.VISIBLE
-                btnCompleteCpDetails?.text = "End Trip"
-                btnCompleteCpDetails?.setOnClickListener {
-                    DriverEndTripBottomSheet.newInstance(visitId!!)
-                        .showOnce(parentFragmentManager, "driver_end_trip")
+                if (pickedFromSiteConfirmed) {
+                    btnCompleteCpDetails?.text = "End Trip"
+                    btnCompleteCpDetails?.setOnClickListener {
+                        DriverEndTripBottomSheet.newInstance(visitId!!)
+                            .showOnce(parentFragmentManager, "driver_end_trip")
+                    }
+                } else {
+                    btnCompleteCpDetails?.text = "Picked from Site"
+                    btnCompleteCpDetails?.setOnClickListener { markDriverPickedFromSite() }
                 }
             } else {
                 btnCompleteCpDetails?.visibility = View.GONE

@@ -159,17 +159,28 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
                 addr.visibility = View.GONE
             }
 
-            // Captured punch photo (mobile clock in/out).
+            // Captured punch photo (mobile clock in/out). Tapping opens the
+            // shared full-screen viewer — the thumbnail is too small to verify
+            // who actually punched, which is the whole point of capturing it.
             val photo = row.findViewById<ImageView>(R.id.ivPunchEventPhoto)
             val pid = ev.photoId
             if (!pid.isNullOrBlank()) {
                 photo.visibility = View.VISIBLE
-                photo.load(
-                    com.manjugroups.m_connect.BuildConfig.BASE_URL +
-                        "api/storage/serve?storageId=" + pid,
-                )
+                // resolve() handles both a bare storageId and an already-
+                // resolved URL, and repairs dev/localhost storage hosts.
+                val url = com.manjugroups.m_connect.ui.common.ProfilePhotos
+                    .resolve(pid) ?: pid
+                photo.load(url)
+                photo.isClickable = true
+                photo.setOnClickListener {
+                    context?.let { ctx ->
+                        com.manjugroups.m_connect.ui.common.ImagePreviewDialog.show(ctx, url)
+                    }
+                }
             } else {
                 photo.visibility = View.GONE
+                photo.setOnClickListener(null)
+                photo.isClickable = false
             }
 
             list.addView(row)

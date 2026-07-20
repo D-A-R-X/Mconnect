@@ -29,16 +29,26 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private val binding get() = _binding!!
 
     private var vehicles: List<AllocateVehicleOption> = emptyList()
+    private var showPricing: Boolean = true
     private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
     private var pricingType = "km"  // "km" or "package"
 
     companion object {
+        /**
+         * @param showPricing false for external agencies. Their per-km /
+         *   package rate is contracted on the agency record in the web app, so
+         *   asking for it again per allocation would let a dispatcher quietly
+         *   override the agreed rate. Internal (company) vehicles still price
+         *   per trip.
+         */
         fun newInstance(
             vehicles: List<AllocateVehicleOption>,
+            showPricing: Boolean = true,
             onAllocate: (AllocateVehicleResult) -> Unit,
         ): AllocateVehicleBottomSheet {
             val sheet = AllocateVehicleBottomSheet()
             sheet.vehicles = vehicles
+            sheet.showPricing = showPricing
             sheet.onAllocateCallback = onAllocate
             return sheet
         }
@@ -85,6 +95,14 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.tvLabelDriverPhone.text = Html.fromHtml("Driver Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelPickupTime.text = Html.fromHtml("Pickup Time <font color='#EF4444'>*</font>")
         binding.tvAmountLabel.text = Html.fromHtml("Per Km amount (Rs) <font color='#EF4444'>*</font>")
+
+        // External agencies: the per-km / package rate is contracted on the
+        // agency record in the web app, so it isn't asked for per allocation.
+        val pricingVis = if (showPricing) View.VISIBLE else View.GONE
+        binding.tvPricingLabel.visibility = pricingVis
+        binding.rowPricingToggle.visibility = pricingVis
+        binding.tvAmountLabel.visibility = pricingVis
+        binding.etAmount.visibility = pricingVis
 
         setupVehicleSpinner()
         setupTimePicker()
@@ -185,14 +203,24 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Select a vehicle", Toast.LENGTH_SHORT).show()
             return
         }
-        if (driverName.isEmpty() || driverPhone.isEmpty() || pickupTime.isEmpty() || amountText.isEmpty()) {
+        if (driverName.isEmpty() || driverPhone.isEmpty() || pickupTime.isEmpty()) {
             Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
             return
         }
-        val amount = amountText.toDoubleOrNull()
-        if (amount == null || amount < 0) {
-            Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
-            return
+        // Amount is mandatory only while the pricing block is on screen —
+        // otherwise the sheet would refuse to submit over a hidden field.
+        var amount = 0.0
+        if (showPricing) {
+            if (amountText.isEmpty()) {
+                Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val parsed = amountText.toDoubleOrNull()
+            if (parsed == null || parsed < 0) {
+                Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
+                return
+            }
+            amount = parsed
         }
 
         onAllocateCallback?.invoke(

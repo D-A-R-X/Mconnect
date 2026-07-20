@@ -124,6 +124,16 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.tvBtnViewSummary.text = text
     }
 
+    /**
+     * Bottom edge of the profile row (avatar / name / bell), in px.
+     *
+     * Screens that pin this header behind a scrolling panel use it as the
+     * stop line: the panel may rise until it meets this, so the banner art
+     * scrolls away but the profile row stays put.
+     */
+    fun profileRowBottom(): Int =
+        binding.homeProfileRow.let { it.top + it.height }
+
     fun setFleetBannerMode() {
         isFleetBannerMode = true
         binding.bannerTextContent.visibility = View.GONE
@@ -228,10 +238,21 @@ class HomeHeaderView @JvmOverloads constructor(
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
         binding.tvAvatarInitial.text = name.first().uppercase().toString()
+        // Prefer the designation/department already cached on the session over
+        // a generic placeholder. This used to fall straight through to "Staff"
+        // and only became the real role once the getStaffDetail refresh below
+        // returned — so whenever that call failed (no network, DNS down) the
+        // header silently regressed to "Staff" for someone who is, say,
+        // "Driver • Administration", even though both values were on hand.
+        val cachedRole = listOfNotNull(
+            session.designation?.trim()?.takeIf { it.isNotEmpty() },
+            session.department?.trim()?.takeIf { it.isNotEmpty() },
+        ).joinToString(" • ")
         binding.tvHeaderRole.text = when {
             session.designation
                 ?.trim()
                 ?.equals("External Fleet", ignoreCase = true) == true -> "Agency"
+            cachedRole.isNotEmpty() -> cachedRole
             session.isAdmin -> "Administrator"
             else -> "Staff"
         }

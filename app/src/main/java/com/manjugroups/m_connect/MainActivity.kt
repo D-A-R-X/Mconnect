@@ -499,13 +499,33 @@ class MainActivity : AppCompatActivity() {
         // Fleet container, with its own bottom nav (Trips / Vehicles / Driver /
         // Settings). Skip the normal MainActivity tab bar entirely.
         //
-        // Covers external agencies (designation "External Fleet"), who have no
-        // staff record and would break on Home / HR / Chat / Profile, and
-        // in-house fleet-desk staff ("Driver • Administration"), whose whole
-        // job is this screen — they were landing on the driver home and seeing
-        // "No Driver Trips" because they have no trips of their own.
+        // External agencies only (designation "External Fleet"). They have no
+        // staff record and would break on Home / HR / Chat / Profile, and the
+        // portal is backed by the travel-desk project's agency session.
+        // In-house "Driver • Administration" staff do NOT come here — they get
+        // the normal driver screen with dispatch powers instead.
+        // A driver created by an external agency gets the most stripped
+        // shell in the app: their assigned trips and nothing else. No tabs
+        // (they have no Home/HR/Chat), no bell (no notifications feed) and
+        // no clock-in (no attendance record) — just the profile avatar for
+        // settings and logout.
+        if (session.isExternalFleetDriver) {
+            lockTabBarOff()
+            if (savedInstanceState == null) {
+                supportFragmentManager.beginTransaction()
+                    .setReorderingAllowed(true)
+                    .replace(
+                        R.id.fragmentContainer,
+                        com.manjugroups.m_connect.ui.library.AgencyDriverTripsFragment(),
+                        "agency_driver_root",
+                    )
+                    .commit()
+            }
+            return
+        }
+
         if (isFleetPortalPrincipal()) {
-            setTabBarVisible(false)
+            lockTabBarOff()
             if (savedInstanceState == null) {
                 supportFragmentManager.beginTransaction()
                     .setReorderingAllowed(true)
@@ -1198,7 +1218,20 @@ class MainActivity : AppCompatActivity() {
         selectTab(index)
     }
 
+    /**
+     * Principals with no tabs at all (external agency, agency driver) lock
+     * the bar off. Without a latch the back-stack listener and selectTab
+     * would keep calling setTabBarVisible(true) and flash it back in.
+     */
+    private var tabBarLockedOff = false
+
+    fun lockTabBarOff() {
+        tabBarLockedOff = true
+        setTabBarVisible(false)
+    }
+
     fun setTabBarVisible(visible: Boolean) {
+        if (visible && tabBarLockedOff) return
         if (!::tabBarContainer.isInitialized) return
         val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
         if (tabBarContainer.visibility == target) {
@@ -1746,8 +1779,7 @@ class MainActivity : AppCompatActivity() {
      * call, and the 401 watchdog reads that as a dead session and logs them
      * out — see AdminFleetTripsFragment.useMmsFleet for the split.
      */
-    private fun isFleetPortalPrincipal(): Boolean =
-        isExternalFleetPrincipal() || session.isFleetAdminDriver
+    private fun isFleetPortalPrincipal(): Boolean = isExternalFleetPrincipal()
 
     private suspend fun refreshSessionContext() {
         runCatching {

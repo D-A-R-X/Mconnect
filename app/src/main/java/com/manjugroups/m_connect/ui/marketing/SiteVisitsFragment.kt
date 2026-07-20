@@ -183,7 +183,8 @@ class SiteVisitsFragment : Fragment() {
     }
 
     private fun isInProgress(status: String): Boolean = status in setOf(
-        "picked_up", "on_site", "dropped", "in-progress", "in_progress",
+        "picked_up", "on_site", "picked_from_site", "dropped",
+        "in-progress", "in_progress",
         "client_started", "ongoing", "started", "active", "arrived"
     )
 
@@ -420,8 +421,9 @@ class SiteVisitsFragment : Fragment() {
             }
             isInProgress(status) -> {
                 statusText.text = when (status) {
-                    "picked_up" -> "Picked up"
+                    "picked_up" -> "Picked from CP"
                     "on_site" -> "On site"
+                    "picked_from_site" -> "Picked from site"
                     "dropped" -> "Dropped"
                     "arrived" -> "Arrived"
                     else -> "Enroute"

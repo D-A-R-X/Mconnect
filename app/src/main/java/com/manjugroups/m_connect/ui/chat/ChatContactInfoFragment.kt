@@ -328,9 +328,20 @@ class ChatContactInfoFragment : Fragment() {
                 crossfade(true)
                 transformations(CircleCropTransformation())
             }
+            // Same as group info: the circle crop hides most of the photo, so
+            // tapping opens the shared full-screen viewer.
+            binding.ivAvatarPhoto.isClickable = true
+            binding.ivAvatarPhoto.setOnClickListener {
+                context?.let { ctx ->
+                    com.manjugroups.m_connect.ui.common.ImagePreviewDialog
+                        .show(ctx, resolvedPhotoUrl)
+                }
+            }
         } else {
             binding.ivAvatarPhoto.visibility = View.GONE
             binding.tvAvatar.visibility = View.VISIBLE
+            binding.ivAvatarPhoto.setOnClickListener(null)
+            binding.ivAvatarPhoto.isClickable = false
         }
         binding.tvTitle.text = title
         binding.tvHeaderTitle.text = title

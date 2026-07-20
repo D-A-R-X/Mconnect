@@ -216,6 +216,12 @@
                             android:layout_height="2dp"
                             android:layout_weight="1"
                             android:background="#EAECF0" />
+                        <View
+                            android:id="@+id/stepLine6"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
                     </LinearLayout>
 
                     <!-- Step Circles and Text -->
@@ -322,7 +328,8 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
                                 android:fontFamily="@font/inter_semibold"
-                                android:text="PICKED UP"
+                                android:text="PICKED FROM CP"
+                                android:textAlignment="center"
                                 android:textColor="#98A2B3"
                                 android:textSize="8sp" />
                         </LinearLayout>
@@ -357,6 +364,41 @@
                                 android:layout_marginTop="6dp"
                                 android:fontFamily="@font/inter_semibold"
                                 android:text="ON SITE"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
+                        <!-- PICKED FROM SITE -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepPickedFromSite"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepPickedFromSite"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_nav_home" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepPickedFromSite"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="PICKED FROM SITE"
+                                android:textAlignment="center"
                                 android:textColor="#98A2B3"
                                 android:textSize="8sp" />
                         </LinearLayout>

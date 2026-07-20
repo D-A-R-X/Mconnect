@@ -277,6 +277,14 @@ class OtpActivity : AppCompatActivity() {
             session.department = it
         }
 
+        // External-fleet principals (the agency and its drivers) have no
+        // `staff` row, no IAM grants and no MMS fleet-driver record. Their
+        // designation is synthesised by the auth payload, so probing those
+        // staff-only endpoints would 401 — which the session watchdog turns
+        // into a forced logout — and getStaffDetail would overwrite the
+        // designation the restricted shell keys off. Skip all three.
+        if (session.isExternalFleetPrincipal) return@coroutineScope
+
         // Run network requests in parallel
         val jobFleet = launch {
             session.fleetDriverByBackend = runCatching {

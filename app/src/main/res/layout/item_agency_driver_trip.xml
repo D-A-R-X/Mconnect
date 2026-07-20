@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_admin_fleet_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tvTripProject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_toStartOf="@+id/tvTripPhase"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:textColor="#111827"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvTripPhase"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:background="@drawable/bg_home_trip_status_progress"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:textColor="#B54708"
+            android:textSize="11sp" />
+    </RelativeLayout>
+
+    <TextView
+        android:id="@+id/tvTripWhen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:textColor="#667085"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvTripPickup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/inter_regular"
+        android:maxLines="2"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvTripVehicle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="@font/inter_regular"
+        android:textColor="#667085"
+        android:textSize="12sp" />
+
+    <FrameLayout
+        android:id="@+id/btnTripAction"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_home_trip_action_ready">
+
+        <TextView
+            android:id="@+id/tvTripActionLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </FrameLayout>
+</LinearLayout>
