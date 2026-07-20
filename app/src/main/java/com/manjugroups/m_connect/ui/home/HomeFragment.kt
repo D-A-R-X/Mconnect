@@ -1496,15 +1496,15 @@ class HomeFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openDetail)
             } else if (!isInProgress && canStartTrip) {
-                val startTrip: (View) -> Unit = {
-                    DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
-                        .showOnce(parentFragmentManager, "driver_start_trip")
-                }
+                // Card and button both open the trip detail first — address,
+                // stage progress, then Start Trip — rather than dropping the
+                // driver straight into the km/photo sheet.
+                val openTripDetail: (View) -> Unit = { openDriverTripDetail(visit) }
                 itemView.isClickable = true
                 itemView.isFocusable = true
-                itemView.setOnClickListener(startTrip)
+                itemView.setOnClickListener(openTripDetail)
                 actionBtn.isClickable = true
-                actionBtn.setOnClickListener(startTrip)
+                actionBtn.setOnClickListener(openTripDetail)
             } else if (!isInProgress && !canStartTrip) {
                 // The card says "Clock In First" — so take them there instead of
                 // opening trip navigation they can't act on yet. Same redirect
@@ -1618,6 +1618,41 @@ class HomeFragment : Fragment() {
         return rawName.lowercase().split(" ").filter { it.isNotBlank() }
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
             .ifBlank { "Client" }
+    }
+
+    private fun openDriverTripDetail(visit: TodayVisit) {
+        val whenText = listOfNotNull(
+            visit.scheduledDate.takeIf { it.isNotBlank() },
+            visit.scheduledStartTime?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+
+        // The detail screen can't rebuild the navigation args, so it asks us
+        // to do it when the driver taps Continue.
+        parentFragmentManager.setFragmentResultListener(
+            DriverTripDetailFragment.RESULT_OPEN_NAVIGATION,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val id = bundle.getString("visitId")
+            if (id == visit.id) openTripNavigationForVisit(visit)
+        }
+
+        parentFragmentManager.beginTransaction()
+            .setReorderingAllowed(true)
+            .replace(
+                R.id.fragmentContainer,
+                DriverTripDetailFragment.newInstance(
+                    visitId = visit.id,
+                    title = visit.placeName ?: "Site visit",
+                    whenText = whenText,
+                    address = visit.placeAddress.orEmpty(),
+                    status = visit.status,
+                    scheduledDate = visit.scheduledDate,
+                    lat = visit.placeLat,
+                    lng = visit.placeLng,
+                ),
+            )
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun openTripNavigationForVisit(visit: TodayVisit) {
@@ -2084,24 +2119,28 @@ class HomeFragment : Fragment() {
         binding.tabUpcoming.setOnClickListener(clickListener)
         binding.tabCompleted.setOnClickListener(clickListener)
 
+        // One rounded track with three equal segments — the same segmented
+        // control the fleet screen uses. Transport drivers used to get three
+        // loose pills instead, which read as a different control for the same
+        // job; only the labels differ by role now.
+        binding.layoutDriverTabs.setBackgroundResource(
+            R.drawable.bg_admin_trips_tabs_container,
+        )
+        val tabTrackPad = dpx(4)
+        binding.layoutDriverTabs.setPadding(
+            tabTrackPad, tabTrackPad, tabTrackPad, tabTrackPad,
+        )
         if (session.isFleetAdminDriver) {
-            // Same segmented control as the fleet screen: one rounded track
-            // with three equal segments, rather than three separate pills.
-            binding.layoutDriverTabs.setBackgroundResource(
-                R.drawable.bg_admin_trips_tabs_container,
-            )
-            val pad = dpx(4)
-            binding.layoutDriverTabs.setPadding(pad, pad, pad, pad)
             binding.tabAll.text = "Pending"
             binding.tabUpcoming.text = "Assigned"
             binding.tabCompleted.text = "Completed"
-            listOf(binding.tabAll, binding.tabUpcoming, binding.tabCompleted)
-                .forEach { tab ->
-                    tab.layoutParams = LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
-                    )
-                }
         }
+        listOf(binding.tabAll, binding.tabUpcoming, binding.tabCompleted)
+            .forEach { tab ->
+                tab.layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                )
+            }
 
         updateTabSelectionVisuals()
     }
@@ -2114,7 +2153,7 @@ class HomeFragment : Fragment() {
             binding.tabCompleted to "completed",
         )
 
-        if (session.isFleetAdminDriver) {
+        run {
             // Segmented control: ONE white track (the parent), with only the
             // active segment drawing a filled pill. Inactive segments must have
             // no background at all — giving them the bordered "inactive pill"
@@ -2141,22 +2180,6 @@ class HomeFragment : Fragment() {
                 val vPad = dpx(8)
                 tab.setPadding(0, vPad, 0, vPad)
             }
-            return
-        }
-
-        // Transport drivers keep the original three separate pills.
-        val activeBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_active)
-        val inactiveBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_inactive)
-        val grayText = android.graphics.Color.parseColor("#344054")
-        tabs.forEach { (tab, key) ->
-            val isActive = selectedTab == key
-            tab.background = if (isActive) activeBg else inactiveBg
-            tab.backgroundTintList = null
-            tab.setTextColor(if (isActive) white else grayText)
-            tab.typeface = androidx.core.content.res.ResourcesCompat.getFont(
-                requireContext(),
-                if (isActive) R.font.inter_semibold else R.font.inter_medium,
-            )
         }
     }
 
