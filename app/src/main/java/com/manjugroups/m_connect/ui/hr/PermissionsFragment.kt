@@ -243,7 +243,7 @@ class PermissionsFragment : Fragment() {
         // Each badge = the PENDING (actionable) count in that scope. Team is
         // already pending-only from the server; the company-wide All feed also
         // carries approved/rejected rows, so filter to pending here. Team is
-        // hierarchy-scoped server-side, so it's genuinely 0 for a no-team user.
+        // direct-report scoped server-side, so it's genuinely 0 for a no-team user.
         val state = viewModel.uiState.value
         setScopeBadge(popupView.findViewById(R.id.dotTeamBadge), state.pendingApprovals.count { isPending(it) })
         setScopeBadge(
@@ -331,7 +331,7 @@ class PermissionsFragment : Fragment() {
             state.pendingApprovals
         } else when (scope) {
             Scope.MY -> filterHistoryPermissions(mineOnly)
-            // Team = hierarchy-scoped only (empty when the user has no team).
+            // Team = direct reports only (empty when the user has no team).
             Scope.TEAM -> filterHistoryPermissions(state.pendingApprovals)
             // All = every request company-wide (backend gates to admins/viewAll).
             Scope.ALL -> filterHistoryPermissions(state.allApprovals.distinctBy { it.id })

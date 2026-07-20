@@ -229,23 +229,25 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun buildAttendanceTabs() {
-        val canApprove = session.hasPermission("attendance.approve")
+        val canApproveTeam = session.hasPermission("attendance.teamApprove") ||
+            session.hasPermission("attendance.approve")
         val canViewAllAppr = session.hasPermission("attendance.viewAllApprovals")
+        // `attendance.hrReview` is the dedicated IAM grant. Keep
+        // viewAllApprovals as a compatibility fallback for existing roles
+        // that received HR Review before the permission was split.
+        val canHrReview = session.hasPermission("attendance.hrReview") ||
+            session.hasPermission("attendance.viewAllApprovals")
         val canViewAll = session.hasPermission("attendance.viewAll")
 
         // (logical id, label). Order mirrors the existing screen.
         val logical = mutableListOf<Pair<Int, String>>()
         logical.add(0 to "My Attendance")
-        if (canApprove || isReportingOfficer) {
+        if (canApproveTeam || isReportingOfficer) {
             logical.add(1 to "Team Attendance")
             logical.add(2 to "Team Approval")
         }
         if (canViewAllAppr) logical.add(3 to "All Approval")
-        // HR Review is an HR surface (final company-wide reclassification).
-        // Gate it on viewAllApprovals, NOT approve — managers/reporting
-        // officers legitimately hold attendance.approve for their own team
-        // and must not see the HR queue.
-        if (canViewAllAppr) logical.add(4 to "HR Review")
+        if (canHrReview) logical.add(4 to "HR Review")
         if (canViewAll) logical.add(5 to "All")
 
         visibleLogicalTabs = logical.map { it.first }
@@ -402,25 +404,25 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 val approvalsDeferred = async {
                     if (cachedApprovals.isNotEmpty()) null
-                    // subtree, not the server's "direct" default: a reporting
-                    // officer must see pending approvals for EVERYONE below
-                    // them, not just direct reports — a manager-of-managers
-                    // otherwise gets an empty Team Approval tab.
+                    // Team Approval matches the web's My Team scope: only
+                    // employees who report directly to the current officer.
                     else runCatching {
                         api.getPendingAttendanceApprovals(
-                            token, scope = "subtree", requests = true,
+                            token, scope = "direct", requests = true,
                         )
                     }.getOrNull()
                 }
                 // Company-wide surfaces are HR-only — skip the guaranteed-403
                 // fetches when the caller doesn't hold the permission.
                 val canViewAllApprovals = session.hasPermission("attendance.viewAllApprovals")
+                val canHrReview = session.hasPermission("attendance.hrReview") ||
+                    canViewAllApprovals
                 val allApprovalsDeferred = async {
                     if (cachedAllApprovals.isNotEmpty() || !canViewAllApprovals) null
                     else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
                 val hrReviewDeferred = async {
-                    if (cachedHrReview.isNotEmpty() || !canViewAllApprovals) null
+                    if (cachedHrReview.isNotEmpty() || !canHrReview) null
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {
