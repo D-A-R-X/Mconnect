@@ -170,6 +170,33 @@ object PushTokenManager {
         }
     }
 
+    /**
+     * Register the FCM token for an external-agency driver via the travel-desk
+     * route. They have no staff record, so the MMS registerPushDevice path
+     * would 401 (and trip the logout) — this is their own channel, so trip
+     * allocations can push them.
+     */
+    suspend fun syncAgencyDriverToken(context: Context, session: SessionManager): Boolean {
+        if (!session.isLoggedIn) return false
+        if (!hasNotificationPermission(context)) return false
+        if (!ensureFirebaseInitialized(context)) return false
+        return try {
+            val token = FirebaseMessaging.getInstance().token.await()
+            com.manjugroups.m_connect.network.TravelDeskApi.create().registerPushToken(
+                session.bearerToken,
+                com.manjugroups.m_connect.network.TravelDeskPushRegisterRequest(
+                    pushToken = token,
+                    platform = "android",
+                ),
+            )
+            session.pushToken = token
+            true
+        } catch (e: Exception) {
+            Log.e("PushTokenManager", "syncAgencyDriverToken failed", e)
+            false
+        }
+    }
+
     suspend fun registerRefreshedToken(
         context: Context,
         session: SessionManager,

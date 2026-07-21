@@ -23,6 +23,11 @@ data class TravelDeskVerifyOtpRequest(
     val otp: String,
 )
 
+data class TravelDeskPushRegisterRequest(
+    val pushToken: String,
+    val platform: String = "android",
+)
+
 data class TravelDeskAuthUser(
     @SerializedName("_id") val id: String? = null,
     val name: String? = null,

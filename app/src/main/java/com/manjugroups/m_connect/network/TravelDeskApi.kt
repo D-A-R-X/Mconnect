@@ -30,6 +30,14 @@ interface TravelDeskApi {
     @POST("api/travel-desk/auth/send-otp")
     suspend fun sendOtp(@Body body: TravelDeskSendOtpRequest): TravelDeskSendOtpResponse
 
+    // Register the agency driver's FCM token so trip allocations can push
+    // them — they're not staff, so this is their own channel.
+    @POST("api/travel-desk/push/register")
+    suspend fun registerPushToken(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskPushRegisterRequest,
+    ): TravelDeskSimpleResponse
+
     @POST("api/travel-desk/auth/verify-otp")
     suspend fun verifyOtp(@Body body: TravelDeskVerifyOtpRequest): TravelDeskVerifyOtpResponse
 

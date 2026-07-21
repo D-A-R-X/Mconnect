@@ -349,10 +349,16 @@ class OtpActivity : AppCompatActivity() {
     }
 
     private suspend fun syncPushTokenIfPossible() {
-        // registerPushDevice is an MMS endpoint. An external-fleet principal's
-        // token is unknown to MMS, so it 401s — and the 401 interceptor fires
-        // the session-expired bus even though runCatching swallows the throw,
-        // bouncing the just-logged-in driver straight back to sign-in.
+        // An agency driver isn't staff, so the MMS registerPushDevice path 401s
+        // (and the interceptor would bounce them to sign-in). Register on their
+        // own travel-desk channel instead, so trip allocations can push them.
+        if (session.isExternalFleetDriver) {
+            runCatching {
+                PushTokenManager.syncAgencyDriverToken(this@OtpActivity, session)
+            }
+            return
+        }
+        // The agency principal (not a driver) has no push channel; skip.
         if (session.isExternalFleetPrincipal) return
         runCatching {
             PushTokenManager.syncCurrentToken(this@OtpActivity, session)

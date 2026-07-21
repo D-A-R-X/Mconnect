@@ -141,13 +141,20 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     }
 
     private fun bindPhoto(image: ImageView, empty: TextView, storageId: String?) {
+        // The box only looks like a real photo card when there IS a photo.
+        // With none, drop the card chrome so an empty bordered box doesn't read
+        // as a broken / placeholder image.
+        val box = image.parent as? View
         if (storageId.isNullOrBlank()) {
             image.visibility = View.GONE
             empty.visibility = View.VISIBLE
+            empty.text = "Not captured"
+            box?.background = null
             return
         }
         image.visibility = View.VISIBLE
         empty.visibility = View.GONE
+        box?.setBackgroundResource(R.drawable.bg_trip_detail_map_card)
         // /api/storage/serve is a public route, so Coil loads it by URL.
         val url = "${BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
         image.load(url)
