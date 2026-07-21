@@ -168,11 +168,19 @@ class BookingDraftManager(
     /** Convenience JSON helpers shared by the bottom sheet. */
     fun encode(map: Map<String, String?>): String = gson.toJson(map)
 
-    @Suppress("UNCHECKED_CAST")
     fun decode(json: String?): Map<String, String?> {
         if (json.isNullOrBlank()) return emptyMap()
         return runCatching {
-            gson.fromJson(json, Map::class.java) as? Map<String, String?> ?: emptyMap()
+            // Gson represents an untyped JSON object as Map<String, Any?>.
+            // Normalise every value instead of casting the map directly: an
+            // older draft may contain booleans/numbers and the unchecked cast
+            // would then crash later when restore calls String helpers on it.
+            val raw = gson.fromJson(json, Map::class.java) as? Map<*, *>
+                ?: return@runCatching emptyMap()
+            raw.entries.mapNotNull { (key, value) ->
+                val stringKey = key as? String ?: return@mapNotNull null
+                stringKey to value?.toString()
+            }.toMap()
         }.getOrDefault(emptyMap())
     }
 

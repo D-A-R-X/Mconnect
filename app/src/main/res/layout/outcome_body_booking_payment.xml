@@ -9,13 +9,20 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Registration Charges" />
+    <LinearLayout
+        android:id="@+id/groupBookingChargesAdvance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+    <TextView style="@style/OutcomeFieldLabel" android:text="Charges &amp; Advance" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Registration Charges *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayRegCharges" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Gst Amount" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="GST Amount *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayGstAmount" style="@style/OutcomeFieldEdit" android:hint="Enter Value" android:inputType="numberDecimal" />
@@ -44,24 +51,24 @@
             android:layout_marginStart="10dp"
             android:fontFamily="@font/inter_medium"
             android:includeFontPadding="false"
-            android:text="If Applicable"
+            android:text="Applicable"
             android:textColor="#475467"
             android:textSize="12sp" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Document Charges" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Document Charges *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayDocCharges" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Patta Charges" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Patta Charges *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayPattaCharges" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Other Charges" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Other Charges *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayOtherCharges" style="@style/OutcomeFieldEdit" android:hint="Enter Value" android:inputType="numberDecimal" />
@@ -90,21 +97,16 @@
             android:layout_marginStart="10dp"
             android:fontFamily="@font/inter_medium"
             android:includeFontPadding="false"
-            android:text="If Applicable"
+            android:text="Applicable"
             android:textColor="#475467"
             android:textSize="12sp" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Advance Amount" />
-    <LinearLayout style="@style/OutcomeFieldPill">
-        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
-        <EditText android:id="@+id/etPayAdvanceAmount" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="numberDecimal" />
-    </LinearLayout>
-
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Payment Mode" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Customer Funding" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Customer Payment Category *" />
     <LinearLayout android:id="@+id/rowPayPaymentMode" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_info_shield" />
-        <TextView android:id="@+id/tvPayPaymentMode" style="@style/OutcomeFieldValue" android:hint="Select Mode" />
+        <TextView android:id="@+id/tvPayPaymentMode" style="@style/OutcomeFieldValue" android:hint="Select category" />
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
@@ -116,7 +118,7 @@
         android:id="@+id/lblPayLoanAmount"
         style="@style/OutcomeFieldLabel"
         android:layout_marginTop="14dp"
-        android:text="Loan Amount Required"
+        android:text="Bank Loan Amount *"
         android:visibility="gone" />
     <LinearLayout
         android:id="@+id/rowPayLoanAmount"
@@ -130,68 +132,158 @@
             android:inputType="numberDecimal" />
     </LinearLayout>
 
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Advance Booking Payment *" />
+    <LinearLayout android:id="@+id/rowBookMode" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <TextView android:id="@+id/tvBookMode" style="@style/OutcomeFieldValue" android:hint="Select Mode" />
+        <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Advance Amount *" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <EditText android:id="@+id/etPayAdvanceAmount" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvPayMinimumAdvance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="Project minimum: ₹0. Higher advance is allowed."
+        android:textColor="#667085"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:id="@+id/groupPayDigitalProof"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Transaction ID *" />
+        <LinearLayout style="@style/OutcomeFieldPill">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+            <EditText android:id="@+id/etPayTransactionId" style="@style/OutcomeFieldEdit" android:hint="UTR / Ref no" android:inputType="text" />
+        </LinearLayout>
+
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Payment Proof *" />
+        <TextView
+            android:id="@+id/btnPayProofUpload"
+            style="@style/OutcomeFieldValue"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="14dp"
+            android:text="Choose file"
+            android:textColor="#175CD3" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/groupPayInstrument"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView android:id="@+id/lblPayInstrumentNo" style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Cheque No *" />
+        <LinearLayout style="@style/OutcomeFieldPill">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+            <EditText android:id="@+id/etPayInstrumentNo" style="@style/OutcomeFieldEdit" android:hint="Enter instrument number" android:inputType="text" />
+        </LinearLayout>
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Bank *" />
+        <LinearLayout style="@style/OutcomeFieldPill">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+            <EditText android:id="@+id/etPayBankName" style="@style/OutcomeFieldEdit" android:hint="Enter bank" android:inputType="textCapWords" />
+        </LinearLayout>
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Branch *" />
+        <LinearLayout style="@style/OutcomeFieldPill">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+            <EditText android:id="@+id/etPayBankBranch" style="@style/OutcomeFieldEdit" android:hint="Enter branch" android:inputType="textCapWords" />
+        </LinearLayout>
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Instrument Date *" />
+        <LinearLayout android:id="@+id/rowPayInstrumentDate" style="@style/OutcomeFieldPillClickable">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
+            <TextView android:id="@+id/tvPayInstrumentDate" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
+        </LinearLayout>
+    </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/groupBookingPaymentSchedule"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
     <!-- Payment Plan — mirrors the web's Balance Payment Schedule select:
          Regular (max 30 days) / Flexi (max 60 days) always, plus
          Special (max 180 days) only when the selected project has
          specialPaymentEnabled. Flexi keeps mapping to freePayment. -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Payment Plan" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Payment Schedule" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Payment Plan *" />
     <LinearLayout android:id="@+id/rowPayPlan" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPayPlan" style="@style/OutcomeFieldValue" android:hint="Select Plan" />
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Allotment Due Amount" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Allotment Due Amount *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayAllotDue" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Allotment Due Date" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Allotment Due Date *" />
     <LinearLayout android:id="@+id/rowPayAllotDate" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPayAllotDate" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="2nd Payment Amount" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="2nd Payment Amount *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPay2Mode" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="text" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="2nd Payment Date" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="2nd Payment Date *" />
     <LinearLayout android:id="@+id/rowPay2Date" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPay2Date" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="3rd Payment Amount" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="3rd Payment Amount *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPay3Mode" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="text" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="3rd Payment Date" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="3rd Payment Date *" />
     <LinearLayout android:id="@+id/rowPay3Date" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPay3Date" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="4th Payment Amount" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="4th Payment Amount *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPay4Mode" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="text" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="4th Payment Date" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="4th Payment Date *" />
     <LinearLayout android:id="@+id/rowPay4Date" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPay4Date" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Preferred Registration Date" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Preferred Registration Date *" />
     <LinearLayout android:id="@+id/rowPayPrefReg" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
         <TextView android:id="@+id/tvPayPrefReg" style="@style/OutcomeFieldValue" android:hint="dd/mm/yyyy" />
+    </LinearLayout>
     </LinearLayout>
 </LinearLayout>

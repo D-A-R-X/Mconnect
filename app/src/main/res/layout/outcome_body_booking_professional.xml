@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Profession" />
+    <TextView style="@style/OutcomeFieldLabel" android:text="Profession *" />
 
     <LinearLayout
         android:id="@+id/rowProfProfession"
@@ -23,7 +23,7 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Designation" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Designation *" />
 
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
@@ -34,7 +34,35 @@
             android:inputType="textCapWords" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Income Per Annum" />
+    <LinearLayout
+        android:id="@+id/groupProfDepartment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Department *" />
+        <LinearLayout android:id="@+id/rowProfDepartment" style="@style/OutcomeFieldPillClickable">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+            <TextView android:id="@+id/tvProfDepartment" style="@style/OutcomeFieldValue" android:hint="Select Department" />
+            <ImageView style="@style/OutcomeFieldChevron" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/groupProfOtherDepartment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Other Department *" />
+        <LinearLayout style="@style/OutcomeFieldPill">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+            <EditText android:id="@+id/etProfOtherDepartment" style="@style/OutcomeFieldEdit" android:hint="Enter department" android:inputType="textCapCharacters" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Income Per Annum *" />
 
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />

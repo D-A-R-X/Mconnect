@@ -1150,6 +1150,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        restoreWindowLayoutAfterResume()
         if (!session.isLoggedIn) return
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
@@ -1178,6 +1179,47 @@ class MainActivity : AppCompatActivity() {
         lastTrackingResumeSyncMs = now
         lifecycleScope.launch {
             runCatching { syncTrackingBootstrap() }
+        }
+    }
+
+    /**
+     * Locking the device can pause a bottom-nav animation or invalidate the
+     * edge-to-edge inset dispatch. Reassert the logical nav state and request
+     * a fresh layout when the activity becomes interactive again so the
+     * resumed page cannot keep an intermediate translation, stale safe area,
+     * or clipped fragment height.
+     */
+    private fun restoreWindowLayoutAfterResume() {
+        if (!::mainRoot.isInitialized || !::fragmentContainer.isInitialized) return
+
+        if (::tabBarContainer.isInitialized) {
+            tabBarContainer.animate().cancel()
+            if (tabBarContainer.visibility == View.VISIBLE) {
+                val hiddenOffset = 150f * resources.displayMetrics.density
+                tabBarContainer.translationY = if (isBottomNavVisible) 0f else hiddenOffset
+                tabBarContainer.alpha = if (isBottomNavVisible) 1f else 0f
+            }
+        }
+        if (::bottomNavFadeOverlay.isInitialized) {
+            bottomNavFadeOverlay.animate().cancel()
+            if (bottomNavFadeOverlay.visibility == View.VISIBLE) {
+                val hiddenOffset = 150f * resources.displayMetrics.density
+                bottomNavFadeOverlay.translationY = if (isBottomNavVisible) 0f else hiddenOffset
+                bottomNavFadeOverlay.alpha = if (isBottomNavVisible) 1f else 0f
+            }
+        }
+
+        ViewCompat.requestApplyInsets(mainRoot)
+        mainRoot.post {
+            if (isFinishing || isDestroyed) return@post
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            ViewCompat.requestApplyInsets(mainRoot)
+            mainRoot.requestLayout()
+            fragmentContainer.requestLayout()
+            supportFragmentManager.fragments
+                .lastOrNull { it.isVisible }
+                ?.view
+                ?.requestLayout()
         }
     }
 

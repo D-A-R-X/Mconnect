@@ -760,6 +760,7 @@ class AttendanceHistoryFragment : Fragment() {
                 card.findViewById(R.id.tvHistoryItemStatus),
                 record,
             )
+            bindPenaltyNotice(card, record.resolvedPenaltyReason())
 
             // Open the punch-event log sheet on tap — mirrors the web
             // popup that lists every individual IN/OUT event with its
@@ -1578,13 +1579,19 @@ class AttendanceHistoryFragment : Fragment() {
             // no fine). Now a day with no fine shows no banner.
             val fineBanner = card.findViewById<View>(R.id.llTeamFinesBanner)
             val tvFineAmount = card.findViewById<TextView>(R.id.tvTeamFineAmount)
+            val tvFineText = card.findViewById<TextView>(R.id.tvTeamFineText)
             val fineAmt = (record.lateFineDeduction ?: record.fineAmount) ?: 0.0
             if (showFines && fineAmt > 0.0) {
                 fineBanner.visibility = View.VISIBLE
+                tvFineText.text = record.lateMinutes?.takeIf { it > 0 }
+                    ?.let { "Late by ${it} min" }
+                    ?: "Attendance fine"
                 tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fineAmt)
             } else {
                 fineBanner.visibility = View.GONE
             }
+
+            bindPenaltyNotice(card, record.resolvedPenaltyReason())
 
             // Name + employee id so two DIFFERENT staff who share a name (e.g.
             // duplicate "DHIVAGAR.B" accounts) are distinguishable — each row's
@@ -1614,8 +1621,8 @@ class AttendanceHistoryFragment : Fragment() {
                 tv.setTextColor(Color.parseColor("#067647"))
             }
             "absent" -> {
-                tv.text = "Absent"
-                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.text = if (record.hasAbsentPenalty()) "Absent · Penalty" else "Absent"
+                tv.setBackgroundResource(R.drawable.bg_pill_red_light)
                 tv.setTextColor(Color.parseColor("#B42318"))
             }
             "weekoff" -> {
@@ -1633,6 +1640,17 @@ class AttendanceHistoryFragment : Fragment() {
                 tv.setBackgroundResource(R.drawable.bg_chip_inactive)
                 tv.setTextColor(Color.parseColor("#475467"))
             }
+        }
+    }
+
+    private fun bindPenaltyNotice(card: View, reason: String?) {
+        val banner = card.findViewById<View>(R.id.llAttendancePenaltyBanner) ?: return
+        val reasonView = card.findViewById<TextView>(R.id.tvAttendancePenaltyReason)
+        if (reason.isNullOrBlank()) {
+            banner.visibility = View.GONE
+        } else {
+            banner.visibility = View.VISIBLE
+            reasonView.text = "Reason: $reason"
         }
     }
 
