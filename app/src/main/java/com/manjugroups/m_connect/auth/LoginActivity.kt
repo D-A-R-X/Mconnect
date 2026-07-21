@@ -104,6 +104,7 @@ class LoginActivity : AppCompatActivity() {
                             val phone = normalizePhone(binding.etPhone.text.toString())
                             startActivity(Intent(this@LoginActivity, OtpActivity::class.java).apply {
                                 putExtra(OtpActivity.EXTRA_PHONE, phone)
+                                putExtra(OtpActivity.EXTRA_AGENCY_DRIVER, state.agencyDriver)
                             })
                             viewModel.resetState()
                         }

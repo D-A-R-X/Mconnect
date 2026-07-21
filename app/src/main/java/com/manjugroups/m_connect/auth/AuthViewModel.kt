@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.SendOtpRequest
+import com.manjugroups.m_connect.network.TravelDeskApi
+import com.manjugroups.m_connect.network.TravelDeskSendOtpRequest
+import com.manjugroups.m_connect.network.TravelDeskVerifyOtpRequest
+import com.manjugroups.m_connect.network.UserInfo
 import com.manjugroups.m_connect.network.VerifyOtpRequest
 import com.manjugroups.m_connect.network.VerifyOtpResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +20,12 @@ import retrofit2.HttpException
 sealed interface AuthUiState {
     data object Idle : AuthUiState
     data object Loading : AuthUiState
-    data class OtpSent(val message: String) : AuthUiState
+    /**
+     * @param agencyDriver the OTP went out on the travel-desk path (an agency
+     * driver), so verify must be routed there too — the MMS OTP store won't
+     * have it.
+     */
+    data class OtpSent(val message: String, val agencyDriver: Boolean = false) : AuthUiState
     data class Verified(val response: VerifyOtpResponse) : AuthUiState
     data class Error(val message: String) : AuthUiState
 }
@@ -30,7 +39,16 @@ private data class ApiErrorResponse(
 class AuthViewModel : ViewModel() {
 
     private val api = ApiService.create()
+    private val travelDeskApi = TravelDeskApi.create()
     private val gson = Gson()
+
+    // The designation the backend would synthesise for an agency driver if the
+    // MMS auth branch were live. We stamp it locally so MainActivity routes a
+    // travel-desk driver login into the stripped agency-driver shell.
+    private companion object {
+        const val AGENCY_DRIVER_DESIGNATION = "External Fleet Driver"
+        const val AGENCY_DRIVER_DEPARTMENT = "Fleet"
+    }
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -46,22 +64,57 @@ class AuthViewModel : ViewModel() {
                 val response = api.sendOtp(SendOtpRequest(phone))
                 if (response.success) {
                     _uiState.value = AuthUiState.OtpSent(response.message ?: "OTP sent")
+                } else if (isNotRegistered(response.message)) {
+                    // Not a staff/agency phone — it may be an agency driver,
+                    // whom only the travel-desk auth path knows.
+                    sendAgencyDriverOtp(phone)
                 } else {
                     _uiState.value = AuthUiState.Error(response.message ?: "Failed to send OTP")
                 }
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+                if (isNotRegistered(parseErrorMessage(e, ""))) {
+                    sendAgencyDriverOtp(phone)
+                } else {
+                    _uiState.value =
+                        AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+                }
             }
         }
     }
 
-    fun verifyOtp(phone: String, otp: String) {
+    private suspend fun sendAgencyDriverOtp(phone: String) {
+        try {
+            val td = travelDeskApi.sendOtp(TravelDeskSendOtpRequest(phone))
+            if (td.success) {
+                _uiState.value = AuthUiState.OtpSent(td.message ?: "OTP sent", agencyDriver = true)
+            } else {
+                _uiState.value =
+                    AuthUiState.Error(td.error ?: "Phone number not registered. Contact admin.")
+            }
+        } catch (e: Exception) {
+            _uiState.value =
+                AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+        }
+    }
+
+    /** The MMS auth path returns this exact text for an unknown phone. */
+    private fun isNotRegistered(message: String?): Boolean =
+        message?.contains("not registered", ignoreCase = true) == true
+
+    fun verifyOtp(phone: String, otp: String, agencyDriver: Boolean = false) {
         _uiState.value = AuthUiState.Loading
         if (AuthBypass.matches(phone, otp)) {
             _uiState.value = AuthUiState.Verified(AuthBypass.syntheticVerifyResponse(phone))
             return
         }
         viewModelScope.launch {
+            // The OTP was sent on the travel-desk path (agency driver), so its
+            // code lives in the travel-desk OTP store, not the MMS one — verify
+            // there directly rather than bouncing off an MMS "No OTP found".
+            if (agencyDriver) {
+                verifyAgencyDriverOtp(phone, otp)
+                return@launch
+            }
             try {
                 val response = api.verifyOtp(VerifyOtpRequest(phone, otp))
                 if (response.success && response.token != null) {
@@ -72,6 +125,44 @@ class AuthViewModel : ViewModel() {
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
             }
+        }
+    }
+
+    private suspend fun verifyAgencyDriverOtp(phone: String, otp: String) {
+        try {
+            val td = travelDeskApi.verifyOtp(TravelDeskVerifyOtpRequest(phone, otp))
+            if (!td.success || td.token == null) {
+                _uiState.value = AuthUiState.Error(td.error ?: "Invalid OTP")
+                return
+            }
+            if (!td.user?.role.equals("driver", ignoreCase = true)) {
+                // Agencies belong on the travel-desk web, not the app.
+                _uiState.value = AuthUiState.Error(
+                    "External fleet agencies sign in on the travel-desk web, not the app."
+                )
+                return
+            }
+            // The travel-desk payload carries no designation, so synthesise the
+            // one MainActivity keys the stripped driver shell off.
+            _uiState.value = AuthUiState.Verified(
+                VerifyOtpResponse(
+                    success = true,
+                    token = td.token,
+                    error = null,
+                    user = UserInfo(
+                        staffId = td.user?.id,
+                        name = td.user?.name,
+                        phone = td.user?.phone ?: phone,
+                        role = "external_fleet_driver",
+                        designation = AGENCY_DRIVER_DESIGNATION,
+                        department = AGENCY_DRIVER_DEPARTMENT,
+                        status = "active",
+                    ),
+                )
+            )
+        } catch (e: Exception) {
+            _uiState.value =
+                AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
         }
     }
 

@@ -1400,6 +1400,12 @@ class HomeFragment : Fragment() {
             "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
             "on_site", "on-site", "picked_from_site"
         )
+        // A visit that was never started and whose slot has passed is expired —
+        // the source of the "still shows Start after the date is lost" bug.
+        val isExpired = !isCompleted && !isInProgress &&
+            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            )
 
         when {
             needsCpDetails -> {
@@ -1462,6 +1468,16 @@ class HomeFragment : Fragment() {
                 actionIcon.visibility = View.GONE
                 eta.text = "Complete"
             }
+            isExpired -> {
+                statusText.text = "Expired"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                action.text = "Expired"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
+                action.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                actionIcon.visibility = View.GONE
+                eta.text = "Date passed"
+            }
             !canStartTrip -> {
                 statusText.text = "Clock in"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
@@ -1484,7 +1500,22 @@ class HomeFragment : Fragment() {
             }
         }
 
-        if (session.isDriverMode) {
+        if (isExpired) {
+            // The slot has passed — the backend rejects any trip action on a
+            // stale date, so keep the card inert rather than opening a flow
+            // that dead-ends. A tap just explains why.
+            val explain: (View) -> Unit = {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "This visit's scheduled date has passed.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+            itemView.isClickable = true
+            itemView.setOnClickListener(explain)
+            actionBtn.isClickable = true
+            actionBtn.setOnClickListener(explain)
+        } else if (session.isDriverMode) {
             if (isCompleted) {
                 val openDetail: (View) -> Unit = {
                     DriverTripCompletedBottomSheet.newInstance(visit.id)
@@ -1934,10 +1965,14 @@ class HomeFragment : Fragment() {
                 // rather than let one odd record break the screen.
                 fleetPending = pending.rows.filter { !it.id.isNullOrBlank() }
                 val assignedRows = assigned.rows.filter { !it.id.isNullOrBlank() }
-                // Same completion test the fleet screen uses: status is the
-                // canonical field; the model carries no end timestamp.
+                // A dispatch trip is done when the driver has ended it
+                // (travelDeskEndedAt), the same signal the backend's "complete"
+                // sub-tab uses. status stays "scheduled" the whole way for a
+                // travel-desk trip, so testing it here never matched and left
+                // the Completed tab permanently empty.
                 val isDone = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
-                    (t.status ?: "").equals("completed", ignoreCase = true)
+                    t.travelDeskEndedAt != null ||
+                        (t.status ?: "").equals("completed", ignoreCase = true)
                 }
                 fleetAssigned = assignedRows.filterNot(isDone)
                 fleetCompleted = assignedRows.filter(isDone)
@@ -2026,8 +2061,52 @@ class HomeFragment : Fragment() {
             card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
             if (isPending) {
                 card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
+                card.assignmentInfo.visibility = View.GONE
+            } else {
+                // Assigned / Completed: surface who the trip went to and how
+                // far it's progressed, so the admin can track it — whether it
+                // was allocated to the in-house fleet or an external agency.
+                bindFleetAssignmentInfo(card, trip)
             }
             c.addView(card.root)
+        }
+    }
+
+    /**
+     * Fill the assignment-tracking block on an Assigned/Completed dispatch
+     * card. Works for both allocation sources: the in-house MMS fleet (a
+     * vehicle + its driver, no agency) and an external agency (agency name +
+     * the driver they allotted). Progress is read off the travel-desk stamps,
+     * which both flows write.
+     */
+    private fun bindFleetAssignmentInfo(
+        card: com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding,
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        card.assignmentInfo.visibility = View.VISIBLE
+
+        val vehicleNo = trip.vehicle?.vehicleNumber?.takeIf { it.isNotBlank() }
+        val agency = trip.travelAgency?.name?.takeIf { it.isNotBlank() }
+        card.tvAssignedVehicle.text = listOfNotNull(
+            vehicleNo ?: "Vehicle pending",
+            agency?.let { "· $it" },
+        ).joinToString(" ")
+
+        val driver = trip.driverName?.takeIf { it.isNotBlank() }
+        val phone = trip.driverPhone?.takeIf { it.isNotBlank() }
+        card.tvAssignedDriver.text = when {
+            driver != null && phone != null -> "$driver · $phone"
+            driver != null -> driver
+            else -> "Driver not set"
+        }
+
+        card.tvAssignedProgress.text = when {
+            trip.travelDeskEndedAt != null -> "Dropped"
+            trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
+            trip.travelDeskOnSiteAt != null -> "On site"
+            trip.travelDeskStartedAt != null -> "Picked from CP"
+            trip.travelDeskArrivedAt != null -> "Reached client"
+            else -> "Awaiting pickup"
         }
     }
 

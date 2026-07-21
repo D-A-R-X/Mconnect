@@ -44,11 +44,16 @@ class OtpActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PHONE = "extra_phone"
+        const val EXTRA_AGENCY_DRIVER = "extra_agency_driver"
     }
 
     private val phone: String by lazy {
         intent.getStringExtra(EXTRA_PHONE) ?: ""
     }
+
+    // Whether the OTP was issued on the travel-desk (agency driver) path, so
+    // verify is routed there. Seeded from the intent; a resend can flip it.
+    private var agencyDriver: Boolean = false
 
     private val notificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -64,6 +69,7 @@ class OtpActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityOtpBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        agencyDriver = intent.getBooleanExtra(EXTRA_AGENCY_DRIVER, false)
         window.statusBarColor = Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
 
@@ -166,7 +172,7 @@ class OtpActivity : AppCompatActivity() {
 
     private fun verifyOtp() {
         binding.tvOtpError.visibility = View.GONE
-        viewModel.verifyOtp(phone, getOtp())
+        viewModel.verifyOtp(phone, getOtp(), agencyDriver)
     }
 
     private fun collectState() {
@@ -181,6 +187,9 @@ class OtpActivity : AppCompatActivity() {
                             binding.btnVerify.isClickable = false
                         }
                         is AuthUiState.OtpSent -> {
+                            // A resend re-runs detection; keep the verify path
+                            // in sync with where the fresh OTP actually went.
+                            agencyDriver = state.agencyDriver
                             resetButton()
                             clearOtp()
                             viewModel.resetState()
@@ -340,6 +349,11 @@ class OtpActivity : AppCompatActivity() {
     }
 
     private suspend fun syncPushTokenIfPossible() {
+        // registerPushDevice is an MMS endpoint. An external-fleet principal's
+        // token is unknown to MMS, so it 401s — and the 401 interceptor fires
+        // the session-expired bus even though runCatching swallows the throw,
+        // bouncing the just-logged-in driver straight back to sign-in.
+        if (session.isExternalFleetPrincipal) return
         runCatching {
             PushTokenManager.syncCurrentToken(this@OtpActivity, session)
         }

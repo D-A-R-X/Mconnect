@@ -29,9 +29,14 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private val binding get() = _binding!!
 
     private var vehicles: List<AllocateVehicleOption> = emptyList()
+    private var drivers: List<AllocateDriverOption> = emptyList()
     private var showPricing: Boolean = true
     private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
+    // Opens the add-driver form with the typed name; the completion callback
+    // hands back the created driver so this sheet can select it and resume.
+    private var onAddNewDriver: ((String, (AllocateDriverOption) -> Unit) -> Unit)? = null
     private var pricingType = "km"  // "km" or "package"
+    private var selectedDriverId: String? = null
 
     companion object {
         /**
@@ -43,12 +48,16 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
          */
         fun newInstance(
             vehicles: List<AllocateVehicleOption>,
+            drivers: List<AllocateDriverOption> = emptyList(),
             showPricing: Boolean = true,
+            onAddNewDriver: ((String, (AllocateDriverOption) -> Unit) -> Unit)? = null,
             onAllocate: (AllocateVehicleResult) -> Unit,
         ): AllocateVehicleBottomSheet {
             val sheet = AllocateVehicleBottomSheet()
             sheet.vehicles = vehicles
+            sheet.drivers = drivers
             sheet.showPricing = showPricing
+            sheet.onAddNewDriver = onAddNewDriver
             sheet.onAllocateCallback = onAllocate
             return sheet
         }
@@ -105,11 +114,71 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.etAmount.visibility = pricingVis
 
         setupVehicleSpinner()
+        setupDriverPicker()
         setupTimePicker()
         setupPricingToggle()
 
         binding.btnSubmitAllocate.setOnClickListener {
             validateAndSubmit()
+        }
+    }
+
+    private fun setupDriverPicker() {
+        // Free typing stays allowed (backend auto-creates a typed driver), but
+        // tapping opens the roster dropdown so the dispatcher can pick an exact
+        // driver — which binds the trip by id and avoids shared-phone mix-ups.
+        // Editing the name by hand invalidates a previous roster pick.
+        binding.etDriverName.setOnClickListener { openDriverDropdown() }
+        binding.etDriverName.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val picked = drivers.firstOrNull { it.id == selectedDriverId }
+                if (picked != null && s?.toString()?.trim() != picked.name) {
+                    selectedDriverId = null
+                }
+            }
+        })
+    }
+
+    private fun openDriverDropdown() {
+        val options = drivers.map {
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = it,
+                title = it.name,
+                subtitle = it.phone,
+                keywords = it.phone,
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select driver",
+            options = options,
+            emptyMessage = "No drivers yet — add one",
+            createLabel = "Add new driver",
+            onCreateNew = { typedName -> addNewDriver(typedName) },
+        ) { driver ->
+            selectDriver(driver)
+        }
+    }
+
+    private fun selectDriver(driver: AllocateDriverOption) {
+        selectedDriverId = driver.id
+        binding.etDriverName.setText(driver.name)
+        binding.etDriverPhone.setText(driver.phone)
+    }
+
+    private fun addNewDriver(typedName: String) {
+        val cb = onAddNewDriver
+        if (cb == null) {
+            Toast.makeText(requireContext(), "Add drivers from the Driver tab.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // The host opens the add-driver form; when it returns the new driver we
+        // select it here and the allocation resumes where it left off.
+        cb(typedName) { created ->
+            drivers = drivers + created
+            selectDriver(created)
         }
     }
 
@@ -128,6 +197,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
                 if (binding.etDriverName.text?.toString()?.trim().isNullOrEmpty()) {
                     v.defaultDriverName?.takeIf { it.isNotBlank() }?.let {
                         binding.etDriverName.setText(it)
+                        selectedDriverId = null
                     }
                 }
                 if (binding.etDriverPhone.text?.toString()?.trim().isNullOrEmpty()) {
@@ -229,6 +299,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
                 vehicleLabel = vehicle.label,
                 driverName = driverName,
                 driverPhone = driverPhone,
+                driverId = selectedDriverId,
                 pickupTime = pickupTime,
                 pricingMode = pricingType,
                 amount = amount,
@@ -242,6 +313,13 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         _binding = null
     }
 }
+
+/** A roster driver the agency can pick from when allocating a trip. */
+data class AllocateDriverOption(
+    val id: String,
+    val name: String,
+    val phone: String,
+)
 
 /** A vehicle the agency can pick from when allocating a trip. */
 data class AllocateVehicleOption(
@@ -257,6 +335,8 @@ data class AllocateVehicleResult(
     val vehicleLabel: String,
     val driverName: String,
     val driverPhone: String,
+    /** The exact roster driver, when picked from the dropdown. */
+    val driverId: String? = null,
     val pickupTime: String,
     val pricingMode: String, // "km" | "package"
     val amount: Double,

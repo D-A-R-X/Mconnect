@@ -90,6 +90,88 @@
         android:textColorHint="#9CA3AF"
         android:textSize="14sp" />
 
+    <!-- Make -->
+    <TextView
+        android:id="@+id/tvLabelMake"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Make"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etMake"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_car"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Maruti Suzuki / Toyota / …"
+        android:inputType="textCapWords"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
+    <!-- Model -->
+    <TextView
+        android:id="@+id/tvLabelModel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Model"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etModel"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_car"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Innova / Swift"
+        android:inputType="textCapWords"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
+    <!-- Model Year -->
+    <TextView
+        android:id="@+id/tvLabelModelYear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Model Year"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etModelYear"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_capacity"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="2023"
+        android:inputType="number"
+        android:maxLength="4"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
     <!-- Vehicle Type -->
     <TextView
         android:id="@+id/tvLabelVehicleType"
@@ -198,7 +280,47 @@
         android:textColorHint="#9CA3AF"
         android:textSize="14sp" />
 
-    <!-- Agency -->
+    <!-- WhatsApp Number -->
+    <TextView
+        android:id="@+id/tvLabelWhatsapp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="WhatsApp Number"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etDriverWhatsapp"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:drawableStart="@drawable/ic_custom_phone"
+        android:drawablePadding="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Enter WhatsApp Number"
+        android:inputType="phone"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
+    <CheckBox
+        android:id="@+id/cbWhatsappSameAsMobile"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:checked="true"
+        android:fontFamily="@font/inter_regular"
+        android:text="Same as mobile number"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <!-- Agency — hidden: the backend binds the vehicle to the logged-in
+         agency, so asking for it here was redundant. Kept in the tree (GONE)
+         because the sheet's code still reads/writes the field. -->
     <TextView
         android:id="@+id/tvLabelAgency"
         android:layout_width="wrap_content"
@@ -207,7 +329,8 @@
         android:fontFamily="@font/inter_semibold"
         android:text="Agency *"
         android:textColor="#374151"
-        android:textSize="13sp" />
+        android:textSize="13sp"
+        android:visibility="gone" />
 
     <EditText
         android:id="@+id/etAgency"
@@ -223,7 +346,8 @@
         android:paddingHorizontal="14dp"
         android:textColor="#111827"
         android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        android:visibility="gone" />
 
     <!-- Submit Button -->
     <androidx.appcompat.widget.AppCompatButton

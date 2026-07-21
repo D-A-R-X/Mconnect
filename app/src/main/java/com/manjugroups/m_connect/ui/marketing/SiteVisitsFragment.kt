@@ -432,6 +432,16 @@ class SiteVisitsFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor("#B54708"))
                 statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B54708"))
             }
+            // A still-scheduled visit whose slot has already passed is expired,
+            // not "Scheduled" — that stale "Scheduled/Start" was the bug.
+            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            ) -> {
+                statusText.text = "Expired"
+                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_red)
+                statusText.setTextColor(Color.parseColor("#B42318"))
+                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B42318"))
+            }
             else -> {
                 statusText.text = "Scheduled"
                 statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_orange)

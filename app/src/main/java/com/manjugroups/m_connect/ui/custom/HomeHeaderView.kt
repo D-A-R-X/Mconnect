@@ -140,6 +140,17 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.bannerIllustrationContainer.visibility = View.GONE
         binding.ivCustomBannerIllustration.visibility = View.GONE
         binding.layoutFleetBanner.visibility = View.VISIBLE
+        // The fleet banner packs more than the default one (title + subtitle +
+        // "View My Summary" + two stat cards), and the shared 180dp wrapper
+        // clipped the button under the trips panel. Give it the room it needs;
+        // the trips screen sizes its hero spacer from the measured height, so
+        // this adapts automatically.
+        val params = binding.cardWorkSummary.layoutParams
+        val target = (216 * resources.displayMetrics.density).toInt()
+        if (params.height != target) {
+            params.height = target
+            binding.cardWorkSummary.layoutParams = params
+        }
     }
 
     /**

@@ -741,6 +741,23 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
             }
+            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            ) -> {
+                // The fixed day/time has passed and the visit was never run —
+                // show it as Expired instead of a live "Start Trip" that the
+                // backend's assignment-date gate would reject anyway.
+                statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_cpv_status_cancelled)
+                statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_cpv_status_dot_cancelled)
+                statusText.text = "Expired"
+                statusText.setTextColor(Color.parseColor("#B42318"))
+
+                actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_cpv_action_cancelled)
+                actionLabel.text = "Expired"
+                actionLabel.setTextColor(Color.parseColor("#7A0F0A"))
+                actionIcon.visibility = View.GONE
+                tapMode = TapMode.NONE
+            }
             !isClockedIn -> {
                 // Scheduled but the user hasn't clocked in for the day. Matches the
                 // design's "Need to Clock In" state. Tap routes to the clock-in

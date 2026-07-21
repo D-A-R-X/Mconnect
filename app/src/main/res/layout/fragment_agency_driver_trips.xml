@@ -14,18 +14,19 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#FFFFFF"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingBottom="10dp">
 
         <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
             <FrameLayout
                 android:id="@+id/btnDriverProfile"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:layout_centerVertical="true"
                 android:background="@drawable/bg_profile_back_circle"
                 android:contentDescription="@null"
@@ -33,34 +34,96 @@
 
                 <ImageView
                     android:id="@+id/ivDriverAvatar"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_user_outline"
                     app:tint="#0B63C6" />
             </FrameLayout>
 
-            <TextView
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_centerInParent="true"
-                android:fontFamily="@font/inter_semibold"
-                android:text="My Trips"
-                android:textColor="#111827"
-                android:textSize="18sp" />
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@id/btnDriverProfile"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="My Trips"
+                    android:textColor="#111827"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/tvDriverName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_regular"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </RelativeLayout>
 
-        <TextView
-            android:id="@+id/tvDriverName"
+        <!-- Assigned / Completed / Expired — equal-weight segments so the
+             switch fills the width and adapts to any phone size. -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="12dp"
-            android:fontFamily="@font/inter_regular"
-            android:textColor="#667085"
-            android:textSize="13sp" />
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_admin_trips_tabs_container"
+            android:orientation="horizontal"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/tabAssigned"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_my_trips_tab_active"
+                android:backgroundTint="#0B61CA"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:paddingVertical="8dp"
+                android:text="Assigned"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tabCompleted"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:paddingVertical="8dp"
+                android:text="Completed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tabExpired"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:paddingVertical="8dp"
+                android:text="Expired"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -96,7 +159,7 @@
                     android:layout_marginTop="64dp"
                     android:fontFamily="@font/inter_regular"
                     android:gravity="center"
-                    android:text="No trips assigned to you yet."
+                    android:text="No trips here yet."
                     android:textColor="#667085"
                     android:textSize="14sp"
                     android:visibility="gone" />

@@ -83,7 +83,7 @@
             android:fontFamily="@font/inter_regular"
             android:hyphenationFrequency="none"
             android:lineSpacingExtra="2dp"
-            android:maxLines="2"
+            android:maxLines="1"
             android:text="1st Avenue, 83rd St, Ashok Nagar, Chennai, Tamil Nadu 600083"
             android:textColor="#374151"
             android:textSize="12sp" />
@@ -158,6 +158,52 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
+        </LinearLayout>
+
+        <!-- Assignment tracking: who the trip went to + how far it's got.
+             Shown only for allocated (Assigned / Completed) trips. -->
+        <LinearLayout
+            android:id="@+id/assignmentInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="10dp"
+                android:background="#EEF0F4" />
+
+            <TextView
+                android:id="@+id/tvAssignedVehicle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvAssignedDriver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvAssignedProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_home_trip_status_progress"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="3dp"
+                android:textColor="#B54708"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <!-- Row 4: action, right-aligned on its own line so it always has room

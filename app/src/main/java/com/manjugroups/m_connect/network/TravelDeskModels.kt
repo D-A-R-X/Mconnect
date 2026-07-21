@@ -7,6 +7,38 @@ import com.google.gson.annotations.SerializedName
 // independently (avoids a class-resolution quirk we hit when they were
 // declared in the same file).
 
+// ── Auth ────────────────────────────────────────────────────────────────
+data class TravelDeskSendOtpRequest(
+    val phone: String,
+)
+
+data class TravelDeskSendOtpResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val error: String? = null,
+)
+
+data class TravelDeskVerifyOtpRequest(
+    val phone: String,
+    val otp: String,
+)
+
+data class TravelDeskAuthUser(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    /** "driver" or "agency". Agencies use the travel-desk web, not the app. */
+    val role: String? = null,
+)
+
+data class TravelDeskVerifyOtpResponse(
+    val success: Boolean = false,
+    val token: String? = null,
+    val user: TravelDeskAuthUser? = null,
+    val error: String? = null,
+)
+
 data class TravelDeskProject(
     @SerializedName("_id") val id: String,
     val name: String? = null,
@@ -37,6 +69,25 @@ data class TravelDeskTrip(
     val vehicleId: String? = null,
     val project: TravelDeskProject? = null,
     val vehicle: TravelDeskVehicleRef? = null,
+    // Present once a trip is allocated — lets the admin track WHO it went to.
+    // travelAgency is set for external-agency allocations; absent for the
+    // in-house MMS fleet. The travelDesk* stamps drive the progress pill.
+    val travelAgency: TravelDeskAgencyRef? = null,
+    val travelDeskArrivedAt: Long? = null,
+    val travelDeskStartedAt: Long? = null,
+    val travelDeskOnSiteAt: Long? = null,
+    val travelDeskPickedFromSiteAt: Long? = null,
+    val travelDeskEndedAt: Long? = null,
+    // Odometer readings + dashboard photos the driver captured at start/end.
+    val travelDeskStartKm: Double? = null,
+    val travelDeskEndKm: Double? = null,
+    val travelDeskStartPhotoIds: List<String> = emptyList(),
+    val travelDeskEndPhotoIds: List<String> = emptyList(),
+)
+
+data class TravelDeskAgencyRef(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
 )
 
 /**
@@ -78,13 +129,37 @@ data class TravelDeskDriverTripRequest(
     val siteVisitId: String,
 )
 
+data class TravelDeskStartTripRequest(
+    val siteVisitId: String,
+    /** Fixed client OTP on this backend ("0000"). */
+    val otp: String,
+    val photoIds: List<String>,
+    val startKm: Double? = null,
+)
+
+data class TravelDeskEndTripRequest(
+    val siteVisitId: String,
+    val photoIds: List<String>,
+    val endKm: Double? = null,
+)
+
+data class TravelDeskStorageResponse(
+    val success: Boolean = false,
+    val storageId: String? = null,
+    val error: String? = null,
+)
+
 data class TravelDeskVehicle(
     @SerializedName("_id") val id: String,
     val vehicleNumber: String? = null,
+    val make: String? = null,
+    val model: String? = null,
+    val modelYear: Int? = null,
     val type: String? = null,
     val capacity: Int? = null,
     val defaultDriverName: String? = null,
     val defaultDriverPhone: String? = null,
+    val defaultDriverWhatsapp: String? = null,
     val status: String? = null,
 )
 
@@ -120,6 +195,9 @@ data class AllocateTripRequest(
     val pricingMode: String,
     val driverName: String? = null,
     val driverPhone: String? = null,
+    // The exact roster driver, when picked from the dropdown — binds the trip
+    // by id so a shared phone can't leak it to another driver.
+    val travelDeskDriverId: String? = null,
     val kmRate: Double? = null,
     val packageAmount: Double? = null,
 )
@@ -128,13 +206,31 @@ data class AllocateTripRequest(
 
 data class CreateVehicleRequest(
     val vehicleNumber: String,
+    val make: String? = null,
+    val model: String? = null,
+    val modelYear: Int? = null,
     val type: String? = null,
     val capacity: Int? = null,
     val defaultDriverName: String? = null,
     val defaultDriverPhone: String? = null,
+    val defaultDriverWhatsapp: String? = null,
     // Optional override; the agency-scoped endpoint defaults to the caller's
     // own agency when omitted.
     val travelAgencyId: String? = null,
+)
+
+data class UpdateVehicleRequest(
+    val id: String,
+    val vehicleNumber: String? = null,
+    val make: String? = null,
+    val model: String? = null,
+    val modelYear: Int? = null,
+    val type: String? = null,
+    val capacity: Int? = null,
+    val defaultDriverName: String? = null,
+    val defaultDriverPhone: String? = null,
+    val defaultDriverWhatsapp: String? = null,
+    val status: String? = null,
 )
 
 // ── Drivers ─────────────────────────────────────────────────────────────
