@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Office Name" />
+    <TextView style="@style/OutcomeFieldLabel" android:text="Office Name *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
         <EditText android:id="@+id/etOfficeName" style="@style/OutcomeFieldEdit" android:hint="Enter Name" android:inputType="textCapWords" />
@@ -31,9 +31,40 @@
         <EditText android:id="@+id/etOfficePhone" style="@style/OutcomeFieldEdit" android:hint="Enter Number" android:inputType="phone" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Office Address" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Office Address" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Door No *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
-        <EditText android:id="@+id/etOfficeAddress" style="@style/OutcomeFieldEdit" android:hint="Enter Address" android:inputType="textPostalAddress" />
+        <EditText android:id="@+id/etOfficeDoorNo" style="@style/OutcomeFieldEdit" android:hint="Enter door / floor number" android:inputType="textPostalAddress" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Street Name *" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etOfficeStreet" style="@style/OutcomeFieldEdit" android:hint="Enter street name" android:inputType="textPostalAddress|textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Address Line 1 *" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etOfficeAddress" style="@style/OutcomeFieldEdit" android:hint="Enter address line 1" android:inputType="textPostalAddress" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Address Line 2" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etOfficeAddressLine2" style="@style/OutcomeFieldEdit" android:hint="Enter address line 2" android:inputType="textPostalAddress" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Office Area" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etOfficeArea" style="@style/OutcomeFieldEdit" android:hint="Enter area" android:inputType="textPostalAddress" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Office Pincode" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etOfficePincode" style="@style/OutcomeFieldEdit" android:hint="6-digit pincode" android:inputType="number" android:maxLength="6" />
     </LinearLayout>
 </LinearLayout>
