@@ -120,6 +120,11 @@ class ProfileFragment : Fragment() {
     }
 
     private fun loadStaffProfile() {
+        // External-fleet principals (agency + its drivers) have no staff row.
+        // Their synthetic staffId points at a travelAgencies/travelDeskDrivers
+        // doc, so getStaffDetail 401s — and every 401 is treated as a dead
+        // session, which would log them straight back out.
+        if (session.isExternalFleetPrincipal) return
         val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             try {

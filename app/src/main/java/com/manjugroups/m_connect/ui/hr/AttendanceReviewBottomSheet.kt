@@ -272,16 +272,26 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         // Trip lines, coloured per kind (on-duty → amber, field visit → green,
         // else blue), each with a white casing + forward direction arrows.
         qualifyingTrips.forEach { trip ->
-            val path = trip.snappedPath.orEmpty().map { LatLng(it.lat, it.lng) }
-                .ifEmpty {
-                    val s = trip.startLat; val sl = trip.startLng
-                    val e = trip.endLat; val el = trip.endLng
-                    if (s != null && sl != null && e != null && el != null)
-                        listOf(LatLng(s, sl), LatLng(e, el)) else emptyList()
-                }
+            val snapped = trip.snappedPath.orEmpty().map { LatLng(it.lat, it.lng) }
+            // Only a start and an end point survive for some trips (no GPS
+            // fixes in between, or snapping never ran). Joining them draws a
+            // straight line that reads as a real travelled road — so draw it
+            // dashed and unarrowed instead, which reads as "we know the two
+            // ends, not the path".
+            val isEstimate = snapped.size < 2
+            val path = snapped.ifEmpty {
+                val s = trip.startLat; val sl = trip.startLng
+                val e = trip.endLat; val el = trip.endLng
+                if (s != null && sl != null && e != null && el != null)
+                    listOf(LatLng(s, sl), LatLng(e, el)) else emptyList()
+            }
             if (path.size >= 2) {
                 drewRoute = true
-                drawTripLine(map, path, kindColor(trip))
+                if (isEstimate) {
+                    drawEstimatedLine(map, path, kindColor(trip))
+                } else {
+                    drawTripLine(map, path, kindColor(trip))
+                }
                 path.forEach { boundsBuilder.include(it); hasBounds = true }
             }
         }
@@ -342,6 +352,24 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         !trip.onDutyCategory.isNullOrBlank() -> Color.parseColor("#F59E0B")
         !trip.fieldVisitId.isNullOrBlank() -> Color.parseColor("#22C55E")
         else -> Color.parseColor("#2563EB")
+    }
+
+    /**
+     * Straight connector for a trip whose actual path is unknown — only its
+     * endpoints are. Dashed and thinner than a real route, with no direction
+     * arrows, so it can't be mistaken for a road that was driven.
+     */
+    private fun drawEstimatedLine(map: GoogleMap, path: List<LatLng>, color: Int) {
+        map.addPolyline(
+            PolylineOptions().addAll(path).color(color).width(5f).zIndex(2f)
+                .geodesic(true)
+                .pattern(
+                    listOf(
+                        com.google.android.gms.maps.model.Dash(20f),
+                        com.google.android.gms.maps.model.Gap(14f),
+                    ),
+                ),
+        )
     }
 
     /** White casing + coloured line + forward arrows — the web polyline look. */
@@ -620,10 +648,23 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
     // ── Full-screen route map ──
     //
     // Opens the same travelled route in an edge-to-edge dialog with gestures
-    // enabled, so the reviewer can pan/zoom the journey. Playback stays on
-    // the inline preview's replay controls.
+    // enabled, so the reviewer can pan/zoom the journey. Carries its own
+    // play/pause + scrub bar driven by the SAME playback clock as the inline
+    // preview, so the two can't disagree about where the journey is.
     private var fullMapDialog: Dialog? = null
     private var fullMapView: com.google.android.gms.maps.MapView? = null
+
+    /**
+     * The expanded map and its own playback marker.
+     *
+     * renderPlaybackFrame drives BOTH maps from one clock, so scrubbing or
+     * playing in either place stays in step — rather than running a second,
+     * independent playback that could drift out of sync with the inline one.
+     */
+    private var fullMap: com.google.android.gms.maps.GoogleMap? = null
+    private var fullPlaybackMarker: Marker? = null
+    private var fullSeekBar: SeekBar? = null
+    private var fullPlayButton: android.widget.ImageView? = null
 
     private fun showFullMapDialog() {
         val data = lastRouteData ?: return
@@ -656,6 +697,76 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             },
         )
 
+        // Playback bar: play/pause + scrub, pinned to the bottom of the
+        // expanded map. Only shown when there's actually a track to replay.
+        if (playbackPath.size >= 2) {
+            val bar = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setBackgroundResource(R.drawable.bg_attendance_history_inner)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                elevation = dp(6).toFloat()
+            }
+            val playBtn = android.widget.ImageView(ctx).apply {
+                setImageResource(
+                    if (isPlaying) android.R.drawable.ic_media_pause
+                    else android.R.drawable.ic_media_play,
+                )
+                contentDescription = "Play or pause route replay"
+                layoutParams = android.widget.LinearLayout.LayoutParams(dp(28), dp(28))
+            }
+            val seek = SeekBar(ctx).apply {
+                max = (playbackPath.size - 1).coerceAtLeast(1)
+                progress = playbackIdx.coerceIn(0, max)
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
+                ).apply { marginStart = dp(10) }
+            }
+            fullPlayButton = playBtn
+            fullSeekBar = seek
+            playBtn.setOnClickListener {
+                if (isPlaying) {
+                    pausePlayback()
+                } else {
+                    if (playbackIdx >= playbackPath.size - 1) {
+                        playbackIdx = 0; playbackProgress = 0f
+                    }
+                    startPlayback()
+                }
+                playBtn.setImageResource(
+                    if (isPlaying) android.R.drawable.ic_media_pause
+                    else android.R.drawable.ic_media_play,
+                )
+            }
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser || playbackPath.size < 2) return
+                    playbackIdx = progress.coerceIn(0, playbackPath.size - 1)
+                    playbackProgress = 0f
+                    renderPlaybackFrame()
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {
+                    if (isPlaying) {
+                        pausePlayback()
+                        fullPlayButton?.setImageResource(android.R.drawable.ic_media_play)
+                    }
+                }
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+            bar.addView(playBtn)
+            bar.addView(seek)
+            root.addView(
+                bar,
+                android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM
+                    leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(24)
+                },
+            )
+        }
+
         val dialog = Dialog(ctx, android.R.style.Theme_Light_NoTitleBar_Fullscreen)
         dialog.setContentView(root)
         // The dialog owns this MapView's lifecycle: created on show,
@@ -668,6 +779,10 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         mapView.onResume()
         mapView.getMapAsync { map ->
             map.uiSettings.isZoomControlsEnabled = true
+            fullMap = map
+            // Mirror the current playback position immediately, so opening
+            // mid-replay doesn't show an empty route until the next frame.
+            renderPlaybackFrame()
             val bounds = drawRouteOnMap(map, data)
             if (bounds != null) {
                 mapView.post {
@@ -687,6 +802,12 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             }
             fullMapView = null
             fullMapDialog = null
+            // Marker belongs to the destroyed map; drop the refs so
+            // renderPlaybackFrame stops mirroring into it.
+            fullPlaybackMarker = null
+            fullMap = null
+            fullSeekBar = null
+            fullPlayButton = null
         }
         fullMapDialog = dialog
         fullMapView = mapView
@@ -855,6 +976,27 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         binding.replaySeekBar.progress = i
         binding.tvReplayTime.text = playbackTimes.getOrNull(i)?.let { formatMillisTime(it) } ?: "--"
         binding.tvReplayLocation.text = nearestStopLabel(pos) ?: "En route"
+
+        // Mirror onto the expanded map when it's open.
+        fullMap?.let { fm ->
+            val fMarker = fullPlaybackMarker
+            if (fMarker == null) {
+                fullPlaybackMarker = fm.addMarker(
+                    MarkerOptions().position(pos).anchor(0.5f, 0.5f).zIndex(20f)
+                        .flat(true).rotation(heading)
+                        .icon(
+                            playbackVehicleIcon
+                                ?: BitmapDescriptorFactory.defaultMarker(
+                                    BitmapDescriptorFactory.HUE_AZURE,
+                                ),
+                        ),
+                )
+            } else {
+                fMarker.position = pos
+                fMarker.rotation = heading
+            }
+            fullSeekBar?.progress = i
+        }
     }
 
     private fun nearestStopLabel(pos: LatLng): String? {

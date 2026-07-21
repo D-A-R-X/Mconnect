@@ -629,6 +629,10 @@ class HomeViewModel : ViewModel() {
         val status = when (this.phase?.lowercase(Locale.getDefault())) {
             "completed" -> "completed"
             "on_site" -> "on_site"
+            // Return leg: still an in-flight trip. Without this it would
+            // fall through to "scheduled" and the card would offer
+            // "Start Trip" on a trip already under way.
+            "picked_from_site" -> "picked_from_site"
             "in_progress" -> "in-progress"
             else -> "scheduled"
         }
