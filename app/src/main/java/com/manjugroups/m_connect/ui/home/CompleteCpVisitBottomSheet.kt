@@ -158,6 +158,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) uploadClientImage(uri)
         }
+    private enum class BookingDocumentKind { ADVANCE_PROOF, AADHAAR, PAN }
+    private var pendingBookingDocumentKind: BookingDocumentKind? = null
+    private var advanceProofStorageId: String? = null
+    private var advanceProofFileName: String? = null
+    private var aadhaarDocumentStorageId: String? = null
+    private var aadhaarDocumentFileName: String? = null
+    private var panDocumentStorageId: String? = null
+    private var panDocumentFileName: String? = null
+    private val pickBookingDocument =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val kind = pendingBookingDocumentKind
+            pendingBookingDocumentKind = null
+            if (uri != null && kind != null) uploadBookingDocument(uri, kind)
+        }
     private var staffSaveAs: SaveAs = SaveAs.DRAFT
     private var lastBookingPrefillKey: String? = null
     private var bookingGstPercent: Double? = null
@@ -285,6 +299,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etFormEmail: EditText? = null
     private var tvFormNationality: TextView? = null
     private var etFormHomeAddress: EditText? = null
+    private var etFormHomeDoorNo: EditText? = null
+    private var etFormHomeStreet: EditText? = null
+    private var etFormHomeAddressLine2: EditText? = null
     private var etFormPincode: EditText? = null
     private var etFormState: EditText? = null
     private var etFormDistrict: EditText? = null
@@ -292,6 +309,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     // Professional
     private var tvProfProfession: TextView? = null
+    private var tvProfDepartment: TextView? = null
+    private var groupProfDepartment: View? = null
+    private var groupProfOtherDepartment: View? = null
+    private var etProfOtherDepartment: EditText? = null
     private var etProfDesignation: EditText? = null
     private var etProfIncome: EditText? = null
 
@@ -301,10 +322,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etOfficeMobile: EditText? = null
     private var etOfficePhone: EditText? = null
     private var etOfficeAddress: EditText? = null
+    private var etOfficeDoorNo: EditText? = null
+    private var etOfficeStreet: EditText? = null
+    private var etOfficeAddressLine2: EditText? = null
+    private var etOfficeArea: EditText? = null
+    private var etOfficePincode: EditText? = null
 
     // Booking
     private var tvBookType: TextView? = null
+    private var bookConversionManualEntry: Boolean = true
+    private var bookExchangeManualEntry: Boolean = true
+    private var groupBookConversion: View? = null
+    private var groupBookConversionManual: View? = null
+    private var groupBookConversionLinked: View? = null
+    private var tvBookConversionSource: TextView? = null
+    private var etBookConversionProject: EditText? = null
+    private var etBookConversionPlot: EditText? = null
+    private var etBookConversionCredit: EditText? = null
+    private var etBookConversionNotes: EditText? = null
+    private var etBookConversionSourceBooking: EditText? = null
+    private var groupBookExchange: View? = null
+    private var groupBookExchangeManual: View? = null
+    private var groupBookExchangeLinkedInternal: View? = null
+    private var groupBookExchangeLinked: View? = null
+    private var tvBookExchangeSource: TextView? = null
+    private var etBookExchangeProject: EditText? = null
+    private var etBookExchangePlot: EditText? = null
+    private var etBookExchangeExtent: EditText? = null
+    private var etBookExchangeLookupProject: EditText? = null
+    private var etBookExchangeLookupPlot: EditText? = null
+    private var etBookExchangeMobile: EditText? = null
+    private var etBookExchangeSourceBooking: EditText? = null
+    private var lblBookExchangeValue: TextView? = null
+    private var etBookExchangeValue: EditText? = null
+    private var tvBookExchangeBalance: TextView? = null
+    private var etBookExchangeNotes: EditText? = null
     private var tvBookSource: TextView? = null
+    private var etBookSourceName: EditText? = null
+    private var etBookSourceMobile: EditText? = null
+    private var etBookReferralBenefit: EditText? = null
     private var etBookCef: EditText? = null
     private var tvBookDate: TextView? = null
     private var tvBookProject: TextView? = null
@@ -314,6 +370,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var ivBookVisitYes: ImageView? = null
     private var ivBookVisitNo: ImageView? = null
     private var ivBookDuplicate: ImageView? = null
+    private var groupBookSiteVisit: View? = null
+    private var etBookSvName: EditText? = null
+    private var etBookSvMobile: EditText? = null
 
     // Charges
     private var etChargeBookingCost: EditText? = null
@@ -329,6 +388,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     // Payment
     private var etPayRegCharges: EditText? = null
+    private var groupBookingChargesAdvance: View? = null
+    private var groupBookingPaymentSchedule: View? = null
     private var etPayGstAmount: EditText? = null
     private var ivPayGstApplicable: ImageView? = null
     private var etPayDocCharges: EditText? = null
@@ -340,6 +401,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var lblPayLoanAmount: TextView? = null
     private var rowPayLoanAmount: View? = null
     private var etPayLoanAmount: EditText? = null
+    private var tvPayMinimumAdvance: TextView? = null
+    private var groupPayDigitalProof: View? = null
+    private var etPayTransactionId: EditText? = null
+    private var btnPayProofUpload: TextView? = null
+    private var groupPayInstrument: View? = null
+    private var lblPayInstrumentNo: TextView? = null
+    private var etPayInstrumentNo: EditText? = null
+    private var etPayBankName: EditText? = null
+    private var etPayBankBranch: EditText? = null
+    private var tvPayInstrumentDate: TextView? = null
     private var tvPayPlan: TextView? = null
     private var etPayAllotDue: EditText? = null
     private var tvPayAllotDate: TextView? = null
@@ -359,6 +430,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tvStaffTelecaller: TextView? = null
     private var etStaffAadhar: EditText? = null
     private var etStaffPancard: EditText? = null
+    private var btnStaffAadhaarUpload: TextView? = null
+    private var btnStaffPanUpload: TextView? = null
     private var etStaffRefName1: EditText? = null
     private var etStaffRefMobile1: EditText? = null
     private var etStaffRefProf1: EditText? = null
@@ -801,7 +874,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             renderClientImage()
         }
         renderClientImage()
+        etFormHomeDoorNo = view.findViewById(R.id.etFormHomeDoorNo)
+        etFormHomeStreet = view.findViewById(R.id.etFormHomeStreet)
         etFormHomeAddress = view.findViewById(R.id.etFormHomeAddress)
+        etFormHomeAddressLine2 = view.findViewById(R.id.etFormHomeAddressLine2)
         etFormPincode = view.findViewById(R.id.etFormPincode)
         etFormState = view.findViewById(R.id.etFormState)
         etFormDistrict = view.findViewById(R.id.etFormDistrict)
@@ -841,6 +917,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun bindProfessionalFields(view: View) {
         tvProfProfession = view.findViewById(R.id.tvProfProfession)
+        tvProfDepartment = view.findViewById(R.id.tvProfDepartment)
+        groupProfDepartment = view.findViewById(R.id.groupProfDepartment)
+        groupProfOtherDepartment = view.findViewById(R.id.groupProfOtherDepartment)
+        etProfOtherDepartment = view.findViewById(R.id.etProfOtherDepartment)
         etProfDesignation = view.findViewById(R.id.etProfDesignation)
         etProfIncome = view.findViewById(R.id.etProfIncome)
     }
@@ -850,12 +930,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etOfficeEmail = view.findViewById(R.id.etOfficeEmail)
         etOfficeMobile = view.findViewById(R.id.etOfficeMobile)
         etOfficePhone = view.findViewById(R.id.etOfficePhone)
+        etOfficeDoorNo = view.findViewById(R.id.etOfficeDoorNo)
+        etOfficeStreet = view.findViewById(R.id.etOfficeStreet)
         etOfficeAddress = view.findViewById(R.id.etOfficeAddress)
+        etOfficeAddressLine2 = view.findViewById(R.id.etOfficeAddressLine2)
+        etOfficeArea = view.findViewById(R.id.etOfficeArea)
+        etOfficePincode = view.findViewById(R.id.etOfficePincode)
     }
 
     private fun bindBookingFields(view: View) {
         tvBookType = view.findViewById(R.id.tvBookType)
+        groupBookConversion = view.findViewById(R.id.groupBookConversion)
+        groupBookConversionManual = view.findViewById(R.id.groupBookConversionManual)
+        groupBookConversionLinked = view.findViewById(R.id.groupBookConversionLinked)
+        tvBookConversionSource = view.findViewById(R.id.tvBookConversionSource)
+        etBookConversionProject = view.findViewById(R.id.etBookConversionProject)
+        etBookConversionPlot = view.findViewById(R.id.etBookConversionPlot)
+        etBookConversionCredit = view.findViewById(R.id.etBookConversionCredit)
+        etBookConversionNotes = view.findViewById(R.id.etBookConversionNotes)
+        etBookConversionSourceBooking = view.findViewById(R.id.etBookConversionSourceBooking)
+        groupBookExchange = view.findViewById(R.id.groupBookExchange)
+        groupBookExchangeManual = view.findViewById(R.id.groupBookExchangeManual)
+        groupBookExchangeLinkedInternal = view.findViewById(R.id.groupBookExchangeLinkedInternal)
+        groupBookExchangeLinked = view.findViewById(R.id.groupBookExchangeLinked)
+        tvBookExchangeSource = view.findViewById(R.id.tvBookExchangeSource)
+        etBookExchangeProject = view.findViewById(R.id.etBookExchangeProject)
+        etBookExchangePlot = view.findViewById(R.id.etBookExchangePlot)
+        etBookExchangeExtent = view.findViewById(R.id.etBookExchangeExtent)
+        etBookExchangeLookupProject = view.findViewById(R.id.etBookExchangeLookupProject)
+        etBookExchangeLookupPlot = view.findViewById(R.id.etBookExchangeLookupPlot)
+        etBookExchangeMobile = view.findViewById(R.id.etBookExchangeMobile)
+        etBookExchangeSourceBooking = view.findViewById(R.id.etBookExchangeSourceBooking)
+        lblBookExchangeValue = view.findViewById(R.id.lblBookExchangeValue)
+        etBookExchangeValue = view.findViewById(R.id.etBookExchangeValue)
+        tvBookExchangeBalance = view.findViewById(R.id.tvBookExchangeBalance)
+        etBookExchangeNotes = view.findViewById(R.id.etBookExchangeNotes)
         tvBookSource = view.findViewById(R.id.tvBookSource)
+        etBookSourceName = view.findViewById(R.id.etBookSourceName)
+        etBookSourceMobile = view.findViewById(R.id.etBookSourceMobile)
+        etBookReferralBenefit = view.findViewById(R.id.etBookReferralBenefit)
         etBookCef = view.findViewById(R.id.etBookCef)
         tvBookDate = view.findViewById(R.id.tvBookDate)
         tvBookProject = view.findViewById(R.id.tvBookProject)
@@ -865,6 +978,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         ivBookVisitYes = view.findViewById(R.id.ivBookVisitYes)
         ivBookVisitNo = view.findViewById(R.id.ivBookVisitNo)
         ivBookDuplicate = view.findViewById(R.id.ivBookDuplicate)
+        groupBookSiteVisit = view.findViewById(R.id.groupBookSiteVisit)
+        etBookSvName = view.findViewById(R.id.etBookSvName)
+        etBookSvMobile = view.findViewById(R.id.etBookSvMobile)
     }
 
     private fun bindChargesFields(view: View) {
@@ -881,6 +997,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun bindPaymentFields(view: View) {
+        groupBookingChargesAdvance = view.findViewById(R.id.groupBookingChargesAdvance)
+        groupBookingPaymentSchedule = view.findViewById(R.id.groupBookingPaymentSchedule)
         etPayRegCharges = view.findViewById(R.id.etPayRegCharges)
         etPayGstAmount = view.findViewById(R.id.etPayGstAmount)
         ivPayGstApplicable = view.findViewById(R.id.ivPayGstApplicable)
@@ -893,6 +1011,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         lblPayLoanAmount = view.findViewById(R.id.lblPayLoanAmount)
         rowPayLoanAmount = view.findViewById(R.id.rowPayLoanAmount)
         etPayLoanAmount = view.findViewById(R.id.etPayLoanAmount)
+        tvPayMinimumAdvance = view.findViewById(R.id.tvPayMinimumAdvance)
+        groupPayDigitalProof = view.findViewById(R.id.groupPayDigitalProof)
+        etPayTransactionId = view.findViewById(R.id.etPayTransactionId)
+        btnPayProofUpload = view.findViewById(R.id.btnPayProofUpload)
+        groupPayInstrument = view.findViewById(R.id.groupPayInstrument)
+        lblPayInstrumentNo = view.findViewById(R.id.lblPayInstrumentNo)
+        etPayInstrumentNo = view.findViewById(R.id.etPayInstrumentNo)
+        etPayBankName = view.findViewById(R.id.etPayBankName)
+        etPayBankBranch = view.findViewById(R.id.etPayBankBranch)
+        tvPayInstrumentDate = view.findViewById(R.id.tvPayInstrumentDate)
         tvPayPlan = view.findViewById(R.id.tvPayPlan)
         etPayAllotDue = view.findViewById(R.id.etPayAllotDue)
         tvPayAllotDate = view.findViewById(R.id.tvPayAllotDate)
@@ -907,6 +1035,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
+                applySpecialConsiderationVisibility()
                 recomputeBookingFinanceDerivedFields()
             }
         }
@@ -914,6 +1043,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etChargeSpecialConsideration?.addTextChangedListener(recomputeWatcher)
         etChargeGuidelineValue?.addTextChangedListener(recomputeWatcher)
         etPayAdvanceAmount?.addTextChangedListener(recomputeWatcher)
+        etPayRegCharges?.addTextChangedListener(recomputeWatcher)
+        etPayGstAmount?.addTextChangedListener(recomputeWatcher)
+        etPayDocCharges?.addTextChangedListener(recomputeWatcher)
+        etPayPattaCharges?.addTextChangedListener(recomputeWatcher)
+        etPayOtherCharges?.addTextChangedListener(recomputeWatcher)
+        applySpecialConsiderationVisibility()
+        applyAdvancePaymentVisibility()
     }
 
     private fun bindStaffFields(view: View) {
@@ -924,6 +1060,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tvStaffTelecaller = view.findViewById(R.id.tvStaffTelecaller)
         etStaffAadhar = view.findViewById(R.id.etStaffAadhar)
         etStaffPancard = view.findViewById(R.id.etStaffPancard)
+        btnStaffAadhaarUpload = view.findViewById(R.id.btnStaffAadhaarUpload)
+        btnStaffPanUpload = view.findViewById(R.id.btnStaffPanUpload)
         etStaffRefName1 = view.findViewById(R.id.etStaffRefName1)
         etStaffRefMobile1 = view.findViewById(R.id.etStaffRefMobile1)
         etStaffRefProf1 = view.findViewById(R.id.etStaffRefProf1)
@@ -1101,10 +1239,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
                 popup.setOnMenuItemClickListener { menuItem ->
                     tvProfProfession?.text = menuItem.title
+                    val salaried = menuItem.title.toString() == "Salaried"
+                    groupProfDepartment?.visibility = if (salaried) View.VISIBLE else View.GONE
+                    if (!salaried) {
+                        tvProfDepartment?.text = ""
+                        etProfOtherDepartment?.text?.clear()
+                        groupProfOtherDepartment?.visibility = View.GONE
+                    }
                     scheduleDraftPushIfActive()
                     true
                 }
                 popup.show()
+            }
+        }
+        view?.findViewById<View>(R.id.rowProfDepartment)?.setOnClickListener {
+            picker(
+                "Select Department",
+                listOf("Admin", "Sales", "HR", "Software Developer", "Other"),
+            ) {
+                tvProfDepartment?.text = it
+                val other = it == "Other"
+                groupProfOtherDepartment?.visibility = if (other) View.VISIBLE else View.GONE
+                if (!other) etProfOtherDepartment?.text?.clear()
             }
         }
 
@@ -1124,17 +1280,37 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             picker(
                 "Select Booking Type",
                 listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"),
-            ) { tvBookType?.text = it }
+            ) {
+                tvBookType?.text = it
+                refreshBookingTypeSections()
+            }
         }
+        view?.findViewById<View>(R.id.rowBookConversionSource)?.setOnClickListener {
+            bookConversionManualEntry = !bookConversionManualEntry
+            refreshBookingTypeSections()
+            scheduleDraftPushIfActive()
+        }
+        view?.findViewById<View>(R.id.rowBookExchangeSource)?.setOnClickListener {
+            bookExchangeManualEntry = !bookExchangeManualEntry
+            refreshBookingTypeSections()
+            scheduleDraftPushIfActive()
+        }
+        etBookExchangeValue?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = updateExchangeBalance()
+        })
         view?.findViewById<View>(R.id.rowBookSource)?.setOnClickListener {
-            // Web auto-derives sourceType from context (cp_visit /
-            // site_visit / walk_in) without exposing a picker. Mobile
-            // still surfaces a picker — restrict the visible options
-            // to the same three valid strings so an operator override
-            // can never desync from the backend's accepted set.
             picker(
-                "Select Source",
-                listOf("walk_in", "cp_visit", "site_visit"),
+                "Select Client Source",
+                listOf(
+                    "Direct / Walk-in",
+                    "Reference",
+                    "Channel Partner",
+                    "Site Visit",
+                    "Online / Social Media",
+                    "Other",
+                ),
             ) { tvBookSource?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookDate)?.setOnClickListener {
@@ -1160,19 +1336,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             ) { tvBookProperty?.text = it }
         }
         view?.findViewById<View>(R.id.rowBookMode)?.setOnClickListener {
-            // Web: ["Cash", "Cheque", "NEFT", "Online", "Loan"] —
-            // mobile had "Online Transfer" (non-matching) and was
-            // missing NEFT + Loan entirely.
             picker(
-                "Select Booking Mode",
-                listOf("Cash", "Cheque", "NEFT", "Online", "Loan"),
-            ) { tvBookMode?.text = it }
+                "Select Advance Booking Payment",
+                listOf("CASH", "UPI", "NEFT", "RTGS", "CHEQUE", "DD"),
+            ) {
+                tvBookMode?.text = it
+                applyAdvancePaymentVisibility()
+            }
         }
         view?.findViewById<View>(R.id.rowBookVisitYes)?.setOnClickListener {
-            bookIsAgainstVisit = YesNo.YES; refreshBookingRadios()
+            bookIsAgainstVisit = YesNo.YES
+            refreshBookingRadios()
+            groupBookSiteVisit?.visibility = View.VISIBLE
         }
         view?.findViewById<View>(R.id.rowBookVisitNo)?.setOnClickListener {
-            bookIsAgainstVisit = YesNo.NO; refreshBookingRadios()
+            bookIsAgainstVisit = YesNo.NO
+            refreshBookingRadios()
+            groupBookSiteVisit?.visibility = View.GONE
         }
         view?.findViewById<View>(R.id.rowBookDuplicate)?.setOnClickListener {
             bookDuplicate = !bookDuplicate
@@ -1183,8 +1363,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Charges picker
         view?.findViewById<View>(R.id.rowChargePromoTnc)?.setOnClickListener {
-            picker("Select Offers T&C", listOf("Default T&C", "Festive T&C", "Custom T&C")) {
+            picker(
+                "Select Terms & Conditions",
+                listOf(
+                    "Registration within 7 days",
+                    "Registration within 15 days",
+                    "Registration within 30 days",
+                ),
+            ) {
                 tvChargePromoTnc?.text = it
+                etChargeOfferValidity?.setText(it.filter(Char::isDigit))
             }
         }
 
@@ -1195,6 +1383,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 if (payGstApplicable) R.drawable.ic_outcome_checkbox_checked
                 else R.drawable.ic_outcome_checkbox_empty
             )
+            recomputeBookingFinanceDerivedFields()
+            scheduleDraftPushIfActive()
         }
         view?.findViewById<View>(R.id.rowPayOtherApplicable)?.setOnClickListener {
             payOtherApplicable = !payOtherApplicable
@@ -1202,6 +1392,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 if (payOtherApplicable) R.drawable.ic_outcome_checkbox_checked
                 else R.drawable.ic_outcome_checkbox_empty
             )
+            recomputeBookingFinanceDerivedFields()
+            scheduleDraftPushIfActive()
         }
         view?.findViewById<View>(R.id.rowPayPaymentMode)?.setOnClickListener {
             // Customer Payment Category — matches the web Booking
@@ -1259,6 +1451,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             pickDate(tvPay4Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
         }
         view?.findViewById<View>(R.id.rowPayPrefReg)?.setOnClickListener { pickDate(tvPayPrefReg) }
+        view?.findViewById<View>(R.id.rowPayInstrumentDate)?.setOnClickListener {
+            pickDate(tvPayInstrumentDate)
+        }
+        btnPayProofUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.ADVANCE_PROOF)
+        }
 
         // Staff pickers + radio
         view?.findViewById<View>(R.id.rowStaffAvp)?.setOnClickListener {
@@ -1277,7 +1475,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             pickBookingStaff("Select Telecaller", "telecaller") { bookingStaffTelecaller = it; tvStaffTelecaller?.text = it.name ?: "Selected" }
         }
         view?.findViewById<View>(R.id.rowStaffDocPrep)?.setOnClickListener {
-            picker("Document Language", listOf("English", "Tamil", "Hindi")) { tvStaffDocPrep?.text = it }
+            picker(
+                "Document Language",
+                listOf("English", "Kannada", "Tamil", "Telugu", "Hindi"),
+            ) { tvStaffDocPrep?.text = it }
+        }
+        val relations = listOf(
+            "Father", "Mother", "Spouse", "Brother", "Sister", "Son", "Daughter",
+            "Friend", "Colleague", "Neighbour", "Relative", "Other",
+        )
+        view?.findViewById<View>(R.id.rowStaffRefRelation1)?.setOnClickListener {
+            picker("Reference Relation 1", relations) { etStaffRefProf1?.setText(it) }
+        }
+        view?.findViewById<View>(R.id.rowStaffRefRelation2)?.setOnClickListener {
+            picker("Reference Relation 2", relations) { etStaffRefProf2?.setText(it) }
+        }
+        btnStaffAadhaarUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.AADHAAR)
+        }
+        btnStaffPanUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.PAN)
         }
         view?.findViewById<View>(R.id.rowStaffSaveDraft)?.setOnClickListener {
             staffSaveAs = SaveAs.DRAFT; refreshStaffSaveRadios()
@@ -1359,6 +1576,64 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (bookIsAgainstVisit == YesNo.NO) R.drawable.ic_outcome_radio_on
             else R.drawable.ic_outcome_radio_off
         )
+        groupBookSiteVisit?.visibility =
+            if (bookIsAgainstVisit == YesNo.YES) View.VISIBLE else View.GONE
+    }
+
+    private fun refreshBookingTypeSections() {
+        val type = textOrNull(tvBookType?.text).orEmpty()
+        val isConversion = type == "CONVERSION"
+        val isExchange = type == "EXCHANGE" || type == "INTERNAL EXCHANGE"
+        groupBookConversion?.visibility = if (isConversion) View.VISIBLE else View.GONE
+        groupBookExchange?.visibility = if (isExchange) View.VISIBLE else View.GONE
+
+        tvBookConversionSource?.text = if (bookConversionManualEntry) {
+            "Manual previous booking entry"
+        } else {
+            "Linked previous booking"
+        }
+        groupBookConversionManual?.visibility =
+            if (isConversion && bookConversionManualEntry) View.VISIBLE else View.GONE
+        groupBookConversionLinked?.visibility =
+            if (isConversion && !bookConversionManualEntry) View.VISIBLE else View.GONE
+
+        tvBookExchangeSource?.text = if (bookExchangeManualEntry) {
+            "Manual old property entry"
+        } else {
+            "Linked old property"
+        }
+        groupBookExchangeManual?.visibility =
+            if (isExchange && bookExchangeManualEntry) View.VISIBLE else View.GONE
+        groupBookExchangeLinkedInternal?.visibility =
+            if (type == "INTERNAL EXCHANGE" && !bookExchangeManualEntry) View.VISIBLE else View.GONE
+        groupBookExchangeLinked?.visibility =
+            if (isExchange && !bookExchangeManualEntry) View.VISIBLE else View.GONE
+        lblBookExchangeValue?.text = if (type == "EXCHANGE") "Exchange Value *" else "Exchange Value"
+        tvBookExchangeBalance?.visibility = if (type == "EXCHANGE") View.VISIBLE else View.GONE
+        updateExchangeBalance()
+    }
+
+    private fun updateExchangeBalance() {
+        if (textOrNull(tvBookType?.text) != "EXCHANGE") return
+        val total = calculatedTotalPayableAmount() ?: 0.0
+        val exchange = numberOrNull(etBookExchangeValue?.text) ?: 0.0
+        tvBookExchangeBalance?.text = String.format(
+            Locale.US,
+            "Balance Payable: ₹%,.0f",
+            (total - exchange).coerceAtLeast(0.0),
+        )
+    }
+
+    private fun calculatedTotalPayableAmount(): Double? {
+        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return null
+        val agreed = (bookingCost - (numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0))
+            .coerceAtLeast(0.0)
+        return agreed +
+            (numberOrNull(etPayRegCharges?.text) ?: 0.0) +
+            (if (payGstApplicable) numberOrNull(etPayGstAmount?.text) ?: 0.0 else 0.0) +
+            (numberOrNull(etPayDocCharges?.text) ?: 0.0) +
+            (numberOrNull(etPayPattaCharges?.text) ?: 0.0) +
+            (if (payOtherApplicable) numberOrNull(etPayOtherCharges?.text) ?: 0.0 else 0.0)
     }
 
     private fun refreshPaymentToggles() {
@@ -1465,7 +1740,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bodyBooking?.visibility = if (bookingActive && bookingSub == BookingSub.BOOKING)
             View.VISIBLE else View.GONE
         bodyCharges?.visibility = if (showBookingFinance) View.VISIBLE else View.GONE
-        bodyPayment?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
+        bodyPayment?.visibility = if (showBookingFinance || showPaymentStaff) View.VISIBLE else View.GONE
+        groupBookingChargesAdvance?.visibility =
+            if (showBookingFinance) View.VISIBLE else View.GONE
+        groupBookingPaymentSchedule?.visibility =
+            if (showPaymentStaff) View.VISIBLE else View.GONE
         bodyStaff?.visibility = if (showPaymentStaff) View.VISIBLE else View.GONE
         bodySiteVisit?.visibility = if (siteVisitActive) View.VISIBLE else View.GONE
         bodyPostpone?.visibility = if (postponeActive) View.VISIBLE else View.GONE
@@ -1571,6 +1850,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (name.isEmpty()) {
                 showError("Client name is required (Client Details tab)")
                 return
+            }
+            if (staffSaveAs == SaveAs.CONFIRMED) {
+                val bookingCost = numberOrNull(etChargeBookingCost?.text)
+                val advanceAmount = numberOrNull(etPayAdvanceAmount?.text)
+                val missing = confirmationMissingFields(bookingCost, advanceAmount)
+                if (missing.isNotEmpty()) {
+                    showError("Complete required field: ${missing.first()}")
+                    return
+                }
+                confirmationValidationError(bookingCost, advanceAmount)?.let {
+                    showError(it)
+                    return
+                }
             }
             persistBooking()
             return
@@ -1682,13 +1974,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val fields = listOf(
             // Client identity
             etFormName, etFormFather, etFormAltNumber, etFormWhatsApp,
-            etFormEmail, etFormHomeAddress, etFormPincode, etFormState,
-            etFormDistrict, etFormLocation,
+            etFormEmail, etFormHomeDoorNo, etFormHomeStreet,
+            etFormHomeAddress, etFormHomeAddressLine2, etFormPincode,
+            etFormState, etFormDistrict, etFormLocation,
             // Professional
-            etProfDesignation, etProfIncome,
+            etProfDesignation, etProfOtherDepartment, etProfIncome,
             // Office
             etOfficeName, etOfficeEmail, etOfficeMobile, etOfficePhone,
-            etOfficeAddress,
+            etOfficeDoorNo, etOfficeStreet, etOfficeAddress,
+            etOfficeAddressLine2, etOfficeArea, etOfficePincode,
         )
         fields.forEach { f ->
             f ?: return@forEach
@@ -1891,6 +2185,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 fill(etFormName, it.contactName ?: manual?.clientName ?: ai?.clientName)
                 fill(etFormEmail, it.emailId)
                 fill(etFormAltNumber, manual?.alternateMobileNumber ?: ai?.alternateMobileNumber)
+                fill(etFormHomeDoorNo, it.clientPlaceProfile?.doorNo ?: manual?.doorNo ?: ai?.doorNo)
                 fill(etFormHomeAddress, manual?.address ?: ai?.address ?: it.suggestedVisitAddress)
                 fill(etFormPincode, manual?.pincode ?: ai?.pincode)
                 fill(etFormState, manual?.state ?: ai?.state)
@@ -1942,6 +2237,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         fill(etFormDistrict, client.district)
         fill(etFormLocation, client.location)
         fillLabel(tvProfProfession, client.profession, "Select Profession")
+        val isSalaried = client.profession.equals("Salaried", ignoreCase = true)
+        groupProfDepartment?.visibility = if (isSalaried) View.VISIBLE else View.GONE
+        if (isSalaried) {
+            val department = client.department?.trim().orEmpty()
+            val standardDepartments = setOf("Admin", "Sales", "HR", "Software Developer")
+            if (department.isNotBlank()) {
+                if (department in standardDepartments) {
+                    tvProfDepartment?.text = department
+                    groupProfOtherDepartment?.visibility = View.GONE
+                } else {
+                    tvProfDepartment?.text = "Other"
+                    fill(etProfOtherDepartment, department)
+                    groupProfOtherDepartment?.visibility = View.VISIBLE
+                }
+            }
+        }
         fill(etProfDesignation, client.designation)
         fill(etProfIncome, client.incomePerAnnum)
         fill(etOfficeName, client.officeName)
@@ -2037,13 +2348,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etFormAltNumber" to et(etFormAltNumber),
             "etFormWhatsApp" to et(etFormWhatsApp),
             "etFormEmail" to et(etFormEmail),
+            "etFormHomeDoorNo" to et(etFormHomeDoorNo),
+            "etFormHomeStreet" to et(etFormHomeStreet),
             "etFormHomeAddress" to et(etFormHomeAddress),
+            "etFormHomeAddressLine2" to et(etFormHomeAddressLine2),
             "etFormPincode" to et(etFormPincode),
             "etFormState" to et(etFormState),
             "etFormDistrict" to et(etFormDistrict),
             "etFormLocation" to et(etFormLocation),
             // Professional
             "tvProfProfession" to tv(tvProfProfession),
+            "tvProfDepartment" to tv(tvProfDepartment),
+            "etProfOtherDepartment" to et(etProfOtherDepartment),
             "etProfDesignation" to et(etProfDesignation),
             "etProfIncome" to et(etProfIncome),
             // Office
@@ -2051,16 +2367,42 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etOfficeEmail" to et(etOfficeEmail),
             "etOfficeMobile" to et(etOfficeMobile),
             "etOfficePhone" to et(etOfficePhone),
+            "etOfficeDoorNo" to et(etOfficeDoorNo),
+            "etOfficeStreet" to et(etOfficeStreet),
             "etOfficeAddress" to et(etOfficeAddress),
+            "etOfficeAddressLine2" to et(etOfficeAddressLine2),
+            "etOfficeArea" to et(etOfficeArea),
+            "etOfficePincode" to et(etOfficePincode),
             // Booking
             "tvBookType" to tv(tvBookType),
+            "bookConversionManualEntry" to bookConversionManualEntry.toString(),
+            "etBookConversionProject" to et(etBookConversionProject),
+            "etBookConversionPlot" to et(etBookConversionPlot),
+            "etBookConversionCredit" to et(etBookConversionCredit),
+            "etBookConversionNotes" to et(etBookConversionNotes),
+            "etBookConversionSourceBooking" to et(etBookConversionSourceBooking),
+            "bookExchangeManualEntry" to bookExchangeManualEntry.toString(),
+            "etBookExchangeProject" to et(etBookExchangeProject),
+            "etBookExchangePlot" to et(etBookExchangePlot),
+            "etBookExchangeExtent" to et(etBookExchangeExtent),
+            "etBookExchangeLookupProject" to et(etBookExchangeLookupProject),
+            "etBookExchangeLookupPlot" to et(etBookExchangeLookupPlot),
+            "etBookExchangeMobile" to et(etBookExchangeMobile),
+            "etBookExchangeSourceBooking" to et(etBookExchangeSourceBooking),
+            "etBookExchangeValue" to et(etBookExchangeValue),
+            "etBookExchangeNotes" to et(etBookExchangeNotes),
             "tvBookSource" to tv(tvBookSource),
+            "etBookSourceName" to et(etBookSourceName),
+            "etBookSourceMobile" to et(etBookSourceMobile),
+            "etBookReferralBenefit" to et(etBookReferralBenefit),
             "etBookCef" to et(etBookCef),
             "tvBookDate" to tv(tvBookDate),
             "tvBookProject" to tv(tvBookProject),
             "tvBookPlot" to tv(tvBookPlot),
             "tvBookProperty" to tv(tvBookProperty),
             "tvBookMode" to tv(tvBookMode),
+            "etBookSvName" to et(etBookSvName),
+            "etBookSvMobile" to et(etBookSvMobile),
             // Charges
             "etChargeBookingCost" to et(etChargeBookingCost),
             "etChargeGuidelineValue" to et(etChargeGuidelineValue),
@@ -2081,6 +2423,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etPayPattaCharges" to et(etPayPattaCharges),
             "etPayOtherCharges" to et(etPayOtherCharges),
             "etPayAdvanceAmount" to et(etPayAdvanceAmount),
+            "etPayTransactionId" to et(etPayTransactionId),
+            "advanceProofStorageId" to advanceProofStorageId,
+            "advanceProofFileName" to advanceProofFileName,
+            "etPayInstrumentNo" to et(etPayInstrumentNo),
+            "etPayBankName" to et(etPayBankName),
+            "etPayBankBranch" to et(etPayBankBranch),
+            "tvPayInstrumentDate" to tv(tvPayInstrumentDate),
             "tvPayAllotDate" to tv(tvPayAllotDate),
             "etPayAllotDue" to et(etPayAllotDue),
             "tvPay2Date" to tv(tvPay2Date),
@@ -2097,7 +2446,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "tvStaffBdo" to tv(tvStaffBdo),
             "tvStaffTelecaller" to tv(tvStaffTelecaller),
             "etStaffAadhar" to et(etStaffAadhar),
+            "aadhaarDocumentStorageId" to aadhaarDocumentStorageId,
+            "aadhaarDocumentFileName" to aadhaarDocumentFileName,
             "etStaffPancard" to et(etStaffPancard),
+            "panDocumentStorageId" to panDocumentStorageId,
+            "panDocumentFileName" to panDocumentFileName,
             "tvStaffDocPrep" to tv(tvStaffDocPrep),
             // References
             "etStaffRefName1" to et(etStaffRefName1),
@@ -2111,6 +2464,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // (projectId/plotId) plus the Special-plan gate.
             "bookingProjectId" to bookingProject?.id,
             "bookingUnitId" to bookingUnit?.id,
+            "bookingStaffAvpId" to bookingStaffAvp?.id,
+            "bookingStaffGmId" to bookingStaffGm?.id,
+            "bookingStaffSmId" to bookingStaffSm?.id,
+            "bookingStaffBdoId" to bookingStaffBdo?.id,
+            "bookingStaffTelecallerId" to bookingStaffTelecaller?.id,
+            "bookIsAgainstVisit" to bookIsAgainstVisit.name,
+            "bookDuplicate" to bookDuplicate.toString(),
+            "payGstApplicable" to payGstApplicable.toString(),
+            "payOtherApplicable" to payOtherApplicable.toString(),
+            "staffSaveAs" to staffSaveAs.name,
         )
     }
 
@@ -2135,27 +2498,60 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etFormAltNumber, "etFormAltNumber")
             et(etFormWhatsApp, "etFormWhatsApp")
             et(etFormEmail, "etFormEmail")
+            et(etFormHomeDoorNo, "etFormHomeDoorNo")
+            et(etFormHomeStreet, "etFormHomeStreet")
             et(etFormHomeAddress, "etFormHomeAddress")
+            et(etFormHomeAddressLine2, "etFormHomeAddressLine2")
             et(etFormPincode, "etFormPincode")
             et(etFormState, "etFormState")
             et(etFormDistrict, "etFormDistrict")
             et(etFormLocation, "etFormLocation")
             tv(tvProfProfession, "tvProfProfession")
+            tv(tvProfDepartment, "tvProfDepartment")
+            et(etProfOtherDepartment, "etProfOtherDepartment")
             et(etProfDesignation, "etProfDesignation")
             et(etProfIncome, "etProfIncome")
             et(etOfficeName, "etOfficeName")
             et(etOfficeEmail, "etOfficeEmail")
             et(etOfficeMobile, "etOfficeMobile")
             et(etOfficePhone, "etOfficePhone")
+            et(etOfficeDoorNo, "etOfficeDoorNo")
+            et(etOfficeStreet, "etOfficeStreet")
             et(etOfficeAddress, "etOfficeAddress")
+            et(etOfficeAddressLine2, "etOfficeAddressLine2")
+            et(etOfficeArea, "etOfficeArea")
+            et(etOfficePincode, "etOfficePincode")
             tv(tvBookType, "tvBookType")
+            bookConversionManualEntry =
+                map["bookConversionManualEntry"]?.toBooleanStrictOrNull() ?: true
+            et(etBookConversionProject, "etBookConversionProject")
+            et(etBookConversionPlot, "etBookConversionPlot")
+            et(etBookConversionCredit, "etBookConversionCredit")
+            et(etBookConversionNotes, "etBookConversionNotes")
+            et(etBookConversionSourceBooking, "etBookConversionSourceBooking")
+            bookExchangeManualEntry =
+                map["bookExchangeManualEntry"]?.toBooleanStrictOrNull() ?: true
+            et(etBookExchangeProject, "etBookExchangeProject")
+            et(etBookExchangePlot, "etBookExchangePlot")
+            et(etBookExchangeExtent, "etBookExchangeExtent")
+            et(etBookExchangeLookupProject, "etBookExchangeLookupProject")
+            et(etBookExchangeLookupPlot, "etBookExchangeLookupPlot")
+            et(etBookExchangeMobile, "etBookExchangeMobile")
+            et(etBookExchangeSourceBooking, "etBookExchangeSourceBooking")
+            et(etBookExchangeValue, "etBookExchangeValue")
+            et(etBookExchangeNotes, "etBookExchangeNotes")
             tv(tvBookSource, "tvBookSource")
+            et(etBookSourceName, "etBookSourceName")
+            et(etBookSourceMobile, "etBookSourceMobile")
+            et(etBookReferralBenefit, "etBookReferralBenefit")
             et(etBookCef, "etBookCef")
             tv(tvBookDate, "tvBookDate")
             tv(tvBookProject, "tvBookProject")
             tv(tvBookPlot, "tvBookPlot")
             tv(tvBookProperty, "tvBookProperty")
             tv(tvBookMode, "tvBookMode")
+            et(etBookSvName, "etBookSvName")
+            et(etBookSvMobile, "etBookSvMobile")
             et(etChargeBookingCost, "etChargeBookingCost")
             et(etChargeGuidelineValue, "etChargeGuidelineValue")
             et(etChargeSpecialConsideration, "etChargeSpecialConsideration")
@@ -2179,6 +2575,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etPayPattaCharges, "etPayPattaCharges")
             et(etPayOtherCharges, "etPayOtherCharges")
             et(etPayAdvanceAmount, "etPayAdvanceAmount")
+            et(etPayTransactionId, "etPayTransactionId")
+            advanceProofStorageId = map["advanceProofStorageId"]?.takeIf { it.isNotBlank() }
+            advanceProofFileName = map["advanceProofFileName"]?.takeIf { it.isNotBlank() }
+            btnPayProofUpload?.text = advanceProofFileName?.let { "✓ $it" } ?: "Choose file"
+            et(etPayInstrumentNo, "etPayInstrumentNo")
+            et(etPayBankName, "etPayBankName")
+            et(etPayBankBranch, "etPayBankBranch")
+            tv(tvPayInstrumentDate, "tvPayInstrumentDate")
             tv(tvPayAllotDate, "tvPayAllotDate")
             et(etPayAllotDue, "etPayAllotDue")
             tv(tvPay2Date, "tvPay2Date")
@@ -2194,7 +2598,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             tv(tvStaffBdo, "tvStaffBdo")
             tv(tvStaffTelecaller, "tvStaffTelecaller")
             et(etStaffAadhar, "etStaffAadhar")
+            aadhaarDocumentStorageId = map["aadhaarDocumentStorageId"]?.takeIf { it.isNotBlank() }
+            aadhaarDocumentFileName = map["aadhaarDocumentFileName"]?.takeIf { it.isNotBlank() }
+            btnStaffAadhaarUpload?.text = aadhaarDocumentFileName?.let { "✓ $it" } ?: "Choose file"
             et(etStaffPancard, "etStaffPancard")
+            panDocumentStorageId = map["panDocumentStorageId"]?.takeIf { it.isNotBlank() }
+            panDocumentFileName = map["panDocumentFileName"]?.takeIf { it.isNotBlank() }
+            btnStaffPanUpload?.text = panDocumentFileName?.let { "✓ $it" } ?: "Choose file"
             tv(tvStaffDocPrep, "tvStaffDocPrep")
             et(etStaffRefName1, "etStaffRefName1")
             et(etStaffRefMobile1, "etStaffRefMobile1")
@@ -2202,7 +2612,47 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etStaffRefName2, "etStaffRefName2")
             et(etStaffRefMobile2, "etStaffRefMobile2")
             et(etStaffRefProf2, "etStaffRefProf2")
+            fun restoredStaff(idKey: String, labelKey: String): StaffData? {
+                val id = map[idKey]?.takeIf { it.isNotBlank() } ?: return null
+                return StaffData(
+                    id = id,
+                    name = map[labelKey]?.takeIf { it.isNotBlank() },
+                    phone = null,
+                    role = null,
+                    designation = null,
+                    status = null,
+                    employeeId = null,
+                    department = null,
+                )
+            }
+            bookingStaffAvp = restoredStaff("bookingStaffAvpId", "tvStaffAvp")
+            bookingStaffGm = restoredStaff("bookingStaffGmId", "tvStaffGm")
+            bookingStaffSm = restoredStaff("bookingStaffSmId", "tvStaffSm")
+            bookingStaffBdo = restoredStaff("bookingStaffBdoId", "tvStaffBdo")
+            bookingStaffTelecaller = restoredStaff("bookingStaffTelecallerId", "tvStaffTelecaller")
+            bookIsAgainstVisit = runCatching {
+                YesNo.valueOf(map["bookIsAgainstVisit"].orEmpty())
+            }.getOrDefault(YesNo.YES)
+            bookDuplicate = map["bookDuplicate"]?.toBooleanStrictOrNull() ?: bookDuplicate
+            payGstApplicable = map["payGstApplicable"]?.toBooleanStrictOrNull() ?: payGstApplicable
+            payOtherApplicable = map["payOtherApplicable"]?.toBooleanStrictOrNull() ?: payOtherApplicable
+            staffSaveAs = runCatching {
+                SaveAs.valueOf(map["staffSaveAs"].orEmpty())
+            }.getOrDefault(SaveAs.DRAFT)
             restoreBookingSelections(map)
+            refreshBookingTypeSections()
+            groupProfDepartment?.visibility =
+                if (tvProfProfession?.text?.toString() == "Salaried") View.VISIBLE else View.GONE
+            groupProfOtherDepartment?.visibility =
+                if (tvProfProfession?.text?.toString() == "Salaried" &&
+                    tvProfDepartment?.text?.toString() == "Other"
+                ) View.VISIBLE else View.GONE
+            refreshBookingRadios()
+            refreshPaymentToggles()
+            refreshStaffSaveRadios()
+            applySpecialConsiderationVisibility()
+            applyAdvancePaymentVisibility()
+            applyLoanAmountVisibility()
         } finally {
             draftSuppressSave = false
         }
@@ -2234,6 +2684,44 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
             }
             resolveProjectSpecialPaymentFlag(projectId)
+            // Replace the lightweight draft placeholders with the current
+            // server objects. This restores minimum-advance validation and
+            // also re-checks that the saved plot is still bookable.
+            viewLifecycleOwner.lifecycleScope.launch {
+                val projects = runCatching { api.getMarketingProjects(session.bearerToken) }
+                    .getOrNull()?.takeIf { it.success }?.projects.orEmpty()
+                val liveProject = projects.firstOrNull { it.id == projectId }
+                if (!isAdded || bookingProject?.id != projectId) return@launch
+                if (liveProject != null) {
+                    bookingProject = liveProject
+                    bookingProjectCache = projects.filter {
+                        it.status?.trim()?.lowercase(Locale.US) == "ongoing"
+                    }
+                    updateMinimumAdvanceHint(liveProject)
+                    if (liveProject.specialPaymentEnabled == null) {
+                        resolveProjectSpecialPaymentFlag(liveProject.id)
+                    } else {
+                        ensurePaymentPlanAllowed()
+                    }
+                }
+                if (unitId == null) return@launch
+                val units = runCatching {
+                    api.listInventoryUnits(session.bearerToken, projectId)
+                }.getOrNull()?.takeIf { it.success }?.units.orEmpty()
+                    .filter(::isAvailableForBooking)
+                if (!isAdded || bookingProject?.id != projectId) return@launch
+                bookingUnitCacheProjectId = projectId
+                bookingUnitCache = units
+                val liveUnit = units.firstOrNull { it.id == unitId }
+                if (liveUnit != null) {
+                    bookingUnit = liveUnit
+                    tvBookPlot?.text = liveUnit.unitNumber ?: plotLabel ?: "Selected"
+                } else {
+                    bookingUnit = null
+                    tvBookPlot?.text = "Select Plot"
+                    showError("The plot saved in this draft is no longer available")
+                }
+            }
             return
         }
 
@@ -2249,6 +2737,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             } ?: return@launch
             if (!isAdded || bookingProject != null) return@launch
             bookingProject = project
+            updateMinimumAdvanceHint(project)
             if (project.specialPaymentEnabled == null) {
                 resolveProjectSpecialPaymentFlag(project.id)
             } else {
@@ -2256,10 +2745,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
             if (plotLabel == null || bookingUnit != null) return@launch
             val units = runCatching {
-                api.listInventoryUnits(
-                    session.bearerToken, project.id, status = "available",
-                )
+                api.listInventoryUnits(session.bearerToken, project.id)
             }.getOrNull()?.takeIf { it.success }?.units.orEmpty()
+                .filter(::isAvailableForBooking)
             val unit = units.firstOrNull {
                 (it.unitNumber ?: it.id).trim().equals(plotLabel, ignoreCase = true)
             } ?: return@launch
@@ -2303,15 +2791,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val editTexts = listOf(
             etClientMobile, etFormName, etFormFather, etFormAltNumber,
-            etFormWhatsApp, etFormEmail, etFormHomeAddress, etFormPincode,
+            etFormWhatsApp, etFormEmail, etFormHomeDoorNo, etFormHomeStreet,
+            etFormHomeAddress, etFormHomeAddressLine2, etFormPincode,
             etFormState, etFormDistrict, etFormLocation, etProfDesignation,
-            etProfIncome, etOfficeName, etOfficeEmail, etOfficeMobile,
-            etOfficePhone, etOfficeAddress, etBookCef, etChargeBookingCost,
+            etProfOtherDepartment, etProfIncome, etOfficeName, etOfficeEmail, etOfficeMobile,
+            etOfficePhone, etOfficeDoorNo, etOfficeStreet, etOfficeAddress,
+            etOfficeAddressLine2, etOfficeArea, etOfficePincode,
+            etBookConversionProject, etBookConversionPlot, etBookConversionCredit,
+            etBookConversionNotes, etBookConversionSourceBooking,
+            etBookExchangeProject, etBookExchangePlot, etBookExchangeExtent,
+            etBookExchangeLookupProject, etBookExchangeLookupPlot,
+            etBookExchangeMobile, etBookExchangeSourceBooking,
+            etBookExchangeValue, etBookExchangeNotes,
+            etBookSourceName, etBookSourceMobile, etBookReferralBenefit,
+            etBookSvName, etBookSvMobile, etBookCef, etChargeBookingCost,
             etChargeGuidelineValue, etChargeSpecialConsideration,
             etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
             etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
             etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
-            etPayOtherCharges, etPayAdvanceAmount, etPayAllotDue, etPay2Mode,
+            etPayOtherCharges, etPayAdvanceAmount, etPayTransactionId,
+            etPayInstrumentNo, etPayBankName, etPayBankBranch,
+            etPayAllotDue, etPay2Mode,
             etPay3Mode, etPay4Mode, etStaffAadhar, etStaffPancard,
             etStaffRefName1, etStaffRefMobile1, etStaffRefProf1,
             etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
@@ -2375,24 +2875,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!isStandaloneBookingMode) return
         listOf(
             etClientMobile, tvFormPhone as? EditText, etFormName, etFormFather,
-            etFormAltNumber, etFormWhatsApp, etFormEmail, etFormHomeAddress,
+            etFormAltNumber, etFormWhatsApp, etFormEmail, etFormHomeDoorNo,
+            etFormHomeStreet, etFormHomeAddress, etFormHomeAddressLine2,
             etFormPincode, etFormState, etFormDistrict, etFormLocation,
-            etProfDesignation, etProfIncome, etOfficeName, etOfficeEmail,
-            etOfficeMobile, etOfficePhone, etOfficeAddress, etBookCef,
+            etProfDesignation, etProfOtherDepartment, etProfIncome, etOfficeName, etOfficeEmail,
+            etOfficeMobile, etOfficePhone, etOfficeDoorNo, etOfficeStreet,
+            etOfficeAddress, etOfficeAddressLine2, etOfficeArea, etOfficePincode,
+            etBookConversionProject, etBookConversionPlot, etBookConversionCredit,
+            etBookConversionNotes, etBookConversionSourceBooking,
+            etBookExchangeProject, etBookExchangePlot, etBookExchangeExtent,
+            etBookExchangeLookupProject, etBookExchangeLookupPlot,
+            etBookExchangeMobile, etBookExchangeSourceBooking,
+            etBookExchangeValue, etBookExchangeNotes,
+            etBookSourceName, etBookSourceMobile, etBookReferralBenefit,
+            etBookSvName, etBookSvMobile, etBookCef,
             etChargeBookingCost, etChargeGuidelineValue, etChargeSpecialConsideration,
             etChargeDiscountApprovedBy, etChargeScReason, etChargeScValidity,
             etChargePromoOffers, etChargePromoValue, etChargeOfferValidity,
             etPayRegCharges, etPayGstAmount, etPayDocCharges, etPayPattaCharges,
-            etPayOtherCharges,
+            etPayOtherCharges, etPayLoanAmount, etPayTransactionId,
+            etPayInstrumentNo, etPayBankName, etPayBankBranch,
             etPayAdvanceAmount, etPayAllotDue, etPay2Mode, etPay3Mode, etPay4Mode,
             etStaffAadhar, etStaffPancard, etStaffRefName1, etStaffRefMobile1,
             etStaffRefProf1, etStaffRefName2, etStaffRefMobile2, etStaffRefProf2,
         ).forEach { it?.setText("") }
         listOf(
             tvFormTitle, tvFormDob, tvFormAnniversary, tvFormNationality,
-            tvProfProfession, tvBookType, tvBookSource, tvBookProject,
+            tvProfProfession, tvProfDepartment, tvBookType, tvBookSource, tvBookProject,
             tvBookPlot, tvBookProperty, tvBookMode, tvChargePromoTnc,
-            tvPayPaymentMode, tvPayAllotDate, tvPay2Date, tvPay3Date,
+            tvPayPaymentMode, tvPayInstrumentDate, tvPayAllotDate, tvPay2Date, tvPay3Date,
             tvPay4Date, tvPayPrefReg, tvStaffAvp, tvStaffGm, tvStaffSm,
             tvStaffBdo, tvStaffTelecaller, tvStaffDocPrep,
         ).forEach { it?.text = "" }
@@ -2410,6 +2921,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         lastEnrichedBookingPincode = null
         lastBookingPrefillKey = null
         bookingGstPercent = null
+        bookConversionManualEntry = true
+        bookExchangeManualEntry = true
         bookIsAgainstVisit = YesNo.YES
         bookDuplicate = false
         payGstApplicable = true
@@ -2420,13 +2933,26 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         clientImageStorageId = null
         clientImageFileName = null
         clientImageLocalUri = null
+        advanceProofStorageId = null
+        advanceProofFileName = null
+        aadhaarDocumentStorageId = null
+        aadhaarDocumentFileName = null
+        panDocumentStorageId = null
+        panDocumentFileName = null
+        btnPayProofUpload?.text = "Choose file"
+        btnStaffAadhaarUpload?.text = "Choose file"
+        btnStaffPanUpload?.text = "Choose file"
         renderClientImage()
         staffSaveAs = SaveAs.DRAFT
         bookingSub = BookingSub.CLIENT
         bookingStep = BookingStep.CLIENT_FORM
         applyEditModeToFields(true)
         refreshBookingRadios()
+        refreshBookingTypeSections()
         refreshPaymentToggles()
+        applySpecialConsiderationVisibility()
+        applyAdvancePaymentVisibility()
+        applyLoanAmountVisibility()
         refreshStaffSaveRadios()
         clearError()
         renderState()
@@ -2449,6 +2975,33 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!isLoanCustomer) {
             etPayLoanAmount?.text?.clear()
         }
+    }
+
+    private fun applySpecialConsiderationVisibility() {
+        val visible = (numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0) > 0.0
+        val state = if (visible) View.VISIBLE else View.GONE
+        listOf(
+            R.id.lblChargeDiscountApprovedBy,
+            R.id.rowChargeDiscountApprovedBy,
+            R.id.lblChargeScReason,
+            R.id.rowChargeScReason,
+            R.id.lblChargeScValidity,
+            R.id.rowChargeScValidity,
+        ).forEach { id -> view?.findViewById<View>(id)?.visibility = state }
+        if (!visible) {
+            etChargeDiscountApprovedBy?.text?.clear()
+            etChargeScReason?.text?.clear()
+            etChargeScValidity?.text?.clear()
+        }
+    }
+
+    private fun applyAdvancePaymentVisibility() {
+        val mode = textOrNull(tvBookMode?.text)?.uppercase(Locale.US).orEmpty()
+        groupPayDigitalProof?.visibility =
+            if (mode in setOf("UPI", "NEFT", "RTGS")) View.VISIBLE else View.GONE
+        groupPayInstrument?.visibility =
+            if (mode in setOf("CHEQUE", "DD")) View.VISIBLE else View.GONE
+        lblPayInstrumentNo?.text = if (mode == "DD") "DD No *" else "Cheque No *"
     }
 
     /**
@@ -2543,8 +3096,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     showError(resp.error ?: "No projects available")
                     return@launch
                 }
-                bookingProjectCache = resp.projects
-                showBookingProjectPicker(resp.projects)
+                val ongoing = resp.projects.filter {
+                    it.status?.trim()?.lowercase(Locale.US) == "ongoing"
+                }
+                if (ongoing.isEmpty()) {
+                    showError("No ongoing projects available")
+                    return@launch
+                }
+                bookingProjectCache = ongoing
+                showBookingProjectPicker(ongoing)
             } catch (e: Exception) {
                 showError(e.message ?: "Failed to load projects")
             }
@@ -2574,6 +3134,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             bookingGstPercent = null
             tvBookProject?.text = project.name ?: "Selected"
             tvBookPlot?.text = "Select Plot"
+            updateMinimumAdvanceHint(project)
             // A different project may not allow the Special plan.
             plotPrefillSpecialPayment = false
             projectDetailSpecialPayment = false
@@ -2584,6 +3145,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 resolveProjectSpecialPaymentFlag(project.id)
             }
         }
+    }
+
+    private fun updateMinimumAdvanceHint(project: MarketingProject?) {
+        tvPayMinimumAdvance?.text = String.format(
+            Locale.US,
+            "Project minimum: ₹%,.0f. Higher advance is allowed.",
+            project?.minimumAdvanceAmount ?: 0.0,
+        )
     }
 
     private fun pickBookingUnit() {
@@ -2598,16 +3167,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Fetch every unit then apply the public/raw status mapping on
+                // device. Older deployments stored bookable rows as raw
+                // "available" while newer responses expose a normalized
+                // public status; server-side filtering alone could therefore
+                // return an empty picker for projects such as Rajan test.
                 val resp = api.listInventoryUnits(
                     token = session.bearerToken,
                     projectId = project.id,
-                    status = "available",
                 )
                 if (!resp.success) {
                     showError(resp.error ?: "Failed to load plots")
                     return@launch
                 }
-                val available = resp.units.filter { it.status == "available" }
+                val available = resp.units.filter(::isAvailableForBooking)
                 if (available.isEmpty()) {
                     showError("No available plots in this project")
                     return@launch
@@ -2643,7 +3216,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             },
             emptyMessage = "No plots found",
         ) { unit ->
-            if (unit.status != "available") {
+            if (!isAvailableForBooking(unit)) {
                 showError("Selected plot is no longer available")
                 return@show
             }
@@ -2652,6 +3225,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             loadBookingPlotPrefill(force = true)
         }
     }
+
+    private fun isAvailableForBooking(unit: InventoryUnit): Boolean =
+        unit.status.trim().equals("available", ignoreCase = true) ||
+            unit.rawStatus?.trim()?.equals("available", ignoreCase = true) == true
 
     private fun loadBookingPlotPrefill(force: Boolean = false) {
         val unit = bookingUnit ?: return
@@ -2732,6 +3309,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun recomputeBookingFinanceDerivedFields() {
+        updateExchangeBalance()
         val gstPercent = bookingGstPercent ?: return
         if (!payGstApplicable) return
         val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return
@@ -3605,6 +4183,80 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun chooseBookingDocument(kind: BookingDocumentKind) {
+        pendingBookingDocumentKind = kind
+        pickBookingDocument.launch(arrayOf("application/pdf", "image/*"))
+    }
+
+    private fun uploadBookingDocument(uri: Uri, kind: BookingDocumentKind) {
+        val ctx = context ?: return
+        val target = when (kind) {
+            BookingDocumentKind.ADVANCE_PROOF -> btnPayProofUpload
+            BookingDocumentKind.AADHAAR -> btnStaffAadhaarUpload
+            BookingDocumentKind.PAN -> btnStaffPanUpload
+        }
+        target?.text = "Uploading…"
+        target?.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            val displayName = resolveDocumentName(uri)
+            val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
+            val uploaded = runCatching {
+                withContext(Dispatchers.IO) {
+                    val suffix = displayName.substringAfterLast('.', "bin").take(8)
+                    val temp = java.io.File.createTempFile("booking_doc_", ".$suffix", ctx.cacheDir)
+                    try {
+                        ctx.contentResolver.openInputStream(uri).use { input ->
+                            requireNotNull(input) { "Unable to read selected file" }
+                            temp.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        StorageUploader.upload(api, session.bearerToken, temp, contentType = mime)
+                    } finally {
+                        temp.delete()
+                    }
+                }
+            }.getOrNull()
+            if (!isAdded) return@launch
+            target?.isEnabled = true
+            val storageId = uploaded?.storageId
+            if (storageId.isNullOrBlank()) {
+                target?.text = "Choose file"
+                Toast.makeText(
+                    requireContext(),
+                    uploaded?.errorMessage ?: "Couldn't upload the selected file",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return@launch
+            }
+            when (kind) {
+                BookingDocumentKind.ADVANCE_PROOF -> {
+                    advanceProofStorageId = storageId
+                    advanceProofFileName = displayName
+                }
+                BookingDocumentKind.AADHAAR -> {
+                    aadhaarDocumentStorageId = storageId
+                    aadhaarDocumentFileName = displayName
+                }
+                BookingDocumentKind.PAN -> {
+                    panDocumentStorageId = storageId
+                    panDocumentFileName = displayName
+                }
+            }
+            target?.text = "✓ $displayName"
+            scheduleDraftPushIfActive()
+        }
+    }
+
+    private fun resolveDocumentName(uri: Uri): String {
+        val cursor = context?.contentResolver?.query(uri, null, null, null, null)
+        cursor?.use {
+            val index = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && it.moveToFirst()) {
+                it.getString(index)?.takeIf(String::isNotBlank)?.let { name -> return name }
+            }
+        }
+        return "booking-document"
+    }
+
     private fun bookingDateForApi(): String? {
         val raw = tvBookDate?.text?.toString()?.trim().orEmpty()
         if (raw.isEmpty() || raw.equals("dd/mm/yyyy", ignoreCase = true)) return null
@@ -3758,6 +4410,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun numberOrNull(value: CharSequence?): Double? =
         value?.toString()?.trim()?.replace(",", "")?.takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
+    private fun composeAddress(vararg parts: CharSequence?): String? =
+        parts.mapNotNull(::textOrNull).joinToString(", ").takeIf { it.isNotBlank() }
+
     private fun buildBookingRequest(
         sourceType: String,
         cpVisitId: String? = null,
@@ -3795,6 +4450,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val bookingCost = numberOrNull(etChargeBookingCost?.text)
         val advanceAmount = numberOrNull(etPayAdvanceAmount?.text)
+        val bookingType = textOrNull(tvBookType?.text)
+        val isExchange = bookingType == "EXCHANGE" || bookingType == "INTERNAL EXCHANGE"
+        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        val agreedAmount = bookingCost?.minus(specialConsideration)
+        val exchangeValue = numberOrNull(etBookExchangeValue?.text)
+        val totalPayable = calculatedTotalPayableAmount()
         return CreateBookingRequest(
             clientName = name,
             mobileNumber = phone,
@@ -3811,12 +4472,31 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             whatsappNumber = textOrNull(etFormWhatsApp?.text),
             email = textOrNull(etFormEmail?.text),
             pincode = textOrNull(etFormPincode?.text),
-            homeAddress = textOrNull(etFormHomeAddress?.text),
+            homeAddress = composeAddress(
+                etFormHomeDoorNo?.text,
+                etFormHomeStreet?.text,
+                etFormHomeAddress?.text,
+                etFormHomeAddressLine2?.text,
+            ),
             profession = textOrNull(tvProfProfession?.text),
             designation = textOrNull(etProfDesignation?.text),
+            department = if (textOrNull(tvProfProfession?.text) == "Salaried") {
+                if (textOrNull(tvProfDepartment?.text) == "Other") {
+                    textOrNull(etProfOtherDepartment?.text)
+                } else {
+                    textOrNull(tvProfDepartment?.text)
+                }
+            } else null,
             incomePerAnnum = textOrNull(etProfIncome?.text),
             officeName = textOrNull(etOfficeName?.text),
-            officeAddress = textOrNull(etOfficeAddress?.text),
+            officeAddress = composeAddress(
+                etOfficeDoorNo?.text,
+                etOfficeStreet?.text,
+                etOfficeAddress?.text,
+                etOfficeAddressLine2?.text,
+            ),
+            officeArea = textOrNull(etOfficeArea?.text),
+            officePincode = textOrNull(etOfficePincode?.text),
             state = textOrNull(etFormState?.text),
             district = textOrNull(etFormDistrict?.text),
             location = textOrNull(etFormLocation?.text),
@@ -3827,12 +4507,53 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             projectId = project?.id,
             plotId = unit?.id,
             plotNo = unit?.unitNumber,
-            bookingType = textOrNull(tvBookType?.text),
+            bookingType = bookingType,
+            conversionManualEntry = if (bookingType == "CONVERSION") bookConversionManualEntry else null,
+            manualConversionProjectName = if (bookingType == "CONVERSION" && bookConversionManualEntry)
+                textOrNull(etBookConversionProject?.text) else null,
+            manualConversionPlotNo = if (bookingType == "CONVERSION" && bookConversionManualEntry)
+                textOrNull(etBookConversionPlot?.text) else null,
+            manualConversionCredit = if (bookingType == "CONVERSION" && bookConversionManualEntry)
+                numberOrNull(etBookConversionCredit?.text) else null,
+            conversionNotes = if (bookingType == "CONVERSION" && bookConversionManualEntry)
+                textOrNull(etBookConversionNotes?.text) else null,
+            sourceExchangeBookingId = when {
+                bookingType == "CONVERSION" && !bookConversionManualEntry ->
+                    textOrNull(etBookConversionSourceBooking?.text)
+                isExchange && !bookExchangeManualEntry ->
+                    textOrNull(etBookExchangeSourceBooking?.text)
+                else -> null
+            },
+            exchangeManualEntry = if (isExchange) bookExchangeManualEntry else null,
+            exchangeLookupProjectId = if (bookingType == "INTERNAL EXCHANGE" && !bookExchangeManualEntry)
+                textOrNull(etBookExchangeLookupProject?.text) else null,
+            exchangeLookupPlotNo = if (bookingType == "INTERNAL EXCHANGE" && !bookExchangeManualEntry)
+                textOrNull(etBookExchangeLookupPlot?.text) else null,
+            exchangeConnectedMobileNumber = if (bookingType == "INTERNAL EXCHANGE" && !bookExchangeManualEntry)
+                textOrNull(etBookExchangeMobile?.text)?.filter(Char::isDigit) else null,
+            manualExchangeProjectName = if (isExchange && bookExchangeManualEntry)
+                textOrNull(etBookExchangeProject?.text) else null,
+            manualExchangePlotNo = if (isExchange && bookExchangeManualEntry)
+                textOrNull(etBookExchangePlot?.text) else null,
+            manualExchangeExtentSqft = if (isExchange && bookExchangeManualEntry)
+                numberOrNull(etBookExchangeExtent?.text) else null,
+            exchangeOldRegisteredValue = if (isExchange) exchangeValue else null,
+            exchangeNewValue = if (bookingType == "EXCHANGE") agreedAmount else null,
+            exchangeBalancePayable = if (bookingType == "EXCHANGE") {
+                ((totalPayable ?: 0.0) - (exchangeValue ?: 0.0)).coerceAtLeast(0.0)
+            } else null,
+            exchangeNotes = if (isExchange) textOrNull(etBookExchangeNotes?.text) else null,
             cefNo = textOrNull(etBookCef?.text),
             isDuplicateBooking = bookDuplicate,
             isAgainstSV = bookIsAgainstVisit == YesNo.YES,
+            svName = if (bookIsAgainstVisit == YesNo.YES) textOrNull(etBookSvName?.text) else null,
+            svMobileNo = if (bookIsAgainstVisit == YesNo.YES) textOrNull(etBookSvMobile?.text) else null,
             propertyType = textOrNull(tvBookProperty?.text),
             bookingMode = textOrNull(tvBookMode?.text),
+            clientSource = textOrNull(tvBookSource?.text),
+            clientSourceName = textOrNull(etBookSourceName?.text),
+            clientSourceMobile = textOrNull(etBookSourceMobile?.text),
+            referralBenefit = textOrNull(etBookReferralBenefit?.text),
             bookingCost = bookingCost,
             guidelineValue = numberOrNull(etChargeGuidelineValue?.text),
             specialConsideration = numberOrNull(etChargeSpecialConsideration?.text),
@@ -3843,7 +4564,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             promotionalOffersTnC = textOrNull(tvChargePromoTnc?.text),
             promotionalOfferValue = numberOrNull(etChargePromoValue?.text),
             offerValidityPeriod = numberOrNull(etChargeOfferValidity?.text),
-            agreedAmount = bookingCost?.minus(numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0),
+            agreedAmount = agreedAmount,
             registrationCharges = numberOrNull(etPayRegCharges?.text),
             gstAmount = numberOrNull(etPayGstAmount?.text),
             gstApplicable = payGstApplicable,
@@ -3853,7 +4574,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             otherChargesApplicable = payOtherApplicable,
             advanceAmount = advanceAmount,
             balanceAmount = if (bookingCost != null && advanceAmount != null) bookingCost - advanceAmount else null,
-            paymentMode = textOrNull(tvPayPaymentMode?.text),
+            paymentMode = textOrNull(tvBookMode?.text),
+            advanceTransactionId = textOrNull(etPayTransactionId?.text),
+            advancePaymentProofStorageId = advanceProofStorageId,
+            advancePaymentProofFileName = advanceProofFileName,
+            advanceInstrumentNo = textOrNull(etPayInstrumentNo?.text),
+            advanceBankName = textOrNull(etPayBankName?.text),
+            advanceBankBranch = textOrNull(etPayBankBranch?.text),
+            advanceInstrumentDate = dateTextForApi(tvPayInstrumentDate?.text),
             customerPaymentCategory = parseCustomerPaymentCategory(tvPayPaymentMode?.text),
             loanAmountRequested = if (parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B")
                 numberOrNull(etPayLoanAmount?.text)
@@ -3875,7 +4603,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             originalBdoStaffId = bookingStaffBdo?.id,
             originalTelecallerStaffId = bookingStaffTelecaller?.id,
             aadhaar = textOrNull(etStaffAadhar?.text),
+            aadhaarDocumentStorageId = aadhaarDocumentStorageId,
+            aadhaarDocumentFileName = aadhaarDocumentFileName,
             pan = textOrNull(etStaffPancard?.text),
+            panDocumentStorageId = panDocumentStorageId,
+            panDocumentFileName = panDocumentFileName,
             referenceName1 = textOrNull(etStaffRefName1?.text),
             referenceMobile1 = textOrNull(etStaffRefMobile1?.text),
             referenceProfession1 = textOrNull(etStaffRefProf1?.text),
@@ -3896,41 +4628,211 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         fun requireText(label: String, value: CharSequence?) {
             if (!hasText(value)) missing += label
         }
-        requireText("CEF No", etBookCef?.text)
-        requireText("Property Type", tvBookProperty?.text)
-        requireText("Booking Mode", tvBookMode?.text)
-        requireText("Preferred Registration Date", tvPayPrefReg?.text)
-        requireText("Booking Type", tvBookType?.text)
+        fun requirePositive(label: String, value: CharSequence?) {
+            if ((numberOrNull(value) ?: 0.0) <= 0.0) missing += label
+        }
+
+        requireText("Mobile Number", textOrNull(tvFormPhone?.text) ?: textOrNull(etClientMobile?.text))
         requireText("Title", tvFormTitle?.text)
+        requireText("Client Name", etFormName?.text)
+        requireText("Father / Spouse Name", etFormFather?.text)
+        requireText("Date of Birth", tvFormDob?.text)
         requireText("Alternate Numbers", etFormAltNumber?.text)
         requireText("WhatsApp Number", etFormWhatsApp?.text)
-        requireText("Date of Birth", tvFormDob?.text)
+        requireText("Email", etFormEmail?.text)
+        requireText("Nationality", tvFormNationality?.text)
+        requireText("Door No", etFormHomeDoorNo?.text)
+        requireText("Street Name", etFormHomeStreet?.text)
+        requireText("Address Line 1", etFormHomeAddress?.text)
         requireText("Pincode", etFormPincode?.text)
-        requireText("Home Address", etFormHomeAddress?.text)
-        requireText("Office/Alternate Address", etOfficeAddress?.text)
-        requireText("Location", etFormLocation?.text)
-        requireText("State", etFormState?.text)
         requireText("District", etFormDistrict?.text)
-        requireText("Father/Spouse Name", etFormFather?.text)
+
         requireText("Profession", tvProfProfession?.text)
-        requireText("Reference Name 1", etStaffRefName1?.text)
-        requireText("Reference Name 2", etStaffRefName2?.text)
-        requireText("Reference Mobile Number 1", etStaffRefMobile1?.text)
-        requireText("Reference Mobile Number 2", etStaffRefMobile2?.text)
-        requireText("Aadhaar", etStaffAadhar?.text)
-        if (bookingProject == null) missing += "Project Name"
-        if (bookingUnit == null && textOrNull(tvBookPlot?.text) == null) missing += "Plot No"
-        if (bookingCost == null || bookingCost <= 0) missing += "Booking Cost"
-        if (bookingStaffTelecaller == null) missing += "Original TeleCaller"
-        if (bookingStaffBdo == null) missing += "Original BDO"
-        if (bookingStaffSm == null) missing += "Original Senior Manager"
-        if (bookingStaffGm == null) missing += "Original GM"
-        if (bookingStaffAvp == null && argSiteVisitId == null) missing += "Original AVP"
-        if (!hasText(tvPayPaymentMode?.text)) missing += "Payment Mode"
-        if (textOrNull(tvBookType?.text) == "NEW" && (advanceAmount == null || advanceAmount <= 0)) {
-            missing += "Advance Amount"
+        requireText("Designation", etProfDesignation?.text)
+        if (textOrNull(tvProfProfession?.text).equals("Salaried", ignoreCase = true)) {
+            requireText("Department", tvProfDepartment?.text)
+            if (textOrNull(tvProfDepartment?.text) == "Other") {
+                requireText("Other Department", etProfOtherDepartment?.text)
+            }
         }
+        requireText("Income Per Annum", etProfIncome?.text)
+        requireText("Office Name", etOfficeName?.text)
+        requireText("Office Door No", etOfficeDoorNo?.text)
+        requireText("Office Street Name", etOfficeStreet?.text)
+        requireText("Office Address Line 1", etOfficeAddress?.text)
+
+        requireText("Booking Type", tvBookType?.text)
+        when (textOrNull(tvBookType?.text)) {
+            "CONVERSION" -> {
+                if (bookConversionManualEntry) {
+                    requireText("Previous Project", etBookConversionProject?.text)
+                    requireText("Previous Plot", etBookConversionPlot?.text)
+                    requirePositive("Conversion Credit", etBookConversionCredit?.text)
+                } else {
+                    requireText("Previous Booking ID", etBookConversionSourceBooking?.text)
+                }
+            }
+            "EXCHANGE", "INTERNAL EXCHANGE" -> {
+                if (bookExchangeManualEntry) {
+                    requireText("Old Project Name", etBookExchangeProject?.text)
+                    requireText("Old Plot Number", etBookExchangePlot?.text)
+                } else {
+                    if (textOrNull(tvBookType?.text) == "INTERNAL EXCHANGE") {
+                        requireText("Old Project ID", etBookExchangeLookupProject?.text)
+                        requireText("Old Plot Number", etBookExchangeLookupPlot?.text)
+                        requireText("Connected Mobile Number", etBookExchangeMobile?.text)
+                    }
+                    requireText("Source Booking ID", etBookExchangeSourceBooking?.text)
+                }
+                if (textOrNull(tvBookType?.text) == "EXCHANGE") {
+                    requirePositive("Exchange Value", etBookExchangeValue?.text)
+                }
+            }
+        }
+        requireText("CEF No", etBookCef?.text)
+        requireText("Booking Date", tvBookDate?.text)
+        if (bookingProject == null) missing += "Project"
+        if (bookingUnit == null && textOrNull(tvBookPlot?.text) == null) missing += "Plot"
+        requireText("Property Type", tvBookProperty?.text)
+        requireText("Advance Booking Payment", tvBookMode?.text)
+        if (bookIsAgainstVisit == YesNo.YES) {
+            requireText("SV Name", etBookSvName?.text)
+            requireText("SV Mobile No.", etBookSvMobile?.text)
+        }
+
+        if (bookingCost == null || bookingCost <= 0) missing += "Booking Cost"
+        requireText("Guideline Value", etChargeGuidelineValue?.text)
+        if ((numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0) > 0.0) {
+            requireText("Discount Approved By", etChargeDiscountApprovedBy?.text)
+            requireText("SC Reason", etChargeScReason?.text)
+            requirePositive("SC Validity", etChargeScValidity?.text)
+        }
+        requireText("Promotional Offer", etChargePromoOffers?.text)
+        requireText("Offer Value", etChargePromoValue?.text)
+        requireText("Terms & Conditions", tvChargePromoTnc?.text)
+        requireText("Registration Charges", etPayRegCharges?.text)
+        requireText("GST Amount", etPayGstAmount?.text)
+        requireText("Document Charges", etPayDocCharges?.text)
+        requireText("Patta Charges", etPayPattaCharges?.text)
+        requireText("Other Charges", etPayOtherCharges?.text)
+        requireText("Customer Payment Category", tvPayPaymentMode?.text)
+        if (advanceAmount == null || advanceAmount <= 0) missing += "Advance Amount"
+
+        val bookingMode = textOrNull(tvBookMode?.text)?.uppercase(Locale.US).orEmpty()
+        if (bookingMode in setOf("UPI", "NEFT", "RTGS")) {
+            requireText("Transaction ID", etPayTransactionId?.text)
+            if (advanceProofStorageId.isNullOrBlank()) missing += "Payment Proof"
+        }
+        if (bookingMode in setOf("CHEQUE", "DD")) {
+            requireText(if (bookingMode == "DD") "DD No" else "Cheque No", etPayInstrumentNo?.text)
+            requireText("Bank", etPayBankName?.text)
+            requireText("Branch", etPayBankBranch?.text)
+            requireText("Date", tvPayInstrumentDate?.text)
+        }
+        if (parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B") {
+            requirePositive("Bank Loan Amount", etPayLoanAmount?.text)
+        }
+
+        requireText("Payment Plan", tvPayPlan?.text)
+        requireText("Allotment Due Amount", etPayAllotDue?.text)
+        requireText("Allotment Due Date", tvPayAllotDate?.text)
+        if (payPlan != "Flexi") {
+            requireText("2nd Payment Amount", etPay2Mode?.text)
+            requireText("2nd Payment Date", tvPay2Date?.text)
+            requireText("3rd Payment Amount", etPay3Mode?.text)
+            requireText("3rd Payment Date", tvPay3Date?.text)
+            requireText("4th Payment Amount", etPay4Mode?.text)
+            requireText("4th Payment Date", tvPay4Date?.text)
+        }
+        requireText("Preferred Registration Date", tvPayPrefReg?.text)
+
+        if (bookingStaffAvp == null) missing += "Original AVP"
+        if (bookingStaffGm == null) missing += "Original General Manager"
+        if (bookingStaffSm == null) missing += "Original Senior Manager"
+        if (bookingStaffBdo == null) missing += "Original BDO"
+        if (bookingStaffTelecaller == null) missing += "Original Telecaller"
+        requireText("Aadhaar Number", etStaffAadhar?.text)
+        if (aadhaarDocumentStorageId.isNullOrBlank()) missing += "Aadhaar Upload"
+        requireText("PAN Number", etStaffPancard?.text)
+        if (panDocumentStorageId.isNullOrBlank()) missing += "PAN Upload"
+        requireText("Reference 1 — Name", etStaffRefName1?.text)
+        requireText("Reference 1 — Relation", etStaffRefProf1?.text)
+        requireText("Reference 1 — Mobile", etStaffRefMobile1?.text)
+        requireText("Reference 2 — Name", etStaffRefName2?.text)
+        requireText("Reference 2 — Relation", etStaffRefProf2?.text)
+        requireText("Reference 2 — Mobile", etStaffRefMobile2?.text)
+        requireText("Document to be Prepared In", tvStaffDocPrep?.text)
         return missing
+    }
+
+    private fun confirmationValidationError(bookingCost: Double?, advanceAmount: Double?): String? {
+        fun digits(value: CharSequence?): String =
+            value?.filter(Char::isDigit)?.toString().orEmpty()
+        listOf(
+            "Mobile Number" to (textOrNull(tvFormPhone?.text) ?: textOrNull(etClientMobile?.text)),
+            "Alternate Numbers" to textOrNull(etFormAltNumber?.text),
+            "WhatsApp Number" to textOrNull(etFormWhatsApp?.text),
+            "Reference 1 Mobile" to textOrNull(etStaffRefMobile1?.text),
+            "Reference 2 Mobile" to textOrNull(etStaffRefMobile2?.text),
+        ).firstOrNull { (_, value) -> value != null && digits(value).length != 10 }
+            ?.let { return "${it.first} must be exactly 10 digits" }
+        if (bookIsAgainstVisit == YesNo.YES && digits(etBookSvMobile?.text).length != 10) {
+            return "SV Mobile No. must be exactly 10 digits"
+        }
+        textOrNull(etBookSourceMobile?.text)?.let {
+            if (digits(it).length != 10) return "Source / Reference Mobile must be exactly 10 digits"
+        }
+        if (textOrNull(tvBookType?.text) == "INTERNAL EXCHANGE" &&
+            !bookExchangeManualEntry && digits(etBookExchangeMobile?.text).length != 10
+        ) {
+            return "Connected Mobile Number must be exactly 10 digits"
+        }
+        if (digits(etFormPincode?.text).length != 6) return "Pincode must be exactly 6 digits"
+        textOrNull(etOfficePincode?.text)?.let {
+            if (digits(it).length != 6) return "Office Pincode must be exactly 6 digits"
+        }
+        if (digits(etStaffAadhar?.text).length != 12) return "Aadhaar Number must be exactly 12 digits"
+        if (textOrNull(etStaffPancard?.text)?.length != 10) return "PAN Number must be exactly 10 characters"
+
+        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        if (bookingCost != null && specialConsideration > bookingCost) {
+            return "Special Consideration cannot exceed the Booking Cost"
+        }
+        val minimumAdvance = bookingProject?.minimumAdvanceAmount
+        if (minimumAdvance != null && (advanceAmount ?: 0.0) < minimumAdvance) {
+            return "Advance must be at least ₹${minimumAdvance.toLong()} as set in Project Details"
+        }
+        val basePayable = calculatedTotalPayableAmount() ?: 0.0
+        val totalPayable = if (textOrNull(tvBookType?.text) == "EXCHANGE") {
+            (basePayable - (numberOrNull(etBookExchangeValue?.text) ?: 0.0)).coerceAtLeast(0.0)
+        } else {
+            basePayable
+        }
+        if ((advanceAmount ?: 0.0) > totalPayable) {
+            return "Advance cannot exceed the total payable amount"
+        }
+        val loanAmount = if (parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "B") {
+            numberOrNull(etPayLoanAmount?.text) ?: 0.0
+        } else 0.0
+        if (loanAmount > totalPayable) return "Bank Loan Amount cannot exceed the Total Property Cost"
+        if ((advanceAmount ?: 0.0) > totalPayable - loanAmount) {
+            return "Advance cannot exceed the Customer Payable Amount after excluding the bank loan"
+        }
+        val conversionCredit = if (textOrNull(tvBookType?.text) == "CONVERSION" &&
+            bookConversionManualEntry
+        ) numberOrNull(etBookConversionCredit?.text) ?: 0.0 else 0.0
+        val remainingAfterAdvance = totalPayable - loanAmount -
+            (advanceAmount ?: 0.0) - conversionCredit
+        val allotment = numberOrNull(etPayAllotDue?.text) ?: 0.0
+        if (allotment > remainingAfterAdvance) {
+            return "Allotment payment cannot exceed the remaining Customer Payable Amount"
+        }
+        val scheduled = listOf(etPay2Mode, etPay3Mode, etPay4Mode)
+            .sumOf { numberOrNull(it?.text) ?: 0.0 }
+        if (payPlan != "Flexi" && scheduled > remainingAfterAdvance - allotment) {
+            return "Payment schedule cannot exceed the remaining Customer Payable Amount"
+        }
+        return validatePaymentSchedule()
     }
 
     // ---- Persistence ------------------------------------------------

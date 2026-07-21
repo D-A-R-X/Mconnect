@@ -1474,6 +1474,17 @@ data class AttendanceRecord(
     val approverPhotoUrl: String? = null,
     /** ISO timestamp — approvedAt / reviewedAt / fallback updatedAt. */
     val decidedAt: String? = null,
+    // Raw approval label used by system penalty rows. This is distinct from
+    // approverName, which is the human-friendly decision metadata.
+    val approvedByName: String? = null,
+    // System-enforced absence metadata. These fields are returned for task,
+    // reporting-officer deadline, and HR deadline penalties so mobile can
+    // distinguish them from an ordinary absence (the web shows the same
+    // "Absent · Penalty" badge and reason).
+    val penaltyKind: String? = null,
+    val penaltyReason: String? = null,
+    val penaltyTaskId: String? = null,
+    val penaltyTaskUrl: String? = null,
     // Fines / Late info.
     // lateFineDeduction is the server-computed fine (₹) returned by
     // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
@@ -1592,6 +1603,7 @@ data class AttendanceApprovalRecord(
     val status: String? = null,
     // Backend categorisation chosen by the approver — present | half-day | absent | weekoff | holiday.
     val approvedAttendance: String? = null,
+    val approvedByName: String? = null,
     val department: String? = null,
     val designation: String? = null,
     val employeeId: String? = null,
@@ -1617,6 +1629,11 @@ data class AttendanceApprovalRecord(
     // attendance-fine banner (0 / absent = no fine that day).
     val lateFineDeduction: Double? = null,
     val fineAmount: Double? = null,
+    val lateMinutes: Int? = null,
+    val penaltyKind: String? = null,
+    val penaltyReason: String? = null,
+    val penaltyTaskId: String? = null,
+    val penaltyTaskUrl: String? = null,
 )
 
 // Body for /api/hr/attendance/approve. Backend defaults the attendance bucket
@@ -2821,6 +2838,7 @@ data class ClientProfile(
     val location: String? = null,
     val profession: String? = null,
     val designation: String? = null,
+    val department: String? = null,
     val incomePerAnnum: String? = null,
     val officeName: String? = null,
     val officeAddress: String? = null,
@@ -2962,6 +2980,9 @@ data class MarketingProject(
     // Gates the "Special (max 180 days)" payment plan in the booking form,
     // mirroring the web. Null until the backend exposing it is deployed.
     val specialPaymentEnabled: Boolean? = null,
+    // Minimum advance configured in Project Details. Booking confirmation
+    // must reject a lower amount, matching the web/iOS form.
+    val minimumAdvanceAmount: Double? = null,
 )
 
 data class MarketingProjectsResponse(
@@ -3134,9 +3155,12 @@ data class CreateBookingRequest(
     val homeAddress: String? = null,
     val profession: String? = null,
     val designation: String? = null,
+    val department: String? = null,
     val incomePerAnnum: String? = null,
     val officeName: String? = null,
     val officeAddress: String? = null,
+    val officeArea: String? = null,
+    val officePincode: String? = null,
     val state: String? = null,
     val district: String? = null,
     val location: String? = null,
@@ -3148,11 +3172,34 @@ data class CreateBookingRequest(
     val plotId: String? = null,
     val plotNo: String? = null,
     val bookingType: String? = null,
+    val conversionManualEntry: Boolean? = null,
+    val manualConversionProjectName: String? = null,
+    val manualConversionPlotNo: String? = null,
+    val manualConversionCredit: Double? = null,
+    val conversionNotes: String? = null,
+    val sourceExchangeBookingId: String? = null,
+    val exchangeManualEntry: Boolean? = null,
+    val exchangeLookupProjectId: String? = null,
+    val exchangeLookupPlotNo: String? = null,
+    val exchangeConnectedMobileNumber: String? = null,
+    val manualExchangeProjectName: String? = null,
+    val manualExchangePlotNo: String? = null,
+    val manualExchangeExtentSqft: Double? = null,
+    val exchangeOldRegisteredValue: Double? = null,
+    val exchangeNewValue: Double? = null,
+    val exchangeBalancePayable: Double? = null,
+    val exchangeNotes: String? = null,
     val cefNo: String? = null,
     val isDuplicateBooking: Boolean? = null,
     val isAgainstSV: Boolean? = null,
+    val svName: String? = null,
+    val svMobileNo: String? = null,
     val propertyType: String? = null,
     val bookingMode: String? = null,
+    val clientSource: String? = null,
+    val clientSourceName: String? = null,
+    val clientSourceMobile: String? = null,
+    val referralBenefit: String? = null,
     val bookingCost: Double? = null,
     val guidelineValue: Double? = null,
     val specialConsideration: Double? = null,
@@ -3174,6 +3221,13 @@ data class CreateBookingRequest(
     val advanceAmount: Double? = null,
     val balanceAmount: Double? = null,
     val paymentMode: String? = null,
+    val advanceTransactionId: String? = null,
+    val advancePaymentProofStorageId: String? = null,
+    val advancePaymentProofFileName: String? = null,
+    val advanceInstrumentNo: String? = null,
+    val advanceBankName: String? = null,
+    val advanceBankBranch: String? = null,
+    val advanceInstrumentDate: String? = null,
     // Mirrors the web Booking · Customer Payment Category dropdown.
     // Mobile sends just the letter ("A" / "B" / "C") so the server's
     // bookings.customerPaymentCategory union accepts the value.
@@ -3201,7 +3255,11 @@ data class CreateBookingRequest(
     val originalBdoStaffId: String? = null,
     val originalTelecallerStaffId: String? = null,
     val aadhaar: String? = null,
+    val aadhaarDocumentStorageId: String? = null,
+    val aadhaarDocumentFileName: String? = null,
     val pan: String? = null,
+    val panDocumentStorageId: String? = null,
+    val panDocumentFileName: String? = null,
     val referenceName1: String? = null,
     val referenceMobile1: String? = null,
     val referenceProfession1: String? = null,
@@ -3285,9 +3343,12 @@ data class Booking(
     val homeAddress: String? = null,
     val profession: String? = null,
     val designation: String? = null,
+    val department: String? = null,
     val incomePerAnnum: String? = null,
     val officeName: String? = null,
     val officeAddress: String? = null,
+    val officeArea: String? = null,
+    val officePincode: String? = null,
     val state: String? = null,
     val district: String? = null,
     val location: String? = null,
@@ -3297,11 +3358,34 @@ data class Booking(
     val nationality: String? = null,
     val bookingDate: String? = null,                // yyyy-MM-dd
     val bookingType: String? = null,
+    val conversionManualEntry: Boolean? = null,
+    val manualConversionProjectName: String? = null,
+    val manualConversionPlotNo: String? = null,
+    val manualConversionCredit: Double? = null,
+    val conversionNotes: String? = null,
+    val sourceExchangeBookingId: String? = null,
+    val exchangeManualEntry: Boolean? = null,
+    val exchangeLookupProjectId: String? = null,
+    val exchangeLookupPlotNo: String? = null,
+    val exchangeConnectedMobileNumber: String? = null,
+    val manualExchangeProjectName: String? = null,
+    val manualExchangePlotNo: String? = null,
+    val manualExchangeExtentSqft: Double? = null,
+    val exchangeOldRegisteredValue: Double? = null,
+    val exchangeNewValue: Double? = null,
+    val exchangeBalancePayable: Double? = null,
+    val exchangeNotes: String? = null,
     val cefNo: String? = null,
     val isDuplicateBooking: Boolean? = null,
     val isAgainstSV: Boolean? = null,
+    val svName: String? = null,
+    val svMobileNo: String? = null,
     val propertyType: String? = null,
     val bookingMode: String? = null,
+    val clientSource: String? = null,
+    val clientSourceName: String? = null,
+    val clientSourceMobile: String? = null,
+    val referralBenefit: String? = null,
     val bookingCost: Double? = null,
     val guidelineValue: Double? = null,
     val specialConsideration: Double? = null,
@@ -3323,6 +3407,13 @@ data class Booking(
     val balanceAmount: Double? = null,
     val agreedAmount: Double? = null,
     val paymentMode: String? = null,
+    val advanceTransactionId: String? = null,
+    val advancePaymentProofStorageId: String? = null,
+    val advancePaymentProofFileName: String? = null,
+    val advanceInstrumentNo: String? = null,
+    val advanceBankName: String? = null,
+    val advanceBankBranch: String? = null,
+    val advanceInstrumentDate: String? = null,
     // Mirrors the web Booking · Customer Payment Category dropdown.
     // Mobile sends just the letter ("A" / "B" / "C") so the server's
     // bookings.customerPaymentCategory union accepts the value.
@@ -3357,7 +3448,11 @@ data class Booking(
     val createdAt: Double? = null,
     val updatedAt: Double? = null,
     val aadhaar: String? = null,
+    val aadhaarDocumentStorageId: String? = null,
+    val aadhaarDocumentFileName: String? = null,
     val pan: String? = null,
+    val panDocumentStorageId: String? = null,
+    val panDocumentFileName: String? = null,
     val referenceName1: String? = null,
     val referenceMobile1: String? = null,
     val referenceProfession1: String? = null,
