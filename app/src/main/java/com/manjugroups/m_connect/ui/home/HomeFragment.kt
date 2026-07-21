@@ -1701,6 +1701,11 @@ class HomeFragment : Fragment() {
             visitCategory = visit.visitCategory,
             cpType = visit.cpVisit?.cpType,
             clientMobile = visit.leadPhone,
+            lmoName = visit.lmoName,
+            deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                visit.scheduledDate,
+                visit.scheduledEndTime ?: visit.scheduledStartTime,
+            ),
         )
         parentFragmentManager.beginTransaction()
             .applySmoothTransitions()

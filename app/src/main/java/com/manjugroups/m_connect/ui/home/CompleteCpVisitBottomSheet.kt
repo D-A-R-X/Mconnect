@@ -385,18 +385,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etSvVisitorCount: EditText? = null
     private var siteVisitorRows: LinearLayout? = null
 
-    // Postpone body — aligned with the web's Postpone dialog
-    // (POSTPONE_REASONS in app/marketing/cp-visits/[id]/page.tsx):
-    // checkbox list of fixed reasons plus an optional notes field.
-    // Submits to the same `clientPlaceVisits.setOutcome` mutation the
-    // web uses, with the checked reason labels as `postponeReasons`.
+    // Postpone body — a next-visit date + a single reason box (simpler
+    // than the Not Interested multi-reason checklist, which operators
+    // were confusing it with). The chosen date is recorded in the notes
+    // and the typed reason ships as the single postponeReasons entry the
+    // backend's setOutcome requires for outcome="postponed".
     private var bodyPostpone: View? = null
-    private var cbPostClientUnavailable: android.widget.CheckBox? = null
-    private var cbPostWeather: android.widget.CheckBox? = null
-    private var cbPostVehicle: android.widget.CheckBox? = null
-    private var cbPostDocument: android.widget.CheckBox? = null
-    private var cbPostRescheduledByClient: android.widget.CheckBox? = null
-    private var cbPostOtherCommitment: android.widget.CheckBox? = null
+    private var tvPostNextDate: TextView? = null
     private var etPostNotes: EditText? = null
 
     // Not Interested body — mirrors the web's SV "Mark not interested"
@@ -942,13 +937,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun bindPostponeFields(view: View) {
         bodyPostpone = view.findViewById(R.id.bodyPostpone)
-        cbPostClientUnavailable = view.findViewById(R.id.cbPostClientUnavailable)
-        cbPostWeather = view.findViewById(R.id.cbPostWeather)
-        cbPostVehicle = view.findViewById(R.id.cbPostVehicle)
-        cbPostDocument = view.findViewById(R.id.cbPostDocument)
-        cbPostRescheduledByClient = view.findViewById(R.id.cbPostRescheduledByClient)
-        cbPostOtherCommitment = view.findViewById(R.id.cbPostOtherCommitment)
+        tvPostNextDate = view.findViewById(R.id.tvPostNextDate)
         etPostNotes = view.findViewById(R.id.etPostNotes)
+        // Next-visit date can't be in the past — a postpone always moves
+        // the visit forward.
+        view.findViewById<View>(R.id.rowPostNextDate)?.setOnClickListener {
+            pickDate(tvPostNextDate, minDateMillis = System.currentTimeMillis())
+        }
     }
 
     private fun bindNotInterestedFields(view: View) {
@@ -2494,6 +2489,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         target: TextView?,
         format: String = "dd/MM/yyyy",
         maxDateMillis: Long? = null,
+        minDateMillis: Long? = null,
         afterPicked: (() -> Unit)? = null,
     ) {
         val cal = Calendar.getInstance()
@@ -2517,6 +2513,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cal.get(Calendar.DAY_OF_MONTH),
         ).apply {
             maxDateMillis?.let { datePicker.maxDate = it }
+            minDateMillis?.let { datePicker.minDate = it }
         }.show()
     }
 
@@ -3254,25 +3251,28 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!isSiteVisitMode && cpVisitId.isNullOrBlank()) {
             return showError("Missing CP visit id")
         }
-        // Match the web's Postpone dialog: at least one reason must be
-        // ticked; notes are optional. The backend's
-        // clientPlaceVisits.setOutcome rejects an empty postponeReasons
-        // array when outcome="postponed", so we mirror that check here
-        // and show the same gist message as the web's toast.
-        val reasons = postponedReasonsFromForm()
-        if (reasons.isEmpty()) {
-            showError("Select at least one postpone reason")
+        // Postpone captures a next-visit date + a reason. Both are
+        // required: the date so the office knows when to re-run the
+        // visit, the reason because the backend's setOutcome rejects an
+        // empty postponeReasons array for outcome="postponed" (the reason
+        // ships as that single entry, via postponedReasonsFromForm()).
+        val nextDate = tvPostNextDate?.text?.toString()?.trim().orEmpty()
+        if (nextDate.isBlank() || nextDate.equals("dd/mm/yyyy", ignoreCase = true)) {
+            showError("Pick the next visit date")
             return
         }
-        val notes = etPostNotes?.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+        val reason = etPostNotes?.text?.toString()?.trim().orEmpty()
+        if (reason.isBlank()) {
+            showError("Enter a reason for postponement")
+            return
+        }
+        // The next-visit date rides in the human-readable notes blob (the
+        // outcome request has no dedicated date field); the reason travels
+        // separately via postponeReasons.
         finalizeTerminalOutcome(
             cpVisitId = cpVisitId.orEmpty(),
             outcomeEnum = OUTCOME_POSTPONED,
-            // Notes payload stays human-readable. Web stores `notes`
-            // as the operator typed; we do the same so a postponed
-            // visit looks identical regardless of which surface saved
-            // it. Reasons travel separately via postponeReasons.
-            notes = notes.orEmpty(),
+            notes = "Next visit: $nextDate — $reason",
         )
     }
 
@@ -3469,14 +3469,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * (persistPostpone) shows the same gist error the web shows.
      */
     private fun postponedReasonsFromForm(): List<String> {
-        val picked = mutableListOf<String>()
-        if (cbPostClientUnavailable?.isChecked == true) picked += "Client unavailable"
-        if (cbPostWeather?.isChecked == true) picked += "Weather"
-        if (cbPostVehicle?.isChecked == true) picked += "Vehicle issue"
-        if (cbPostDocument?.isChecked == true) picked += "Document pending"
-        if (cbPostRescheduledByClient?.isChecked == true) picked += "Rescheduled by client"
-        if (cbPostOtherCommitment?.isChecked == true) picked += "Other commitment"
-        return picked
+        // The postpone form now carries a single free-text reason rather
+        // than a checklist; ship it as the one-element array the backend
+        // requires. Empty → caller (persistPostpone) shows the gist error.
+        val reason = etPostNotes?.text?.toString()?.trim().orEmpty()
+        return if (reason.isBlank()) emptyList() else listOf(reason)
     }
 
     /**

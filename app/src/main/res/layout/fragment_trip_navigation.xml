@@ -265,11 +265,65 @@
                             android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- LMO (Lead Management Officer — the visit's telecaller) -->
+                <LinearLayout
+                    android:id="@+id/rowTripLmo"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_auth_user" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="LMO"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripLmo"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="—"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
             </LinearLayout>
 
             <View
                 android:layout_width="1dp"
-                android:layout_height="86dp"
+                android:layout_height="140dp"
                 android:layout_marginStart="10dp"
                 android:layout_marginEnd="10dp"
                 android:background="#E5E7EB" />
@@ -368,6 +422,60 @@
 
                         <TextView
                             android:id="@+id/tvTripEta"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="—"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Deadline — when the visit is scheduled to be completed by -->
+                <LinearLayout
+                    android:id="@+id/rowTripDeadline"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_filter_calendar" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Deadline"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripDeadline"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="5dp"
@@ -636,7 +744,7 @@
                         android:fontFamily="@font/inter_regular"
                         android:gravity="center"
                         android:includeFontPadding="false"
-                        android:text="Reaching"
+                        android:text="Reached"
                         android:textColor="#8E8E93"
                         android:textSize="10sp" />
                 </LinearLayout>

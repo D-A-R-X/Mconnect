@@ -225,6 +225,7 @@ class AgencyDriverTripsFragment : Fragment() {
                     vehicle = trip.vehicle?.vehicleNumber.orEmpty(),
                     phase = phase,
                     canOperateToday = trip.canOperateToday != false,
+                    onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L,
                 ),
             )
             .addToBackStack(null)

@@ -348,6 +348,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // later until outcome/project conversion is captured.
         cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
 
+        // LMO (telecaller) + deadline — shown only when the caller supplied
+        // them (both are optional args threaded from the visit row).
+        bindTripMeta(
+            view,
+            lmoName = args.getString(ARG_LMO_NAME),
+            deadline = args.getString(ARG_DEADLINE),
+        )
+
         tvTitle?.text = "Trip Details"
         // The "Type" cell on the Trip Details card now surfaces the visit
         // category rather than echoing the client name (which the header
@@ -463,6 +471,27 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 Toast.makeText(requireContext(), "Trip completed successfully", Toast.LENGTH_SHORT).show()
                 navigateUp()
             }
+        }
+    }
+
+    /** Fill (or hide) the LMO + Deadline cells on the Trip Details card. */
+    private fun bindTripMeta(view: View, lmoName: String?, deadline: String?) {
+        val lmoRow = view.findViewById<View>(R.id.rowTripLmo)
+        val lmo = lmoName?.takeIf { it.isNotBlank() }
+        if (lmo != null) {
+            view.findViewById<TextView>(R.id.tvTripLmo)?.text = lmo
+            lmoRow?.visibility = View.VISIBLE
+        } else {
+            lmoRow?.visibility = View.GONE
+        }
+
+        val deadlineRow = view.findViewById<View>(R.id.rowTripDeadline)
+        val dl = deadline?.takeIf { it.isNotBlank() }
+        if (dl != null) {
+            view.findViewById<TextView>(R.id.tvTripDeadline)?.text = dl
+            deadlineRow?.visibility = View.VISIBLE
+        } else {
+            deadlineRow?.visibility = View.GONE
         }
     }
 
@@ -691,7 +720,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         applyTripProgressStage(stage)
     }
 
-    private fun applyTripProgressStage(stage: Int) {
+    private fun applyTripProgressStage(stageRaw: Int) {
+        // The "Complete" step fills only once the visit's OUTCOME decision is
+        // recorded (booking / not interested / postponed / SV outcome).
+        // Physically finishing the trip = "Reached", not "Complete", until the
+        // decision is captured. Driver-mode fleet trips have no outcome sheet,
+        // so they complete as usual.
+        val stage = if (
+            stageRaw >= 4 && !session.isDriverMode && !cpVisitDecisionCaptured
+        ) 3 else stageRaw
+
         // Right-side state label
         val (rightLabel, rightColor) = when (stage) {
             0 -> "Not Started" to "#8E8E93"
@@ -2465,6 +2503,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // bookings via /api/postsales/cases/byMobile without going
         // back to a prior creation step.
         private const val ARG_CLIENT_MOBILE = "arg_client_mobile"
+        private const val ARG_LMO_NAME = "arg_lmo_name"
+        private const val ARG_DEADLINE = "arg_deadline"
 
         fun forVisit(
             visitId: String,
@@ -2480,6 +2520,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             visitCategory: String? = null,
             cpType: String? = null,
             clientMobile: String? = null,
+            lmoName: String? = null,
+            deadline: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -2495,6 +2537,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (visitCategory != null) putString(ARG_VISIT_CATEGORY, visitCategory)
                 if (cpType != null) putString(ARG_CP_TYPE, cpType)
                 if (clientMobile != null) putString(ARG_CLIENT_MOBILE, clientMobile)
+                if (lmoName != null) putString(ARG_LMO_NAME, lmoName)
+                if (deadline != null) putString(ARG_DEADLINE, deadline)
             }
         }
 

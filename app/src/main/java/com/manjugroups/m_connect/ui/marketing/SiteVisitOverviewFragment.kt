@@ -375,8 +375,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             else -> "Site Visit"
         }
 
-        // Default to Cab Vehicle initially
-        isOwnVehicleSelected = false
+        // Seed the vehicle mode from the list-row args so the FIRST frame
+        // already shows the right stepper. Defaulting to Cab and flipping in
+        // bindEnriched made the badge/stepper visibly jump between "Own
+        // Vehicle" and "Cab Vehicle" on open. The enriched fetch still
+        // re-asserts this, but now it usually confirms rather than corrects.
+        val argTravelMode = args.getString(ARG_TRAVEL_MODE)
+        val argVehiclePref = args.getString(ARG_VEHICLE_PREFERENCE)
+        isOwnVehicleSelected =
+            argTravelMode == "own_vehicle" || argVehiclePref == "own_vehicle"
         toggleStepperVisibility()
 
         // Stepper state mapping
@@ -928,7 +935,38 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 snapshot = proposed,
             )
             updateStepper(stepIndex)
-            bindStatusHeader(effStatus)
+            // Drive the header off the SAME computed step, not the raw
+            // status. Agency trips advance via travelDesk* timestamps while
+            // sv.status stays "scheduled"; binding the header to the raw
+            // status showed "SCHEDULED" over a stepper sitting on DROPPED.
+            bindStatusHeaderForStep(stepIndex, effStatus)
+        }
+    }
+
+    /**
+     * Header label that always agrees with the stepper. Terminal outcomes
+     * (completed / cancelled) keep their own coloured labels; every other
+     * state is synthesised from the computed step index so the header can't
+     * lag the progress bar when the SV row's status trails the driver's taps.
+     */
+    private fun bindStatusHeaderForStep(stepIndex: Int, rawStatus: String) {
+        val lower = rawStatus.lowercase(Locale.US)
+        when {
+            lower in setOf("completed", "complete", "done", "closed") ->
+                bindStatusHeader("completed")
+            lower in setOf("cancelled", "canceled", "no_show") ->
+                bindStatusHeader(rawStatus)
+            else -> bindStatusHeader(
+                when (stepIndex) {
+                    6 -> "completed"
+                    5 -> "dropped"
+                    4 -> "picked_from_site"
+                    3 -> "on_site"
+                    2 -> "picked_up"
+                    1 -> "assigned"
+                    else -> "scheduled"
+                }
+            )
         }
     }
 
@@ -1075,6 +1113,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         private const val ARG_SCHEDULED_START_TIME = "arg_scheduled_start_time"
         private const val ARG_STATUS = "arg_status"
         private const val ARG_VISIT_CATEGORY = "arg_visit_category"
+        private const val ARG_TRAVEL_MODE = "arg_travel_mode"
+        private const val ARG_VEHICLE_PREFERENCE = "arg_vehicle_preference"
 
         fun forVisit(visit: TodayVisit): SiteVisitOverviewFragment {
             return SiteVisitOverviewFragment().apply {
@@ -1089,6 +1129,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     putString(ARG_SCHEDULED_START_TIME, visit.scheduledStartTime)
                     putString(ARG_STATUS, visit.status)
                     putString(ARG_VISIT_CATEGORY, visit.visitCategory)
+                    putString(ARG_TRAVEL_MODE, visit.travelMode)
+                    putString(ARG_VEHICLE_PREFERENCE, visit.vehiclePreference)
                 }
             }
         }

@@ -353,8 +353,8 @@ class AttendanceHistoryFragment : Fragment() {
             attCount = teamApprovalAttendanceRows().size
             reqCount = teamApprovalRequestRows().size
         } else {
-            attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
-            reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
+            attCount = hrReviewAttendanceRows().size
+            reqCount = hrReviewRequestRows().size
         }
         binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
         binding.subTabRequest.text = String.format(Locale.US, "Requests (%02d)", reqCount)
@@ -557,11 +557,8 @@ class AttendanceHistoryFragment : Fragment() {
             )
             3 -> renderApprovals(cachedAllApprovals.filterNot(::isRequestLinked), "")
             4 -> {
-                val source = if (activeSubTab == 0) {
-                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
-                } else {
-                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
-                }
+                val source = if (activeSubTab == 0) hrReviewAttendanceRows()
+                else hrReviewRequestRows()
                 renderApprovals(source, "")
             }
             5 -> renderTeamAttendance(cachedAllAttendance, showFines = true, "")
@@ -601,8 +598,55 @@ class AttendanceHistoryFragment : Fragment() {
      * one, otherwise the request rows carried inside the approvals feed.
      */
     private fun teamApprovalRequestRows(): List<AttendanceApprovalRecord> =
-        if (teamRequestsSourced) cachedTeamRequests
-        else cachedApprovals.filter(::isRequestLinked)
+        dedupeRequestRows(
+            if (teamRequestsSourced) cachedTeamRequests
+            else cachedApprovals.filter(::isRequestLinked)
+        )
+
+    /** HR Review · Attendance sub-tab rows (non-request punch records). */
+    private fun hrReviewAttendanceRows(): List<AttendanceApprovalRecord> =
+        cachedHrReview.filter {
+            it.requestType != "remarks" && it.requestType != "correction"
+        }
+
+    /** HR Review · Requests sub-tab rows, deduped (see [dedupeRequestRows]). */
+    private fun hrReviewRequestRows(): List<AttendanceApprovalRecord> =
+        dedupeRequestRows(
+            cachedHrReview.filter {
+                it.requestType == "remarks" || it.requestType == "correction"
+            }
+        )
+
+    /**
+     * Collapse duplicate request rows for the SAME staff + date. A single
+     * correction/remark can surface twice in the pending feed — the real
+     * attendanceRequests doc PLUS a biometric "shadow" of the same day —
+     * which showed as two identical cards for one person. Keep the one
+     * that's actually actionable: prefer a true request row (requestStage
+     * set), then one that carries the reason, else the first seen. Rows with
+     * no staffId are never collapsed (keyed by their own id) so we can't
+     * accidentally merge unrelated records.
+     */
+    private fun dedupeRequestRows(
+        rows: List<AttendanceApprovalRecord>,
+    ): List<AttendanceApprovalRecord> {
+        fun score(r: AttendanceApprovalRecord): Int =
+            (if (!r.requestStage.isNullOrBlank()) 2 else 0) +
+                (if (!r.requestReason.isNullOrBlank()) 1 else 0)
+
+        val byKey = LinkedHashMap<String, AttendanceApprovalRecord>()
+        for (r in rows) {
+            val staff = r.staffId?.trim().orEmpty()
+            val key = if (staff.isBlank()) "id:${r.id}" else "$staff|${r.date.orEmpty()}"
+            val existing = byKey[key]
+            byKey[key] = when {
+                existing == null -> r
+                score(r) > score(existing) -> r
+                else -> existing
+            }
+        }
+        return byKey.values.toList()
+    }
 
     /** Whether the ACTIVE tab's backing cache has nothing to show yet. */
     private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
@@ -1396,11 +1440,8 @@ class AttendanceHistoryFragment : Fragment() {
                  else teamApprovalAttendanceRows()
             3 -> cachedAllApprovals.filterNot(::isRequestLinked)
             4 -> {
-                if (activeSubTab == 0) {
-                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
-                } else {
-                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
-                }
+                if (activeSubTab == 0) hrReviewAttendanceRows()
+                else hrReviewRequestRows()
             }
             5 -> cachedAllAttendance
             else -> emptyList()

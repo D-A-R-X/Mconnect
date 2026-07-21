@@ -3,6 +3,9 @@ package com.manjugroups.m_connect.ui.library
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,7 +20,10 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAgencyDriverTripDetailBinding
+import com.manjugroups.m_connect.network.TravelDeskApi
+import com.manjugroups.m_connect.network.TravelDeskDriverTripRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,12 +43,22 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     private var mapView: MapView? = null
     private var marker: LatLng? = null
 
+    private val api by lazy { TravelDeskApi.create() }
+    private lateinit var session: SessionManager
+    private val handler = Handler(Looper.getMainLooper())
+    private var pickupGateRunnable: Runnable? = null
+
+    // Live lifecycle state — starts from the args, then the fragment re-fetches
+    // in place after each step so the driver stays on this screen.
+    private var currentPhase: String = ""
+    private var onSiteAtMs: Long = 0L
+    private var busy = false
+
     private val visitId get() = requireArguments().getString(ARG_ID).orEmpty()
     private val title get() = requireArguments().getString(ARG_TITLE).orEmpty()
     private val whenText get() = requireArguments().getString(ARG_WHEN).orEmpty()
     private val address get() = requireArguments().getString(ARG_ADDRESS).orEmpty()
     private val vehicle get() = requireArguments().getString(ARG_VEHICLE).orEmpty()
-    private val phase get() = requireArguments().getString(ARG_PHASE).orEmpty()
     private val canOperateToday get() = requireArguments().getBoolean(ARG_CAN_OPERATE, true)
 
     override fun onCreateView(
@@ -62,7 +78,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         binding.tvDetailAddress.text = address.ifBlank { "No address" }
         binding.tvDetailVehicle.text =
             if (vehicle.isNotBlank()) "Vehicle: $vehicle" else "No vehicle"
-        binding.tvDetailProgress.text = phaseLabel(phase)
+        session = SessionManager(requireContext())
+        currentPhase = requireArguments().getString(ARG_PHASE).orEmpty()
+        onSiteAtMs = requireArguments().getLong(ARG_ONSITE_AT, 0L)
+
+        binding.tvDetailProgress.text = phaseLabel(currentPhase)
 
         binding.btnDetailBack.setOnClickListener {
             parentFragmentManager.popBackStack()
@@ -76,47 +96,114 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
 
         renderAction()
 
-        // A completed capture returns here; refresh the visible state.
+        // The Start/End capture sheets return here — re-fetch in place so the
+        // driver keeps their spot in the flow rather than being bounced back.
         setFragmentResultListener(AgencyDriverTripActionSheet.RESULT_KEY) { _, _ ->
-            // The lifecycle advanced; the list behind us reloads on resume, and
-            // popping back shows the fresh card. Simplest correct behaviour.
-            parentFragmentManager.popBackStack()
+            reloadAndRender()
         }
     }
 
+    /** Re-fetch this trip and re-render, keeping the driver on this screen. */
+    private fun reloadAndRender() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val trip = runCatching { api.listDriverTrips(session.bearerToken) }
+                .getOrNull()?.rows?.firstOrNull { it.id == visitId }
+            if (_binding == null || trip == null) return@launch
+            currentPhase = (trip.phase ?: "").lowercase()
+            onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L
+            binding.tvDetailProgress.text = phaseLabel(currentPhase)
+            renderAction()
+        }
+    }
+
+    /** Return pickup unlocks this many ms after "reached site" is marked. */
+    private val pickupGateMs = 60_000L
+
     private fun renderAction() {
-        val started = phase == "in_progress" || phase == "on_site" ||
-            phase == "picked_from_site"
-        val completed = phase == "completed"
+        pickupGateRunnable?.let { handler.removeCallbacks(it) }
+        val btn = binding.btnDetailAction
+        val label = binding.tvDetailActionLabel
+
+        fun enable(text: String, onClick: () -> Unit) {
+            label.text = text
+            btn.isEnabled = true
+            btn.alpha = 1f
+            btn.setOnClickListener { if (!busy) onClick() }
+        }
+        fun disable(text: String) {
+            label.text = text
+            btn.isEnabled = false
+            btn.alpha = 0.5f
+            btn.setOnClickListener(null)
+        }
+
         when {
-            completed -> {
-                binding.tvDetailActionLabel.text = "Completed"
-                binding.btnDetailAction.isEnabled = false
-                binding.btnDetailAction.alpha = 0.5f
-            }
-            // The backend only allows trip actions on the scheduled date, so a
-            // trip whose day has passed can't be started/ended — say so rather
-            // than offer a button that always errors.
-            !canOperateToday -> {
-                binding.tvDetailActionLabel.text = "Not scheduled for today"
-                binding.btnDetailAction.isEnabled = false
-                binding.btnDetailAction.alpha = 0.5f
-            }
-            started -> {
-                binding.tvDetailActionLabel.text = "End Trip"
-                binding.btnDetailAction.setOnClickListener {
-                    AgencyDriverTripActionSheet
-                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.END)
-                        .show(childFragmentManager, "agency_end")
-                }
-            }
-            else -> {
-                binding.tvDetailActionLabel.text = "Start Trip"
-                binding.btnDetailAction.setOnClickListener {
+            currentPhase == "completed" -> disable("Completed")
+            // The backend only allows trip actions on the scheduled date.
+            !canOperateToday -> disable("Not scheduled for today")
+            // Not started yet → capture OTP + odometer photo + start km.
+            currentPhase != "in_progress" && currentPhase != "on_site" &&
+                currentPhase != "picked_from_site" ->
+                enable("Start Trip") {
                     AgencyDriverTripActionSheet
                         .newInstance(visitId, AgencyDriverTripActionSheet.Mode.START)
                         .show(childFragmentManager, "agency_start")
                 }
+            // Started, driving → mark arrival at the site.
+            currentPhase == "in_progress" ->
+                enable("Reached Site") { markOnSite() }
+            // On site → return pickup, gated 60s after reaching the site.
+            currentPhase == "on_site" -> {
+                val elapsed = System.currentTimeMillis() - onSiteAtMs
+                val remaining = pickupGateMs - elapsed
+                if (onSiteAtMs > 0L && remaining > 0) {
+                    disable("Picked from Site in ${(remaining / 1000) + 1}s")
+                    val r = Runnable { if (_binding != null) renderAction() }
+                    pickupGateRunnable = r
+                    handler.postDelayed(r, minOf(remaining, 1000L))
+                } else {
+                    enable("Picked from Site") { markPickedFromSite() }
+                }
+            }
+            // Return pickup done → close the trip with the end odometer.
+            else ->
+                enable("End Trip") {
+                    AgencyDriverTripActionSheet
+                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.END)
+                        .show(childFragmentManager, "agency_end")
+                }
+        }
+    }
+
+    private fun markOnSite() = runStep {
+        api.driverMarkOnSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+    }
+
+    private fun markPickedFromSite() = runStep {
+        api.driverMarkPickedFromSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+    }
+
+    /** Fire a one-tap lifecycle step, then re-fetch + re-render in place. */
+    private fun runStep(call: suspend () -> com.manjugroups.m_connect.network.TravelDeskSimpleResponse) {
+        if (busy) return
+        busy = true
+        binding.btnDetailAction.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = runCatching { call() }
+            busy = false
+            if (_binding == null) return@launch
+            val ok = result.getOrNull()?.success == true
+            if (!ok) {
+                Toast.makeText(
+                    requireContext(),
+                    result.getOrNull()?.error
+                        ?: result.exceptionOrNull()?.message
+                        ?: "Could not update the trip",
+                    Toast.LENGTH_LONG,
+                ).show()
+                renderAction()
+            } else {
+                reloadAndRender()
             }
         }
     }
@@ -190,6 +277,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        pickupGateRunnable?.let { handler.removeCallbacks(it) }
         mapView?.onDestroy()
         mapView = null
         _binding = null
@@ -203,6 +291,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_VEHICLE = "arg_vehicle"
         private const val ARG_PHASE = "arg_phase"
         private const val ARG_CAN_OPERATE = "arg_can_operate"
+        private const val ARG_ONSITE_AT = "arg_onsite_at"
 
         fun newInstance(
             id: String,
@@ -212,6 +301,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             vehicle: String,
             phase: String,
             canOperateToday: Boolean,
+            onSiteAtMs: Long = 0L,
         ): AgencyDriverTripDetailFragment = AgencyDriverTripDetailFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_ID, id)
@@ -221,6 +311,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
                 putString(ARG_VEHICLE, vehicle)
                 putString(ARG_PHASE, phase)
                 putBoolean(ARG_CAN_OPERATE, canOperateToday)
+                putLong(ARG_ONSITE_AT, onSiteAtMs)
             }
         }
     }

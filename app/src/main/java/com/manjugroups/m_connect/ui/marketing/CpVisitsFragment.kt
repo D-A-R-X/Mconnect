@@ -57,6 +57,10 @@ class CpVisitsFragment : Fragment() {
     private var allVisits: List<TodayVisit> = emptyList()
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    // Active date-range filter (yyyy-MM-dd). Null = default window.
+    private var filterFromDate: String? = null
+    private var filterToDate: String? = null
+    private val DATE_FILTER_KEY = "cp_date_filter_result"
     // Row cache: a visit's card is inflated at most ONCE per (data,
     // clock-state) generation — re-inflating up to 200 card layouts on every
     // tab switch is what used to make this screen feel slow. Pagination now
@@ -98,6 +102,7 @@ class CpVisitsFragment : Fragment() {
 
         setupSearch(view)
         setupFilterPills(view)
+        setupDateFilter(view)
         observeAttendanceState()
 
         // Infinite scroll: render the next 20 rows as the user nears the end.
@@ -176,6 +181,69 @@ class CpVisitsFragment : Fragment() {
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+    }
+
+    // ---------- Date-range filter ----------
+
+    private fun setupDateFilter(root: View) {
+        root.findViewById<View>(R.id.btnFilterCalendar)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
+                title = "Filter by date",
+                subtitle = "Pick a day or a date range",
+                initialFrom = filterFromDate,
+                initialTo = filterToDate,
+                resultKey = DATE_FILTER_KEY,
+            ).show(childFragmentManager, "cp_date_filter")
+        }
+        childFragmentManager.setFragmentResultListener(
+            DATE_FILTER_KEY, viewLifecycleOwner,
+        ) { _, bundle ->
+            filterFromDate = bundle.getString(
+                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM,
+            )
+            filterToDate = bundle.getString(
+                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_TO,
+            )
+            updateDateFilterChip()
+            loadVisits()
+        }
+        root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
+            filterFromDate = null
+            filterToDate = null
+            updateDateFilterChip()
+            loadVisits()
+        }
+    }
+
+    private fun updateDateFilterChip() {
+        val chip = rootView?.findViewById<TextView>(R.id.tvDateFilterChip) ?: return
+        val from = filterFromDate
+        val to = filterToDate
+        if (from == null || to == null) {
+            chip.visibility = View.GONE
+            return
+        }
+        chip.visibility = View.VISIBLE
+        chip.text = if (from == to) {
+            "${prettyDate(from)}  ✕"
+        } else {
+            "${prettyDate(from)} – ${prettyDate(to)}  ✕"
+        }
+    }
+
+    private fun prettyDate(iso: String): String {
+        val parsed = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
+        }.getOrNull() ?: return iso
+        return SimpleDateFormat("dd MMM", Locale.getDefault()).format(parsed)
+    }
+
+    /** Keep only visits whose scheduledDate falls in the active range. */
+    private fun inDateRange(v: TodayVisit): Boolean {
+        val from = filterFromDate ?: return true
+        val to = filterToDate ?: return true
+        val d = v.scheduledDate.takeIf { it.isNotBlank() } ?: return true
+        return d in from..to
     }
 
     // ---------- Filter pills ----------
@@ -265,12 +333,10 @@ class CpVisitsFragment : Fragment() {
             list.removeAllViews()
         }
 
-        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_YEAR, -30)
-        val from = ymd.format(cal.time)
-        cal.add(Calendar.DAY_OF_YEAR, 60)
-        val to = ymd.format(cal.time)
+        // Pass the active range to the backend when a filter is set so distant
+        // dates load; otherwise fetch the default (all) window.
+        val from = filterFromDate
+        val to = filterToDate
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -283,8 +349,8 @@ class CpVisitsFragment : Fragment() {
                 // sort / render code is unchanged.
                 val resp = geoApi.getMyMarketingCpVisits(
                     session.bearerToken,
-                    fromDate = null,
-                    toDate = null,
+                    fromDate = from,
+                    toDate = to,
                 )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
@@ -425,6 +491,9 @@ class CpVisitsFragment : Fragment() {
             leadName = resolvedClientName,
             leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
+            // LMO = the telecaller who owns the CP visit (the creator).
+            lmoName = this.telecaller?.name?.takeIf { it.isNotBlank() }
+                ?: this.telecaller?.staffName?.takeIf { it.isNotBlank() },
             cpVisit = cpState,
             // Thread the CP's `createdAt` ms timestamp into the
             // envelope's `creationTime` slot so the CP list's
@@ -464,19 +533,17 @@ class CpVisitsFragment : Fragment() {
             rowsBuiltClockedIn = isClockedIn
         }
 
-        val needle = searchQuery.lowercase(Locale.US)
         fun matches(v: TodayVisit): Boolean {
             if (!matchesFilter(v, currentFilter)) return false
-            if (needle.isBlank()) return true
-            return listOf(v.placeName, v.leadName, v.placeAddress)
-                .any { it?.lowercase(Locale.US)?.contains(needle) == true }
+            if (!inDateRange(v)) return false
+            return com.manjugroups.m_connect.util.VisitSearch.matches(v, searchQuery)
         }
         val matched = allVisits.filter { matches(it) }
         cpMatchedCount = matched.size
 
         // Reset the scroll window whenever the filter / search / data changes.
         val windowCtx =
-            "$currentFilter|$needle|${System.identityHashCode(allVisits)}"
+            "$currentFilter|$searchQuery|${System.identityHashCode(allVisits)}"
         if (windowCtx != cpWindowCtx) {
             cpWindowCtx = windowCtx
             cpPager.reset()
@@ -543,6 +610,18 @@ class CpVisitsFragment : Fragment() {
         val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
+
+        // LMO (telecaller/creator) — shown only when the mapping supplied it.
+        val lmoRow = itemView.findViewById<View>(R.id.rowVisitItemLmo)
+        val lmoNameView = itemView.findViewById<TextView>(R.id.tvVisitItemLmoName)
+        val lmo = visit.lmoName?.takeIf { it.isNotBlank() }
+        if (lmo != null) {
+            lmoNameView.text = lmo
+            lmoRow.visibility = View.VISIBLE
+        } else {
+            lmoRow.visibility = View.GONE
+        }
+
         // Category badge now lives in the body's Type cell (tvVisitItemTitle),
         // so the standalone tvVisitItemLead row underneath the grid is hidden.
         // Same de-dupe rule HomeFragment follows on Today's Trip.
@@ -937,6 +1016,11 @@ class CpVisitsFragment : Fragment() {
                     visitCategory = visit.visitCategory,
                     cpType = visit.cpVisit?.cpType,
                     clientMobile = visit.leadPhone,
+                    lmoName = visit.lmoName,
+                    deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                        visit.scheduledDate,
+                        visit.scheduledEndTime ?: visit.scheduledStartTime,
+                    ),
                 )
             )
             .addToBackStack(null)

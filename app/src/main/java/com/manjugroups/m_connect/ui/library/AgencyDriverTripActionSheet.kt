@@ -63,6 +63,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
     private var currentPhotoUri: Uri? = null
 
     private lateinit var etKm: EditText
+    private var otpField: EditText? = null
     private lateinit var btnUpload: FrameLayout
     private lateinit var placeholder: LinearLayout
     private lateinit var ivPhoto: ImageView
@@ -130,7 +131,13 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         ivPhoto = view.findViewById(R.id.ivCapturedPhoto)
         btnSubmit = view.findViewById(R.id.btnCaptureSubmit)
 
+        val otpLabel = view.findViewById<TextView>(R.id.tvOtpLabel)
+        val etOtp = view.findViewById<EditText>(R.id.etCaptureOtp)
         val isStart = mode == Mode.START
+        // OTP is only for starting the trip at the client pickup.
+        otpLabel.visibility = if (isStart) View.VISIBLE else View.GONE
+        etOtp.visibility = if (isStart) View.VISIBLE else View.GONE
+        this.otpField = etOtp
         view.findViewById<TextView>(R.id.tvCaptureTitle).text =
             if (isStart) "Start Trip" else "End Trip"
         view.findViewById<TextView>(R.id.tvCaptureSubtitle).text =
@@ -191,6 +198,11 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Enter a valid Km reading", Toast.LENGTH_SHORT).show()
             return
         }
+        val otp = otpField?.text?.toString()?.trim().orEmpty()
+        if (mode == Mode.START && otp.isEmpty()) {
+            Toast.makeText(requireContext(), "Enter the client OTP", Toast.LENGTH_SHORT).show()
+            return
+        }
         val file = currentPhotoFile
         if (file == null || !file.exists()) {
             Toast.makeText(requireContext(), "Capture the odometer photo first", Toast.LENGTH_SHORT).show()
@@ -210,16 +222,14 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                         session.bearerToken,
                         TravelDeskStartTripRequest(
                             siteVisitId = visitId,
-                            otp = CLIENT_OTP,
+                            otp = otp,
                             photoIds = listOf(storageId),
                             startKm = km,
                         ),
                     )
                 } else {
-                    // Mark on-site reached, then end (backend needs on-site first).
-                    api.driverMarkOnSite(
-                        session.bearerToken, TravelDeskDriverTripRequest(visitId),
-                    )
+                    // On-site + picked-from-site are their own buttons now; end
+                    // just closes the trip out with the closing odometer.
                     api.driverEndTrip(
                         session.bearerToken,
                         TravelDeskEndTripRequest(

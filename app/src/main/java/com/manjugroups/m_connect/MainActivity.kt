@@ -1154,6 +1154,12 @@ class MainActivity : AppCompatActivity() {
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
         inAppUpdateManager?.onResume()
+        // Ask (once) to exempt the app from "Manage app if unused" — its
+        // default-on hibernation/auto-revoke is what puts the app to sleep and
+        // breaks background tracking, push and biometric alerts. Applies to
+        // every principal (external fleet relies on push too), so it runs
+        // before the external-principal early return below.
+        com.manjugroups.m_connect.util.UnusedAppRestrictions.maybePrompt(this)
         // External-fleet principals (agency + agency drivers) have no staff
         // record, so every MMS call below 401s on their token and trips the
         // session-expired logout. They live entirely on the travel-desk

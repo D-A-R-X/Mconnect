@@ -140,6 +140,13 @@ interface TravelDeskApi {
         @Body body: TravelDeskDriverTripRequest
     ): TravelDeskSimpleResponse
 
+    // The return pickup — enabled 60s after "reached site" in the app.
+    @POST("api/travel-desk/trips/picked-from-site")
+    suspend fun driverMarkPickedFromSite(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
     @POST("api/travel-desk/trips/end")
     suspend fun driverEndTrip(
         @Header("Authorization") token: String,
