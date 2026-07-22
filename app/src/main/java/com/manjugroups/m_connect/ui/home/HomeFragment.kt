@@ -1914,7 +1914,7 @@ class HomeFragment : Fragment() {
             
             val tvTitle = card.findViewById<TextView>(R.id.tvConversionTitle)
             tvTitle?.text = title
-            tvTitle?.setTextColor(tintColor)
+            // DO NOT tint title, leave default color
             
             val tvValue = card.findViewById<TextView>(R.id.tvConversionValue)
             tvValue?.text = value
@@ -1922,17 +1922,12 @@ class HomeFragment : Fragment() {
             
             val tvTrend = card.findViewById<TextView>(R.id.tvConversionTrendValue)
             tvTrend?.text = trend
-            tvTrend?.setTextColor(tintColor)
+            // DO NOT tint trend, keep it green
             
             val arrowGraph = card.findViewById<ImageView>(R.id.ivConversionChart)
             arrowGraph?.setColorFilter(tintColor)
             
             card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
-            
-            val bg = card.background
-            if (bg is android.graphics.drawable.GradientDrawable) {
-                bg.setStroke(3, tintColor) // 1dp approx
-            }
             
             // Animate graph arrow
             if (arrowGraph != null) {

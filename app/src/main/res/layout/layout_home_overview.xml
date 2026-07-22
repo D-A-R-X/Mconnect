@@ -224,19 +224,27 @@
         android:layout_marginTop="12dp"
         android:layout_marginBottom="8dp" />
 
-    <LinearLayout
-        android:id="@+id/conversionKpisRow"
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:weightSum="4"
-        android:baselineAligned="false"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="8dp"
+        android:clipToPadding="false"
+        android:paddingHorizontal="4dp"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:id="@+id/conversionKpisRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false">
         
-        <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiInterest" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginVertical="4dp" />
-        <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiWarmHot" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginVertical="4dp" />
-        <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiHotSite" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginVertical="4dp" />
-        <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiSiteBooking" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="0dp" android:layout_marginVertical="4dp" />
-    </LinearLayout>
+            <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiInterest" />
+            <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiWarmHot" />
+            <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiHotSite" />
+            <include layout="@layout/item_conversion_kpi_card" android:id="@+id/kpiSiteBooking" />
+        </LinearLayout>
+    </HorizontalScrollView>
     </LinearLayout>
 </LinearLayout>
