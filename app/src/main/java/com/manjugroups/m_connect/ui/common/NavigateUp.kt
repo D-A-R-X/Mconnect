@@ -11,12 +11,16 @@ import com.manjugroups.m_connect.R
  */
 fun Fragment.navigateUp() {
     val fm = parentFragmentManager
-    if (fm.isStateSaved) {
+    // Use the ASYNC popBackStack, never popBackStackImmediate(). Immediate pop
+    // rebuilds the destination fragment's whole view tree synchronously on the
+    // tap (these screens navigate with replace(), so the previous page is
+    // re-inflated from scratch) — that blocks the click handler and makes the
+    // back arrow feel frozen. The async pop returns instantly; the rebuild then
+    // overlaps the slide transition instead of stalling the tap.
+    if (fm.isStateSaved || fm.backStackEntryCount > 0) {
         runCatching { fm.popBackStack() }
         return
     }
-    val popped = runCatching { fm.popBackStackImmediate() }.getOrDefault(false)
-    if (popped) return
     runCatching {
         requireActivity().onBackPressedDispatcher.onBackPressed()
     }

@@ -31,6 +31,12 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.MmsFleetDriverEndRequest
+import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
+import com.manjugroups.m_connect.network.MmsFleetDriverStartRequest
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskDriverTripRequest
 import com.manjugroups.m_connect.network.TravelDeskEndTripRequest
@@ -56,9 +62,14 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
     enum class Mode { START, END }
 
     private val api = TravelDeskApi.create()
+    private val geoApi = GeoTrackApi.create()
+    private val staffApi = ApiService.create()
     private lateinit var session: SessionManager
     private var visitId: String = ""
     private var mode: Mode = Mode.START
+    // Internal MFPL fleet driver (staff token, mms-fleet endpoints) vs the
+    // external agency driver (travel-desk endpoints). Same UI + flow.
+    private var internal: Boolean = false
     private var currentPhotoFile: File? = null
     private var currentPhotoUri: Uri? = null
 
@@ -124,6 +135,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         session = SessionManager(requireContext())
         visitId = requireArguments().getString(ARG_VISIT_ID).orEmpty()
         mode = if (requireArguments().getString(ARG_MODE) == Mode.END.name) Mode.END else Mode.START
+        internal = requireArguments().getBoolean(ARG_INTERNAL, false)
 
         etKm = view.findViewById(R.id.etCaptureKm)
         btnUpload = view.findViewById(R.id.btnCaptureImage)
@@ -213,12 +225,40 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val storageId = uploadPhoto(file)
-                val ok = if (mode == Mode.START) {
+                val ok: Pair<Boolean, String?> = if (internal) {
+                    if (mode == Mode.START) {
+                        // Backend requires arrival before start; chain them. The
+                        // internal start takes no OTP field (the OTP here is the
+                        // client-side gate), only photo + km.
+                        geoApi.markMmsFleetDriverArrived(
+                            session.bearerToken, MmsFleetDriverSiteVisitRequest(visitId),
+                        )
+                        val r = geoApi.startMmsFleetDriverTrip(
+                            session.bearerToken,
+                            MmsFleetDriverStartRequest(
+                                siteVisitId = visitId,
+                                photoIds = listOf(storageId),
+                                startKm = km,
+                            ),
+                        )
+                        r.success to r.error
+                    } else {
+                        val r = geoApi.endMmsFleetDriverTrip(
+                            session.bearerToken,
+                            MmsFleetDriverEndRequest(
+                                siteVisitId = visitId,
+                                photoIds = listOf(storageId),
+                                endKm = km,
+                            ),
+                        )
+                        r.success to r.error
+                    }
+                } else if (mode == Mode.START) {
                     // Backend requires arrival before start; chain them.
                     api.driverMarkArrived(
                         session.bearerToken, TravelDeskDriverTripRequest(visitId),
                     )
-                    api.driverStartTrip(
+                    val r = api.driverStartTrip(
                         session.bearerToken,
                         TravelDeskStartTripRequest(
                             siteVisitId = visitId,
@@ -227,10 +267,11 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             startKm = km,
                         ),
                     )
+                    r.success to r.error
                 } else {
                     // On-site + picked-from-site are their own buttons now; end
                     // just closes the trip out with the closing odometer.
-                    api.driverEndTrip(
+                    val r = api.driverEndTrip(
                         session.bearerToken,
                         TravelDeskEndTripRequest(
                             siteVisitId = visitId,
@@ -238,9 +279,10 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             endKm = km,
                         ),
                     )
+                    r.success to r.error
                 }
-                if (!ok.success) {
-                    throw IllegalStateException(ok.error ?: "Could not update the trip")
+                if (!ok.first) {
+                    throw IllegalStateException(ok.second ?: "Could not update the trip")
                 }
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
@@ -252,6 +294,12 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
     }
 
     private suspend fun uploadPhoto(file: File): String {
+        if (internal) {
+            // Staff storage upload (generated upload URL), not the agency route.
+            val result = StorageUploader.upload(staffApi, session.bearerToken, file)
+            return result.storageId
+                ?: throw IllegalStateException(result.errorMessage ?: "Failed to upload photo")
+        }
         val body = file.asRequestBody("image/jpeg".toMediaType())
         val res = api.uploadStorageFile(session.bearerToken, body)
         return res.storageId
@@ -277,11 +325,20 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "agency_trip_action_result"
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_MODE = "arg_mode"
+        private const val ARG_INTERNAL = "arg_internal"
         private const val CLIENT_OTP = "0000"
 
-        fun newInstance(visitId: String, mode: Mode): AgencyDriverTripActionSheet =
+        fun newInstance(
+            visitId: String,
+            mode: Mode,
+            internal: Boolean = false,
+        ): AgencyDriverTripActionSheet =
             AgencyDriverTripActionSheet().apply {
-                arguments = bundleOf(ARG_VISIT_ID to visitId, ARG_MODE to mode.name)
+                arguments = bundleOf(
+                    ARG_VISIT_ID to visitId,
+                    ARG_MODE to mode.name,
+                    ARG_INTERNAL to internal,
+                )
             }
     }
 }

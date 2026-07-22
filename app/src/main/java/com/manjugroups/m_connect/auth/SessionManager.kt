@@ -246,6 +246,45 @@ class SessionManager(context: Context) {
         get() = isDriverDesignation(designation) &&
             (department ?: "").trim().equals("Administration", ignoreCase = true)
 
+    /**
+     * Who gets the internal fleet-dispatch Home (the Pending / Assigned /
+     * Completed allocation queue). Two populations:
+     *   1. Driver • Administration by designation ([isFleetAdminDriver]).
+     *   2. Any internal staff (e.g. a Fleet Assistant Manager) who explicitly
+     *      holds the fleet permission in IAM — mirroring the web, where the
+     *      fleet page is gated on marketing.fleet.view / .assign.
+     *
+     * Permission is read from the EXPLICIT [iamPermissions] set (not
+     * hasPermission), so the blanket `isAdmin` flag doesn't pull every admin
+     * into the dispatcher Home — the same phantom-key caution as
+     * [canViewVpDashboard]. VP / GM / super-admin users keep their company
+     * dashboard even if they also hold a fleet key.
+     */
+    val isInternalFleetDispatcher: Boolean
+        get() {
+            if (isExternalFleetPrincipal) return false
+            // Driver • Administration IS the designation-based dispatcher.
+            if (isFleetAdminDriver) return true
+            // Any OTHER driver (e.g. Driver • Transport) only drives the trips
+            // assigned to them — they never get the dispatch queue / Allocate,
+            // even if a fleet permission is present. They fall through to the
+            // driver's own-trips Home instead.
+            if (isDriverMode) return false
+            if (canViewVpDashboard()) return false
+            return iamPermissions.contains("marketing.fleet.assign") ||
+                iamPermissions.contains("marketing.fleet.view")
+        }
+
+    /**
+     * An internal staff driver (e.g. Driver • Transport) who DRIVES fleet trips
+     * assigned to them — they get the same granular Start → Reached → Picked →
+     * End flow the external agency driver has, backed by the mms-fleet driver
+     * endpoints. Excludes the dispatcher (Driver • Administration) and the
+     * external agency principals.
+     */
+    val isInternalFleetDriver: Boolean
+        get() = !isExternalFleetPrincipal && isDriverMode && !isFleetAdminDriver
+
     val isDriverMode: Boolean
         // Both driver populations get the driver screen. "Driver • Transport"
         // sees only their own assigned trips; "Driver • Administration" sees

@@ -70,8 +70,13 @@ data class TravelDeskTrip(
     val vehiclePreference: String? = null,
     // Client identity resolved server-side (lead → CP client → place). Shown as
     // the card's primary line; falls back to "Unknown" on the card when null.
+    // NOTE: clientName is only populated once the newer backend is deployed; the
+    // `lead` object below is already live on prod (enrichVisit has long returned
+    // it), so the card falls back to lead.contactName — the same field the web
+    // fleet page reads — until clientName ships.
     val clientName: String? = null,
     val clientPhone: String? = null,
+    val lead: TravelDeskLead? = null,
     // LMO — the telecaller who created the visit. Resolved server-side in the
     // trips payload; shown on the admin fleet card in place of the vehicle tag.
     val lmoName: String? = null,
@@ -100,6 +105,13 @@ data class TravelDeskTrip(
 data class TravelDeskAgencyRef(
     @SerializedName("_id") val id: String? = null,
     val name: String? = null,
+)
+
+/** The lead a site visit is linked to. enrichVisit returns this inline; the
+ *  fleet card reads contactName as the client-name fallback (matches web). */
+data class TravelDeskLead(
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
 )
 
 /**
@@ -200,11 +212,37 @@ data class TravelDeskAllocateResponse(
     val error: String? = null,
 )
 
+/** External travel agencies the fleet admin can allot a trip to. */
+data class TravelDeskAgency(
+    @SerializedName("_id") val id: String? = null,
+    val name: String? = null,
+    val status: String? = null,
+    val mobileNumber: String? = null,
+)
+
+data class TravelDeskAgenciesResponse(
+    val success: Boolean = false,
+    val agencies: List<TravelDeskAgency>? = null,
+    val data: List<TravelDeskAgency>? = null,
+    val error: String? = null,
+) {
+    val rows: List<TravelDeskAgency>
+        get() = agencies ?: data ?: emptyList()
+}
+
+data class AllotAgencyRequest(
+    val siteVisitId: String,
+    val travelAgencyId: String,
+)
+
 data class AllocateTripRequest(
     val siteVisitId: String,
     val vehicleId: String,
     val pickupTime: String,
-    val pricingMode: String,
+    // Per-trip pricing is no longer captured in the app (the web MFPL assign
+    // has none, and the allocate route ignores these) — kept optional with
+    // defaults so the request shape stays stable for any agency consumer.
+    val pricingMode: String = "km",
     val driverName: String? = null,
     val driverPhone: String? = null,
     // The exact roster driver, when picked from the dropdown — binds the trip

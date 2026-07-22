@@ -47,9 +47,13 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     private var marker: LatLng? = null
 
     private val api by lazy { TravelDeskApi.create() }
+    private val geoApi by lazy { com.manjugroups.m_connect.network.GeoTrackApi.create() }
     private lateinit var session: SessionManager
     private val handler = Handler(Looper.getMainLooper())
     private var pickupGateRunnable: Runnable? = null
+    // Internal MFPL fleet driver (mms-fleet endpoints) vs external agency
+    // driver (travel-desk endpoints). Same UI + lifecycle.
+    private val internal get() = requireArguments().getBoolean(ARG_INTERNAL, false)
 
     // Live lifecycle state — starts from the args, then the fragment re-fetches
     // in place after each step so the driver stays on this screen.
@@ -99,6 +103,10 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         geocodeAddress()
 
         renderAction()
+        // Internal trips are opened from Home with only the visit status as the
+        // seed phase — pull the true fleet phase/onSite from the backend so the
+        // stepper + action button reflect real progress on first paint.
+        if (internal) reloadAndRender()
 
         // The Start/End capture sheets return here — re-fetch in place so the
         // driver keeps their spot in the flow rather than being bounced back.
@@ -110,11 +118,29 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     /** Re-fetch this trip and re-render, keeping the driver on this screen. */
     private fun reloadAndRender() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val trip = runCatching { api.listDriverTrips(session.bearerToken) }
-                .getOrNull()?.rows?.firstOrNull { it.id == visitId }
-            if (_binding == null || trip == null) return@launch
-            currentPhase = (trip.phase ?: "").lowercase()
-            onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L
+            val phaseAndOnSite: Pair<String, Long>? = if (internal) {
+                runCatching { geoApi.getMmsFleetDriverTrips(session.bearerToken) }
+                    .getOrNull()?.trips?.firstOrNull { it.id == visitId }
+                    ?.let { t ->
+                        // Fill the vehicle label (opened from Home with no vehicle
+                        // arg) from the fetched trip.
+                        val veh = listOfNotNull(
+                            t.vehicle?.vehicleNumber?.takeIf { n -> n.isNotBlank() },
+                            t.vehicle?.type?.takeIf { ty -> ty.isNotBlank() },
+                        ).joinToString(" · ")
+                        if (_binding != null && veh.isNotBlank()) {
+                            binding.tvDetailVehicle.text = "Vehicle: $veh"
+                        }
+                        (t.phase ?: "") to (t.travelDeskOnSiteAt ?: 0L)
+                    }
+            } else {
+                runCatching { api.listDriverTrips(session.bearerToken) }
+                    .getOrNull()?.rows?.firstOrNull { it.id == visitId }
+                    ?.let { (it.phase ?: "") to (it.travelDeskOnSiteAt ?: 0L) }
+            }
+            if (_binding == null || phaseAndOnSite == null) return@launch
+            currentPhase = phaseAndOnSite.first.lowercase()
+            onSiteAtMs = phaseAndOnSite.second
             binding.tvDetailProgress.text = phaseLabel(currentPhase)
             renderStages()
             renderAction()
@@ -151,7 +177,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
                 currentPhase != "picked_from_site" ->
                 enable("Start Trip") {
                     AgencyDriverTripActionSheet
-                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.START)
+                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.START, internal)
                         .show(childFragmentManager, "agency_start")
                 }
             // Started, driving → mark arrival at the site.
@@ -174,22 +200,38 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             else ->
                 enable("End Trip") {
                     AgencyDriverTripActionSheet
-                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.END)
+                        .newInstance(visitId, AgencyDriverTripActionSheet.Mode.END, internal)
                         .show(childFragmentManager, "agency_end")
                 }
         }
     }
 
     private fun markOnSite() = runStep {
-        api.driverMarkOnSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+        if (internal) {
+            geoApi.markMmsFleetDriverOnSite(
+                session.bearerToken,
+                com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(visitId),
+            ).let { it.success to it.error }
+        } else {
+            api.driverMarkOnSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+                .let { it.success to it.error }
+        }
     }
 
     private fun markPickedFromSite() = runStep {
-        api.driverMarkPickedFromSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+        if (internal) {
+            geoApi.markMmsFleetDriverPickedFromSite(
+                session.bearerToken,
+                com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(visitId),
+            ).let { it.success to it.error }
+        } else {
+            api.driverMarkPickedFromSite(session.bearerToken, TravelDeskDriverTripRequest(visitId))
+                .let { it.success to it.error }
+        }
     }
 
     /** Fire a one-tap lifecycle step, then re-fetch + re-render in place. */
-    private fun runStep(call: suspend () -> com.manjugroups.m_connect.network.TravelDeskSimpleResponse) {
+    private fun runStep(call: suspend () -> Pair<Boolean, String?>) {
         if (busy) return
         busy = true
         binding.btnDetailAction.isEnabled = false
@@ -197,11 +239,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             val result = runCatching { call() }
             busy = false
             if (_binding == null) return@launch
-            val ok = result.getOrNull()?.success == true
+            val ok = result.getOrNull()?.first == true
             if (!ok) {
                 Toast.makeText(
                     requireContext(),
-                    result.getOrNull()?.error
+                    result.getOrNull()?.second
                         ?: result.exceptionOrNull()?.message
                         ?: "Could not update the trip",
                     Toast.LENGTH_LONG,
@@ -370,6 +412,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_PHASE = "arg_phase"
         private const val ARG_CAN_OPERATE = "arg_can_operate"
         private const val ARG_ONSITE_AT = "arg_onsite_at"
+        private const val ARG_INTERNAL = "arg_internal"
 
         fun newInstance(
             id: String,
@@ -380,6 +423,8 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             phase: String,
             canOperateToday: Boolean,
             onSiteAtMs: Long = 0L,
+            // true → internal MFPL fleet driver (mms-fleet endpoints).
+            internal: Boolean = false,
         ): AgencyDriverTripDetailFragment = AgencyDriverTripDetailFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_ID, id)
@@ -390,6 +435,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
                 putString(ARG_PHASE, phase)
                 putBoolean(ARG_CAN_OPERATE, canOperateToday)
                 putLong(ARG_ONSITE_AT, onSiteAtMs)
+                putBoolean(ARG_INTERNAL, internal)
             }
         }
     }

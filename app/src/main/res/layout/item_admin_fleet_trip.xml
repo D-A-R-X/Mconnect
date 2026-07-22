@@ -165,7 +165,7 @@
                     android:ellipsize="end"
                     android:fontFamily="@font/inter_medium"
                     android:maxLines="1"
-                    android:text="LMO"
+                    android:text="—"
                     android:textColor="#1E3A8A"
                     android:textSize="12sp" />
             </LinearLayout>

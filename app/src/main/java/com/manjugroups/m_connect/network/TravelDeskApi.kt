@@ -187,6 +187,19 @@ interface TravelDeskApi {
         @Header("Authorization") token: String
     ): TravelDeskVehiclesResponse
 
+    @GET("api/mms-fleet/dispatch/agencies")
+    suspend fun listMmsAgencies(
+        @Header("Authorization") token: String
+    ): TravelDeskAgenciesResponse
+
+    // Allot a visit to an external travel agency (sets travelAgencyId; the
+    // agency then assigns the cab in Travel Desk).
+    @POST("api/mms-fleet/dispatch/allot-agency")
+    suspend fun allotMmsAgency(
+        @Header("Authorization") token: String,
+        @Body body: AllotAgencyRequest
+    ): TravelDeskAllocateResponse
+
     @GET("api/mms-fleet/dispatch/drivers")
     suspend fun listMmsDrivers(
         @Header("Authorization") token: String

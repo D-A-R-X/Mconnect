@@ -119,7 +119,11 @@ class AdminFleetTripsFragment : Fragment() {
         // profile/account overview inside the Admin Fleet portal) instead of
         // the staff ProfileFragment, which requires a real staff record.
         binding.homeHeader.setOnProfileClickListener {
-            (parentFragment as? AdminFleetContainerFragment)?.openTab(3)
+            // Walk up the parent chain rather than assuming a direct parent, so
+            // the profile tap always finds the container and opens Settings.
+            var f: Fragment? = parentFragment
+            while (f != null && f !is AdminFleetContainerFragment) f = f.parentFragment
+            (f as? AdminFleetContainerFragment)?.openTab(3)
         }
         binding.homeHeader.post { _binding?.homeHeader?.playEntryAnimation() }
 
@@ -363,7 +367,6 @@ class AdminFleetTripsFragment : Fragment() {
         AllocateVehicleBottomSheet.newInstance(
             vehicles = options,
             drivers = driverOptions,
-            showPricing = useMmsFleet,
             onAddNewDriver = { typedName, onCreated -> addDriverThenResume(typedName, onCreated) },
         ) { result ->
             submitAllocate(originalTrip, result)
@@ -437,16 +440,10 @@ class AdminFleetTripsFragment : Fragment() {
                         siteVisitId = siteVisitId,
                         vehicleId = result.vehicleId,
                         pickupTime = result.pickupTime,
-                        pricingMode = result.pricingMode,
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
                         travelDeskDriverId = result.driverId,
-                        kmRate = if (result.pricingMode == "km") result.amount else null,
-                        packageAmount = if (result.pricingMode == "package") result.amount else null,
                 )
-                // MMS dispatch ignores the agency pricing fields (km rate /
-                // package) — internal trips aren't billed per-agency — but the
-                // request shape is shared, so they're simply unused there.
                 val resp = if (useMmsFleet) {
                     api.allocateMms(token, request)
                 } else {
@@ -583,7 +580,9 @@ class AdminFleetTripsFragment : Fragment() {
         return AdminTrip(
             id = trip.id.orEmpty(),
             time = timeLabel,
-            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown",
+            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() }
+                ?: trip.lead?.contactName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Unknown",
             address = addressLine,
             attendees = attendees,
             vehicleType = vehicleLabel,
@@ -672,8 +671,9 @@ class AdminFleetTripsFragment : Fragment() {
                 // LMO — the telecaller who created the visit. Kept visible (with
                 // an em-dash fallback) so its weighted pill keeps the Allocate
                 // button right-aligned on the row.
-                binding.tvLmoTag.text = item.lmoName?.takeIf { it.isNotBlank() }
-                    ?.let { "LMO: $it" } ?: "LMO —"
+                // Just the LMO name (the person icon conveys the role), or "—".
+                binding.tvLmoTag.text =
+                    item.lmoName?.takeIf { it.isNotBlank() } ?: "—"
                 // Expired takes over the badge from "Assigned" once the day is
                 // lost, and hides Allocate — the backend would reject it anyway.
                 binding.tvTripStatus.text = if (item.expired) "Expired" else item.status

@@ -202,8 +202,12 @@ class HomeHeaderView @JvmOverloads constructor(
         }
         androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
 
-        // Set up click listeners for profile and notifications
-        binding.btnHomeProfile.setOnClickListener {
+        // Set up click listeners for profile and notifications. The whole
+        // profile row is tappable — not just the 44dp avatar circle — so tapping
+        // the name / role also opens the profile (the small avatar-only target
+        // was easy to miss). The bell is a child with its own listener, so its
+        // taps are consumed there and never fall through to this.
+        val openProfile = View.OnClickListener {
             onProfileClickListener?.invoke() ?: run {
                 val resolvedFragment = fragment ?: getFragment(this)
                 resolvedFragment?.parentFragmentManager?.beginTransaction()
@@ -217,6 +221,8 @@ class HomeHeaderView @JvmOverloads constructor(
                     }
             }
         }
+        binding.btnHomeProfile.setOnClickListener(openProfile)
+        binding.homeProfileRow.setOnClickListener(openProfile)
 
         binding.btnHomeBell.setOnClickListener {
             onBellClickListener?.invoke() ?: run {

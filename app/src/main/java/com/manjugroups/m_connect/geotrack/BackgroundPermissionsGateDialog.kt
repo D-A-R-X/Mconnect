@@ -216,9 +216,13 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     }
 
     /**
-     * Resolve the async "unused app restrictions" status and show the row only
-     * when it's currently ENABLED (i.e. still needs turning off). The switch
-     * reads ON once it's disabled. Non-blocking — it never gates dismissal.
+     * Resolve the async "unused app restrictions" status and show the row
+     * alongside the other permissions WHENEVER the device supports the feature
+     * — whether the restriction is still ON (needs turning off) or already OFF.
+     * The switch reads ON only once the restriction is disabled on the device
+     * (the good state the user is aiming for). The row is hidden only when the
+     * OS has no such setting (FEATURE_NOT_AVAILABLE / ERROR), since there would
+     * be nothing to toggle. Non-blocking — it never gates dismissal.
      */
     private fun refreshUnusedAppRow(root: View) {
         val ctx = context ?: return
@@ -230,14 +234,26 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             {
                 if (!isAdded || view == null) return@addListener
                 val status = runCatching { future.get() }.getOrNull()
-                val enabled = when (status) {
+                // available = the device exposes this setting at all.
+                // restrictionOn = the OS will hibernate/revoke the app if unused.
+                val available: Boolean
+                val restrictionOn: Boolean
+                when (status) {
                     androidx.core.content.UnusedAppRestrictionsConstants.API_30_BACKPORT,
                     androidx.core.content.UnusedAppRestrictionsConstants.API_30,
-                    androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> true
-                    else -> false // ERROR / FEATURE_NOT_AVAILABLE / DISABLED
+                    androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> {
+                        available = true; restrictionOn = true
+                    }
+                    androidx.core.content.UnusedAppRestrictionsConstants.DISABLED -> {
+                        available = true; restrictionOn = false
+                    }
+                    else -> { // FEATURE_NOT_AVAILABLE / ERROR
+                        available = false; restrictionOn = false
+                    }
                 }
-                row.visibility = if (enabled) View.VISIBLE else View.GONE
-                sw.isChecked = !enabled
+                row.visibility = if (available) View.VISIBLE else View.GONE
+                // ON only when the restriction is disabled in mobile settings.
+                sw.isChecked = available && !restrictionOn
             },
             ContextCompat.getMainExecutor(ctx),
         )

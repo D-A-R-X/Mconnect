@@ -159,7 +159,9 @@ class ProfileFragment : Fragment() {
 
     private fun bindActions() {
         binding.btnProfileBack.setOnClickListener {
-            parentFragmentManager.popBackStackImmediate()
+            // Async pop — popBackStackImmediate() rebuilds the destination on the
+            // tap and makes the back arrow feel frozen.
+            parentFragmentManager.popBackStack()
         }
 
         val openEditProfile = View.OnClickListener {
