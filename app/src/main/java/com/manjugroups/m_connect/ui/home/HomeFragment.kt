@@ -212,6 +212,7 @@ class HomeFragment : Fragment() {
         if (b.whiteContentArea.translationY != 0f) b.whiteContentArea.translationY = 0f
         // Clear any leftover two-stage card translation (Overview or Trip) so the
         // section sits at its natural rest position under the header.
+        b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
         b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
     }
 
@@ -391,8 +392,9 @@ class HomeFragment : Fragment() {
                         // cover the banner (stage 1), then its sticky header pins
                         // under the profile row and only the CARD area scrolls
                         // under it (stage 2). Pick whichever section is live.
-                        val stickyHeaderId = R.id.tripHeader
-                        val cardsAreaId = R.id.tripCardsArea
+                        val dashboard = session.canViewVpDashboard()
+                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         // overflow = how far the cards extend past the pinned
                         // header's bottom (space between it and the nav bar). If
                         // they fit, overflow is 0 and the scroll stops at sLimit —
@@ -424,6 +426,8 @@ class HomeFragment : Fragment() {
                             homeRestInitialized = true
                             b.homeContent.scrollTo(0, 0)
                             b.whiteContentArea.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
                             b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
                         }
@@ -469,8 +473,13 @@ class HomeFragment : Fragment() {
                     // Applies to the dashboard Overview and the normal Today's Trip
                     // list alike (whichever section is live).
                     run {
-                        val cardsArea = b.root.findViewById<View>(R.id.tripCardsArea)
-                        val stickyHeader = b.root.findViewById<View>(R.id.tripHeader)
+                        val dashboard = session.canViewVpDashboard()
+                        val cardsArea = b.root.findViewById<View>(
+                            if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
+                        )
+                        val stickyHeader = b.root.findViewById<View>(
+                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        )
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         cardsArea?.translationY = -overshoot
@@ -1790,31 +1799,29 @@ class HomeFragment : Fragment() {
         val root = _binding?.root ?: return
         
         // Populate Grid Cards
-        fun setupCard(id: Int, title: String, value: String, trend: String, iconRes: Int, trendUp: Boolean = true) {
-            val card = root.findViewById<View>(id) ?: return
-            card.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
-            card.findViewById<TextView>(R.id.tvKpiValue)?.text = value
-            card.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
-            card.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
+        fun bindMarketingCard(card: View?, title: String, value: String, trend: String, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
+            card?.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
+            card?.findViewById<TextView>(R.id.tvKpiValue)?.text = value
+            card?.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
             
-            val arrow = card.findViewById<ImageView>(R.id.ivTrendArrow)
-            val trendText = card.findViewById<TextView>(R.id.tvTrendValue)
+            val arrow = card?.findViewById<ImageView>(R.id.ivTrendArrow)
+            val trendText = card?.findViewById<TextView>(R.id.tvTrendValue)
             val color = if (trendUp) Color.parseColor("#10B981") else Color.parseColor("#EF4444")
             arrow?.setColorFilter(color)
             trendText?.setTextColor(color)
-            
             // Animation
             val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
-            anim.startOffset = (id % 5) * 50L // Stagger slightly
-            card.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
+            anim.startOffset = ((card?.id ?: 0) % 5) * 50L // Stagger slightly
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        setupCard(R.id.cardTotalCalls, "Total Calls", "984", "12%", R.drawable.ic_custom_phone)
-        setupCard(R.id.cardHotLeads, "Hot Leads", "37", "16%", R.drawable.ic_custom_clipboard_check)
-        setupCard(R.id.cardSiteVisits, "Site Visits", "15", "25%", R.drawable.ic_custom_user)
-        setupCard(R.id.cardBookings, "Bookings", "2", "100%", R.drawable.ic_booking_calendar)
-        setupCard(R.id.cardCollection, "Collection (Today)", "₹18.60 L", "32%", R.drawable.ic_cash_bills)
-        setupCard(R.id.cardBookingValue, "Booking Value", "₹1.85 Cr", "120%", R.drawable.ic_arrow_compare)
+        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.img_marketing_3d_calls, "#3B82F6", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.img_marketing_3d_hot, "#EF4444", true)
+        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.img_marketing_3d_sv, "#8B5CF6", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.img_marketing_3d_cp, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.img_marketing_3d_incoming, "#10B981", false)
+        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.img_marketing_3d_warm, "#3B82F6", false)
 
         // Populate Funnel
         fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
