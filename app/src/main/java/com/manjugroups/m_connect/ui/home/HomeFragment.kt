@@ -137,7 +137,7 @@ class HomeFragment : Fragment() {
         startBannerAnimation()
 
         setupRoleAdaptiveView()
-        setupOverviewTabs()
+        setupMarketingOverview()
         setupDriverTabs()
         // Overview (dashboard) vs Today's Trip from the start, so a normal user
         // never flashes the dashboard before data loads.
@@ -212,7 +212,6 @@ class HomeFragment : Fragment() {
         if (b.whiteContentArea.translationY != 0f) b.whiteContentArea.translationY = 0f
         // Clear any leftover two-stage card translation (Overview or Trip) so the
         // section sits at its natural rest position under the header.
-        b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
         b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
     }
 
@@ -392,9 +391,8 @@ class HomeFragment : Fragment() {
                         // cover the banner (stage 1), then its sticky header pins
                         // under the profile row and only the CARD area scrolls
                         // under it (stage 2). Pick whichever section is live.
-                        val dashboard = session.canViewVpDashboard()
-                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
-                        val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
+                        val stickyHeaderId = R.id.tripHeader
+                        val cardsAreaId = R.id.tripCardsArea
                         // overflow = how far the cards extend past the pinned
                         // header's bottom (space between it and the nav bar). If
                         // they fit, overflow is 0 and the scroll stops at sLimit —
@@ -411,7 +409,6 @@ class HomeFragment : Fragment() {
                         // list keeps its natural height (no empty gap, no forced
                         // banner-lift).
                         val target = when {
-                            dashboard -> (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
                             overflow > 0 -> (vp + sLimit + overflow).coerceAtLeast(0)
                             else -> 0
                         }
@@ -427,8 +424,6 @@ class HomeFragment : Fragment() {
                             homeRestInitialized = true
                             b.homeContent.scrollTo(0, 0)
                             b.whiteContentArea.translationY = 0f
-                            b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
-                            b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
                             b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
                         }
@@ -474,13 +469,8 @@ class HomeFragment : Fragment() {
                     // Applies to the dashboard Overview and the normal Today's Trip
                     // list alike (whichever section is live).
                     run {
-                        val dashboard = session.canViewVpDashboard()
-                        val cardsArea = b.root.findViewById<View>(
-                            if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
-                        )
-                        val stickyHeader = b.root.findViewById<View>(
-                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
-                        )
+                        val cardsArea = b.root.findViewById<View>(R.id.tripCardsArea)
+                        val stickyHeader = b.root.findViewById<View>(R.id.tripHeader)
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         cardsArea?.translationY = -overshoot
@@ -1796,37 +1786,78 @@ class HomeFragment : Fragment() {
 
     private var selectedTab = "all"
 
-    private fun setupOverviewTabs() {
-        val tabHr = _binding?.root?.findViewById<TextView>(R.id.tabHr) ?: return
-        val tabMarketing = _binding?.root?.findViewById<TextView>(R.id.tabMarketing) ?: return
-        val layoutHr = _binding?.root?.findViewById<View>(R.id.layoutHr) ?: return
-        val layoutMarketing = _binding?.root?.findViewById<View>(R.id.layoutMarketing) ?: return
-
-        tabHr.setOnClickListener {
-            layoutHr.visibility = View.VISIBLE
-            layoutMarketing.visibility = View.GONE
+    private fun setupMarketingOverview() {
+        val root = _binding?.root ?: return
+        
+        // Populate Grid Cards
+        fun setupCard(id: Int, title: String, value: String, trend: String, iconRes: Int, trendUp: Boolean = true) {
+            val card = root.findViewById<View>(id) ?: return
+            card.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
+            card.findViewById<TextView>(R.id.tvKpiValue)?.text = value
+            card.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
+            card.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
             
-            tabHr.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabHr.setTextColor(Color.parseColor("#FFFFFF"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
+            val arrow = card.findViewById<ImageView>(R.id.ivTrendArrow)
+            val trendText = card.findViewById<TextView>(R.id.tvTrendValue)
+            val color = if (trendUp) Color.parseColor("#10B981") else Color.parseColor("#EF4444")
+            arrow?.setColorFilter(color)
+            trendText?.setTextColor(color)
             
-            tabMarketing.setBackgroundResource(0)
-            tabMarketing.setTextColor(Color.parseColor("#475467"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+            // Animation
+            val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            anim.startOffset = (id % 5) * 50L // Stagger slightly
+            card.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        tabMarketing.setOnClickListener {
-            layoutHr.visibility = View.GONE
-            layoutMarketing.visibility = View.VISIBLE
-            
-            tabMarketing.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabMarketing.setTextColor(Color.parseColor("#FFFFFF"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
-            
-            tabHr.setBackgroundResource(0)
-            tabHr.setTextColor(Color.parseColor("#475467"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+        setupCard(R.id.cardTotalCalls, "Total Calls", "984", "12%", R.drawable.ic_custom_phone)
+        setupCard(R.id.cardHotLeads, "Hot Leads", "37", "16%", R.drawable.ic_custom_clipboard_check)
+        setupCard(R.id.cardSiteVisits, "Site Visits", "15", "25%", R.drawable.ic_custom_user)
+        setupCard(R.id.cardBookings, "Bookings", "2", "100%", R.drawable.ic_booking_calendar)
+        setupCard(R.id.cardCollection, "Collection (Today)", "₹18.60 L", "32%", R.drawable.ic_cash_bills)
+        setupCard(R.id.cardBookingValue, "Booking Value", "₹1.85 Cr", "120%", R.drawable.ic_arrow_compare)
+
+        // Populate Funnel
+        fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
+            val row = root.findViewById<View>(id) ?: return
+            row.findViewById<TextView>(R.id.tvFunnelLabel)?.text = label
+            row.findViewById<TextView>(R.id.tvFunnelValue)?.text = value
+            row.findViewById<TextView>(R.id.tvFunnelPercent)?.text = percent
+            row.findViewById<View>(R.id.vFunnelDot)?.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(colorHex))
         }
+
+        setupFunnelRow(R.id.rowFunnel1, "Total Calls", "984", "100%", "#3B82F6")
+        setupFunnelRow(R.id.rowFunnel2, "Interested", "541", "55.0%", "#06B6D4")
+        setupFunnelRow(R.id.rowFunnel3, "Warm Leads", "239", "24.3%", "#F59E0B")
+        setupFunnelRow(R.id.rowFunnel4, "Hot Leads", "37", "3.8%", "#EF4444")
+        setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
+        setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
+
+        // Animate funnel
+        val funnelAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+        funnelAnim.startOffset = 300L
+        root.findViewById<View>(R.id.funnelCard)?.startAnimation(funnelAnim)
+
+        // Populate Conversion KPIs
+        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String) {
+            val card = root.findViewById<View>(id) ?: return
+            card.findViewById<TextView>(R.id.tvConversionTitle)?.text = title
+            card.findViewById<TextView>(R.id.tvConversionValue)?.text = value
+            card.findViewById<TextView>(R.id.tvConversionTrendValue)?.text = trend
+            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
+            
+            val tintColor = Color.parseColor(colorHex)
+            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setColorFilter(tintColor)
+            
+            val bg = card.background
+            if (bg is android.graphics.drawable.GradientDrawable) {
+                bg.setStroke(3, tintColor) // 1dp approx
+            }
+        }
+
+        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_custom_user, "#3B82F6")
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_custom_clipboard_check, "#EF4444")
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_arrow_compare, "#F59E0B")
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_gate_check_circle, "#10B981")
     }
 
     /**

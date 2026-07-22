@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="8dp">
+
+    <!-- Colored Dot -->
+    <View
+        android:id="@+id/vFunnelDot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:background="@drawable/bg_circle"
+        android:backgroundTint="#3B82F6" />
+
+    <!-- Label -->
+    <TextView
+        android:id="@+id/tvFunnelLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:text="Total Calls"
+        android:textColor="#374151"
+        android:textSize="13sp"
+        android:fontFamily="@font/inter_medium" />
+
+    <!-- Value -->
+    <TextView
+        android:id="@+id/tvFunnelValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="984"
+        android:textColor="#111827"
+        android:textSize="13sp"
+        android:fontFamily="@font/inter_bold"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Percentage -->
+    <TextView
+        android:id="@+id/tvFunnelPercent"
+        android:layout_width="45dp"
+        android:layout_height="wrap_content"
+        android:text="100%"
+        android:textColor="#111827"
+        android:textSize="13sp"
+        android:fontFamily="@font/inter_bold"
+        android:textAlignment="viewEnd" />
+</LinearLayout>
