@@ -393,7 +393,7 @@ class HomeFragment : Fragment() {
                         // under the profile row and only the CARD area scrolls
                         // under it (stage 2). Pick whichever section is live.
                         val dashboard = session.canViewVpDashboard()
-                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        val stickyHeaderId = if (dashboard) 0 else R.id.tripHeader
                         val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         // overflow = how far the cards extend past the pinned
                         // header's bottom (space between it and the nav bar). If
@@ -478,7 +478,7 @@ class HomeFragment : Fragment() {
                             if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         )
                         val stickyHeader = b.root.findViewById<View>(
-                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                            if (dashboard) 0 else R.id.tripHeader
                         )
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
@@ -1906,8 +1906,37 @@ class HomeFragment : Fragment() {
             funnelChart?.startLayoutAnimation()
         }
 
+        // Date & Team Filters
+        root.findViewById<View>(R.id.llOverviewDateFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.newInstance()
+                .show(childFragmentManager, "DateFilter")
+        }
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.REQUEST_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val from = bundle.getString(com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.RESULT_FROM) ?: return@setFragmentResultListener
+            try {
+                val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(from)
+                if (date != null) {
+                    val formatted = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(date)
+                    root.findViewById<TextView>(R.id.tvOverviewDateFilter)?.text = formatted.uppercase(java.util.Locale.US)
+                }
+            } catch(e: Exception) {}
+        }
+        
+        root.findViewById<View>(R.id.llOverviewTeamFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.AppBottomSheets.showOptions(
+                requireContext(),
+                "Select Team",
+                listOf(
+                    com.manjugroups.m_connect.ui.common.AppBottomSheets.Option("All Teams") {}
+                )
+            )
+        }
+
         // Populate Conversion KPIs
-        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String) {
+        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String, index: Int) {
             val card = root.findViewById<View>(id) ?: return
             
             val tintColor = Color.parseColor(colorHex)
@@ -1929,18 +1958,22 @@ class HomeFragment : Fragment() {
             
             card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
             
-            // Animate graph arrow
+            // Animate graph arrow infinitely
             if (arrowGraph != null) {
-                val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
-                anim.startOffset = 300 // slightly delayed
-                arrowGraph.startAnimation(anim)
+                val yAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "translationY", 0f, -8f, 0f)
+                yAnim.duration = 1500
+                yAnim.repeatCount = android.animation.ValueAnimator.INFINITE
+                yAnim.repeatMode = android.animation.ValueAnimator.RESTART
+                yAnim.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                yAnim.startDelay = (index * 200).toLong()
+                yAnim.start()
             }
         }
 
-        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6")
-        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444")
-        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B")
-        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981")
+        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6", 0)
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444", 1)
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B", 2)
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981", 3)
     }
 
     /**

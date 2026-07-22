@@ -20,6 +20,7 @@
 
         <!-- Date Picker -->
         <LinearLayout
+            android:id="@+id/llOverviewDateFilter"
             android:layout_width="0dp"
             android:layout_height="44dp"
             android:layout_weight="1"
@@ -36,6 +37,7 @@
                 app:tint="#1E3A8A" />
                 
             <TextView
+                android:id="@+id/tvOverviewDateFilter"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -53,6 +55,7 @@
 
         <!-- Teams Picker -->
         <LinearLayout
+            android:id="@+id/llOverviewTeamFilter"
             android:layout_width="0dp"
             android:layout_height="44dp"
             android:layout_weight="1"
