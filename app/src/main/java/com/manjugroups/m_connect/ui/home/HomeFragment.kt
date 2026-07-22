@@ -1924,8 +1924,8 @@ class HomeFragment : Fragment() {
             tvTrend?.text = trend
             tvTrend?.setTextColor(tintColor)
             
-            val arrow = card.findViewById<ImageView>(R.id.ivConversionTrendArrow)
-            arrow?.setColorFilter(tintColor)
+            val arrowGraph = card.findViewById<ImageView>(R.id.ivConversionChart)
+            arrowGraph?.setColorFilter(tintColor)
             
             card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
             
@@ -1934,11 +1934,11 @@ class HomeFragment : Fragment() {
                 bg.setStroke(3, tintColor) // 1dp approx
             }
             
-            // Animate arrow
-            if (arrow != null) {
+            // Animate graph arrow
+            if (arrowGraph != null) {
                 val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
                 anim.startOffset = 300 // slightly delayed
-                arrow.startAnimation(anim)
+                arrowGraph.startAnimation(anim)
             }
         }
 

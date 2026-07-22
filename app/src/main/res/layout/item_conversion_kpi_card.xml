@@ -3,92 +3,81 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/cardConversion"
     android:layout_width="140dp"
-    android:layout_height="110dp"
-    android:layout_marginEnd="12dp"
-    android:layout_marginVertical="4dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="4dp"
+    android:layout_marginVertical="2dp"
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:cardBackgroundColor="#F8FAFC">
 
-    <!-- Thin border can be added via background drawable if needed, 
-         using cardElevation=0 and a stroke on a child layout, 
-         but for now we'll just use a solid background -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="12dp"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
         android:background="@drawable/bg_conversion_kpi_border">
 
+        <!-- 3D Icon at Top Right -->
         <ImageView
             android:id="@+id/ivConversionBadge"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="-4dp"
+            android:layout_marginTop="-4dp"
             android:src="@drawable/ic_custom_user"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintEnd_toEndOf="parent" />
 
+        <!-- Title -->
         <TextView
             android:id="@+id/tvConversionTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
             android:text="Interest\nRate"
             android:textColor="#374151"
-            android:textSize="10sp"
+            android:textSize="9.5sp"
             android:fontFamily="@font/inter_medium"
-            android:lineSpacingExtra="2dp"
-            app:layout_constraintTop_toTopOf="@id/ivConversionBadge"
-            app:layout_constraintBottom_toBottomOf="@id/ivConversionBadge"
-            app:layout_constraintStart_toEndOf="@id/ivConversionBadge"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:lineSpacingExtra="0dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/ivConversionBadge" />
 
+        <!-- Value -->
         <TextView
             android:id="@+id/tvConversionValue"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="55.0%"
             android:textColor="#1E3A8A"
-            android:textSize="18sp"
+            android:textSize="14sp"
             android:fontFamily="@font/inter_bold"
-            android:layout_marginTop="8dp"
-            app:layout_constraintTop_toBottomOf="@id/ivConversionBadge"
+            android:layout_marginTop="2dp"
+            app:layout_constraintTop_toBottomOf="@id/tvConversionTitle"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <LinearLayout
-            android:id="@+id/llConversionTrend"
+        <!-- Trend -->
+        <TextView
+            android:id="@+id/tvConversionTrendValue"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent">
+            android:text="3.2%"
+            android:textColor="#10B981"
+            android:textSize="9.5sp"
+            android:fontFamily="@font/inter_semibold"
+            android:layout_marginTop="2dp"
+            app:layout_constraintTop_toBottomOf="@id/tvConversionValue"
+            app:layout_constraintStart_toStartOf="parent" />
 
-            <ImageView
-                android:id="@+id/ivConversionTrendArrow"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:src="@drawable/ic_arrow_up"
-                app:tint="#10B981" />
-
-            <TextView
-                android:id="@+id/tvConversionTrendValue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3.2%"
-                android:textColor="#10B981"
-                android:textSize="10sp"
-                android:fontFamily="@font/inter_semibold"
-                android:layout_marginStart="2dp" />
-        </LinearLayout>
-
-        <!-- Sparkline Placeholder (bottom right) -->
+        <!-- Graph Arrow -->
         <ImageView
             android:id="@+id/ivConversionChart"
-            android:layout_width="40dp"
-            android:layout_height="20dp"
-            android:scaleType="fitXY"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:layout_width="32dp"
+            android:layout_height="14dp"
+            android:layout_marginTop="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_graph_arrow"
+            app:layout_constraintTop_toBottomOf="@id/tvConversionTrendValue"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>
