@@ -18,11 +18,15 @@
 
         <TextView
             android:id="@+id/tvKpiTitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Title"
             android:textColor="#374151"
-            android:textSize="12sp"
+            android:textSize="11sp"
+            android:maxLines="1"
+            app:autoSizeTextType="uniform"
+            app:autoSizeMinTextSize="8sp"
+            app:autoSizeMaxTextSize="12sp"
             android:fontFamily="@font/inter_medium"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
