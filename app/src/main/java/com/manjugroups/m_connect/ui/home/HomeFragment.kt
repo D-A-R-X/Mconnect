@@ -1891,11 +1891,20 @@ class HomeFragment : Fragment() {
                 }
             }
             funnelChart.startLayoutAnimation()
+            
+            // Add click interaction
+            funnelChart.setOnClickListener {
+                funnelChart.startLayoutAnimation()
+            }
         }
         
-        root.findViewById<View>(R.id.funnelCard)?.startAnimation(
+        val funnelCard = root.findViewById<View>(R.id.funnelCard)
+        funnelCard?.startAnimation(
             android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
         )
+        funnelCard?.setOnClickListener {
+            funnelChart?.startLayoutAnimation()
+        }
 
         // Populate Conversion KPIs
         fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String) {
