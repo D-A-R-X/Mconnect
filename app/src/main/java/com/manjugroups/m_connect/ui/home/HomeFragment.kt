@@ -2169,12 +2169,92 @@ class HomeFragment : Fragment() {
         if (isPending) {
             card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
             card.assignmentInfo.visibility = View.GONE
+            card.root.setOnClickListener { openFleetAllocate(trip) }
         } else {
             card.btnAllocate.setOnClickListener(null)
             // Assigned / Completed: surface who the trip went to and how
             // far it's progressed, so the admin can track it — whether it
             // was allocated to the in-house fleet or an external agency.
             bindFleetAssignmentInfo(card, trip)
+            // Tapping the card opens the manage sheet with the live 5-stage
+            // progress bar (Assigned → Picked from CP → On Site → Picked from
+            // Site → Dropped) + vehicle/driver/agency details.
+            card.root.setOnClickListener { openFleetTripManage(trip) }
+        }
+    }
+
+    /** Map a Home dispatch [TravelDeskTrip] to the admin trip shape the manage
+     *  sheet renders, then open it (progress bar + details + reassign/remove). */
+    private fun openFleetTripManage(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val date = trip.scheduledDate ?: "—"
+        val timePart = trip.scheduledTime ?: trip.pickupTime ?: ""
+        val timeLabel = if (timePart.isBlank()) date else "$date • $timePart"
+        val pickup = trip.pickupAddress?.trim()?.ifBlank { null }
+        val addressLine = pickup ?: trip.project?.name?.let { "Project: $it" } ?: "Address pending"
+        val progress = when {
+            trip.travelDeskEndedAt != null -> "Dropped"
+            trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
+            trip.travelDeskOnSiteAt != null -> "On site"
+            trip.travelDeskStartedAt != null -> "Picked from CP"
+            trip.travelDeskArrivedAt != null -> "Reached client"
+            else -> "Awaiting pickup"
+        }
+        val expired = fleetExpired.any { it.id == trip.id }
+        val adminTrip = com.manjugroups.m_connect.ui.library.AdminFleetTripsFragment.AdminTrip(
+            id = trip.id.orEmpty(),
+            time = timeLabel,
+            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() }
+                ?: trip.lead?.contactName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Unknown",
+            address = addressLine,
+            attendees = trip.expectedAttendeeCount?.toString() ?: "—",
+            vehicleType = trip.vehiclePreference ?: "",
+            lmoName = trip.lmoName?.trim()?.ifBlank { null },
+            status = if (expired) "Expired" else "Assigned",
+            driverName = trip.driverName?.trim()?.ifBlank { null },
+            driverPhone = trip.driverPhone?.trim()?.ifBlank { null },
+            allocatedVehicle = trip.vehicle?.vehicleNumber?.trim()?.ifBlank { null },
+            progressLabel = progress,
+            started = trip.travelDeskStartedAt != null,
+            expired = expired,
+            startKm = trip.travelDeskStartKm,
+            endKm = trip.travelDeskEndKm,
+            startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
+            endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+        )
+        com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet.newInstance(
+            trip = adminTrip,
+            onReassign = { openFleetAllocate(trip) },
+            onRemove = { removeFleetTripDriver(trip) },
+        ).showOnce(parentFragmentManager, "home_fleet_manage")
+    }
+
+    private fun removeFleetTripDriver(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching {
+                fleetApi.unallocate(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(siteVisitId),
+                )
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (resp?.success == true) {
+                android.widget.Toast.makeText(
+                    requireContext(), "Driver removed — back to Pending.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                loadFleetDispatch()
+            } else {
+                android.widget.Toast.makeText(
+                    requireContext(), resp?.error ?: "Could not remove the driver.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 

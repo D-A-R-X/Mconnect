@@ -72,11 +72,15 @@ class AuthViewModel : ViewModel() {
                     _uiState.value = AuthUiState.Error(response.message ?: "Failed to send OTP")
                 }
             } catch (e: Exception) {
-                if (isNotRegistered(parseErrorMessage(e, ""))) {
+                // Parse ONCE — an HttpException's error body is a one-shot stream,
+                // so calling parseErrorMessage twice leaves the second read empty
+                // and collapses a real reason (e.g. "Your account is inactive.
+                // Contact admin.") into the generic 4xx message.
+                val parsed = parseErrorMessage(e, "Network error. Please try again.")
+                if (isNotRegistered(parsed)) {
                     sendAgencyDriverOtp(phone)
                 } else {
-                    _uiState.value =
-                        AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+                    _uiState.value = AuthUiState.Error(parsed)
                 }
             }
         }
