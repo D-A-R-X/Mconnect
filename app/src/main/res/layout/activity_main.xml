@@ -117,183 +117,177 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- iOS Liquid Glass BlurView wrapper for the pill. 
-             Provides true backdrop blur. -->
-        <eightbitlab.com.blurview.BlurView
-            android:id="@+id/tabBarBlurView"
+        <!-- Frosted-glass pill. No android:background: GlassNavBar paints its
+             own blurred backdrop + tint, and a drawable would cover it. -->
+        <com.manjugroups.m_connect.ui.custom.GlassNavBar
+            android:id="@+id/tabBar"
             android:layout_width="match_parent"
             android:layout_height="66dp"
             android:layout_marginStart="32dp"
             android:layout_marginTop="10dp"
             android:layout_marginEnd="32dp"
-            android:elevation="0dp">
-            
-            <com.manjugroups.m_connect.ui.custom.GlassNavBar
-                android:id="@+id/tabBar"
-                android:layout_width="match_parent"
+            android:elevation="10dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <!-- HOME tab -->
+            <FrameLayout
+                android:id="@+id/tabHome"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp">
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true">
 
-                <!-- HOME tab -->
-                <FrameLayout
-                    android:id="@+id/tabHome"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true">
+                    android:gravity="center"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical">
+                    <ImageView
+                        android:id="@+id/tabHomeIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Home" />
 
-                        <ImageView
-                            android:id="@+id/tabHomeIcon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Home" />
+                    <View
+                        android:id="@+id/tabHomeIndicator"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
-                        <View
-                            android:id="@+id/tabHomeIndicator"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tabHomeText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Home"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </FrameLayout>
 
-                        <TextView
-                            android:id="@+id/tabHomeText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Home"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </FrameLayout>
+            <!-- ATTENDANCE tab -->
+            <FrameLayout
+                android:id="@+id/tabHr"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true">
 
-                <!-- ATTENDANCE tab -->
-                <FrameLayout
-                    android:id="@+id/tabHr"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true">
+                    android:gravity="center"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical">
+                    <ImageView
+                        android:id="@+id/tabHrIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Attendance" />
 
-                        <ImageView
-                            android:id="@+id/tabHrIcon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Attendance" />
+                    <View
+                        android:id="@+id/tabHrIndicator"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
-                        <View
-                            android:id="@+id/tabHrIndicator"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tabHrText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Attendance"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </FrameLayout>
 
-                        <TextView
-                            android:id="@+id/tabHrText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Attendance"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </FrameLayout>
+            <!-- CHAT tab -->
+            <FrameLayout
+                android:id="@+id/tabChat"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true">
 
-                <!-- CHAT tab -->
-                <FrameLayout
-                    android:id="@+id/tabChat"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true">
+                    android:gravity="center"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical">
+                    <ImageView
+                        android:id="@+id/tabChatIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Chat" />
 
-                        <ImageView
-                            android:id="@+id/tabChatIcon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Chat" />
+                    <View
+                        android:id="@+id/tabChatIndicator"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
-                        <View
-                            android:id="@+id/tabChatIndicator"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tabChatText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Chat"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </FrameLayout>
 
-                        <TextView
-                            android:id="@+id/tabChatText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Chat"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </FrameLayout>
+            <!-- APPS tab -->
+            <FrameLayout
+                android:id="@+id/tabProfile"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true">
 
-                <!-- APPS tab -->
-                <FrameLayout
-                    android:id="@+id/tabProfile"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true">
+                    android:gravity="center"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical">
+                    <ImageView
+                        android:id="@+id/tabProfileIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Apps" />
 
-                        <ImageView
-                            android:id="@+id/tabProfileIcon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Apps" />
+                    <View
+                        android:id="@+id/tabProfileIndicator"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
 
-                        <View
-                            android:id="@+id/tabProfileIndicator"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/tabProfileText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:text="Apps"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </FrameLayout>
-            </com.manjugroups.m_connect.ui.custom.GlassNavBar>
-        </eightbitlab.com.blurview.BlurView>
+                    <TextView
+                        android:id="@+id/tabProfileText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:includeFontPadding="false"
+                        android:text="Apps"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </FrameLayout>
+        </com.manjugroups.m_connect.ui.custom.GlassNavBar>
         </LinearLayout>
         </FrameLayout>
 
