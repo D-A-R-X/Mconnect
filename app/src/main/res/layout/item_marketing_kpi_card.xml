@@ -2,7 +2,7 @@
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="130dp"
+    android:layout_height="145dp"
     android:layout_margin="4dp"
     app:cardCornerRadius="16dp"
     app:cardElevation="2dp"
@@ -11,7 +11,8 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="10dp">
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="12dp">
 
         <TextView
             android:id="@+id/tvKpiTitle"
@@ -19,7 +20,7 @@
             android:layout_height="wrap_content"
             android:text="Title"
             android:textColor="#374151"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:fontFamily="@font/inter_medium"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
@@ -30,9 +31,9 @@
             android:layout_height="wrap_content"
             android:text="0"
             android:textColor="#1D4ED8"
-            android:textSize="20sp"
+            android:textSize="24sp"
             android:fontFamily="@font/inter_bold"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="8dp"
             app:autoSizeTextType="uniform"
             app:autoSizeMinTextSize="14sp"
             app:autoSizeMaxTextSize="24sp"
@@ -43,54 +44,46 @@
 
         <ImageView
             android:id="@+id/ivKpiIcon"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="-2dp"
-            android:layout_marginBottom="-2dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="-4dp"
             android:scaleType="fitCenter"
+            app:layout_constraintTop_toBottomOf="@id/tvKpiTitle"
             app:layout_constraintBottom_toTopOf="@id/llTrend"
             app:layout_constraintEnd_toEndOf="parent" />
 
         <LinearLayout
             android:id="@+id/llTrend"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/ivKpiIcon">
+            app:layout_constraintStart_toStartOf="parent">
 
-            <LinearLayout
+            <ImageView
+                android:id="@+id/ivTrendArrow"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="#10B981" />
+
+            <TextView
+                android:id="@+id/tvTrendValue"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                
-                <ImageView
-                    android:id="@+id/ivTrendArrow"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:src="@drawable/ic_arrow_up"
-                    app:tint="#10B981" />
-
-                <TextView
-                    android:id="@+id/tvTrendValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0%"
-                    android:textColor="#10B981"
-                    android:textSize="10sp"
-                    android:fontFamily="@font/inter_bold"
-                    android:layout_marginStart="2dp" />
-            </LinearLayout>
+                android:text="0%"
+                android:textColor="#10B981"
+                android:textSize="10sp"
+                android:fontFamily="@font/inter_bold"
+                android:layout_marginStart="2dp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="vs yesterday"
+                android:text=" vs yesterday"
                 android:textColor="#6B7280"
                 android:textSize="9sp"
-                android:layout_marginTop="1dp"
                 android:fontFamily="@font/inter_regular" />
         </LinearLayout>
 
