@@ -5,14 +5,16 @@
     android:layout_height="145dp"
     android:layout_margin="4dp"
     app:cardCornerRadius="16dp"
-    app:cardElevation="2dp"
-    app:cardBackgroundColor="#FFFFFF">
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="#FFFFFF"
+    android:outlineAmbientShadowColor="#1A000000"
+    android:outlineSpotShadowColor="#1A000000">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="14dp">
 
         <TextView
             android:id="@+id/tvKpiTitle"
@@ -33,7 +35,7 @@
             android:textColor="#1D4ED8"
             android:textSize="24sp"
             android:fontFamily="@font/inter_bold"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="0dp"
             app:autoSizeTextType="uniform"
             app:autoSizeMinTextSize="14sp"
             app:autoSizeMaxTextSize="24sp"
@@ -84,6 +86,7 @@
                 android:text=" vs yesterday"
                 android:textColor="#6B7280"
                 android:textSize="9sp"
+                android:maxLines="1"
                 android:fontFamily="@font/inter_regular" />
         </LinearLayout>
 
