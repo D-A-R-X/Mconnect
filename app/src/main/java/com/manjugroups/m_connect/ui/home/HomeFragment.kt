@@ -1801,15 +1801,20 @@ class HomeFragment : Fragment() {
         // Populate Grid Cards
         fun bindMarketingCard(card: View?, title: String, value: String, trend: String, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
             card?.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
-            card?.findViewById<TextView>(R.id.tvKpiValue)?.text = value
+            
+            val tvValue = card?.findViewById<TextView>(R.id.tvKpiValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(android.graphics.Color.parseColor(colorHex))
+            
             card?.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
             card?.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
             
+            val tvTrendText = card?.findViewById<TextView>(R.id.tvTrendValue)
             val arrow = card?.findViewById<ImageView>(R.id.ivTrendArrow)
-            val trendText = card?.findViewById<TextView>(R.id.tvTrendValue)
-            val color = if (trendUp) Color.parseColor("#10B981") else Color.parseColor("#EF4444")
-            arrow?.setColorFilter(color)
-            trendText?.setTextColor(color)
+            val trendColor = if (trendUp) android.graphics.Color.parseColor("#10B981") else android.graphics.Color.parseColor("#EF4444")
+            arrow?.setColorFilter(trendColor)
+            tvTrendText?.setTextColor(trendColor)
+
             // Animation
             val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
             anim.startOffset = ((card?.id ?: 0) % 5) * 50L // Stagger slightly
@@ -1817,9 +1822,9 @@ class HomeFragment : Fragment() {
         }
 
         bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.ic_3d_calls, "#3B82F6", true)
-        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#EF4444", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#10B981", true)
         bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.ic_3d_sv, "#8B5CF6", true)
-        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#F59E0B", true)
         bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.ic_3d_collection, "#10B981", false)
         bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.ic_3d_value, "#3B82F6", false)
 
@@ -1871,26 +1876,21 @@ class HomeFragment : Fragment() {
         val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
         if (funnelChart != null) {
             val colors = listOf("#3B82F6", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981")
+            val values = listOf("984", "541", "239", "37", "15", "2")
+            
+            // Set up LayoutAnimationController for staggered assembly animation
+            val jumpAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            val controller = android.view.animation.LayoutAnimationController(jumpAnim, 0.2f)
+            funnelChart.layoutAnimation = controller
+
             for (i in 0 until funnelChart.childCount) {
-                val block = funnelChart.getChildAt(i)
-                if (i < colors.size) {
+                val block = funnelChart.getChildAt(i) as? TextView
+                if (block != null && i < colors.size) {
                     block.background = createClayDrawable(colors[i])
+                    block.text = values[i]
                 }
-                
-                // Set initial state for assembly animation
-                block.alpha = 0f
-                block.translationY = -50f
-                block.scaleX = 0.8f
-                
-                block.animate()
-                    .alpha(1f)
-                    .translationY(0f)
-                    .scaleX(1f)
-                    .setStartDelay(100L + (i * 120L))
-                    .setDuration(400L)
-                    .setInterpolator(android.view.animation.OvershootInterpolator())
-                    .start()
             }
+            funnelChart.startLayoutAnimation()
         }
         
         root.findViewById<View>(R.id.funnelCard)?.startAnimation(
