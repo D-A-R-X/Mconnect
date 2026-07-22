@@ -134,6 +134,33 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
+            <!-- Trip progress stepper — same stages the internal driver + SV
+                 stepper + travel-desk portal use, so an external-agency driver
+                 sees exactly where the trip has reached. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_admin_fleet_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Trip progress"
+                    android:textColor="#111827"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:id="@+id/agencyTripStages"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
             <FrameLayout
                 android:id="@+id/btnDetailOpenMaps"
                 android:layout_width="match_parent"

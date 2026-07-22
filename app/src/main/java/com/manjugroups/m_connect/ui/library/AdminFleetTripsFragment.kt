@@ -583,6 +583,7 @@ class AdminFleetTripsFragment : Fragment() {
         return AdminTrip(
             id = trip.id.orEmpty(),
             time = timeLabel,
+            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown",
             address = addressLine,
             attendees = attendees,
             vehicleType = vehicleLabel,
@@ -614,6 +615,7 @@ class AdminFleetTripsFragment : Fragment() {
     data class AdminTrip(
         val id: String,
         val time: String,
+        val clientName: String,
         val address: String,
         val attendees: String,
         val vehicleType: String,
@@ -661,6 +663,7 @@ class AdminFleetTripsFragment : Fragment() {
 
             fun bind(item: AdminTrip) {
                 binding.tvTripTime.text = item.time
+                binding.tvClientName.text = item.clientName
                 binding.tvTripAddress.text = item.address
                 // People count only (the pill icon already conveys "people").
                 val attendeesShort = item.attendees.replace(" Attendees", "").trim()

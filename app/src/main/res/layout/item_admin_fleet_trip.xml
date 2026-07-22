@@ -55,8 +55,8 @@
                 android:fontFamily="@font/inter_medium"
                 android:maxLines="1"
                 android:text="2026-06-13 • 13:00"
-                android:textColor="#4B5563"
-                android:textSize="12.5sp" />
+                android:textColor="#6B7280"
+                android:textSize="11sp" />
 
             <!-- Status badge -->
             <TextView
@@ -72,21 +72,34 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Row 2: Address -->
+        <!-- Row 2a: Client name (primary) — falls back to "Unknown" -->
+        <TextView
+            android:id="@+id/tvClientName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:text="Client name"
+            android:textColor="#111827"
+            android:textSize="14sp" />
+
+        <!-- Row 2b: Address (secondary, muted) -->
         <TextView
             android:id="@+id/tvTripAddress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="2dp"
             android:breakStrategy="high_quality"
             android:ellipsize="end"
             android:fontFamily="@font/inter_regular"
             android:hyphenationFrequency="none"
-            android:lineSpacingExtra="2dp"
+            android:lineSpacingExtra="1dp"
             android:maxLines="1"
             android:text="1st Avenue, 83rd St, Ashok Nagar, Chennai, Tamil Nadu 600083"
-            android:textColor="#374151"
-            android:textSize="12sp" />
+            android:textColor="#6B7280"
+            android:textSize="11.5sp" />
 
         <!-- Row 3: people count · LMO · Allocate — three equal-width chips, each
              the same height + shape as the Allocate button. -->

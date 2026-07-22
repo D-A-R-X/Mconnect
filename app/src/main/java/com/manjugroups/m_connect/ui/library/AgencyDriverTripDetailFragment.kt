@@ -1,15 +1,18 @@
 package com.manjugroups.m_connect.ui.library
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.widget.LinearLayout
 import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
@@ -83,6 +86,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         onSiteAtMs = requireArguments().getLong(ARG_ONSITE_AT, 0L)
 
         binding.tvDetailProgress.text = phaseLabel(currentPhase)
+        renderStages()
 
         binding.btnDetailBack.setOnClickListener {
             parentFragmentManager.popBackStack()
@@ -112,6 +116,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             currentPhase = (trip.phase ?: "").lowercase()
             onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L
             binding.tvDetailProgress.text = phaseLabel(currentPhase)
+            renderStages()
             renderAction()
         }
     }
@@ -215,6 +220,79 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         "picked_from_site" -> "Picked from site"
         "completed" -> "Completed"
         else -> "Assigned"
+    }
+
+    /** Same stage order the internal driver + SV stepper + travel-desk use. */
+    private fun stages(): List<String> = listOf(
+        "Assigned",
+        "Picked from CP",
+        "On Site",
+        "Picked from Site",
+        "Dropped",
+        "Completed",
+    )
+
+    /** How far the agency phase has advanced through [stages]. */
+    private fun reachedIndex(): Int = when (currentPhase.lowercase()) {
+        "completed", "complete", "done", "closed" -> 5
+        "dropped" -> 4
+        "picked_from_site" -> 3
+        "on_site", "on-site", "arrived" -> 2
+        "in_progress", "in-progress", "at_client", "picked_up", "started", "active" -> 1
+        else -> 0
+    }
+
+    private fun dp(v: Int): Int =
+        (v * resources.displayMetrics.density).toInt()
+
+    private fun renderStages() {
+        val container = binding.agencyTripStages
+        container.removeAllViews()
+        val reached = reachedIndex()
+
+        stages().forEachIndexed { index, label ->
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(6), 0, dp(6))
+            }
+            val done = index <= reached
+
+            val dot = TextView(requireContext()).apply {
+                text = if (done) "✓" else (index + 1).toString()
+                gravity = android.view.Gravity.CENTER
+                textSize = 11f
+                setTextColor(if (done) Color.WHITE else Color.parseColor("#98A2B3"))
+                setBackgroundResource(
+                    if (done) R.drawable.bg_my_trips_tab_active
+                    else R.drawable.bg_cpv_filter_pill_inactive,
+                )
+                if (done) {
+                    backgroundTintList = android.content.res.ColorStateList
+                        .valueOf(Color.parseColor("#0B61CA"))
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(22), dp(22))
+            }
+
+            val text = TextView(requireContext()).apply {
+                this.text = label
+                textSize = 13f
+                setTextColor(
+                    if (done) Color.parseColor("#111827")
+                    else Color.parseColor("#98A2B3"),
+                )
+                typeface = ResourcesCompat.getFont(
+                    requireContext(),
+                    if (done) R.font.inter_semibold else R.font.inter_regular,
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                ).apply { marginStart = dp(10) }
+            }
+
+            row.addView(dot)
+            row.addView(text)
+            container.addView(row)
+        }
     }
 
     private fun geocodeAddress() {

@@ -2057,6 +2057,10 @@ class HomeFragment : Fragment() {
                 trip.scheduledDate,
                 (trip.scheduledTime ?: trip.pickupTime)?.takeIf { it.isNotBlank() },
             ).joinToString(" • ")
+            // Client identity is the primary line; "Unknown" when the backend
+            // can't resolve a name (leadless walk-in, missing CP client).
+            card.tvClientName.text =
+                trip.clientName?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
             card.tvTripAddress.text = trip.pickupAddress?.trim()?.ifBlank { null }
                 ?: trip.project?.name?.let { "Project: $it" }
                 ?: "Address pending"

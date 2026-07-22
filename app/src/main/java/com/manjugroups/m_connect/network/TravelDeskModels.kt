@@ -68,6 +68,10 @@ data class TravelDeskTrip(
     val pickupTime: String? = null,
     val expectedAttendeeCount: Int? = null,
     val vehiclePreference: String? = null,
+    // Client identity resolved server-side (lead → CP client → place). Shown as
+    // the card's primary line; falls back to "Unknown" on the card when null.
+    val clientName: String? = null,
+    val clientPhone: String? = null,
     // LMO — the telecaller who created the visit. Resolved server-side in the
     // trips payload; shown on the admin fleet card in place of the vehicle tag.
     val lmoName: String? = null,
