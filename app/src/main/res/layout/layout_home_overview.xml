@@ -184,12 +184,12 @@
                     android:gravity="center_horizontal"
                     android:paddingVertical="4dp">
                     
-                    <View android:layout_width="100dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#3B82F6"/>
-                    <View android:layout_width="80dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#06B6D4"/>
-                    <View android:layout_width="65dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#F59E0B"/>
-                    <View android:layout_width="50dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#EF4444"/>
-                    <View android:layout_width="35dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#8B5CF6"/>
-                    <View android:layout_width="20dp" android:layout_height="18dp" android:layout_marginBottom="8dp" android:background="@drawable/bg_funnel_bar" android:backgroundTint="#10B981"/>
+                    <View android:layout_width="100dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
+                    <View android:layout_width="80dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
+                    <View android:layout_width="65dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
+                    <View android:layout_width="50dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
+                    <View android:layout_width="35dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
+                    <View android:layout_width="20dp" android:layout_height="24dp" android:layout_marginBottom="8dp" android:elevation="4dp" />
                 </LinearLayout>
 
                 <!-- Funnel Metrics List -->

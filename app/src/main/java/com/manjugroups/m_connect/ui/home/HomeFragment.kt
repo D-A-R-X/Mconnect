@@ -1839,19 +1839,62 @@ class HomeFragment : Fragment() {
         setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
         setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
 
-        // Animate funnel blocks assembling
+        // Helper to create 3D clay morphism drawable
+        fun createClayDrawable(colorHex: String): android.graphics.drawable.Drawable {
+            val baseColor = android.graphics.Color.parseColor(colorHex)
+            val cornerRadius = 32f
+
+            val baseShape = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(baseColor)
+                this.cornerRadius = cornerRadius
+            }
+
+            val highlight = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.parseColor("#4DFFFFFF"), android.graphics.Color.TRANSPARENT)
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            val shadow = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.TRANSPARENT, android.graphics.Color.parseColor("#4D000000"))
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            return android.graphics.drawable.LayerDrawable(arrayOf(baseShape, highlight, shadow))
+        }
+
+        // Animate funnel blocks assembling and apply clay background
         val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
         if (funnelChart != null) {
+            val colors = listOf("#3B82F6", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981")
             for (i in 0 until funnelChart.childCount) {
                 val block = funnelChart.getChildAt(i)
-                val blockAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
-                blockAnim.startOffset = 200L + (i * 80L)
-                block.startAnimation(blockAnim)
+                if (i < colors.size) {
+                    block.background = createClayDrawable(colors[i])
+                }
+                
+                // Set initial state for assembly animation
+                block.alpha = 0f
+                block.translationY = -50f
+                block.scaleX = 0.8f
+                
+                block.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .scaleX(1f)
+                    .setStartDelay(100L + (i * 120L))
+                    .setDuration(400L)
+                    .setInterpolator(android.view.animation.OvershootInterpolator())
+                    .start()
             }
         }
         
         root.findViewById<View>(R.id.funnelCard)?.startAnimation(
-            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in).apply { startOffset = 100L }
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
         )
 
         // Populate Conversion KPIs
