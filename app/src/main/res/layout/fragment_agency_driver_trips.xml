@@ -9,8 +9,11 @@
     android:orientation="vertical">
 
     <!-- Header: profile avatar only. No bell, no nav — an agency driver has
-         no notifications feed and no other tabs to reach. -->
+         no notifications feed and no other tabs to reach. The top padding is
+         set at runtime to the status-bar inset so the row never slides under
+         the system status bar (the app draws edge-to-edge). -->
     <LinearLayout
+        android:id="@+id/driverHeaderBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#FFFFFF"

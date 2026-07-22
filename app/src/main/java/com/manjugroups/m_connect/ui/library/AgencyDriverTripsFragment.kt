@@ -54,6 +54,21 @@ class AgencyDriverTripsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // The app draws edge-to-edge, so pad the header down by the status-bar
+        // inset — otherwise the avatar / title slide up under the system bar
+        // when this fragment is (re)shown (e.g. returning from Profile).
+        val basePaddingTop = binding.driverHeaderBar.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(
+            binding.driverHeaderBar,
+        ) { v, insets ->
+            val top = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars(),
+            ).top
+            v.setPadding(v.paddingLeft, basePaddingTop + top, v.paddingRight, v.paddingBottom)
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(binding.driverHeaderBar)
+
         binding.tvDriverName.text = session.userName?.trim().orEmpty().ifBlank {
             "Assigned to you"
         }

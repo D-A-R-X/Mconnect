@@ -243,7 +243,7 @@ class SessionManager(context: Context) {
         get() = isExternalFleetAgency || isExternalFleetDriver
 
     val isFleetAdminDriver: Boolean
-        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true) &&
+        get() = isDriverDesignation(designation) &&
             (department ?: "").trim().equals("Administration", ignoreCase = true)
 
     val isDriverMode: Boolean
@@ -252,8 +252,21 @@ class SessionManager(context: Context) {
         // the same UI plus the dispatch list and the Allocate action
         // (isFleetAdminDriver). The Admin Fleet portal is NOT for either of
         // them — it belongs to external agencies.
-        get() = fleetDriverByBackend ||
-            (designation ?: "").trim().equals("Driver", ignoreCase = true)
+        get() = fleetDriverByBackend || isDriverDesignation(designation)
+
+    /**
+     * True for any driver designation, including qualified forms like
+     * "Driver (Transport)" / "Driver - Transport" — not just the bare
+     * "Driver". Matching only the exact word left internal transport drivers
+     * out of the driver shell and the fleet-trip routes.
+     */
+    private fun isDriverDesignation(value: String?): Boolean {
+        val d = (value ?: "").trim().lowercase(java.util.Locale.US)
+        return d == "driver" ||
+            d.startsWith("driver ") ||
+            d.startsWith("driver(") ||
+            d.startsWith("driver-")
+    }
 
     var isNotificationEnabled: Boolean
         get() = getCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, true)

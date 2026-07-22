@@ -83,17 +83,27 @@ class AuthViewModel : ViewModel() {
     }
 
     private suspend fun sendAgencyDriverOtp(phone: String) {
+        // The travel-desk path is only a LAST-RESORT fallback (external agency
+        // drivers). Reaching here just means MMS didn't recognise the phone —
+        // the person could be ordinary field / office staff who simply isn't
+        // registered yet, NOT necessarily a driver. So if travel-desk ALSO
+        // rejects the phone, show a neutral "contact admin" message instead of
+        // its driver-specific "ask your agency to add you as a driver" text.
+        val neutralNotRegistered = "Phone number not registered. Contact admin."
         try {
             val td = travelDeskApi.sendOtp(TravelDeskSendOtpRequest(phone))
             if (td.success) {
                 _uiState.value = AuthUiState.OtpSent(td.message ?: "OTP sent", agencyDriver = true)
             } else {
-                _uiState.value =
-                    AuthUiState.Error(td.error ?: "Phone number not registered. Contact admin.")
+                _uiState.value = AuthUiState.Error(neutralNotRegistered)
             }
         } catch (e: Exception) {
-            _uiState.value =
-                AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+            // Genuine network/connectivity errors keep their real message; a
+            // travel-desk 4xx (phone unknown there too) collapses to neutral.
+            val message =
+                if (e is HttpException) neutralNotRegistered
+                else parseErrorMessage(e, neutralNotRegistered)
+            _uiState.value = AuthUiState.Error(message)
         }
     }
 

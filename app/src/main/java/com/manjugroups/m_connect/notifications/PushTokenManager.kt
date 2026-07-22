@@ -57,9 +57,14 @@ object PushTokenManager {
         "chat-dm", "chat-channel" -> CHANNEL_CHAT
         // Tasks / daily work
         "task-assigned", "daily-task", "task-due" -> CHANNEL_TASKS
-        // Visits (CP / SV)
+        // Visits (CP / SV) + fleet trip allocation. The fleet-assigner alert
+        // fires when a new trip lands in the dispatcher's queue awaiting a
+        // vehicle — it rides the visits channel so it bubbles a heads-up
+        // instead of the quiet general fallback.
         "cp-visit-assigned", "site-visit-assigned", "field-visit",
-        "client-place-visit" -> CHANNEL_VISITS
+        "client-place-visit",
+        "marketing-fleet-new-trip-assigner",
+        "marketing-fleet-unassigned-reporting-officer" -> CHANNEL_VISITS
         // Approvals / requests (leave, permission, WFH, attendance)
         "leave-request", "leave-decision",
         "permission-request", "permission-decision",

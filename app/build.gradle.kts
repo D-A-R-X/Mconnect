@@ -14,6 +14,41 @@ fun ensureTrailingSlash(url: String): String {
 }
 fun gradleProp(name: String): String = (project.findProperty(name) as String?) ?: ""
 
+// Firebase client config resolution.
+//
+// The app initialises Firebase programmatically from BuildConfig (see
+// PushTokenManager.ensureFirebaseInitialized). Release CI supplies these via
+// env vars, but a plain `./gradlew assembleDebug` on a dev machine leaves them
+// blank — which silently disables push entirely (no token is ever registered,
+// so NO notification of any kind can arrive). To make debug builds "just work",
+// fall back to the standard google-services.json (drop your Firebase Android
+// config into app/google-services.json — it holds only non-secret client keys
+// that already ship inside every APK). Env vars still win when present.
+val googleServicesJson: Map<String, String> = run {
+    val f = project.file("google-services.json")
+    if (!f.exists()) return@run emptyMap()
+    runCatching {
+        @Suppress("UNCHECKED_CAST")
+        val root = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
+        val projectInfo = root["project_info"] as? Map<String, Any?> ?: emptyMap()
+        val client = (root["client"] as? List<Map<String, Any?>>)?.firstOrNull() ?: emptyMap()
+        val clientInfo = client["client_info"] as? Map<String, Any?> ?: emptyMap()
+        val apiKey = (client["api_key"] as? List<Map<String, Any?>>)
+            ?.firstOrNull()?.get("current_key") as? String
+        mapOf(
+            "FIREBASE_APPLICATION_ID" to (clientInfo["mobilesdk_app_id"] as? String ?: ""),
+            "FIREBASE_PROJECT_ID" to (projectInfo["project_id"] as? String ?: ""),
+            "FIREBASE_API_KEY" to (apiKey ?: ""),
+            "FIREBASE_GCM_SENDER_ID" to (projectInfo["project_number"] as? String ?: ""),
+            "FIREBASE_STORAGE_BUCKET" to (projectInfo["storage_bucket"] as? String ?: ""),
+        )
+    }.getOrDefault(emptyMap())
+}
+fun firebaseConfig(name: String): String =
+    System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: googleServicesJson[name]
+        ?: ""
+
 val googleMapsApiKey = envOrDefault(
     "GOOGLE_MAPS_ANDROID_KEY",
     envOrDefault(
@@ -66,11 +101,11 @@ android {
 
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         buildConfigField("String", "APP_URL", "\"${appUrl}\"")
-        buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${envOrEmpty("FIREBASE_APPLICATION_ID")}\"")
-        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${envOrEmpty("FIREBASE_PROJECT_ID")}\"")
-        buildConfigField("String", "FIREBASE_API_KEY", "\"${envOrEmpty("FIREBASE_API_KEY")}\"")
-        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", "\"${envOrEmpty("FIREBASE_GCM_SENDER_ID")}\"")
-        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${envOrEmpty("FIREBASE_STORAGE_BUCKET")}\"")
+        buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${firebaseConfig("FIREBASE_APPLICATION_ID")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebaseConfig("FIREBASE_PROJECT_ID")}\"")
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseConfig("FIREBASE_API_KEY")}\"")
+        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", "\"${firebaseConfig("FIREBASE_GCM_SENDER_ID")}\"")
+        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${firebaseConfig("FIREBASE_STORAGE_BUCKET")}\"")
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${googleMapsApiKey}\"")
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }

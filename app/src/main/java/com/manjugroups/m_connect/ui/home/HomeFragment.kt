@@ -1950,6 +1950,7 @@ class HomeFragment : Fragment() {
     private var fleetPending: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
     private var fleetAssigned: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
     private var fleetCompleted: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
+    private var fleetExpired: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
     private var fleetVehicles: List<com.manjugroups.m_connect.network.TravelDeskVehicle> = emptyList()
     private var fleetLoadJob: kotlinx.coroutines.Job? = null
     private var fleetError: String? = null
@@ -1979,8 +1980,19 @@ class HomeFragment : Fragment() {
                     t.travelDeskEndedAt != null ||
                         (t.status ?: "").equals("completed", ignoreCase = true)
                 }
-                fleetAssigned = assignedRows.filterNot(isDone)
-                fleetCompleted = assignedRows.filter(isDone)
+                // A trip that was never started and whose slot has passed is
+                // expired — it can't run, so it shouldn't sit in Assigned as if
+                // it were still live. It moves to the Completed tab, badged.
+                val isExpired = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
+                    !isDone(t) && t.travelDeskStartedAt == null &&
+                        com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                            t.scheduledDate, t.scheduledTime ?: t.pickupTime,
+                            isDone = false,
+                        )
+                }
+                fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
+                fleetExpired = assignedRows.filter(isExpired)
+                fleetCompleted = assignedRows.filter(isDone) + fleetExpired
                 fleetVehicles = vehicles.rows
                 renderFleetDispatch()
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -2049,18 +2061,21 @@ class HomeFragment : Fragment() {
                 ?: trip.project?.name?.let { "Project: $it" }
                 ?: "Address pending"
             card.tvAttendeesTag.text = trip.expectedAttendeeCount?.toString() ?: "—"
-            card.tvVehicleTag.text = (trip.vehiclePreference ?: "External")
-                .replace('_', ' ')
-                .split(" ")
-                .filter { it.isNotBlank() }
-                .joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
-                .ifBlank { "Vehicle" }
+            // LMO (telecaller who created the visit) in place of the vehicle tag.
+            card.tvLmoTag.text = trip.lmoName?.trim()?.takeIf { it.isNotBlank() }
+                ?.let { "LMO: $it" } ?: "LMO —"
 
             val isPending = selectedTab != "upcoming" && selectedTab != "completed"
+            // Expired trips live in the Completed tab but keep their own badge.
+            val isExpiredRow = fleetExpired.any { it.id == trip.id }
             card.tvTripStatus.text = when {
+                isExpiredRow -> "Expired"
                 selectedTab == "completed" -> "Complete"
                 selectedTab == "upcoming" -> "Assigned"
                 else -> "Pending"
+            }
+            if (isExpiredRow) {
+                card.tvTripStatus.setTextColor(android.graphics.Color.parseColor("#B42318"))
             }
             // Allocate only makes sense while the trip has no vehicle.
             card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
@@ -2141,8 +2156,16 @@ class HomeFragment : Fragment() {
         com.manjugroups.m_connect.ui.library.AllocateVehicleBottomSheet
             // Home dispatch is always the internal MMS fleet —
             // marketing.vehicles.list returns own + internal-agency
-            // vehicles only — so per-trip pricing applies.
-            .newInstance(options, showPricing = true) { result ->
+            // vehicles only — so per-trip pricing applies. The driver is fixed
+            // to the vehicle's default (not editable) and the pickup time is
+            // imported from the SV's scheduled time.
+            .newInstance(
+                options,
+                showPricing = true,
+                lockDriverToVehicleDefault = true,
+                fixedPickupTime = (trip.scheduledTime ?: trip.pickupTime)
+                    ?.takeIf { it.isNotBlank() },
+            ) { result ->
                 submitFleetAllocate(siteVisitId, result)
             }
             .showOnce(parentFragmentManager, "home_allocate_vehicle")

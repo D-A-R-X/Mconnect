@@ -68,6 +68,9 @@ data class TravelDeskTrip(
     val pickupTime: String? = null,
     val expectedAttendeeCount: Int? = null,
     val vehiclePreference: String? = null,
+    // LMO — the telecaller who created the visit. Resolved server-side in the
+    // trips payload; shown on the admin fleet card in place of the vehicle tag.
+    val lmoName: String? = null,
     val driverName: String? = null,
     val driverPhone: String? = null,
     val status: String? = null,

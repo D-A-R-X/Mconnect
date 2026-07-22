@@ -388,9 +388,14 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            if (sys.top > 0) {
-                cachedTopInset = sys.top
+            // Use the taller of the status bar and the display cutout so the
+            // header strip clears a centre/corner notch too — otherwise the
+            // title rides up beside the camera cutout on those devices.
+            val topInset = maxOf(sys.top, cutout.top)
+            if (topInset > 0) {
+                cachedTopInset = topInset
             }
             if (!statusBarFullBleed && cachedTopInset > 0) {
                 statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
@@ -1157,10 +1162,13 @@ class MainActivity : AppCompatActivity() {
         inAppUpdateManager?.onResume()
         // Ask (once) to exempt the app from "Manage app if unused" — its
         // default-on hibernation/auto-revoke is what puts the app to sleep and
-        // breaks background tracking, push and biometric alerts. Applies to
-        // every principal (external fleet relies on push too), so it runs
-        // before the external-principal early return below.
-        com.manjugroups.m_connect.util.UnusedAppRestrictions.maybePrompt(this)
+        // breaks background tracking, push and biometric alerts. Tracking staff
+        // see it as a row INSIDE the startup permissions gate (alongside
+        // location/activity/battery); everyone else — who never sees that gate
+        // — gets the standalone one-time prompt here.
+        if (!session.geoTrackingEnabled) {
+            com.manjugroups.m_connect.util.UnusedAppRestrictions.maybePrompt(this)
+        }
         // External-fleet principals (agency + agency drivers) have no staff
         // record, so every MMS call below 401s on their token and trips the
         // session-expired logout. They live entirely on the travel-desk

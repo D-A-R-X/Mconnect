@@ -204,10 +204,16 @@ class AdminFleetTripsFragment : Fragment() {
                 // can't take the whole screen down.
                 pendingTrips = pendingResp.rows.filter { !it.id.isNullOrBlank() }
                 val assignedRows = assignedResp.rows.filter { !it.id.isNullOrBlank() }
-                // Trips with an end timestamp from travel-desk are "Completed";
-                // everything else under "assigned" is in-flight ("Assigned").
-                assignedActive = assignedRows.filter { tripEndedAt(it) == null }
-                assignedCompleted = assignedRows.filter { tripEndedAt(it) != null }
+                // Trips with an end timestamp are "Completed". A never-started
+                // trip whose slot has passed is EXPIRED — it also belongs in
+                // Completed (badged separately), NOT sitting in Assigned as if
+                // it were still live. Everything else is in-flight ("Assigned").
+                assignedActive = assignedRows.filter {
+                    tripEndedAt(it) == null && !isExpiredTrip(it)
+                }
+                assignedCompleted = assignedRows.filter {
+                    tripEndedAt(it) != null || isExpiredTrip(it)
+                }
                 vehicles = vehiclesResp.rows
                 activeVehicleCount = vehicles.count {
                     (it.status ?: "active").equals("active", ignoreCase = true)
@@ -231,6 +237,14 @@ class AdminFleetTripsFragment : Fragment() {
             }
         }
     }
+
+    /** A never-started trip whose scheduled slot has already passed. */
+    private fun isExpiredTrip(trip: TravelDeskTrip): Boolean =
+        tripEndedAt(trip) == null && trip.travelDeskStartedAt == null &&
+            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                trip.scheduledDate, trip.scheduledTime ?: trip.pickupTime,
+                isDone = false,
+            )
 
     /** Surfaces the trip end timestamp regardless of which field the backend uses. */
     private fun tripEndedAt(trip: TravelDeskTrip): Long? {
@@ -561,11 +575,10 @@ class AdminFleetTripsFragment : Fragment() {
             trip.travelDeskArrivedAt != null -> "Reached client"
             else -> "Awaiting pickup"
         }
-        val expired = statusLabel == "Assigned" &&
-            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
-                trip.scheduledDate, trip.scheduledTime ?: trip.pickupTime,
-                isDone = false,
-            )
+        // Independent of which tab the trip lands in — an expired trip now
+        // lives in the Completed tab but must still read "Expired", not
+        // "Completed".
+        val expired = isExpiredTrip(trip)
 
         return AdminTrip(
             id = trip.id.orEmpty(),
@@ -573,6 +586,7 @@ class AdminFleetTripsFragment : Fragment() {
             address = addressLine,
             attendees = attendees,
             vehicleType = vehicleLabel,
+            lmoName = trip.lmoName?.trim()?.ifBlank { null },
             status = statusLabel,
             driverName = trip.driverName?.trim()?.ifBlank { null },
             driverPhone = trip.driverPhone?.trim()?.ifBlank { null },
@@ -603,6 +617,7 @@ class AdminFleetTripsFragment : Fragment() {
         val address: String,
         val attendees: String,
         val vehicleType: String,
+        val lmoName: String?,
         var status: String,
         var driverName: String? = null,
         var driverPhone: String? = null,
@@ -647,22 +662,15 @@ class AdminFleetTripsFragment : Fragment() {
             fun bind(item: AdminTrip) {
                 binding.tvTripTime.text = item.time
                 binding.tvTripAddress.text = item.address
+                // People count only (the pill icon already conveys "people").
                 val attendeesShort = item.attendees.replace(" Attendees", "").trim()
                 binding.tvAttendeesTag.text = attendeesShort
 
-                // The backend sends a snake_case enum ("company_vehicle"), which
-                // this only matched in its already-pretty form — so the raw
-                // value went straight to the pill. Humanise it instead of
-                // abbreviating; the pill now has the width for the full label.
-                binding.tvVehicleTag.text = item.vehicleType
-                    .replace('_', ' ')
-                    .trim()
-                    .split(" ")
-                    .filter { it.isNotBlank() }
-                    .joinToString(" ") { word ->
-                        word.replaceFirstChar { it.uppercase() }
-                    }
-                    .ifBlank { "Vehicle" }
+                // LMO — the telecaller who created the visit. Kept visible (with
+                // an em-dash fallback) so its weighted pill keeps the Allocate
+                // button right-aligned on the row.
+                binding.tvLmoTag.text = item.lmoName?.takeIf { it.isNotBlank() }
+                    ?.let { "LMO: $it" } ?: "LMO —"
                 // Expired takes over the badge from "Assigned" once the day is
                 // lost, and hides Allocate — the backend would reject it anyway.
                 binding.tvTripStatus.text = if (item.expired) "Expired" else item.status

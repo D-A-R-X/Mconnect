@@ -30,6 +30,19 @@ class AdminFleetContainerFragment : Fragment() {
         return binding.root
     }
 
+    /**
+     * Hide/show the floating bottom-nav chrome. A dialog opened over the fleet
+     * portal (e.g. Allocate Vehicle) only dims the background, so the floating
+     * nav pill shows THROUGH the scrim and its "Allocate ›" text bleeds into
+     * the sheet. Sheets call this to hide the chrome while they're open.
+     */
+    fun setNavChromeVisible(visible: Boolean) {
+        val b = _binding ?: return
+        val v = if (visible) View.VISIBLE else View.GONE
+        b.tabBarContainer.visibility = v
+        b.bottomNavFadeOverlay.visibility = v
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 

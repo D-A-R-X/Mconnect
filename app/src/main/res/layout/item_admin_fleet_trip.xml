@@ -88,29 +88,29 @@
             android:textColor="#374151"
             android:textSize="12sp" />
 
-        <!-- Row 3: tags only. The Allocate button used to share this row behind
-             a weighted spacer, so a long vehicle label squeezed the button and
-             the pills ran into it. -->
+        <!-- Row 3: people count · LMO · Allocate — three equal-width chips, each
+             the same height + shape as the Allocate button. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:baselineAligned="false"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <!-- Attendees Tag -->
+            <!-- People count -->
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
                 android:background="@drawable/bg_trip_tag_pill"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="3dp">
+                android:paddingHorizontal="8dp">
 
                 <ImageView
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
                     android:src="@drawable/ic_chat_users"
                     android:tint="#0B61CA" />
 
@@ -118,45 +118,61 @@
                     android:id="@+id/tvAttendeesTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
                     android:fontFamily="@font/inter_medium"
                     android:maxLines="1"
-                    android:text="2 Attendees"
+                    android:text="2"
                     android:textColor="#1E3A8A"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- Vehicle Tag. Weighted so a long label ellipsizes inside the
-                 pill instead of pushing the row wider than the card. -->
+            <!-- LMO (Lead Management Officer — who created the SV) -->
             <LinearLayout
+                android:id="@+id/lmoTagContainer"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_trip_tag_pill"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="3dp">
+                android:paddingHorizontal="8dp">
 
                 <ImageView
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
-                    android:src="@drawable/ic_car_outline"
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
+                    android:src="@drawable/ic_auth_user"
                     android:tint="#0B61CA" />
 
                 <TextView
-                    android:id="@+id/tvVehicleTag"
+                    android:id="@+id/tvLmoTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
                     android:ellipsize="end"
                     android:fontFamily="@font/inter_medium"
                     android:maxLines="1"
-                    android:text="Company Vehicle"
+                    android:text="LMO"
                     android:textColor="#1E3A8A"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
+
+            <!-- Allocate — same size/shape as the two chips. Hidden for
+                 allocated / expired trips. -->
+            <TextView
+                android:id="@+id/btnAllocate"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_admin_fleet_btn_allocate"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="Allocate ›"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
         </LinearLayout>
 
@@ -205,24 +221,6 @@
                 android:textColor="#B54708"
                 android:textSize="11sp" />
         </LinearLayout>
-
-        <!-- Row 4: action, right-aligned on its own line so it always has room
-             and lines up across cards regardless of tag length. -->
-        <TextView
-            android:id="@+id/btnAllocate"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_gravity="end"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_admin_fleet_btn_allocate"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:minWidth="96dp"
-            android:paddingHorizontal="14dp"
-            android:text="Allocate ›"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
 
     </LinearLayout>
 

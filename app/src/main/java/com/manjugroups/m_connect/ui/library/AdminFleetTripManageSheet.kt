@@ -69,6 +69,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         view.findViewById<TextView>(R.id.tvManageProgress).text =
             if (t.expired) "Expired" else t.progressLabel
 
+        bindStatsBar(view, t)
         bindTripRecord(view, t)
 
         val actions = view.findViewById<View>(R.id.manageActions)
@@ -96,6 +97,41 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 onRemove?.invoke()
                 dismissAllowingStateLoss()
             }
+        }
+    }
+
+    /**
+     * The 5-stage trip stats bar the driver advances live (Assigned → Picked
+     * from CP → On Site → Picked from Site → Dropped). Segments up to and
+     * including the current stage turn green; the current stage's label is
+     * highlighted. Derived from the same progress label the card shows, so it
+     * tracks whatever the driver last reported.
+     */
+    private fun bindStatsBar(view: View, t: AdminFleetTripsFragment.AdminTrip) {
+        val stage = when (t.progressLabel.trim().lowercase()) {
+            "dropped", "completed", "complete" -> 4
+            "picked from site" -> 3
+            "on site" -> 2
+            "picked from cp", "picked up" -> 1
+            else -> 0 // Assigned / Reached client / Awaiting pickup
+        }
+        val green = android.graphics.Color.parseColor("#12B76A")
+        val segs = listOf(
+            R.id.statSeg0, R.id.statSeg1, R.id.statSeg2, R.id.statSeg3, R.id.statSeg4,
+        )
+        segs.forEachIndexed { i, id ->
+            view.findViewById<View>(id).setBackgroundResource(
+                if (i <= stage) R.drawable.bg_trip_progress_line_active
+                else R.drawable.bg_trip_progress_line_inactive,
+            )
+        }
+        val labels = listOf(
+            R.id.statLbl0, R.id.statLbl1, R.id.statLbl2, R.id.statLbl3, R.id.statLbl4,
+        )
+        labels.forEachIndexed { i, id ->
+            view.findViewById<TextView>(id).setTextColor(
+                if (i <= stage) green else android.graphics.Color.parseColor("#98A2B3"),
+            )
         }
     }
 

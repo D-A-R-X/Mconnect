@@ -203,7 +203,44 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             refreshStatus(view)
         }
 
+        // "Manage app if unused" (hibernation / auto-revoke) — deep-link to the
+        // OS setting so the user turns it OFF, keeping the app alive.
+        view.findViewById<View>(R.id.rowManageAppUnused).setOnClickListener {
+            val ctx = context ?: return@setOnClickListener
+            val intent = androidx.core.content.IntentCompat
+                .createManageUnusedAppRestrictionsIntent(ctx, ctx.packageName)
+            runCatching { startActivity(intent) }
+        }
+
         refreshStatus(view)
+    }
+
+    /**
+     * Resolve the async "unused app restrictions" status and show the row only
+     * when it's currently ENABLED (i.e. still needs turning off). The switch
+     * reads ON once it's disabled. Non-blocking — it never gates dismissal.
+     */
+    private fun refreshUnusedAppRow(root: View) {
+        val ctx = context ?: return
+        val row = root.findViewById<View>(R.id.rowManageAppUnused)
+        val sw = root.findViewById<SwitchCompat>(R.id.switchManageAppUnused)
+        val future = androidx.core.content.PackageManagerCompat
+            .getUnusedAppRestrictionsStatus(ctx)
+        future.addListener(
+            {
+                if (!isAdded || view == null) return@addListener
+                val status = runCatching { future.get() }.getOrNull()
+                val enabled = when (status) {
+                    androidx.core.content.UnusedAppRestrictionsConstants.API_30_BACKPORT,
+                    androidx.core.content.UnusedAppRestrictionsConstants.API_30,
+                    androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> true
+                    else -> false // ERROR / FEATURE_NOT_AVAILABLE / DISABLED
+                }
+                row.visibility = if (enabled) View.VISIBLE else View.GONE
+                sw.isChecked = !enabled
+            },
+            ContextCompat.getMainExecutor(ctx),
+        )
     }
 
     override fun onResume() {
@@ -300,6 +337,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             autoRow.visibility = View.GONE
         }
         root.findViewById<SwitchCompat>(R.id.switchAutostart).isChecked = autostartOk
+
+        refreshUnusedAppRow(root)
     }
 
     // ── Settings launchers ──────────────────────────────────────

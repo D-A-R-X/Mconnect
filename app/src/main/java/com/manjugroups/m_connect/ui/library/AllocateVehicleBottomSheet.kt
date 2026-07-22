@@ -31,6 +31,12 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private var vehicles: List<AllocateVehicleOption> = emptyList()
     private var drivers: List<AllocateDriverOption> = emptyList()
     private var showPricing: Boolean = true
+    // Internal MMS fleet: the driver is whoever is set as the vehicle's default
+    // driver — the dispatcher can't type a different one. The name + phone
+    // fields are locked and always reflect the selected vehicle's default.
+    private var lockDriverToVehicleDefault: Boolean = false
+    // Pre-fills the pickup time from the SV's scheduled time.
+    private var fixedPickupTime: String? = null
     private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
     // Opens the add-driver form with the typed name; the completion callback
     // hands back the created driver so this sheet can select it and resume.
@@ -50,6 +56,8 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             vehicles: List<AllocateVehicleOption>,
             drivers: List<AllocateDriverOption> = emptyList(),
             showPricing: Boolean = true,
+            lockDriverToVehicleDefault: Boolean = false,
+            fixedPickupTime: String? = null,
             onAddNewDriver: ((String, (AllocateDriverOption) -> Unit) -> Unit)? = null,
             onAllocate: (AllocateVehicleResult) -> Unit,
         ): AllocateVehicleBottomSheet {
@@ -57,6 +65,8 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             sheet.vehicles = vehicles
             sheet.drivers = drivers
             sheet.showPricing = showPricing
+            sheet.lockDriverToVehicleDefault = lockDriverToVehicleDefault
+            sheet.fixedPickupTime = fixedPickupTime
             sheet.onAddNewDriver = onAddNewDriver
             sheet.onAllocateCallback = onAllocate
             return sheet
@@ -94,6 +104,24 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
             behavior.skipCollapsed = true
         }
+        // Hide the fleet portal's floating nav so it doesn't show through the
+        // scrim while this sheet is open. No-op when opened outside the fleet
+        // container (e.g. from Home).
+        fleetContainer()?.setNavChromeVisible(false)
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        fleetContainer()?.setNavChromeVisible(true)
+        super.onDismiss(dialog)
+    }
+
+    private fun fleetContainer(): AdminFleetContainerFragment? {
+        var f = parentFragment
+        while (f != null) {
+            if (f is AdminFleetContainerFragment) return f
+            f = f.parentFragment
+        }
+        return null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -118,12 +146,31 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         setupTimePicker()
         setupPricingToggle()
 
+        // Internal fleet: driver is fixed to the vehicle's default — lock the
+        // name + phone so the dispatcher can't retype them.
+        if (lockDriverToVehicleDefault) {
+            listOf(binding.etDriverName, binding.etDriverPhone).forEach { field ->
+                field.keyListener = null
+                field.isFocusable = false
+                field.isFocusableInTouchMode = false
+                field.isCursorVisible = false
+                field.setOnClickListener(null)
+            }
+        }
+        // Pickup time imported from the SV's scheduled time.
+        fixedPickupTime?.takeIf { it.isNotBlank() }?.let {
+            binding.etPickupTime.setText(it)
+        }
+
         binding.btnSubmitAllocate.setOnClickListener {
             validateAndSubmit()
         }
     }
 
     private fun setupDriverPicker() {
+        // Internal fleet locks the driver to the vehicle default — no roster
+        // dropdown, no free typing.
+        if (lockDriverToVehicleDefault) return
         // Free typing stays allowed (backend auto-creates a typed driver), but
         // tapping opens the roster dropdown so the dispatcher can pick an exact
         // driver — which binds the trip by id and avoids shared-phone mix-ups.
@@ -194,6 +241,14 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.spinnerVehicle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val v = vehicles.getOrNull(position) ?: return
+                if (lockDriverToVehicleDefault) {
+                    // Internal fleet: the driver ALWAYS follows the vehicle's
+                    // default (overwrite whatever was there), never editable.
+                    binding.etDriverName.setText(v.defaultDriverName?.trim().orEmpty())
+                    binding.etDriverPhone.setText(v.defaultDriverPhone?.trim().orEmpty())
+                    selectedDriverId = null
+                    return
+                }
                 if (binding.etDriverName.text?.toString()?.trim().isNullOrEmpty()) {
                     v.defaultDriverName?.takeIf { it.isNotBlank() }?.let {
                         binding.etDriverName.setText(it)
