@@ -1816,12 +1816,12 @@ class HomeFragment : Fragment() {
             card?.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.img_marketing_3d_calls, "#3B82F6", true)
-        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.img_marketing_3d_hot, "#EF4444", true)
-        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.img_marketing_3d_sv, "#8B5CF6", true)
-        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.img_marketing_3d_cp, "#10B981", true)
-        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.img_marketing_3d_incoming, "#10B981", false)
-        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.img_marketing_3d_warm, "#3B82F6", false)
+        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.ic_3d_calls, "#3B82F6", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#EF4444", true)
+        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.ic_3d_sv, "#8B5CF6", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.ic_3d_collection, "#10B981", false)
+        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.ic_3d_value, "#3B82F6", false)
 
         // Populate Funnel
         fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
@@ -1839,10 +1839,20 @@ class HomeFragment : Fragment() {
         setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
         setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
 
-        // Animate funnel
-        val funnelAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
-        funnelAnim.startOffset = 300L
-        root.findViewById<View>(R.id.funnelCard)?.startAnimation(funnelAnim)
+        // Animate funnel blocks assembling
+        val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
+        if (funnelChart != null) {
+            for (i in 0 until funnelChart.childCount) {
+                val block = funnelChart.getChildAt(i)
+                val blockAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+                blockAnim.startOffset = 200L + (i * 80L)
+                block.startAnimation(blockAnim)
+            }
+        }
+        
+        root.findViewById<View>(R.id.funnelCard)?.startAnimation(
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in).apply { startOffset = 100L }
+        )
 
         // Populate Conversion KPIs
         fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String) {
