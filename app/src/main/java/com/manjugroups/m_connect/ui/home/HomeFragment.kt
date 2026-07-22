@@ -427,6 +427,7 @@ class HomeFragment : Fragment() {
                             b.homeContent.scrollTo(0, 0)
                             b.whiteContentArea.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
                             b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
@@ -483,6 +484,9 @@ class HomeFragment : Fragment() {
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         cardsArea?.translationY = -overshoot
+                        if (dashboard) {
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = -overshoot
+                        }
                         stickyHeader?.translationZ = if (overshoot > 0f) 20f * den else 0f
                         b.whiteContentArea.clipChildren = overshoot > 0f
                     }
@@ -1958,15 +1962,18 @@ class HomeFragment : Fragment() {
             
             card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
             
-            // Animate graph arrow infinitely
+            // Animate graph arrow from start to end
             if (arrowGraph != null) {
-                val yAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "translationY", 0f, -8f, 0f)
-                yAnim.duration = 1500
-                yAnim.repeatCount = android.animation.ValueAnimator.INFINITE
-                yAnim.repeatMode = android.animation.ValueAnimator.RESTART
-                yAnim.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-                yAnim.startDelay = (index * 200).toLong()
-                yAnim.start()
+                arrowGraph.post {
+                    arrowGraph.pivotX = 0f
+                    arrowGraph.scaleX = 0f
+                    
+                    val scaleAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "scaleX", 0f, 1f)
+                    scaleAnim.duration = 800
+                    scaleAnim.interpolator = android.view.animation.DecelerateInterpolator()
+                    scaleAnim.startDelay = (200 + index * 100).toLong()
+                    scaleAnim.start()
+                }
             }
         }
 
