@@ -1909,24 +1909,43 @@ class HomeFragment : Fragment() {
         // Populate Conversion KPIs
         fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String) {
             val card = root.findViewById<View>(id) ?: return
-            card.findViewById<TextView>(R.id.tvConversionTitle)?.text = title
-            card.findViewById<TextView>(R.id.tvConversionValue)?.text = value
-            card.findViewById<TextView>(R.id.tvConversionTrendValue)?.text = trend
-            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
             
             val tintColor = Color.parseColor(colorHex)
-            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setColorFilter(tintColor)
+            
+            val tvTitle = card.findViewById<TextView>(R.id.tvConversionTitle)
+            tvTitle?.text = title
+            tvTitle?.setTextColor(tintColor)
+            
+            val tvValue = card.findViewById<TextView>(R.id.tvConversionValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(tintColor)
+            
+            val tvTrend = card.findViewById<TextView>(R.id.tvConversionTrendValue)
+            tvTrend?.text = trend
+            tvTrend?.setTextColor(tintColor)
+            
+            val arrow = card.findViewById<ImageView>(R.id.ivConversionTrendArrow)
+            arrow?.setColorFilter(tintColor)
+            
+            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
             
             val bg = card.background
             if (bg is android.graphics.drawable.GradientDrawable) {
                 bg.setStroke(3, tintColor) // 1dp approx
             }
+            
+            // Animate arrow
+            if (arrow != null) {
+                val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+                anim.startOffset = 300 // slightly delayed
+                arrow.startAnimation(anim)
+            }
         }
 
-        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_custom_user, "#3B82F6")
-        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_custom_clipboard_check, "#EF4444")
-        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_arrow_compare, "#F59E0B")
-        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_gate_check_circle, "#10B981")
+        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6")
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444")
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B")
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981")
     }
 
     /**

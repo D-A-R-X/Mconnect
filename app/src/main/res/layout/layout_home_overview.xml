@@ -180,18 +180,18 @@
                 <!-- Funnel Chart visual drawn in code -->
                 <LinearLayout
                     android:id="@+id/funnelChart"
-                    android:layout_width="120dp"
+                    android:layout_width="150dp"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:gravity="center_horizontal"
                     android:paddingVertical="8dp">
                     
-                    <TextView android:id="@+id/funnelBar1" android:layout_width="100dp" android:layout_height="24dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/funnelBar2" android:layout_width="80dp" android:layout_height="24dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/funnelBar3" android:layout_width="65dp" android:layout_height="24dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/funnelBar4" android:layout_width="50dp" android:layout_height="24dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/funnelBar5" android:layout_width="35dp" android:layout_height="24dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/funnelBar6" android:layout_width="25dp" android:layout_height="24dp" android:layout_marginBottom="0dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar1" android:layout_width="120dp" android:layout_height="28dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar2" android:layout_width="100dp" android:layout_height="28dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar3" android:layout_width="80dp" android:layout_height="28dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar4" android:layout_width="60dp" android:layout_height="28dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar5" android:layout_width="45dp" android:layout_height="28dp" android:layout_marginBottom="2dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/funnelBar6" android:layout_width="32dp" android:layout_height="28dp" android:layout_marginBottom="0dp" android:elevation="4dp" android:gravity="center" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" />
                 </LinearLayout>
 
                 <!-- Funnel Metrics List -->
