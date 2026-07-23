@@ -631,6 +631,11 @@ class AdminFleetTripsFragment : Fragment() {
         var endKm: Double? = null,
         var startPhotoId: String? = null,
         var endPhotoId: String? = null,
+        // An external-agency allotment vs the in-house (Internal / MFPL) fleet.
+        // Drives the manage sheet's wording — an agency trip is removed with
+        // "Remove agency", not "Remove driver".
+        var external: Boolean = false,
+        var agencyName: String? = null,
     )
 
     private class AdminTripsAdapter(

@@ -2255,6 +2255,8 @@ class HomeFragment : Fragment() {
             endKm = trip.travelDeskEndKm,
             startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+            external = trip.travelAgency?.name?.isNotBlank() == true,
+            agencyName = trip.travelAgency?.name?.trim()?.ifBlank { null },
         )
         com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet.newInstance(
             trip = adminTrip,
@@ -2275,15 +2277,21 @@ class HomeFragment : Fragment() {
                 )
             }.getOrNull()
             if (_binding == null) return@launch
+            val external = trip.travelAgency?.name?.isNotBlank() == true
             if (resp?.success == true) {
                 android.widget.Toast.makeText(
-                    requireContext(), "Driver removed — back to Pending.",
+                    requireContext(),
+                    if (external) "Agency removed — back to Pending."
+                    else "Driver removed — back to Pending.",
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
             } else {
                 android.widget.Toast.makeText(
-                    requireContext(), resp?.error ?: "Could not remove the driver.",
+                    requireContext(),
+                    resp?.error
+                        ?: if (external) "Could not remove the agency."
+                        else "Could not remove the driver.",
                     android.widget.Toast.LENGTH_LONG,
                 ).show()
             }
