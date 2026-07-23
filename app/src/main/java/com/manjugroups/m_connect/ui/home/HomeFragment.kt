@@ -2395,7 +2395,7 @@ class HomeFragment : Fragment() {
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val external = result.assignMode == "external"
-            val resp = runCatching {
+            val outcome = runCatching {
                 if (external) {
                     // Allot to an external agency — sets travelAgencyId on the SV;
                     // the agency assigns the cab in Travel Desk.
@@ -2418,8 +2418,9 @@ class HomeFragment : Fragment() {
                         ),
                     )
                 }
-            }.getOrNull()
+            }
             if (_binding == null) return@launch
+            val resp = outcome.getOrNull()
             if (resp?.success == true) {
                 android.widget.Toast.makeText(
                     requireContext(),
@@ -2428,12 +2429,42 @@ class HomeFragment : Fragment() {
                 ).show()
                 loadFleetDispatch()
             } else {
+                // Surface the REAL reason. Retrofit throws on non-2xx (a plain
+                // body type, not Response<T>), so a 400/403 permission error or a
+                // mutation rejection would otherwise collapse into a meaningless
+                // "Allocation failed." Dig the backend's { error } out of the
+                // HttpException body so the dispatcher sees exactly what failed.
+                val msg = resp?.error
+                    ?: outcome.exceptionOrNull()?.let { fleetErrorMessage(it) }
+                    ?: "Allocation failed."
                 android.widget.Toast.makeText(
-                    requireContext(), resp?.error ?: "Allocation failed.",
-                    android.widget.Toast.LENGTH_LONG,
+                    requireContext(), msg, android.widget.Toast.LENGTH_LONG,
                 ).show()
             }
         }
+    }
+
+    /**
+     * Turn a failed fleet API call into a human message. Retrofit throws
+     * HttpException on any non-2xx; the backend puts the real reason in a
+     * { "success": false, "error": "..." } body (e.g. a FORBIDDEN permission
+     * message or "site visit not found"). Pull that out so the dispatcher sees
+     * the actual cause instead of a generic failure toast.
+     */
+    private fun fleetErrorMessage(t: Throwable): String? = when (t) {
+        is retrofit2.HttpException -> {
+            val body = runCatching { t.response()?.errorBody()?.string() }.getOrNull()
+            val parsed = body?.let {
+                runCatching {
+                    com.google.gson.JsonParser.parseString(it)
+                        .asJsonObject.get("error")?.asString
+                }.getOrNull()
+            }
+            (parsed?.takeIf { it.isNotBlank() }
+                ?: "Server rejected the request (${t.code()}).")
+        }
+        is java.io.IOException -> "Network error — check your connection."
+        else -> null
     }
 
     private fun setupDriverTabs() {
