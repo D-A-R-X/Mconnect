@@ -2181,6 +2181,23 @@ class HomeFragment : Fragment() {
         )
         // Allocate only makes sense while the trip has no vehicle.
         card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
+        // The chip row is three equal thirds ONLY while Allocate is present
+        // (pending). Once Allocate is gone (assigned/completed), leaving the two
+        // survivors weighted stretched the "1" people pill to half the card.
+        // Drop their weight so they wrap to content and sit left-aligned instead.
+        val peopleChip = card.tvAttendeesTag.parent as View
+        listOf(peopleChip, card.lmoTagContainer).forEach { chip ->
+            (chip.layoutParams as android.widget.LinearLayout.LayoutParams).also { lp ->
+                if (isPending) {
+                    lp.width = 0
+                    lp.weight = 1f
+                } else {
+                    lp.width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    lp.weight = 0f
+                }
+                chip.layoutParams = lp
+            }
+        }
         if (isPending) {
             card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
             card.assignmentInfo.visibility = View.GONE
@@ -2288,10 +2305,14 @@ class HomeFragment : Fragment() {
 
         val vehicleNo = trip.vehicle?.vehicleNumber?.takeIf { it.isNotBlank() }
         val agency = trip.travelAgency?.name?.takeIf { it.isNotBlank() }
-        card.tvAssignedVehicle.text = listOfNotNull(
-            vehicleNo ?: "Vehicle pending",
-            agency?.let { "· $it" },
-        ).joinToString(" ")
+        // An agency ref marks the trip as farmed out to an EXTERNAL agency;
+        // otherwise it's the in-house (Internal / MFPL) fleet. Lead the line
+        // with that source so the dispatcher can tell the two apart at a glance.
+        val external = agency != null
+        val source = if (external) "External" else "Internal"
+        val detail = if (external) agency else vehicleNo
+        card.tvAssignedVehicle.text =
+            if (detail != null) "$source · $detail" else source
 
         val driver = trip.driverName?.takeIf { it.isNotBlank() }
         val phone = trip.driverPhone?.takeIf { it.isNotBlank() }
@@ -2301,13 +2322,23 @@ class HomeFragment : Fragment() {
             else -> "Driver not set"
         }
 
-        card.tvAssignedProgress.text = when {
+        // Progress stamps only exist once the driver actually sets off. Before
+        // that, "Awaiting pickup" was noise next to "Driver not set" — so show
+        // the badge only once there's real progress to report and hide it while
+        // the trip is still just assigned.
+        val progress = when {
             trip.travelDeskEndedAt != null -> "Dropped"
             trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
             trip.travelDeskOnSiteAt != null -> "On site"
             trip.travelDeskStartedAt != null -> "Picked from CP"
             trip.travelDeskArrivedAt != null -> "Reached client"
-            else -> "Awaiting pickup"
+            else -> null
+        }
+        if (progress != null) {
+            card.tvAssignedProgress.visibility = View.VISIBLE
+            card.tvAssignedProgress.text = progress
+        } else {
+            card.tvAssignedProgress.visibility = View.GONE
         }
     }
 
