@@ -364,14 +364,9 @@ class MyTripsFragment : Fragment() {
                 TabType.COMPLETED -> isCompleted
             }
 
-            // Search Query Filter
-            val matchesSearch = if (searchQuery.isEmpty()) {
-                true
-            } else {
-                val placeName = visit.placeName.orEmpty().lowercase(Locale.getDefault())
-                val leadName = visit.leadName.orEmpty().lowercase(Locale.getDefault())
-                placeName.contains(searchQuery) || leadName.contains(searchQuery)
-            }
+            // Search Query Filter — client name OR phone number.
+            val matchesSearch =
+                com.manjugroups.m_connect.util.VisitSearch.matches(visit, searchQuery)
 
             matchesTab && matchesSearch
         }
@@ -478,6 +473,11 @@ class MyTripsFragment : Fragment() {
             visitCategory = visit.visitCategory,
             cpType = visit.cpVisit?.cpType,
             clientMobile = visit.leadPhone,
+            lmoName = visit.lmoName,
+            deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                visit.scheduledDate,
+                visit.scheduledEndTime ?: visit.scheduledStartTime,
+            ),
         )
         parentFragmentManager.beginTransaction()
             .applySmoothTransitions()

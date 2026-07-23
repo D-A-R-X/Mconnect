@@ -308,10 +308,23 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val uri = proofUri ?: return null
         val mime = proofMimeType
         return try {
+            val ctx = requireContext()
             val resp = withContext(Dispatchers.IO) {
-                val cr: ContentResolver = requireContext().contentResolver
-                val bytes = cr.openInputStream(uri)?.use { it.readBytes() }
+                val cr: ContentResolver = ctx.contentResolver
+                var bytes = cr.openInputStream(uri)?.use { it.readBytes() }
                     ?: error("Unable to read proof file")
+                // Downscale photo proofs (field networks); non-images pass through.
+                if ((mime ?: "").startsWith("image/", ignoreCase = true)) {
+                    val tmp = java.io.File.createTempFile("coll_proof_", ".jpg", ctx.cacheDir)
+                    try {
+                        tmp.writeBytes(bytes)
+                        val cmp = com.manjugroups.m_connect.util.ImageCompressor.compress(tmp)
+                        bytes = cmp.readBytes()
+                        if (cmp !== tmp) runCatching { cmp.delete() }
+                    } finally {
+                        runCatching { tmp.delete() }
+                    }
+                }
                 api.uploadStorageFile(
                     token = session.bearerToken,
                     body = bytes.toRequestBody(mime?.toMediaTypeOrNull()),

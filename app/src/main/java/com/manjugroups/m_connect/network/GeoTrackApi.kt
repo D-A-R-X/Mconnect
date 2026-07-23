@@ -1640,6 +1640,15 @@ data class TodayVisit(
     val travelMode: String? = null,
     val vehiclePreference: String? = null,
     val vehicleAssigned: Boolean? = null,
+    // Granular (timestamp-merged) SV status from the backend's mobile list
+    // query — lets the SV filter separate Started / Picked Up / Completed,
+    // which the 5-bucket `status` field above can't. Null on legacy rows;
+    // the filter falls back to `status` when it's absent.
+    val rawStatus: String? = null,
+    // LMO (Lead Management Officer) — the telecaller who owns/created the
+    // visit. Shown on the SV/CP cards. SV rows get it from the backend list
+    // query; CP rows are mapped from the CpVisitDetail's telecaller.
+    val lmoName: String? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the

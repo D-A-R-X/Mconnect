@@ -754,43 +754,100 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         FieldSpec("location", "Location", b.location),
         FieldSpec("profession", "Profession", b.profession),
         FieldSpec("designation", "Designation", b.designation),
+        FieldSpec("department", "Department", b.department, editable = false),
         FieldSpec("incomePerAnnum", "Income Per Annum", b.incomePerAnnum),
         FieldSpec("officeName", "Office Name", b.officeName),
         FieldSpec("officeMobile", "Office Mobile", b.officeMobile),
         FieldSpec("officePhone", "Office Phone", b.officePhone),
         FieldSpec("officeEmail", "Office Email", b.officeEmail),
         FieldSpec("officeAddress", "Office Address", b.officeAddress),
+        FieldSpec("officeArea", "Office Area", b.officeArea, editable = false),
+        FieldSpec("officePincode", "Office Pincode", b.officePincode, editable = false),
     )
 
-    private fun bookingFields(b: Booking) = listOf(
-        FieldSpec("bookingRefNo", "Booking Ref No", b.bookingRefNo, editable = false),
-        FieldSpec("bookingType", "Booking Type", b.bookingType),
-        FieldSpec("cefNo", "CEF No", b.cefNo),
-        FieldSpec("bookingDate", "Booking Date", b.bookingDate),
-        FieldSpec("projectName", "Project", b.projectName, editable = false),
-        FieldSpec("plotNo", "Plot No", b.plot?.unitNumber ?: b.plotNumber ?: b.plotNo),
-        FieldSpec("propertyType", "Property Type", b.propertyType),
-        FieldSpec("bookingMode", "Booking Mode", b.bookingMode),
-        FieldSpec("bookingCost", "Booking Cost", b.bookingCost?.toString(), numeric = true),
-        FieldSpec("guidelineValue", "Guideline Value", b.guidelineValue?.toString(), numeric = true),
-        FieldSpec("specialConsideration", "Special Consideration", b.specialConsideration?.toString(), numeric = true),
-        FieldSpec("discountApprovedBy", "Discount Approved By", b.discountApprovedBy),
-        FieldSpec("specialConsiderationReason", "SC Reason", b.specialConsiderationReason),
-        FieldSpec("specialConsiderationValidity", "SC Validity Days", b.specialConsiderationValidity?.toString(), numeric = true),
-        FieldSpec("promotionalOffers", "Promotional Offers", b.promotionalOffers),
-        FieldSpec("promotionalOffersTnC", "Promotional Offers T&C", b.promotionalOffersTnC),
-        FieldSpec("promotionalOfferValue", "Promotional Offer Value", b.promotionalOfferValue?.toString(), numeric = true),
-        FieldSpec("offerValidityPeriod", "Offer Validity Days", b.offerValidityPeriod?.toString(), numeric = true),
-        FieldSpec("registrationCharges", "Registration Charges", b.registrationCharges?.toString(), numeric = true),
-        FieldSpec("gstAmount", "GST Amount", b.gstAmount?.toString(), numeric = true),
-        FieldSpec("documentCharges", "Document Charges", b.documentCharges?.toString(), numeric = true),
-        FieldSpec("pattaCharges", "Patta Charges", b.pattaCharges?.toString(), numeric = true),
-        FieldSpec("otherCharges", "Other Charges", b.otherCharges?.toString(), numeric = true),
-        FieldSpec("advanceAmount", "Advance Amount", b.advanceAmount?.toString(), numeric = true),
-        FieldSpec("paymentMode", "Payment Mode", b.paymentMode),
-    )
+    private fun bookingFields(b: Booking): List<FieldSpec> = buildList {
+        add(FieldSpec("bookingRefNo", "Booking Ref No", b.bookingRefNo, editable = false))
+        add(FieldSpec("bookingType", "Booking Type", b.bookingType))
+        if (b.bookingType == "CONVERSION") {
+            add(FieldSpec(
+                "conversionEntryType",
+                "Previous Booking Source",
+                if (b.conversionManualEntry == true) "Manual entry" else "Linked booking",
+                editable = false,
+            ))
+            add(FieldSpec("manualConversionProjectName", "Previous Project", b.manualConversionProjectName, editable = false))
+            add(FieldSpec("manualConversionPlotNo", "Previous Plot", b.manualConversionPlotNo, editable = false))
+            add(FieldSpec("manualConversionCredit", "Conversion Credit", b.manualConversionCredit?.toString(), numeric = true, editable = false))
+            add(FieldSpec("conversionNotes", "Conversion Notes", b.conversionNotes, editable = false))
+            add(FieldSpec("sourceConversionBookingId", "Previous Booking ID", b.sourceExchangeBookingId, editable = false))
+        }
+        if (b.bookingType == "EXCHANGE" || b.bookingType == "INTERNAL EXCHANGE") {
+            add(FieldSpec(
+                "exchangeEntryType",
+                "Old Property Source",
+                if (b.exchangeManualEntry == true) "Manual entry" else "Linked booking",
+                editable = false,
+            ))
+            add(FieldSpec("manualExchangeProjectName", "Old Project", b.manualExchangeProjectName, editable = false))
+            add(FieldSpec("manualExchangePlotNo", "Old Plot", b.manualExchangePlotNo, editable = false))
+            add(FieldSpec("manualExchangeExtentSqft", "Old Extent (sq ft)", b.manualExchangeExtentSqft?.toString(), numeric = true, editable = false))
+            add(FieldSpec("exchangeLookupProjectId", "Old Project ID", b.exchangeLookupProjectId, editable = false))
+            add(FieldSpec("exchangeLookupPlotNo", "Old Plot Number", b.exchangeLookupPlotNo, editable = false))
+            add(FieldSpec("exchangeConnectedMobileNumber", "Connected Mobile", b.exchangeConnectedMobileNumber, editable = false))
+            add(FieldSpec("sourceExchangeBookingId", "Source Booking ID", b.sourceExchangeBookingId, editable = false))
+            add(FieldSpec("exchangeOldRegisteredValue", "Exchange Value", b.exchangeOldRegisteredValue?.toString(), numeric = true, editable = false))
+            add(FieldSpec("exchangeNewValue", "New Registered Value", b.exchangeNewValue?.toString(), numeric = true, editable = false))
+            add(FieldSpec("exchangeBalancePayable", "Exchange Balance Payable", b.exchangeBalancePayable?.toString(), numeric = true, editable = false))
+            add(FieldSpec("exchangeNotes", "Exchange Notes", b.exchangeNotes, editable = false))
+        }
+        add(FieldSpec("cefNo", "CEF No", b.cefNo))
+        add(FieldSpec("bookingDate", "Booking Date", b.bookingDate))
+        add(FieldSpec("projectName", "Project", b.projectName, editable = false))
+        add(FieldSpec("plotNo", "Plot No", b.plot?.unitNumber ?: b.plotNumber ?: b.plotNo))
+        add(FieldSpec("propertyType", "Property Type", b.propertyType))
+        add(FieldSpec("clientSource", "Client Source", b.clientSource, editable = false))
+        add(FieldSpec("clientSourceName", "Source / Reference Name", b.clientSourceName, editable = false))
+        add(FieldSpec("clientSourceMobile", "Source / Reference Mobile", b.clientSourceMobile, editable = false))
+        add(FieldSpec("referralBenefit", "Referral Benefit", b.referralBenefit, editable = false))
+        add(FieldSpec("isAgainstSV", "Is Against Site Visit?", yesNo(b.isAgainstSV), editable = false))
+        if (b.isAgainstSV == true) {
+            add(FieldSpec("svName", "SV Name", b.svName, editable = false))
+            add(FieldSpec("svMobileNo", "SV Mobile No.", b.svMobileNo, editable = false))
+        }
+        add(FieldSpec("bookingMode", "Advance Booking Payment", b.bookingMode))
+        add(FieldSpec("bookingCost", "Booking Cost", b.bookingCost?.toString(), numeric = true))
+        add(FieldSpec("guidelineValue", "Guideline Value", b.guidelineValue?.toString(), numeric = true))
+        add(FieldSpec("specialConsideration", "Special Consideration", b.specialConsideration?.toString(), numeric = true))
+        if ((b.specialConsideration ?: 0.0) > 0.0) {
+            add(FieldSpec("discountApprovedBy", "Discount Approved By", b.discountApprovedBy))
+            add(FieldSpec("specialConsiderationReason", "SC Reason", b.specialConsiderationReason))
+            add(FieldSpec("specialConsiderationValidity", "SC Validity Days", b.specialConsiderationValidity?.toString(), numeric = true))
+        }
+        add(FieldSpec("promotionalOffers", "Promotional Offers", b.promotionalOffers))
+        add(FieldSpec("promotionalOffersTnC", "Promotional Offers T&C", b.promotionalOffersTnC))
+        add(FieldSpec("promotionalOfferValue", "Promotional Offer Value", b.promotionalOfferValue?.toString(), numeric = true))
+        add(FieldSpec("offerValidityPeriod", "Offer Validity Days", b.offerValidityPeriod?.toString(), numeric = true))
+        add(FieldSpec("registrationCharges", "Registration Charges", b.registrationCharges?.toString(), numeric = true))
+        add(FieldSpec("gstAmount", "GST Amount", b.gstAmount?.toString(), numeric = true))
+        add(FieldSpec("documentCharges", "Document Charges", b.documentCharges?.toString(), numeric = true))
+        add(FieldSpec("pattaCharges", "Patta Charges", b.pattaCharges?.toString(), numeric = true))
+        add(FieldSpec("otherCharges", "Other Charges", b.otherCharges?.toString(), numeric = true))
+        add(FieldSpec("customerPaymentCategory", "Customer Payment Category", b.customerPaymentCategory, editable = false))
+        if (b.customerPaymentCategory == "B") {
+            add(FieldSpec("loanAmountRequested", "Bank Loan Amount", b.loanAmountRequested?.toString(), numeric = true, editable = false))
+        }
+        add(FieldSpec("advanceAmount", "Advance Amount", b.advanceAmount?.toString(), numeric = true))
+        add(FieldSpec("paymentMode", "Payment Mode", b.paymentMode))
+        add(FieldSpec("advanceTransactionId", "Transaction ID", b.advanceTransactionId, editable = false))
+        add(FieldSpec("advancePaymentProofFileName", "Payment Proof", b.advancePaymentProofFileName, editable = false))
+        add(FieldSpec("advanceInstrumentNo", "Cheque / DD No.", b.advanceInstrumentNo, editable = false))
+        add(FieldSpec("advanceBankName", "Bank", b.advanceBankName, editable = false))
+        add(FieldSpec("advanceBankBranch", "Branch", b.advanceBankBranch, editable = false))
+        add(FieldSpec("advanceInstrumentDate", "Instrument Date", b.advanceInstrumentDate, editable = false))
+    }
 
     private fun paymentFields(b: Booking) = listOf(
+        FieldSpec("paymentPlan", "Payment Plan", b.paymentPlan, editable = false),
         FieldSpec("allotmentDueAmount", "Allotment Due Amount", b.allotmentDueAmount?.toString(), numeric = true),
         FieldSpec("allotmentDueDate", "Allotment Due Date", b.allotmentDueDate),
         FieldSpec("secondPaymentAmount", "2nd Payment Amount", b.secondPaymentAmount?.toString(), numeric = true),
@@ -801,7 +858,9 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         FieldSpec("fourthPaymentDate", "4th Payment Date", b.fourthPaymentDate),
         FieldSpec("preferredRegistrationDate", "Preferred Registration Date", b.preferredRegistrationDate),
         FieldSpec("aadhaar", "Aadhaar", b.aadhaar),
+        FieldSpec("aadhaarDocumentFileName", "Aadhaar Upload", b.aadhaarDocumentFileName, editable = false),
         FieldSpec("pan", "PAN", b.pan),
+        FieldSpec("panDocumentFileName", "PAN Upload", b.panDocumentFileName, editable = false),
         FieldSpec("referenceName1", "Reference Name 1", b.referenceName1),
         FieldSpec("referenceMobile1", "Reference Mobile 1", b.referenceMobile1),
         FieldSpec("referenceProfession1", "Reference Profession 1", b.referenceProfession1),
@@ -814,6 +873,12 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     private fun value(key: String): String = inputs[key]?.text?.toString()?.trim().orEmpty()
     private fun valueOrNull(key: String): String? = value(key).takeIf { it.isNotBlank() }
     private fun number(key: String): Double? = value(key).takeIf { it.isNotBlank() }?.toDoubleOrNull()
+
+    private fun yesNo(value: Boolean?): String? = when (value) {
+        true -> "Yes"
+        false -> "No"
+        null -> null
+    }
 
     private fun labelStatus(status: String?): String =
         status?.replace("_", " ")?.replaceFirstChar { it.uppercase() } ?: "-"

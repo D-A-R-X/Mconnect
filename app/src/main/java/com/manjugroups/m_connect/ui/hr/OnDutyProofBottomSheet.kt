@@ -226,8 +226,10 @@ class OnDutyProofBottomSheet : BottomSheetDialogFragment() {
     }
 
     private suspend fun uploadProof(file: File): String {
-        val body = file.asRequestBody("image/jpeg".toMediaType())
+        val upload = com.manjugroups.m_connect.util.ImageCompressor.compress(file)
+        val body = upload.asRequestBody("image/jpeg".toMediaType())
         val response = api.uploadStorageFile(session.bearerToken, body)
+        if (upload !== file) runCatching { upload.delete() }
         return response.storageId
             ?: throw IllegalStateException(response.error ?: "upload failed")
     }

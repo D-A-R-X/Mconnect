@@ -7,8 +7,6 @@ import android.text.Html
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
@@ -29,26 +27,55 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private val binding get() = _binding!!
 
     private var vehicles: List<AllocateVehicleOption> = emptyList()
-    private var showPricing: Boolean = true
+    private var drivers: List<AllocateDriverOption> = emptyList()
+    // Index into [vehicles] of the picked vehicle, or -1 until one is chosen.
+    private var selectedVehicleIndex: Int = -1
+    // Internal MMS fleet: the driver is whoever is set as the vehicle's default
+    // driver — the dispatcher can't type a different one. The name + phone
+    // fields are locked and always reflect the selected vehicle's default.
+    private var lockDriverToVehicleDefault: Boolean = false
+    // Pre-fills the pickup time from the SV's scheduled time.
+    private var fixedPickupTime: String? = null
     private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
-    private var pricingType = "km"  // "km" or "package"
+    // Opens the add-driver form with the typed name; the completion callback
+    // hands back the created driver so this sheet can select it and resume.
+    private var onAddNewDriver: ((String, (AllocateDriverOption) -> Unit) -> Unit)? = null
+    private var selectedDriverId: String? = null
+    private var agencies: List<AllocateAgencyOption> = emptyList()
+    // When true, the sheet opens on a source chooser (Travel agency vs MFPL)
+    // step before showing any fields — set by the internal-fleet dispatch.
+    private var showSourceChoice: Boolean = false
+    // "none" (chooser step, nothing picked yet), "internal" (MFPL vehicle), or
+    // "external" (travel agency).
+    private var assignMode: String = "internal"
+    private var selectedAgencyId: String? = null
+    private var selectedAgencyName: String? = null
 
     companion object {
-        /**
-         * @param showPricing false for external agencies. Their per-km /
-         *   package rate is contracted on the agency record in the web app, so
-         *   asking for it again per allocation would let a dispatcher quietly
-         *   override the agreed rate. Internal (company) vehicles still price
-         *   per trip.
-         */
         fun newInstance(
             vehicles: List<AllocateVehicleOption>,
-            showPricing: Boolean = true,
+            drivers: List<AllocateDriverOption> = emptyList(),
+            lockDriverToVehicleDefault: Boolean = false,
+            fixedPickupTime: String? = null,
+            // External travel agencies the dispatcher can allot to instead of an
+            // MFPL vehicle. When non-empty the "Assign from" toggle appears
+            // (mirrors the web dialog); empty keeps the sheet internal-only.
+            agencies: List<AllocateAgencyOption> = emptyList(),
+            // Show the initial Travel agency / MFPL chooser step. Independent of
+            // whether agencies have loaded — the internal dispatch always offers
+            // the choice; the agency list fills in when available.
+            showSourceChoice: Boolean = false,
+            onAddNewDriver: ((String, (AllocateDriverOption) -> Unit) -> Unit)? = null,
             onAllocate: (AllocateVehicleResult) -> Unit,
         ): AllocateVehicleBottomSheet {
             val sheet = AllocateVehicleBottomSheet()
             sheet.vehicles = vehicles
-            sheet.showPricing = showPricing
+            sheet.drivers = drivers
+            sheet.lockDriverToVehicleDefault = lockDriverToVehicleDefault
+            sheet.fixedPickupTime = fixedPickupTime
+            sheet.agencies = agencies
+            sheet.showSourceChoice = showSourceChoice
+            sheet.onAddNewDriver = onAddNewDriver
             sheet.onAllocateCallback = onAllocate
             return sheet
         }
@@ -81,10 +108,34 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             it.elevation = 0f
             it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            // Wrap the sheet to its content — the host defaults to match_parent,
+            // which leaves a white gap below short content (e.g. external mode).
+            it.layoutParams = it.layoutParams.apply {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
             val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+            behavior.isFitToContents = true
             behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
             behavior.skipCollapsed = true
         }
+        // Hide the fleet portal's floating nav so it doesn't show through the
+        // scrim while this sheet is open. No-op when opened outside the fleet
+        // container (e.g. from Home).
+        fleetContainer()?.setNavChromeVisible(false)
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        fleetContainer()?.setNavChromeVisible(true)
+        super.onDismiss(dialog)
+    }
+
+    private fun fleetContainer(): AdminFleetContainerFragment? {
+        var f = parentFragment
+        while (f != null) {
+            if (f is AdminFleetContainerFragment) return f
+            f = f.parentFragment
+        }
+        return null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -94,49 +145,160 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.tvLabelDriverName.text = Html.fromHtml("Driver Name <font color='#EF4444'>*</font>")
         binding.tvLabelDriverPhone.text = Html.fromHtml("Driver Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelPickupTime.text = Html.fromHtml("Pickup Time <font color='#EF4444'>*</font>")
-        binding.tvAmountLabel.text = Html.fromHtml("Per Km amount (Rs) <font color='#EF4444'>*</font>")
-
-        // External agencies: the per-km / package rate is contracted on the
-        // agency record in the web app, so it isn't asked for per allocation.
-        val pricingVis = if (showPricing) View.VISIBLE else View.GONE
-        binding.tvPricingLabel.visibility = pricingVis
-        binding.rowPricingToggle.visibility = pricingVis
-        binding.tvAmountLabel.visibility = pricingVis
-        binding.etAmount.visibility = pricingVis
 
         setupVehicleSpinner()
+        setupDriverPicker()
         setupTimePicker()
-        setupPricingToggle()
+        setupAssignSource()
+
+        // Internal fleet: driver is fixed to the vehicle's default — lock the
+        // name + phone so the dispatcher can't retype them.
+        if (lockDriverToVehicleDefault) {
+            listOf(binding.etDriverName, binding.etDriverPhone).forEach { field ->
+                field.keyListener = null
+                field.isFocusable = false
+                field.isFocusableInTouchMode = false
+                field.isCursorVisible = false
+                field.setOnClickListener(null)
+            }
+        }
+        // Pickup time imported from the SV's scheduled time.
+        fixedPickupTime?.takeIf { it.isNotBlank() }?.let {
+            binding.etPickupTime.setText(it)
+        }
 
         binding.btnSubmitAllocate.setOnClickListener {
             validateAndSubmit()
         }
     }
 
-    private fun setupVehicleSpinner() {
-        val labels = vehicles.map { it.label }.ifEmpty { listOf("No vehicles — add one in travel-desk") }
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, labels)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerVehicle.adapter = adapter
-
-        // When the user picks a vehicle, prefill its default driver if no
-        // driver name has been entered yet. This matches what travel-desk's
-        // server-side allocate does when driverName is left blank.
-        binding.spinnerVehicle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val v = vehicles.getOrNull(position) ?: return
-                if (binding.etDriverName.text?.toString()?.trim().isNullOrEmpty()) {
-                    v.defaultDriverName?.takeIf { it.isNotBlank() }?.let {
-                        binding.etDriverName.setText(it)
-                    }
-                }
-                if (binding.etDriverPhone.text?.toString()?.trim().isNullOrEmpty()) {
-                    v.defaultDriverPhone?.takeIf { it.isNotBlank() }?.let {
-                        binding.etDriverPhone.setText(it)
-                    }
+    private fun setupDriverPicker() {
+        // Internal fleet locks the driver to the vehicle default — no roster
+        // dropdown, no free typing.
+        if (lockDriverToVehicleDefault) return
+        // Free typing stays allowed (backend auto-creates a typed driver), but
+        // tapping opens the roster dropdown so the dispatcher can pick an exact
+        // driver — which binds the trip by id and avoids shared-phone mix-ups.
+        // Editing the name by hand invalidates a previous roster pick.
+        binding.etDriverName.setOnClickListener { openDriverDropdown() }
+        binding.etDriverName.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val picked = drivers.firstOrNull { it.id == selectedDriverId }
+                if (picked != null && s?.toString()?.trim() != picked.name) {
+                    selectedDriverId = null
                 }
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        })
+    }
+
+    private fun openDriverDropdown() {
+        val options = drivers.map {
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = it,
+                title = it.name,
+                subtitle = it.phone,
+                keywords = it.phone,
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select driver",
+            options = options,
+            emptyMessage = "No drivers yet — add one",
+            createLabel = "Add new driver",
+            onCreateNew = { typedName -> addNewDriver(typedName) },
+        ) { driver ->
+            selectDriver(driver)
+        }
+    }
+
+    private fun selectDriver(driver: AllocateDriverOption) {
+        selectedDriverId = driver.id
+        binding.etDriverName.setText(driver.name)
+        binding.etDriverPhone.setText(driver.phone)
+    }
+
+    private fun addNewDriver(typedName: String) {
+        val cb = onAddNewDriver
+        if (cb == null) {
+            Toast.makeText(requireContext(), "Add drivers from the Driver tab.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // The host opens the add-driver form; when it returns the new driver we
+        // select it here and the allocation resumes where it left off.
+        cb(typedName) { created ->
+            drivers = drivers + created
+            selectDriver(created)
+        }
+    }
+
+    private fun setupVehicleSpinner() {
+        // Tapping the field opens the same searchable picker the driver field
+        // uses — one shared app component (SearchableSelectionDialog) instead of
+        // a bare Android Spinner, so a long fleet is searchable by number/model.
+        binding.vehicleSelector.setOnClickListener { openVehicleDropdown() }
+
+        // Auto-select when there is exactly one vehicle, so the common
+        // single-vehicle agency doesn't have to open the picker at all.
+        if (vehicles.size == 1) selectVehicle(0)
+    }
+
+    private fun openVehicleDropdown() {
+        if (vehicles.isEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "No vehicles on file. Add one in travel-desk first.",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        val options = vehicles.mapIndexed { index, v ->
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = index,
+                title = v.label,
+                subtitle = v.defaultDriverName?.trim()?.takeIf { it.isNotBlank() }
+                    ?.let { "Default driver: $it" },
+                keywords = listOfNotNull(v.label, v.defaultDriverName, v.defaultDriverPhone)
+                    .joinToString(" "),
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select vehicle",
+            options = options,
+            emptyMessage = "No vehicles — add one in travel-desk",
+        ) { index ->
+            selectVehicle(index)
+        }
+    }
+
+    private fun selectVehicle(index: Int) {
+        val v = vehicles.getOrNull(index) ?: return
+        selectedVehicleIndex = index
+        binding.tvVehicleValue.text = v.label
+        // When the user picks a vehicle, prefill its default driver if no driver
+        // name has been entered yet. Mirrors travel-desk's server-side allocate
+        // when driverName is left blank.
+        if (lockDriverToVehicleDefault) {
+            // Internal fleet: the driver ALWAYS follows the vehicle's default
+            // (overwrite whatever was there), never editable.
+            binding.etDriverName.setText(v.defaultDriverName?.trim().orEmpty())
+            binding.etDriverPhone.setText(v.defaultDriverPhone?.trim().orEmpty())
+            selectedDriverId = null
+            return
+        }
+        if (binding.etDriverName.text?.toString()?.trim().isNullOrEmpty()) {
+            v.defaultDriverName?.takeIf { it.isNotBlank() }?.let {
+                binding.etDriverName.setText(it)
+                selectedDriverId = null
+            }
+        }
+        if (binding.etDriverPhone.text?.toString()?.trim().isNullOrEmpty()) {
+            v.defaultDriverPhone?.takeIf { it.isNotBlank() }?.let {
+                binding.etDriverPhone.setText(it)
+            }
         }
     }
 
@@ -159,31 +321,102 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun setupPricingToggle() {
-        binding.btnPricePerKm.setOnClickListener {
-            pricingType = "km"
-            binding.btnPricePerKm.setBackgroundResource(R.drawable.bg_my_trips_tab_active)
-            binding.btnPricePerKm.setTextColor(Color.WHITE)
+    // ── Assign-from source (Internal MFPL vs External agency) ────────────────
 
-            binding.btnPricePackage.background = null
-            binding.btnPricePackage.setTextColor(Color.parseColor("#475467"))
+    private val internalOnlyViews get() = listOf(
+        binding.tvLabelVehicle, binding.vehicleSelector,
+        binding.tvLabelDriverName, binding.etDriverName,
+        binding.tvLabelDriverPhone, binding.etDriverPhone,
+        binding.tvLabelPickupTime, binding.etPickupTime,
+    )
 
-            binding.tvAmountLabel.text = Html.fromHtml("Per Km amount (Rs) <font color='#EF4444'>*</font>")
+    private fun setupAssignSource() {
+        // Callers that don't want the chooser (e.g. the agency portal) get the
+        // plain internal form, no toggle.
+        if (!showSourceChoice) {
+            binding.tvLabelAssignSource.visibility = View.GONE
+            binding.rowAssignSource.visibility = View.GONE
+            applyAssignMode("internal")
+            return
         }
+        // Internal dispatch: open on the chooser step — ONLY the two source
+        // buttons show (no fields, no submit) until one is picked.
+        binding.tvLabelAssignSource.visibility = View.VISIBLE
+        binding.rowAssignSource.visibility = View.VISIBLE
+        binding.btnSourceInternal.setOnClickListener { applyAssignMode("internal") }
+        binding.btnSourceExternal.setOnClickListener {
+            // Just reveal the agency field — the picker opens only when the user
+            // taps "Select agency", not automatically.
+            applyAssignMode("external")
+        }
+        binding.agencySelector.setOnClickListener { openAgencyDropdown() }
+        // Open on Internal (MFPL) by default — the vehicle form shows straight
+        // away; the dispatcher taps "External agency" only when they want it.
+        applyAssignMode("internal")
+    }
 
-        binding.btnPricePackage.setOnClickListener {
-            pricingType = "package"
-            binding.btnPricePackage.setBackgroundResource(R.drawable.bg_my_trips_tab_active)
-            binding.btnPricePackage.setTextColor(Color.WHITE)
+    private fun applyAssignMode(mode: String) {
+        assignMode = mode
+        val external = mode == "external"
+        val internal = mode == "internal"
+        val chosen = external || internal
 
-            binding.btnPricePerKm.background = null
-            binding.btnPricePerKm.setTextColor(Color.parseColor("#475467"))
+        // Toggle pill styling — highlight the active choice; "none" leaves both
+        // idle so the chooser reads as an un-answered question.
+        val active = R.drawable.bg_my_trips_tab_active
+        val activeText = Color.WHITE
+        val idleText = Color.parseColor("#475467")
+        binding.btnSourceInternal.setBackgroundResource(if (internal) active else 0)
+        binding.btnSourceInternal.setTextColor(if (internal) activeText else idleText)
+        binding.btnSourceExternal.setBackgroundResource(if (external) active else 0)
+        binding.btnSourceExternal.setTextColor(if (external) activeText else idleText)
 
-            binding.tvAmountLabel.text = Html.fromHtml("Package amount (Rs) <font color='#EF4444'>*</font>")
+        // Internal → vehicle/driver/pickup. External → agency picker. None →
+        // neither (chooser step). Submit is hidden until a source is picked.
+        internalOnlyViews.forEach { it.visibility = if (internal) View.VISIBLE else View.GONE }
+        binding.tvLabelAgency.visibility = if (external) View.VISIBLE else View.GONE
+        binding.agencySelector.visibility = if (external) View.VISIBLE else View.GONE
+        binding.btnSubmitAllocate.visibility = if (chosen) View.VISIBLE else View.GONE
+        binding.btnSubmitAllocate.text = if (external) "Allot" else "Allocate"
+    }
+
+    private fun openAgencyDropdown() {
+        if (agencies.isEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "No travel agencies available yet.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val options = agencies.mapIndexed { index, a ->
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = index,
+                title = a.name,
+                subtitle = a.phone?.trim()?.takeIf { it.isNotBlank() },
+                keywords = listOfNotNull(a.name, a.phone).joinToString(" "),
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select agency",
+            options = options,
+            emptyMessage = "No travel agencies",
+        ) { index ->
+            agencies.getOrNull(index)?.let { a ->
+                selectedAgencyId = a.id
+                selectedAgencyName = a.name
+                binding.tvAgencyValue.text = a.name
+                // Just fill the field — the visible "Allot" button confirms.
+            }
         }
     }
 
     private fun validateAndSubmit() {
+        if (assignMode == "external") {
+            submitExternalAllot()
+            return
+        }
         if (vehicles.isEmpty()) {
             Toast.makeText(
                 requireContext(),
@@ -192,12 +425,10 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             ).show()
             return
         }
-        val selectedIndex = binding.spinnerVehicle.selectedItemPosition
-        val vehicle = vehicles.getOrNull(selectedIndex)
+        val vehicle = vehicles.getOrNull(selectedVehicleIndex)
         val driverName = binding.etDriverName.text.toString().trim()
         val driverPhone = binding.etDriverPhone.text.toString().trim()
         val pickupTime = binding.etPickupTime.text.toString().trim()
-        val amountText = binding.etAmount.text.toString().trim()
 
         if (vehicle == null) {
             Toast.makeText(requireContext(), "Select a vehicle", Toast.LENGTH_SHORT).show()
@@ -207,31 +438,31 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
             return
         }
-        // Amount is mandatory only while the pricing block is on screen —
-        // otherwise the sheet would refuse to submit over a hidden field.
-        var amount = 0.0
-        if (showPricing) {
-            if (amountText.isEmpty()) {
-                Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val parsed = amountText.toDoubleOrNull()
-            if (parsed == null || parsed < 0) {
-                Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
-                return
-            }
-            amount = parsed
-        }
-
         onAllocateCallback?.invoke(
             AllocateVehicleResult(
+                assignMode = "internal",
                 vehicleId = vehicle.vehicleId,
                 vehicleLabel = vehicle.label,
                 driverName = driverName,
                 driverPhone = driverPhone,
+                driverId = selectedDriverId,
                 pickupTime = pickupTime,
-                pricingMode = pricingType,
-                amount = amount,
+            )
+        )
+        dismiss()
+    }
+
+    private fun submitExternalAllot() {
+        val agencyId = selectedAgencyId
+        if (agencyId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Select a travel agency", Toast.LENGTH_SHORT).show()
+            return
+        }
+        onAllocateCallback?.invoke(
+            AllocateVehicleResult(
+                assignMode = "external",
+                travelAgencyId = agencyId,
+                travelAgencyName = selectedAgencyName,
             )
         )
         dismiss()
@@ -243,6 +474,13 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     }
 }
 
+/** A roster driver the agency can pick from when allocating a trip. */
+data class AllocateDriverOption(
+    val id: String,
+    val name: String,
+    val phone: String,
+)
+
 /** A vehicle the agency can pick from when allocating a trip. */
 data class AllocateVehicleOption(
     val vehicleId: String,
@@ -251,13 +489,28 @@ data class AllocateVehicleOption(
     val defaultDriverPhone: String?,
 )
 
-/** Structured result handed to the caller's onAllocate callback. */
+/** An external travel agency the dispatcher can allot a trip to. */
+data class AllocateAgencyOption(
+    val id: String,
+    val name: String,
+    val phone: String? = null,
+)
+
+/**
+ * Structured result handed to the caller's onAllocate callback. [assignMode]
+ * decides which fields are meaningful: "internal" fills vehicle/driver/pricing;
+ * "external" fills only the travel-agency fields (the agency assigns the cab in
+ * Travel Desk, so no vehicle/driver/rate is captured here).
+ */
 data class AllocateVehicleResult(
-    val vehicleId: String,
-    val vehicleLabel: String,
-    val driverName: String,
-    val driverPhone: String,
-    val pickupTime: String,
-    val pricingMode: String, // "km" | "package"
-    val amount: Double,
+    val assignMode: String = "internal", // "internal" | "external"
+    val vehicleId: String = "",
+    val vehicleLabel: String = "",
+    val driverName: String = "",
+    val driverPhone: String = "",
+    /** The exact roster driver, when picked from the dropdown. */
+    val driverId: String? = null,
+    val pickupTime: String = "",
+    val travelAgencyId: String? = null,
+    val travelAgencyName: String? = null,
 )

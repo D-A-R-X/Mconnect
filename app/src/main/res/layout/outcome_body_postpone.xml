@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Outcome · Postpone — checkbox list of postpone reasons plus an
-  optional notes field. Matches the web's `/marketing/cp-visits/[id]`
-  Postpone dialog (POSTPONE_REASONS in app/marketing/cp-visits/[id]/page.tsx).
-  Submits via setCpVisitOutcome(outcome="postponed",
-  postponeReasons=<checked>, notes=<optional>) — same shape the web
-  POSTs to clientPlaceVisits.setOutcome.
+  Outcome · Postpone — a next-visit date + a single reason box. The
+  visit moves to Postponed with the chosen date recorded in the notes
+  and the typed reason shipped as the single postponeReasons entry
+  (the backend's setOutcome requires a non-empty postponeReasons array
+  for outcome="postponed"). Deliberately simpler than Not Interested,
+  which is a multi-reason checklist.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bodyPostpone"
@@ -14,7 +14,7 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Reasons for postponement" />
+    <TextView style="@style/OutcomeFieldLabel" android:text="Next visit date" />
 
     <TextView
         android:layout_width="match_parent"
@@ -22,96 +22,33 @@
         android:layout_marginTop="2dp"
         android:fontFamily="@font/inter_regular"
         android:includeFontPadding="false"
-        android:text="Select one or more — the visit moves to Postponed."
+        android:text="When should this visit be rescheduled to."
         android:textColor="#94A3B8"
         android:textSize="11sp" />
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:orientation="vertical"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="6dp">
+        android:id="@+id/rowPostNextDate"
+        style="@style/OutcomeFieldPillClickable"
+        android:layout_marginTop="10dp">
 
-        <CheckBox
-            android:id="@+id/cbPostClientUnavailable"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Client unavailable"
-            android:textColor="#101828"
-            android:textSize="13sp" />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />
 
-        <CheckBox
-            android:id="@+id/cbPostWeather"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Weather"
-            android:textColor="#101828"
-            android:textSize="13sp" />
+        <TextView
+            android:id="@+id/tvPostNextDate"
+            style="@style/OutcomeFieldValue"
+            android:hint="dd/mm/yyyy" />
 
-        <CheckBox
-            android:id="@+id/cbPostVehicle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Vehicle issue"
-            android:textColor="#101828"
-            android:textSize="13sp" />
-
-        <CheckBox
-            android:id="@+id/cbPostDocument"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Document pending"
-            android:textColor="#101828"
-            android:textSize="13sp" />
-
-        <CheckBox
-            android:id="@+id/cbPostRescheduledByClient"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Rescheduled by client"
-            android:textColor="#101828"
-            android:textSize="13sp" />
-
-        <CheckBox
-            android:id="@+id/cbPostOtherCommitment"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:minHeight="40dp"
-            android:paddingStart="6dp"
-            android:text="Other commitment"
-            android:textColor="#101828"
-            android:textSize="13sp" />
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_chevron_right" />
     </LinearLayout>
 
     <TextView
         style="@style/OutcomeFieldLabel"
         android:layout_marginTop="16dp"
-        android:text="Additional notes" />
+        android:text="Reason" />
 
     <TextView
         android:layout_width="match_parent"
@@ -119,7 +56,7 @@
         android:layout_marginTop="2dp"
         android:fontFamily="@font/inter_regular"
         android:includeFontPadding="false"
-        android:text="Optional — any context the office should see."
+        android:text="Why is the visit being postponed."
         android:textColor="#94A3B8"
         android:textSize="11sp" />
 
@@ -147,7 +84,7 @@
             android:background="@android:color/transparent"
             android:fontFamily="@font/inter_medium"
             android:gravity="top"
-            android:hint="Additional context"
+            android:hint="Reason for postponement"
             android:includeFontPadding="false"
             android:inputType="textMultiLine|textCapSentences"
             android:minLines="2"

@@ -240,6 +240,10 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
+                // The sheet may already be gone (dismissed / detached) when a
+                // late failure lands — requireContext() would then crash. Only
+                // surface the error while still attached.
+                if (!isAdded) return@launch
                 btnSubmit.isEnabled = true
                 Toast.makeText(requireContext(), readApiError(e), Toast.LENGTH_LONG).show()
             }

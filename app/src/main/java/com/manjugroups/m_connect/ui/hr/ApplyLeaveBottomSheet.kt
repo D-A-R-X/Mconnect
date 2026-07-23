@@ -47,9 +47,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     // Fallback used only when the HR policy can't be fetched; the live list
     // comes from the policy allocations (see loadLeaveTypes) and mirrors the
-    // web defaults (casual 12 / sick 12 / earned 15 — all enabled).
-    private var leaveTypes = listOf("casual", "sick", "earned", "unpaid", "half_day", "compensatory")
-    private var selectedLeaveType: String = "casual"
+    // Product-approved mobile categories. Keep this explicit so policy data
+    // cannot re-introduce Casual/Sick/Earned into the category sheet.
+    private var leaveTypes = listOf("unpaid", "compensatory", "half_day")
+    private var selectedLeaveType: String = "unpaid"
     private var selectedFromMillis: Long? = null
     private var selectedToMillis: Long? = null
     private var selectedSession: String = "Morning"
@@ -253,44 +254,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun loadLeaveTypes() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val policy = api.getPolicy(session.bearerToken)
-                val lp = policy.policy?.leave
-                if (lp != null) {
-                    // Same rule as the web Apply Leave dropdown: a tracked type
-                    // is offered only while its HR-policy allocation is > 0
-                    // (an explicit 0 disables the category); a missing value
-                    // falls back to the web defaults (12/12/15). Unpaid has no
-                    // allocation and is always available.
-                    val types = mutableListOf<String>()
-                    if ((lp.casualPerYear ?: 12) > 0) types.add("casual")
-                    if ((lp.sickPerYear ?: 12) > 0) types.add("sick")
-                    if ((lp.earnedPerYear ?: 15) > 0) types.add("earned")
-                    types.add("unpaid")
-                    // Half Day is always offered. It submits as a 0.5-day leave
-                    // of the user's first available base type (casual when the
-                    // user has it, otherwise unpaid) — see halfDayBaseType() —
-                    // so it works even for staff with no casual allocation.
-                    types.add("half_day")
-                    // Compensatory Off spends earned comp-off credits through a
-                    // separate flow (compoff/apply). Always offered — like web —
-                    // and gated at submit-time by whether the user has credits.
-                    types.add("compensatory")
-                    leaveTypes = types
-                }
-            } catch (ce: kotlinx.coroutines.CancellationException) {
-                throw ce
-            } catch (_: Exception) {
-                // Keep defaults when policy isn't available.
-                leaveTypes = listOf("casual", "sick", "earned", "unpaid", "half_day", "compensatory")
-            }
-
-            selectedLeaveType = leaveTypes.firstOrNull() ?: "casual"
-            view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selectedLeaveType)
-            applyTypeUi()
-            updateSubmitButtonState()
-        }
+        leaveTypes = listOf("unpaid", "compensatory", "half_day")
+        if (selectedLeaveType !in leaveTypes) selectedLeaveType = "unpaid"
+        view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selectedLeaveType)
+        applyTypeUi()
+        updateSubmitButtonState()
     }
 
     private fun loadCompCredits() {
@@ -853,7 +821,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             "sick" -> return "Sick Leave"
             "earned" -> return "Earned Leave"
             "unpaid" -> return "Unpaid Leave"
-            "compensatory" -> return "Compensatory Off"
+            "compensatory" -> return "Compensatory Leave"
         }
         val base = value
             .replace('_', ' ')

@@ -112,6 +112,24 @@
             app:tint="#101828" />
     </FrameLayout>
 
+    <!-- ACTIVE DATE-RANGE CHIP (tap to clear) -->
+    <TextView
+        android:id="@+id/tvDateFilterChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_cpv_filter_pill_active"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_medium"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <!-- FILTER PILLS -->
     <HorizontalScrollView
         android:id="@+id/cpvFilterScroll"
@@ -160,7 +178,7 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/pillInProgress"
+                android:id="@+id/pillStarted"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginStart="8dp"
@@ -176,11 +194,10 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/pillCompleted"
+                android:id="@+id/pillPickedUp"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginStart="8dp"
-                android:layout_marginEnd="16dp"
                 android:background="@drawable/bg_cpv_filter_pill_inactive"
                 android:clickable="true"
                 android:focusable="true"
@@ -192,18 +209,38 @@
                 android:textColor="#475467"
                 android:textSize="13sp" />
 
-            <!-- Dummy/hidden pills to avoid breaking pillsAndFilters in Kotlin -->
             <TextView
-                android:id="@+id/pillPostponed"
+                android:id="@+id/pillCompleted"
                 android:layout_width="wrap_content"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Completed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/pillCancelled"
+                android:id="@+id/pillExpired"
                 android:layout_width="wrap_content"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Expired"
+                android:textColor="#475467"
+                android:textSize="13sp" />
         </LinearLayout>
     </HorizontalScrollView>
 

@@ -140,6 +140,17 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.bannerIllustrationContainer.visibility = View.GONE
         binding.ivCustomBannerIllustration.visibility = View.GONE
         binding.layoutFleetBanner.visibility = View.VISIBLE
+        // The fleet banner packs more than the default one (title + subtitle +
+        // "View My Summary" + two stat cards), and the shared 180dp wrapper
+        // clipped the button under the trips panel. Give it the room it needs;
+        // the trips screen sizes its hero spacer from the measured height, so
+        // this adapts automatically.
+        val params = binding.cardWorkSummary.layoutParams
+        val target = (216 * resources.displayMetrics.density).toInt()
+        if (params.height != target) {
+            params.height = target
+            binding.cardWorkSummary.layoutParams = params
+        }
     }
 
     /**
@@ -191,8 +202,12 @@ class HomeHeaderView @JvmOverloads constructor(
         }
         androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
 
-        // Set up click listeners for profile and notifications
-        binding.btnHomeProfile.setOnClickListener {
+        // Set up click listeners for profile and notifications. The whole
+        // profile row is tappable — not just the 44dp avatar circle — so tapping
+        // the name / role also opens the profile (the small avatar-only target
+        // was easy to miss). The bell is a child with its own listener, so its
+        // taps are consumed there and never fall through to this.
+        val openProfile = View.OnClickListener {
             onProfileClickListener?.invoke() ?: run {
                 val resolvedFragment = fragment ?: getFragment(this)
                 resolvedFragment?.parentFragmentManager?.beginTransaction()
@@ -206,6 +221,8 @@ class HomeHeaderView @JvmOverloads constructor(
                     }
             }
         }
+        binding.btnHomeProfile.setOnClickListener(openProfile)
+        binding.homeProfileRow.setOnClickListener(openProfile)
 
         binding.btnHomeBell.setOnClickListener {
             onBellClickListener?.invoke() ?: run {

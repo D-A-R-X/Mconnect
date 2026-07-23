@@ -885,7 +885,10 @@ class AppLibraryFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
             main.setTabBarVisible(true)
-            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+            // fullBleed=false paints a solid blue status-bar strip. The App
+            // Library header doesn't draw behind the status bar, so fullBleed=true
+            // left the window's white background showing above the blue header.
+            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = false)
         }
         if (_binding != null) {
             binding.sectionsContainer.post { playLibraryEntryAnimation() }

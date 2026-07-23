@@ -31,6 +31,113 @@
         android:textColor="#6B7280"
         android:textSize="13sp" />
 
+    <!-- Assign from: Internal (MFPL) vs External (Travel agency) — mirrors the
+         web dialog's source toggle. Shown only when agencies are available. -->
+    <TextView
+        android:id="@+id/tvLabelAssignSource"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Assign from"
+        android:textColor="#374151"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/rowAssignSource"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_pricing_toggle_container"
+        android:orientation="horizontal"
+        android:padding="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/btnSourceInternal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_my_trips_tab_active"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:paddingVertical="8dp"
+            android:text="Internal (MFPL)"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btnSourceExternal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:paddingVertical="8dp"
+            android:text="External agency"
+            android:textColor="#475467"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Travel agency picker (external mode only). -->
+    <TextView
+        android:id="@+id/tvLabelAgency"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Travel agency *"
+        android:textColor="#374151"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/agencySelector"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_vehicle_dropdown"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="14dp"
+            android:src="@drawable/ic_custom_user"
+            android:tint="#4B5563" />
+
+        <TextView
+            android:id="@+id/tvAgencyValue"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginStart="40dp"
+            android:layout_marginEnd="40dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center_vertical"
+            android:hint="Select agency"
+            android:maxLines="1"
+            android:textColor="#111827"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp"
+            android:src="@drawable/ic_chevron_down"
+            android:tint="#4B5563" />
+    </FrameLayout>
+
     <!-- Vehicle Selector -->
     <TextView
         android:id="@+id/tvLabelVehicle"
@@ -43,10 +150,13 @@
         android:textSize="13sp" />
 
     <FrameLayout
+        android:id="@+id/vehicleSelector"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="6dp"
-        android:background="@drawable/bg_vehicle_dropdown">
+        android:background="@drawable/bg_vehicle_dropdown"
+        android:clickable="true"
+        android:focusable="true">
 
         <ImageView
             android:layout_width="20dp"
@@ -55,15 +165,20 @@
             android:layout_marginStart="14dp"
             android:src="@drawable/ic_custom_car" />
 
-        <Spinner
-            android:id="@+id/spinnerVehicle"
+        <TextView
+            android:id="@+id/tvVehicleValue"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_marginStart="40dp"
             android:layout_marginEnd="40dp"
-            android:background="@android:color/transparent"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_regular"
             android:gravity="center_vertical"
-            android:spinnerMode="dropdown" />
+            android:hint="Select vehicle"
+            android:maxLines="1"
+            android:textColor="#111827"
+            android:textColorHint="#9CA3AF"
+            android:textSize="14sp" />
 
         <ImageView
             android:layout_width="16dp"
@@ -151,84 +266,6 @@
         android:focusable="false"
         android:fontFamily="@font/inter_regular"
         android:hint="Select Time (e.g. 02:30 AM)"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
-
-    <!-- Pricing. Hidden for external agencies: their rate is contracted on the
-         agency record in the web app, not set per allocation. -->
-    <TextView
-        android:id="@+id/tvPricingLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Pricing"
-        android:textColor="#374151"
-        android:textSize="13sp" />
-
-    <LinearLayout
-        android:id="@+id/rowPricingToggle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_pricing_toggle_container"
-        android:orientation="horizontal"
-        android:padding="4dp">
-
-        <TextView
-            android:id="@+id/btnPricePerKm"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/bg_my_trips_tab_active"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_medium"
-            android:gravity="center"
-            android:paddingVertical="8dp"
-            android:text="Per Km"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/btnPricePackage"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:clickable="true"
-            android:focusable="true"
-            android:fontFamily="@font/inter_medium"
-            android:gravity="center"
-            android:paddingVertical="8dp"
-            android:text="Package"
-            android:textColor="#475467"
-            android:textSize="13sp" />
-    </LinearLayout>
-
-    <!-- Per Km / Package Amount Input -->
-    <TextView
-        android:id="@+id/tvAmountLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Per Km amount (Rs) *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
-
-    <EditText
-        android:id="@+id/etAmount"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_speedometer"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Amount"
-        android:inputType="numberDecimal"
         android:paddingHorizontal="14dp"
         android:textColor="#111827"
         android:textColorHint="#9CA3AF"

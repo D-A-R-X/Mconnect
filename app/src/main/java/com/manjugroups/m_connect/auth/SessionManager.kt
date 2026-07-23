@@ -243,8 +243,76 @@ class SessionManager(context: Context) {
         get() = isExternalFleetAgency || isExternalFleetDriver
 
     val isFleetAdminDriver: Boolean
-        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true) &&
+        get() = isDriverDesignation(designation) &&
             (department ?: "").trim().equals("Administration", ignoreCase = true)
+
+    /**
+     * A non-driver MANAGER in the fleet-owning departments (Transport /
+     * Administration) — e.g. "Assistant Manager • Transport". They run the
+     * fleet dispatch, sitting above Driver • Administration. Drivers are
+     * excluded (they drive, not dispatch).
+     */
+    private fun isFleetManagerDesignation(): Boolean {
+        val dept = (department ?: "").trim().lowercase(java.util.Locale.US)
+        val desig = (designation ?: "").trim().lowercase(java.util.Locale.US)
+        val fleetDept = dept == "transport" || dept == "administration"
+        return fleetDept && !isDriverDesignation(designation) && desig.contains("manager")
+    }
+
+    /**
+     * Extra capability for a fleet MANAGER (not a plain Driver • Administration
+     * dispatcher): allot to external agencies AND assign the agency's own
+     * drivers + vehicles — the travel-desk dispatcher powers, from inside MMS.
+     * Gated on the manager designation or an explicit fleet permission.
+     */
+    val canAssignAgencyResources: Boolean
+        get() = !isExternalFleetPrincipal &&
+            (isFleetManagerDesignation() ||
+                iamPermissions.contains("marketing.fleet.assign") ||
+                iamPermissions.contains("marketing.fleet.manageVehicles"))
+
+    /**
+     * Who gets the internal fleet-dispatch Home (the Pending / Assigned /
+     * Completed allocation queue). Two populations:
+     *   1. Driver • Administration by designation ([isFleetAdminDriver]).
+     *   2. Any internal staff (e.g. a Fleet Assistant Manager) who explicitly
+     *      holds the fleet permission in IAM — mirroring the web, where the
+     *      fleet page is gated on marketing.fleet.view / .assign.
+     *
+     * Permission is read from the EXPLICIT [iamPermissions] set (not
+     * hasPermission), so the blanket `isAdmin` flag doesn't pull every admin
+     * into the dispatcher Home — the same phantom-key caution as
+     * [canViewVpDashboard]. VP / GM / super-admin users keep their company
+     * dashboard even if they also hold a fleet key.
+     */
+    val isInternalFleetDispatcher: Boolean
+        get() {
+            if (isExternalFleetPrincipal) return false
+            // Driver • Administration IS the designation-based dispatcher.
+            if (isFleetAdminDriver) return true
+            // Any OTHER driver (e.g. Driver • Transport) only drives the trips
+            // assigned to them — they never get the dispatch queue / Allocate,
+            // even if a fleet permission is present. They fall through to the
+            // driver's own-trips Home instead.
+            if (isDriverMode) return false
+            if (canViewVpDashboard()) return false
+            // A non-driver MANAGER in the Transport / Administration department
+            // runs the fleet — they sit above Driver • Administration, so they
+            // get the dispatch by designation even before an IAM key is granted.
+            if (isFleetManagerDesignation()) return true
+            return iamPermissions.contains("marketing.fleet.assign") ||
+                iamPermissions.contains("marketing.fleet.view")
+        }
+
+    /**
+     * An internal staff driver (e.g. Driver • Transport) who DRIVES fleet trips
+     * assigned to them — they get the same granular Start → Reached → Picked →
+     * End flow the external agency driver has, backed by the mms-fleet driver
+     * endpoints. Excludes the dispatcher (Driver • Administration) and the
+     * external agency principals.
+     */
+    val isInternalFleetDriver: Boolean
+        get() = !isExternalFleetPrincipal && isDriverMode && !isFleetAdminDriver
 
     val isDriverMode: Boolean
         // Both driver populations get the driver screen. "Driver • Transport"
@@ -252,8 +320,21 @@ class SessionManager(context: Context) {
         // the same UI plus the dispatch list and the Allocate action
         // (isFleetAdminDriver). The Admin Fleet portal is NOT for either of
         // them — it belongs to external agencies.
-        get() = fleetDriverByBackend ||
-            (designation ?: "").trim().equals("Driver", ignoreCase = true)
+        get() = fleetDriverByBackend || isDriverDesignation(designation)
+
+    /**
+     * True for any driver designation, including qualified forms like
+     * "Driver (Transport)" / "Driver - Transport" — not just the bare
+     * "Driver". Matching only the exact word left internal transport drivers
+     * out of the driver shell and the fleet-trip routes.
+     */
+    private fun isDriverDesignation(value: String?): Boolean {
+        val d = (value ?: "").trim().lowercase(java.util.Locale.US)
+        return d == "driver" ||
+            d.startsWith("driver ") ||
+            d.startsWith("driver(") ||
+            d.startsWith("driver-")
+    }
 
     var isNotificationEnabled: Boolean
         get() = getCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
