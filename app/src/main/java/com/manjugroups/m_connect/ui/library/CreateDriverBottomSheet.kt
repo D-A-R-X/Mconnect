@@ -18,6 +18,11 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
     private val binding get() = _binding!!
 
     private var onCreateCallback: ((String, String, String) -> Unit)? = null
+    private var prefillName: String = ""
+
+    /** Seed the name field (create mode) — used when the dispatcher typed a
+     *  driver that wasn't on the roster and chose "Add new driver". */
+    fun prefillName(name: String) { prefillName = name.trim() }
     private var onSaveCallback: ((String, String, String) -> Unit)? = null
     private var onDeactivateCallback: (() -> Unit)? = null
 
@@ -188,7 +193,7 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             binding.btnSubmitCreate.visibility = View.VISIBLE
             binding.layoutEditButtons.visibility = View.GONE
 
-            binding.etDriverName.setText("")
+            binding.etDriverName.setText(prefillName)
             binding.etDriverPhone.setText("")
             binding.etDriverAddress.setText("")
 

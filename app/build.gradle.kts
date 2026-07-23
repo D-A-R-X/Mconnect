@@ -14,6 +14,41 @@ fun ensureTrailingSlash(url: String): String {
 }
 fun gradleProp(name: String): String = (project.findProperty(name) as String?) ?: ""
 
+// Firebase client config resolution.
+//
+// The app initialises Firebase programmatically from BuildConfig (see
+// PushTokenManager.ensureFirebaseInitialized). Release CI supplies these via
+// env vars, but a plain `./gradlew assembleDebug` on a dev machine leaves them
+// blank — which silently disables push entirely (no token is ever registered,
+// so NO notification of any kind can arrive). To make debug builds "just work",
+// fall back to the standard google-services.json (drop your Firebase Android
+// config into app/google-services.json — it holds only non-secret client keys
+// that already ship inside every APK). Env vars still win when present.
+val googleServicesJson: Map<String, String> = run {
+    val f = project.file("google-services.json")
+    if (!f.exists()) return@run emptyMap()
+    runCatching {
+        @Suppress("UNCHECKED_CAST")
+        val root = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
+        val projectInfo = root["project_info"] as? Map<String, Any?> ?: emptyMap()
+        val client = (root["client"] as? List<Map<String, Any?>>)?.firstOrNull() ?: emptyMap()
+        val clientInfo = client["client_info"] as? Map<String, Any?> ?: emptyMap()
+        val apiKey = (client["api_key"] as? List<Map<String, Any?>>)
+            ?.firstOrNull()?.get("current_key") as? String
+        mapOf(
+            "FIREBASE_APPLICATION_ID" to (clientInfo["mobilesdk_app_id"] as? String ?: ""),
+            "FIREBASE_PROJECT_ID" to (projectInfo["project_id"] as? String ?: ""),
+            "FIREBASE_API_KEY" to (apiKey ?: ""),
+            "FIREBASE_GCM_SENDER_ID" to (projectInfo["project_number"] as? String ?: ""),
+            "FIREBASE_STORAGE_BUCKET" to (projectInfo["storage_bucket"] as? String ?: ""),
+        )
+    }.getOrDefault(emptyMap())
+}
+fun firebaseConfig(name: String): String =
+    System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: googleServicesJson[name]
+        ?: ""
+
 val googleMapsApiKey = envOrDefault(
     "GOOGLE_MAPS_ANDROID_KEY",
     envOrDefault(
@@ -32,7 +67,7 @@ val googleMapsApiKey = envOrDefault(
 )
 // Point the Android client at the same Convex deployment the web admin uses.
 // Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
-// MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
+// MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without   
 // touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
     envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://api-mfpl.theairix.com/")
@@ -41,35 +76,11 @@ val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
 )
 val defaultAppUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_APP_URL", "https://dev-convex-http.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
 )
 val appUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
 )
-
-// versionCode MUST strictly increase on every release, or Google Play — and the
-// in-app update flow, which keys off it — won't offer the update. A hardcoded
-// versionCode is what was blocking store updates. Derive it from the git commit
-// count so it bumps automatically and can't be forgotten; a release pipeline may
-// override via MCONNECT_VERSION_CODE. The floor (6) keeps us above the last store
-// release (5) if git history is unavailable (e.g. a shallow CI clone — in that
-// case set MCONNECT_VERSION_CODE explicitly).
-fun gitCommitCount(): Int = try {
-    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
-        .directory(rootDir)
-        .redirectErrorStream(true)
-        .start()
-    val out = process.inputStream.bufferedReader().use { it.readText() }.trim()
-    process.waitFor()
-    out.toIntOrNull() ?: 0
-} catch (e: Exception) {
-    0
-}
-
-val appVersionCode: Int =
-    System.getenv("MCONNECT_VERSION_CODE")?.toIntOrNull() ?: maxOf(6, gitCommitCount())
-val appVersionName: String =
-    System.getenv("MCONNECT_VERSION_NAME") ?: "1.0.$appVersionCode"
 
 android {
     namespace = "com.manjugroups.m_connect"
@@ -83,18 +94,18 @@ android {
         applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
-        versionCode = appVersionCode
-        versionName = appVersionName
+        versionCode = 11
+        versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         buildConfigField("String", "APP_URL", "\"${appUrl}\"")
-        buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${envOrEmpty("FIREBASE_APPLICATION_ID")}\"")
-        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${envOrEmpty("FIREBASE_PROJECT_ID")}\"")
-        buildConfigField("String", "FIREBASE_API_KEY", "\"${envOrEmpty("FIREBASE_API_KEY")}\"")
-        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", "\"${envOrEmpty("FIREBASE_GCM_SENDER_ID")}\"")
-        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${envOrEmpty("FIREBASE_STORAGE_BUCKET")}\"")
+        buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${firebaseConfig("FIREBASE_APPLICATION_ID")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebaseConfig("FIREBASE_PROJECT_ID")}\"")
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseConfig("FIREBASE_API_KEY")}\"")
+        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", "\"${firebaseConfig("FIREBASE_GCM_SENDER_ID")}\"")
+        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${firebaseConfig("FIREBASE_STORAGE_BUCKET")}\"")
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${googleMapsApiKey}\"")
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }

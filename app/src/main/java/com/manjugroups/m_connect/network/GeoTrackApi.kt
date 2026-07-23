@@ -144,6 +144,12 @@ interface GeoTrackApi {
         @Body body: MmsFleetDriverSiteVisitRequest
     ): MmsFleetDriverActionResponse
 
+    @POST("api/mms-fleet/driver/picked-from-site")
+    suspend fun markMmsFleetDriverPickedFromSite(
+        @Header("Authorization") token: String,
+        @Body body: MmsFleetDriverSiteVisitRequest
+    ): MmsFleetDriverActionResponse
+
     @POST("api/mms-fleet/driver/end")
     suspend fun endMmsFleetDriverTrip(
         @Header("Authorization") token: String,
@@ -365,6 +371,8 @@ interface GeoTrackApi {
     // server-side mutation enforces the legal source state — calling
     // markArrivedSite from scheduled (skipping picked_up) will 500
     // with a transition error, so the mobile flow stays linear.
+    // Order: markPickedUp (at the CP) -> markArrivedSite ->
+    // markPickedFromSite (return pickup) -> markDropped.
 
     @POST("api/marketing/siteVisits/markPickedUp")
     suspend fun markSiteVisitPickedUp(
@@ -380,6 +388,12 @@ interface GeoTrackApi {
 
     @POST("api/marketing/siteVisits/markArrivedSite")
     suspend fun markSiteVisitArrivedSite(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/markPickedFromSite")
+    suspend fun markSiteVisitPickedFromSite(
         @Header("Authorization") token: String,
         @Body body: SiteVisitIdRequest,
     ): GeoTrackResponse
@@ -1384,10 +1398,12 @@ data class ProposedSiteVisit(
     val travelAgencyId: String? = null,
     val pickedUpAt: Long? = null,
     val arrivedSiteAt: Long? = null,
+    val pickedFromSiteAt: Long? = null,
     val droppedAt: Long? = null,
     val completedAt: Long? = null,
     val travelDeskStartedAt: Long? = null,
     val travelDeskOnSiteAt: Long? = null,
+    val travelDeskPickedFromSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
 )
 
@@ -1459,6 +1475,7 @@ data class MmsFleetDriverTrip(
     val travelDeskArrivedAt: Long? = null,
     val travelDeskStartedAt: Long? = null,
     val travelDeskOnSiteAt: Long? = null,
+    val travelDeskPickedFromSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
     val travelDeskStartKm: Double? = null,
     val travelDeskEndKm: Double? = null,
@@ -1623,6 +1640,15 @@ data class TodayVisit(
     val travelMode: String? = null,
     val vehiclePreference: String? = null,
     val vehicleAssigned: Boolean? = null,
+    // Granular (timestamp-merged) SV status from the backend's mobile list
+    // query — lets the SV filter separate Started / Picked Up / Completed,
+    // which the 5-bucket `status` field above can't. Null on legacy rows;
+    // the filter falls back to `status` when it's absent.
+    val rawStatus: String? = null,
+    // LMO (Lead Management Officer) — the telecaller who owns/created the
+    // visit. Shown on the SV/CP cards. SV rows get it from the backend list
+    // query; CP rows are mapped from the CpVisitDetail's telecaller.
+    val lmoName: String? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the

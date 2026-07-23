@@ -17,8 +17,8 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     private var _binding: BottomSheetCreateVehicleBinding? = null
     private val binding get() = _binding!!
 
-    private var onCreateCallback: ((String, String, String, String, String, String) -> Unit)? = null
-    private var onSaveCallback: ((String, String, String, String, String, String) -> Unit)? = null
+    private var onCreateCallback: ((VehicleFormResult) -> Unit)? = null
+    private var onSaveCallback: ((VehicleFormResult) -> Unit)? = null
 
     private var originalVehicleNumberKeyListener: KeyListener? = null
     private var originalVehicleTypeKeyListener: KeyListener? = null
@@ -30,8 +30,12 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_IS_EDIT_MODE = "arg_is_edit_mode"
         private const val ARG_PLATE = "arg_plate"
+        private const val ARG_MAKE = "arg_make"
+        private const val ARG_MODEL = "arg_model"
+        private const val ARG_MODEL_YEAR = "arg_model_year"
         private const val ARG_TYPE = "arg_type"
         private const val ARG_CAPACITY = "arg_capacity"
+        private const val ARG_WHATSAPP = "arg_whatsapp"
         private const val ARG_NAME = "arg_name"
         private const val ARG_PHONE = "arg_phone"
         private const val ARG_AGENCY = "arg_agency"
@@ -40,7 +44,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         // vehicle for themselves, so the field is auto-filled + read-only).
         private const val ARG_FIXED_AGENCY = "arg_fixed_agency"
 
-        fun newInstance(onCreate: (String, String, String, String, String, String) -> Unit): CreateVehicleBottomSheet {
+        fun newInstance(onCreate: (VehicleFormResult) -> Unit): CreateVehicleBottomSheet {
             val sheet = CreateVehicleBottomSheet()
             sheet.onCreateCallback = onCreate
             return sheet
@@ -51,7 +55,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
          *  keeps the editable form via [newInstance]. */
         fun newInstanceLockedToAgency(
             agencyName: String,
-            onCreate: (String, String, String, String, String, String) -> Unit,
+            onCreate: (VehicleFormResult) -> Unit,
         ): CreateVehicleBottomSheet {
             val sheet = CreateVehicleBottomSheet()
             sheet.onCreateCallback = onCreate
@@ -63,22 +67,30 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
 
         fun newEditInstance(
             plate: String,
+            make: String,
+            model: String,
+            modelYear: String,
             type: String,
             capacity: String,
             name: String,
             phone: String,
+            whatsapp: String,
             agency: String,
-            onSave: (String, String, String, String, String, String) -> Unit
+            onSave: (VehicleFormResult) -> Unit
         ): CreateVehicleBottomSheet {
             val sheet = CreateVehicleBottomSheet()
             sheet.onSaveCallback = onSave
             val args = Bundle().apply {
                 putBoolean(ARG_IS_EDIT_MODE, true)
                 putString(ARG_PLATE, plate)
+                putString(ARG_MAKE, make)
+                putString(ARG_MODEL, model)
+                putString(ARG_MODEL_YEAR, modelYear)
                 putString(ARG_TYPE, type)
                 putString(ARG_CAPACITY, capacity)
                 putString(ARG_NAME, name)
                 putString(ARG_PHONE, phone)
+                putString(ARG_WHATSAPP, whatsapp)
                 putString(ARG_AGENCY, agency)
             }
             sheet.arguments = args
@@ -133,6 +145,28 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         originalDriverPhoneKeyListener = binding.etDriverPhone.keyListener
         originalAgencyKeyListener = binding.etAgency.keyListener
 
+        // WhatsApp "same as mobile": disable + mirror the mobile field.
+        fun applyWhatsappSame(checked: Boolean) {
+            binding.etDriverWhatsapp.isEnabled = !checked
+            binding.etDriverWhatsapp.alpha = if (checked) 0.6f else 1f
+            if (checked) {
+                binding.etDriverWhatsapp.setText(binding.etDriverPhone.text)
+            }
+        }
+        applyWhatsappSame(binding.cbWhatsappSameAsMobile.isChecked)
+        binding.cbWhatsappSameAsMobile.setOnCheckedChangeListener { _, checked ->
+            applyWhatsappSame(checked)
+        }
+        binding.etDriverPhone.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (binding.cbWhatsappSameAsMobile.isChecked) {
+                    binding.etDriverWhatsapp.setText(s)
+                }
+            }
+        })
+
         // Add red asterisks to required fields
         binding.tvLabelVehicleNumber.text = Html.fromHtml("Vehicle Number <font color='#EF4444'>*</font>")
         binding.tvLabelVehicleType.text = Html.fromHtml("Vehicle Type <font color='#EF4444'>*</font>")
@@ -153,18 +187,29 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.layoutEditButtons.visibility = View.GONE
 
             val initialPlate = arguments?.getString(ARG_PLATE) ?: ""
+            val initialMake = arguments?.getString(ARG_MAKE) ?: ""
+            val initialModel = arguments?.getString(ARG_MODEL) ?: ""
+            val initialModelYear = arguments?.getString(ARG_MODEL_YEAR) ?: ""
             val initialType = arguments?.getString(ARG_TYPE) ?: ""
             val initialCapacity = arguments?.getString(ARG_CAPACITY) ?: ""
             val initialName = arguments?.getString(ARG_NAME) ?: ""
             val initialPhone = arguments?.getString(ARG_PHONE) ?: ""
+            val initialWhatsapp = arguments?.getString(ARG_WHATSAPP) ?: ""
             val initialAgency = arguments?.getString(ARG_AGENCY) ?: ""
 
             binding.etVehicleNumber.setText(initialPlate)
+            binding.etMake.setText(initialMake)
+            binding.etModel.setText(initialModel)
+            binding.etModelYear.setText(initialModelYear)
             binding.etVehicleType.setText(initialType)
             binding.etCapacity.setText(initialCapacity)
             binding.etDriverName.setText(initialName)
             binding.etDriverPhone.setText(initialPhone)
+            binding.etDriverWhatsapp.setText(initialWhatsapp)
             binding.etAgency.setText(initialAgency)
+            // If a WhatsApp differs from the mobile, un-tick "same as mobile".
+            binding.cbWhatsappSameAsMobile.isChecked =
+                initialWhatsapp.isBlank() || initialWhatsapp == initialPhone
 
             setFieldsEditable(false)
 
@@ -188,19 +233,12 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
 
             binding.btnSave.setOnClickListener {
                 if (!isCurrentlyEditing) return@setOnClickListener
-                val number = binding.etVehicleNumber.text.toString().trim()
-                val type = binding.etVehicleType.text.toString().trim()
-                val capacity = binding.etCapacity.text.toString().trim()
-                val name = binding.etDriverName.text.toString().trim()
-                val phone = binding.etDriverPhone.text.toString().trim()
-                val agency = binding.etAgency.text.toString().trim()
-
-                if (number.isEmpty() || type.isEmpty() || capacity.isEmpty() || name.isEmpty() || phone.isEmpty() || agency.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please fill all fields", Toast.LENGTH_SHORT).show()
+                val result = collectForm()
+                if (result == null) {
+                    Toast.makeText(requireContext(), "Please fill all required fields", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-
-                onSaveCallback?.invoke(number, type, capacity, name, phone, agency)
+                onSaveCallback?.invoke(result)
                 dismiss()
             }
 
@@ -209,10 +247,14 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
                     isCurrentlyEditing = false
                     setFieldsEditable(false)
                     binding.etVehicleNumber.setText(initialPlate)
+                    binding.etMake.setText(initialMake)
+                    binding.etModel.setText(initialModel)
+                    binding.etModelYear.setText(initialModelYear)
                     binding.etVehicleType.setText(initialType)
                     binding.etCapacity.setText(initialCapacity)
                     binding.etDriverName.setText(initialName)
                     binding.etDriverPhone.setText(initialPhone)
+                    binding.etDriverWhatsapp.setText(initialWhatsapp)
                     binding.etAgency.setText(initialAgency)
                     
                     // Show Close button, hide Edit buttons (Cancel / Save)
@@ -228,11 +270,14 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.layoutEditButtons.visibility = View.GONE
 
             binding.etVehicleNumber.setText("")
+            binding.etMake.setText("")
+            binding.etModel.setText("")
+            binding.etModelYear.setText("")
             binding.etVehicleType.setText("")
             binding.etCapacity.setText("")
             binding.etDriverName.setText("")
             binding.etDriverPhone.setText("")
-            binding.etAgency.setText("")
+            binding.etDriverWhatsapp.setText("")
 
             binding.btnSubmitCreate.setOnClickListener {
                 validateAndSubmit()
@@ -308,40 +353,44 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun validateAndSubmit() {
+        val result = collectForm() ?: run {
+            Toast.makeText(requireContext(), "Please fill all required fields", Toast.LENGTH_SHORT).show()
+            return
+        }
+        onCreateCallback?.invoke(result)
+        dismiss()
+    }
+
+    /**
+     * Read every field into a result, validating the required ones. Vehicle
+     * number, type, capacity, driver name and phone are required; make, model,
+     * model year and WhatsApp are optional. The agency is no longer collected —
+     * the backend binds the vehicle to the logged-in agency. Returns null if a
+     * required field is blank.
+     */
+    private fun collectForm(): VehicleFormResult? {
         val number = binding.etVehicleNumber.text.toString().trim()
         val type = binding.etVehicleType.text.toString().trim()
         val capacity = binding.etCapacity.text.toString().trim()
         val name = binding.etDriverName.text.toString().trim()
         val phone = binding.etDriverPhone.text.toString().trim()
-        val agency = binding.etAgency.text.toString().trim()
-
-        if (number.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter vehicle number", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (type.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter vehicle type", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (capacity.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter capacity", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (name.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter driver name", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (phone.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter phone number", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (agency.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter agency", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        onCreateCallback?.invoke(number, type, capacity, name, phone, agency)
-        dismiss()
+        if (number.isEmpty() || type.isEmpty() || capacity.isEmpty() ||
+            name.isEmpty() || phone.isEmpty()
+        ) return null
+        val whatsapp =
+            if (binding.cbWhatsappSameAsMobile.isChecked) phone
+            else binding.etDriverWhatsapp.text.toString().trim()
+        return VehicleFormResult(
+            vehicleNumber = number,
+            make = binding.etMake.text.toString().trim(),
+            model = binding.etModel.text.toString().trim(),
+            modelYear = binding.etModelYear.text.toString().trim(),
+            type = type,
+            capacity = capacity,
+            driverName = name,
+            driverPhone = phone,
+            driverWhatsapp = whatsapp,
+        )
     }
 
     override fun onDestroyView() {
@@ -349,3 +398,16 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         _binding = null
     }
 }
+
+/** Everything the vehicle create/edit form collects. */
+data class VehicleFormResult(
+    val vehicleNumber: String,
+    val make: String,
+    val model: String,
+    val modelYear: String,
+    val type: String,
+    val capacity: String,
+    val driverName: String,
+    val driverPhone: String,
+    val driverWhatsapp: String,
+)

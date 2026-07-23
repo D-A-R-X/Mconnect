@@ -55,8 +55,8 @@
                 android:fontFamily="@font/inter_medium"
                 android:maxLines="1"
                 android:text="2026-06-13 • 13:00"
-                android:textColor="#4B5563"
-                android:textSize="12.5sp" />
+                android:textColor="#6B7280"
+                android:textSize="11sp" />
 
             <!-- Status badge -->
             <TextView
@@ -72,45 +72,58 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Row 2: Address -->
+        <!-- Row 2a: Client name (primary) — falls back to "Unknown" -->
+        <TextView
+            android:id="@+id/tvClientName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:text="Client name"
+            android:textColor="#111827"
+            android:textSize="14sp" />
+
+        <!-- Row 2b: Address (secondary, muted) -->
         <TextView
             android:id="@+id/tvTripAddress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="2dp"
             android:breakStrategy="high_quality"
             android:ellipsize="end"
             android:fontFamily="@font/inter_regular"
             android:hyphenationFrequency="none"
-            android:lineSpacingExtra="2dp"
-            android:maxLines="2"
+            android:lineSpacingExtra="1dp"
+            android:maxLines="1"
             android:text="1st Avenue, 83rd St, Ashok Nagar, Chennai, Tamil Nadu 600083"
-            android:textColor="#374151"
-            android:textSize="12sp" />
+            android:textColor="#6B7280"
+            android:textSize="11.5sp" />
 
-        <!-- Row 3: tags only. The Allocate button used to share this row behind
-             a weighted spacer, so a long vehicle label squeezed the button and
-             the pills ran into it. -->
+        <!-- Row 3: people count · LMO · Allocate — three equal-width chips, each
+             the same height + shape as the Allocate button. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:baselineAligned="false"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <!-- Attendees Tag -->
+            <!-- People count -->
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
                 android:background="@drawable/bg_trip_tag_pill"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="3dp">
+                android:paddingHorizontal="8dp">
 
                 <ImageView
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
                     android:src="@drawable/ic_chat_users"
                     android:tint="#0B61CA" />
 
@@ -118,65 +131,109 @@
                     android:id="@+id/tvAttendeesTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
                     android:fontFamily="@font/inter_medium"
                     android:maxLines="1"
-                    android:text="2 Attendees"
+                    android:text="2"
                     android:textColor="#1E3A8A"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- Vehicle Tag. Weighted so a long label ellipsizes inside the
-                 pill instead of pushing the row wider than the card. -->
+            <!-- LMO (Lead Management Officer — who created the SV) -->
             <LinearLayout
+                android:id="@+id/lmoTagContainer"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_trip_tag_pill"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="3dp">
+                android:paddingHorizontal="8dp">
 
                 <ImageView
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
-                    android:src="@drawable/ic_car_outline"
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
+                    android:src="@drawable/ic_auth_user"
                     android:tint="#0B61CA" />
 
                 <TextView
-                    android:id="@+id/tvVehicleTag"
+                    android:id="@+id/tvLmoTag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
                     android:ellipsize="end"
                     android:fontFamily="@font/inter_medium"
                     android:maxLines="1"
-                    android:text="Company Vehicle"
+                    android:text="—"
                     android:textColor="#1E3A8A"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
+
+            <!-- Allocate — same size/shape as the two chips. Hidden for
+                 allocated / expired trips. -->
+            <TextView
+                android:id="@+id/btnAllocate"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_admin_fleet_btn_allocate"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="Allocate ›"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
         </LinearLayout>
 
-        <!-- Row 4: action, right-aligned on its own line so it always has room
-             and lines up across cards regardless of tag length. -->
-        <TextView
-            android:id="@+id/btnAllocate"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_gravity="end"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_admin_fleet_btn_allocate"
-            android:fontFamily="@font/inter_semibold"
-            android:gravity="center"
-            android:minWidth="96dp"
-            android:paddingHorizontal="14dp"
-            android:text="Allocate ›"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+        <!-- Assignment tracking: who the trip went to + how far it's got.
+             Shown only for allocated (Assigned / Completed) trips. -->
+        <LinearLayout
+            android:id="@+id/assignmentInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="10dp"
+                android:background="#EEF0F4" />
+
+            <TextView
+                android:id="@+id/tvAssignedVehicle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvAssignedDriver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvAssignedProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_home_trip_status_progress"
+                android:fontFamily="@font/inter_semibold"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="3dp"
+                android:textColor="#B54708"
+                android:textSize="11sp" />
+        </LinearLayout>
 
     </LinearLayout>
 

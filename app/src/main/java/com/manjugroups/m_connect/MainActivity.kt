@@ -103,7 +103,9 @@ class MainActivity : AppCompatActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        // Skip the MMS device registration for external-fleet principals —
+        // their token 401s there and the interceptor would force a logout.
+        if (granted && !session.isExternalFleetPrincipal) {
             lifecycleScope.launch {
                 runCatching {
                     PushTokenManager.syncCurrentToken(this@MainActivity, session)
@@ -386,9 +388,14 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            if (sys.top > 0) {
-                cachedTopInset = sys.top
+            // Use the taller of the status bar and the display cutout so the
+            // header strip clears a centre/corner notch too — otherwise the
+            // title rides up beside the camera cutout on those devices.
+            val topInset = maxOf(sys.top, cutout.top)
+            if (topInset > 0) {
+                cachedTopInset = topInset
             }
             if (!statusBarFullBleed && cachedTopInset > 0) {
                 statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
@@ -426,14 +433,20 @@ class MainActivity : AppCompatActivity() {
         // Same outline icon for active + inactive — only the tint changes,
         // matching the design where the shape stays constant and color flips
         // between bright green (#1BCA0B) and soft gray (#D0D5DD).
+        // A driver's home IS their trip list — no overview, no dashboard — so
+        // the first tab reads "Trips" with a trip icon for them. Only the
+        // label and icon change; it still opens HomeFragment, which already
+        // renders the driver's Today's Trip surface.
+        val homeIsTrips = session.isDriverMode
+        val homeIcon = if (homeIsTrips) R.drawable.ic_admin_tab_trips else R.drawable.ic_nav_home
         tabs = listOf(
             TabConfig(
                 findViewById(R.id.tabHome),
                 findViewById(R.id.tabHomeIcon),
                 findViewById(R.id.tabHomeIndicator),
                 findViewById(R.id.tabHomeText),
-                R.drawable.ic_nav_home,
-                R.drawable.ic_nav_home
+                homeIcon,
+                homeIcon
             ),
             TabConfig(
                 findViewById(R.id.tabHr),
@@ -463,6 +476,7 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize all tabs with inactive icon variant.
         tabs.forEach { it.icon.setImageResource(it.inactiveIconRes) }
+        if (homeIsTrips) tabs[TAB_HOME].text.text = "Trips"
 
         // Tab click listeners. Taps still land on the tab itself — GlassNavBar
         // only steals the gesture once it becomes a scrub — so this stays the
@@ -499,13 +513,33 @@ class MainActivity : AppCompatActivity() {
         // Fleet container, with its own bottom nav (Trips / Vehicles / Driver /
         // Settings). Skip the normal MainActivity tab bar entirely.
         //
-        // Covers external agencies (designation "External Fleet"), who have no
-        // staff record and would break on Home / HR / Chat / Profile, and
-        // in-house fleet-desk staff ("Driver • Administration"), whose whole
-        // job is this screen — they were landing on the driver home and seeing
-        // "No Driver Trips" because they have no trips of their own.
+        // External agencies only (designation "External Fleet"). They have no
+        // staff record and would break on Home / HR / Chat / Profile, and the
+        // portal is backed by the travel-desk project's agency session.
+        // In-house "Driver • Administration" staff do NOT come here — they get
+        // the normal driver screen with dispatch powers instead.
+        // A driver created by an external agency gets the most stripped
+        // shell in the app: their assigned trips and nothing else. No tabs
+        // (they have no Home/HR/Chat), no bell (no notifications feed) and
+        // no clock-in (no attendance record) — just the profile avatar for
+        // settings and logout.
+        if (session.isExternalFleetDriver) {
+            lockTabBarOff()
+            if (savedInstanceState == null) {
+                supportFragmentManager.beginTransaction()
+                    .setReorderingAllowed(true)
+                    .replace(
+                        R.id.fragmentContainer,
+                        com.manjugroups.m_connect.ui.library.AgencyDriverTripsFragment(),
+                        "agency_driver_root",
+                    )
+                    .commit()
+            }
+            return
+        }
+
         if (isFleetPortalPrincipal()) {
-            setTabBarVisible(false)
+            lockTabBarOff()
             if (savedInstanceState == null) {
                 supportFragmentManager.beginTransaction()
                     .setReorderingAllowed(true)
@@ -565,6 +599,10 @@ class MainActivity : AppCompatActivity() {
             com.manjugroups.m_connect.notifications.TasksNotification.clear(this)
             return
         }
+        // The task-manager feed is an MMS endpoint; an external-fleet
+        // principal's token 401s there. Guard here so every caller (onResume,
+        // the back-stack listener) is covered — the driver shell has no tasks.
+        if (session.isExternalFleetPrincipal) return
         // Cache-first: paint the last-known open tasks immediately so the
         // warning shows on cold start and survives a slow / failed fetch,
         // instead of intermittently not appearing at all.
@@ -1117,7 +1155,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        restoreWindowLayoutAfterResume()
         if (!session.isLoggedIn) return
+        // Finish a downloaded flexible update / resume a stalled immediate one.
+        // Kept for everyone — it's a Play call, not an MMS one.
+        inAppUpdateManager?.onResume()
+        // Ask (once) to exempt the app from "Manage app if unused" — its
+        // default-on hibernation/auto-revoke is what puts the app to sleep and
+        // breaks background tracking, push and biometric alerts. Tracking staff
+        // see it as a row INSIDE the startup permissions gate (alongside
+        // location/activity/battery); everyone else — who never sees that gate
+        // — gets the standalone one-time prompt here.
+        if (!session.geoTrackingEnabled) {
+            com.manjugroups.m_connect.util.UnusedAppRestrictions.maybePrompt(this)
+        }
+        // External-fleet principals (agency + agency drivers) have no staff
+        // record, so every MMS call below 401s on their token and trips the
+        // session-expired logout. They live entirely on the travel-desk
+        // endpoints; skip the staff-only foreground syncs.
+        if (session.isExternalFleetPrincipal) return
         refreshTasksBanner()
         // Re-assert the background permissions gate every time we come
         // forward. Dialog is no-op when both checks already pass and
@@ -1125,8 +1181,6 @@ class MainActivity : AppCompatActivity() {
         // toggled the missing one ON. Scoped to staff who actually need
         // background tracking — office staff aren't force-prompted.
         maybeShowBackgroundPermissionsGate()
-        // Finish a downloaded flexible update / resume a stalled immediate one.
-        inAppUpdateManager?.onResume()
         // Kick a periodic IAM poll while the app is in the foreground.
         // Forces a refresh every IAM_POLL_INTERVAL_MS (currently 20s)
         // regardless of throttle, so a permission change on the web
@@ -1139,6 +1193,47 @@ class MainActivity : AppCompatActivity() {
         lastTrackingResumeSyncMs = now
         lifecycleScope.launch {
             runCatching { syncTrackingBootstrap() }
+        }
+    }
+
+    /**
+     * Locking the device can pause a bottom-nav animation or invalidate the
+     * edge-to-edge inset dispatch. Reassert the logical nav state and request
+     * a fresh layout when the activity becomes interactive again so the
+     * resumed page cannot keep an intermediate translation, stale safe area,
+     * or clipped fragment height.
+     */
+    private fun restoreWindowLayoutAfterResume() {
+        if (!::mainRoot.isInitialized || !::fragmentContainer.isInitialized) return
+
+        if (::tabBarContainer.isInitialized) {
+            tabBarContainer.animate().cancel()
+            if (tabBarContainer.visibility == View.VISIBLE) {
+                val hiddenOffset = 150f * resources.displayMetrics.density
+                tabBarContainer.translationY = if (isBottomNavVisible) 0f else hiddenOffset
+                tabBarContainer.alpha = if (isBottomNavVisible) 1f else 0f
+            }
+        }
+        if (::bottomNavFadeOverlay.isInitialized) {
+            bottomNavFadeOverlay.animate().cancel()
+            if (bottomNavFadeOverlay.visibility == View.VISIBLE) {
+                val hiddenOffset = 150f * resources.displayMetrics.density
+                bottomNavFadeOverlay.translationY = if (isBottomNavVisible) 0f else hiddenOffset
+                bottomNavFadeOverlay.alpha = if (isBottomNavVisible) 1f else 0f
+            }
+        }
+
+        ViewCompat.requestApplyInsets(mainRoot)
+        mainRoot.post {
+            if (isFinishing || isDestroyed) return@post
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            ViewCompat.requestApplyInsets(mainRoot)
+            mainRoot.requestLayout()
+            fragmentContainer.requestLayout()
+            supportFragmentManager.fragments
+                .lastOrNull { it.isVisible }
+                ?.view
+                ?.requestLayout()
         }
     }
 
@@ -1198,7 +1293,20 @@ class MainActivity : AppCompatActivity() {
         selectTab(index)
     }
 
+    /**
+     * Principals with no tabs at all (external agency, agency driver) lock
+     * the bar off. Without a latch the back-stack listener and selectTab
+     * would keep calling setTabBarVisible(true) and flash it back in.
+     */
+    private var tabBarLockedOff = false
+
+    fun lockTabBarOff() {
+        tabBarLockedOff = true
+        setTabBarVisible(false)
+    }
+
     fun setTabBarVisible(visible: Boolean) {
+        if (visible && tabBarLockedOff) return
         if (!::tabBarContainer.isInitialized) return
         val target = if (visible) android.view.View.VISIBLE else android.view.View.GONE
         if (tabBarContainer.visibility == target) {
@@ -1746,8 +1854,7 @@ class MainActivity : AppCompatActivity() {
      * call, and the 401 watchdog reads that as a dead session and logs them
      * out — see AdminFleetTripsFragment.useMmsFleet for the split.
      */
-    private fun isFleetPortalPrincipal(): Boolean =
-        isExternalFleetPrincipal() || session.isFleetAdminDriver
+    private fun isFleetPortalPrincipal(): Boolean = isExternalFleetPrincipal()
 
     private suspend fun refreshSessionContext() {
         runCatching {

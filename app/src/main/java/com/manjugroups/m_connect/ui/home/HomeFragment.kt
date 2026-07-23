@@ -139,6 +139,9 @@ class HomeFragment : Fragment() {
         setupRoleAdaptiveView()
         setupMarketingOverview()
         setupDriverTabs()
+        // Fleet administrators see the allocation queue in this same
+        // Today's Trip surface, so load it alongside the normal home data.
+        loadFleetDispatch()
         // Overview (dashboard) vs Today's Trip from the start, so a normal user
         // never flashes the dashboard before data loads.
         applyDashboardVisibility()
@@ -513,6 +516,7 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        loadFleetDispatch()
         // Clear any pull-refresh spinner left spinning from before (e.g. the
         // user opened Notifications mid-refresh and came back to a stuck loader).
         _binding?.homeRefresh?.dismissRefresh()
@@ -836,6 +840,15 @@ class HomeFragment : Fragment() {
         // We have a definitive answer — drop any armed/showing skeleton.
         cancelPendingVisitSkeleton()
         setVisitSkeletonVisible(false)
+        // Fleet administrators own this surface: renderFleetDispatch fills it
+        // with the allocation queue. Letting the normal path run too would
+        // clobber those cards with the admin's own (usually empty) trip list
+        // on every state emission.
+        if (session.isInternalFleetDispatcher) {
+            applyDashboardVisibility()
+            renderFleetDispatch()
+            return
+        }
         // Overview (dashboard) vs Today's Trip — one or the other, never both.
         applyDashboardVisibility()
         // VP / Management dashboard replaces the Today's Trip list for anyone
@@ -1387,8 +1400,15 @@ class HomeFragment : Fragment() {
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
         val needsCpDetails = isCpVisit && status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         val isInProgress = status in setOf(
-            "in-progress", "in_progress", "ongoing", "started", "active", "arrived", "on_site", "on-site"
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
+            "on_site", "on-site", "picked_from_site"
         )
+        // A visit that was never started and whose slot has passed is expired —
+        // the source of the "still shows Start after the date is lost" bug.
+        val isExpired = !isCompleted && !isInProgress &&
+            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            )
 
         when {
             needsCpDetails -> {
@@ -1420,13 +1440,15 @@ class HomeFragment : Fragment() {
                 statusText.text = when (status) {
                     "arrived" -> "Reaching"
                     "on_site", "on-site" -> "On Site"
+                    "picked_from_site" -> "Picked from Site"
                     else -> "Enroute"
                 }
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
                 statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
                 action.text = when (status) {
                     "arrived" -> "Complete Trip"
-                    "on_site", "on-site" -> "End Trip"
+                    "on_site", "on-site" -> "Picked from Site"
+                    "picked_from_site" -> "End Trip"
                     else -> "Enroute"
                 }
                 actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_progress)
@@ -1435,6 +1457,7 @@ class HomeFragment : Fragment() {
                 eta.text = when (status) {
                     "arrived" -> "At client place"
                     "on_site", "on-site" -> "At site"
+                    "picked_from_site" -> "Returning"
                     else -> "Tracking"
                 }
             }
@@ -1447,6 +1470,16 @@ class HomeFragment : Fragment() {
                 action.setTextColor(android.graphics.Color.parseColor("#475467"))
                 actionIcon.visibility = View.GONE
                 eta.text = "Complete"
+            }
+            isExpired -> {
+                statusText.text = "Expired"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                action.text = "Expired"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
+                action.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                actionIcon.visibility = View.GONE
+                eta.text = "Date passed"
             }
             !canStartTrip -> {
                 statusText.text = "Clock in"
@@ -1470,8 +1503,33 @@ class HomeFragment : Fragment() {
             }
         }
 
-        if (session.isDriverMode) {
-            if (isCompleted) {
+        if (isExpired) {
+            // The slot has passed — the backend rejects any trip action on a
+            // stale date, so keep the card inert rather than opening a flow
+            // that dead-ends. A tap just explains why.
+            val explain: (View) -> Unit = {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "This visit's scheduled date has passed.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+            itemView.isClickable = true
+            itemView.setOnClickListener(explain)
+            actionBtn.isClickable = true
+            actionBtn.setOnClickListener(explain)
+        } else if (session.isDriverMode) {
+            if (session.isInternalFleetDriver && !isCompleted) {
+                // Internal fleet driver: every tap opens the granular fleet
+                // trip flow (Start → Reached → Picked → End), same as the
+                // external agency driver — not the field-visit navigation.
+                val openFleet: (View) -> Unit = { openFleetDriverDetail(visit) }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openFleet)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openFleet)
+            } else if (isCompleted) {
                 val openDetail: (View) -> Unit = {
                     DriverTripCompletedBottomSheet.newInstance(visit.id)
                         .showOnce(parentFragmentManager, "driver_trip_completed")
@@ -1482,15 +1540,15 @@ class HomeFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openDetail)
             } else if (!isInProgress && canStartTrip) {
-                val startTrip: (View) -> Unit = {
-                    DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
-                        .showOnce(parentFragmentManager, "driver_start_trip")
-                }
+                // Card and button both open the trip detail first — address,
+                // stage progress, then Start Trip — rather than dropping the
+                // driver straight into the km/photo sheet.
+                val openTripDetail: (View) -> Unit = { openDriverTripDetail(visit) }
                 itemView.isClickable = true
                 itemView.isFocusable = true
-                itemView.setOnClickListener(startTrip)
+                itemView.setOnClickListener(openTripDetail)
                 actionBtn.isClickable = true
-                actionBtn.setOnClickListener(startTrip)
+                actionBtn.setOnClickListener(openTripDetail)
             } else if (!isInProgress && !canStartTrip) {
                 // The card says "Clock In First" — so take them there instead of
                 // opening trip navigation they can't act on yet. Same redirect
@@ -1606,6 +1664,72 @@ class HomeFragment : Fragment() {
             .ifBlank { "Client" }
     }
 
+    /**
+     * Open the granular fleet-driver trip flow (reusing the agency driver
+     * detail in internal mode) for an internal fleet driver's assigned trip.
+     * Mirrors [openFleetAllocate]'s pattern — the detail re-fetches phase/onSite
+     * from the mms-fleet endpoints, so the initial args only drive first paint.
+     */
+    private fun openFleetDriverDetail(visit: TodayVisit) {
+        val whenText = listOfNotNull(
+            visit.scheduledDate.takeIf { it.isNotBlank() },
+            visit.scheduledStartTime?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+        val today = com.manjugroups.m_connect.util.VisitExpiry.todayInIndia()
+        parentFragmentManager.beginTransaction()
+            .setReorderingAllowed(true)
+            .replace(
+                R.id.fragmentContainer,
+                com.manjugroups.m_connect.ui.library.AgencyDriverTripDetailFragment.newInstance(
+                    id = visit.id,
+                    title = visit.placeName ?: "Site visit",
+                    whenText = whenText,
+                    address = visit.placeAddress.orEmpty(),
+                    vehicle = "",
+                    phase = visit.status,
+                    canOperateToday = visit.scheduledDate == today,
+                    internal = true,
+                ),
+            )
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openDriverTripDetail(visit: TodayVisit) {
+        val whenText = listOfNotNull(
+            visit.scheduledDate.takeIf { it.isNotBlank() },
+            visit.scheduledStartTime?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+
+        // The detail screen can't rebuild the navigation args, so it asks us
+        // to do it when the driver taps Continue.
+        parentFragmentManager.setFragmentResultListener(
+            DriverTripDetailFragment.RESULT_OPEN_NAVIGATION,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val id = bundle.getString("visitId")
+            if (id == visit.id) openTripNavigationForVisit(visit)
+        }
+
+        parentFragmentManager.beginTransaction()
+            .setReorderingAllowed(true)
+            .replace(
+                R.id.fragmentContainer,
+                DriverTripDetailFragment.newInstance(
+                    visitId = visit.id,
+                    title = visit.placeName ?: "Site visit",
+                    whenText = whenText,
+                    address = visit.placeAddress.orEmpty(),
+                    status = visit.status,
+                    scheduledDate = visit.scheduledDate,
+                    lat = visit.placeLat,
+                    lng = visit.placeLng,
+                ),
+            )
+            .addToBackStack(null)
+            .commit()
+    }
+
     private fun openTripNavigationForVisit(visit: TodayVisit) {
         val fragment = TripNavigationFragment.forVisit(
             visitId = visit.id,
@@ -1621,6 +1745,11 @@ class HomeFragment : Fragment() {
             visitCategory = visit.visitCategory,
             cpType = visit.cpVisit?.cpType,
             clientMobile = visit.leadPhone,
+            lmoName = visit.lmoName,
+            deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                visit.scheduledDate,
+                visit.scheduledEndTime ?: visit.scheduledStartTime,
+            ),
         )
         parentFragmentManager.beginTransaction()
             .applySmoothTransitions()
@@ -2003,6 +2132,449 @@ class HomeFragment : Fragment() {
             .commitOnce()
     }
 
+    // ── Fleet administrator dispatch queue ──────────────────────────────
+    //
+    // "Driver • Administration" gets the same Today's Trip surface as a
+    // Transport driver, but filled with the allocation queue instead of their
+    // own journeys: Pending / Assigned / Completed, each card carrying the
+    // Allocate action. Rendered inline here rather than behind a separate
+    // screen, so the main screen IS the dispatch view.
+    private val fleetApi by lazy {
+        com.manjugroups.m_connect.network.TravelDeskApi.create()
+    }
+    private var fleetPending: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
+    private var fleetAssigned: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
+    private var fleetCompleted: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
+    private var fleetExpired: List<com.manjugroups.m_connect.network.TravelDeskTrip> = emptyList()
+    private var fleetVehicles: List<com.manjugroups.m_connect.network.TravelDeskVehicle> = emptyList()
+    private var fleetAgencies: List<com.manjugroups.m_connect.network.TravelDeskAgency> = emptyList()
+    private var fleetLoadJob: kotlinx.coroutines.Job? = null
+    private var fleetError: String? = null
+    // Reusable pool of inflated dispatch cards. Switching tabs re-renders the
+    // list, and inflating ItemAdminFleetTrip (nested weighted layouts) on every
+    // switch is the expensive part — pooling means each tab switch only rebinds
+    // existing views instead of parsing XML + building a view tree again.
+    private val fleetCardPool =
+        mutableListOf<com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding>()
+
+    private fun loadFleetDispatch() {
+        if (!session.isInternalFleetDispatcher) return
+        val token = session.bearerToken
+        if (token.isBlank()) return
+        fleetLoadJob?.cancel()
+        fleetLoadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val pending = fleetApi.listMmsPending(token)
+                val assigned = fleetApi.listMmsAssigned(token)
+                val vehicles = fleetApi.listMmsVehicles(token)
+                // External agencies for the "Assign from" toggle. Best-effort —
+                // an older backend without this route just yields no agencies,
+                // and the allocate sheet stays internal-only.
+                val agencies = runCatching { fleetApi.listMmsAgencies(token) }
+                    .getOrNull()?.rows.orEmpty()
+                if (_binding == null) return@launch
+                fleetError = null
+                // Rows with no id can't be opened or allocated; drop them
+                // rather than let one odd record break the screen.
+                fleetPending = pending.rows.filter { !it.id.isNullOrBlank() }
+                val assignedRows = assigned.rows.filter { !it.id.isNullOrBlank() }
+                // A dispatch trip is done when the driver has ended it
+                // (travelDeskEndedAt), the same signal the backend's "complete"
+                // sub-tab uses. status stays "scheduled" the whole way for a
+                // travel-desk trip, so testing it here never matched and left
+                // the Completed tab permanently empty.
+                val isDone = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
+                    t.travelDeskEndedAt != null ||
+                        (t.status ?: "").equals("completed", ignoreCase = true)
+                }
+                // A trip that was never started and whose slot has passed is
+                // expired — it can't run, so it shouldn't sit in Assigned as if
+                // it were still live. It moves to the Completed tab, badged.
+                val isExpired = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
+                    !isDone(t) && t.travelDeskStartedAt == null &&
+                        com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                            t.scheduledDate, t.scheduledTime ?: t.pickupTime,
+                            isDone = false,
+                        )
+                }
+                fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
+                fleetExpired = assignedRows.filter(isExpired)
+                fleetCompleted = assignedRows.filter(isDone) + fleetExpired
+                fleetVehicles = vehicles.rows
+                fleetAgencies = agencies.filter {
+                    (it.status ?: "active").equals("active", ignoreCase = true)
+                }
+                renderFleetDispatch()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                fleetError = when {
+                    e is java.net.UnknownHostException ||
+                        e is java.net.ConnectException ||
+                        e is java.net.SocketTimeoutException ->
+                        "No internet connection. Pull to refresh."
+                    (e as? retrofit2.HttpException)?.code() == 403 ->
+                        "You don't have fleet permissions (marketing.fleet.view)."
+                    (e as? retrofit2.HttpException)?.code() == 404 ->
+                        "Fleet dispatch isn't available on this server yet."
+                    else -> e.message ?: "Couldn't load trips"
+                }
+                renderFleetDispatch()
+            }
+        }
+    }
+
+    private fun fleetRowsForTab(): List<com.manjugroups.m_connect.network.TravelDeskTrip> =
+        when (selectedTab) {
+            "upcoming" -> fleetAssigned      // tab 2 = Assigned
+            "completed" -> fleetCompleted
+            else -> fleetPending             // tab 1 = Pending
+        }
+
+    private fun renderFleetDispatch() {
+        if (_binding == null || !session.isInternalFleetDispatcher) return
+        val rows = fleetRowsForTab()
+        val c = binding.visitListContent
+
+        binding.tvVisitCountBadge.visibility =
+            if (rows.isNotEmpty()) View.VISIBLE else View.GONE
+        binding.tvVisitCountBadge.text = rows.size.toString()
+
+        if (rows.isEmpty()) {
+            c.removeAllViews()
+            c.visibility = View.GONE
+            binding.visitEmptyContent.visibility = View.VISIBLE
+            binding.tvVisitEmptyTitle.text = fleetError?.let { "Couldn't load trips" }
+                ?: when (selectedTab) {
+                    "upcoming" -> "No assigned trips"
+                    "completed" -> "No completed trips"
+                    else -> "Nothing to allocate"
+                }
+            binding.tvVisitEmptySubtitle.text = fleetError
+                ?: "Trips waiting for a vehicle will appear here."
+            return
+        }
+
+        binding.visitEmptyContent.visibility = View.GONE
+        c.visibility = View.VISIBLE
+        // Reconcile in place: grow the pool to the row count (inflating only the
+        // shortfall — nothing on a repeat switch), detach all, then re-attach +
+        // rebind exactly `rows.size` pooled cards. No per-switch re-inflation.
+        val inflater = layoutInflater
+        while (fleetCardPool.size < rows.size) {
+            fleetCardPool.add(
+                com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding
+                    .inflate(inflater, c, false),
+            )
+        }
+        c.removeAllViews()
+        rows.forEachIndexed { i, trip ->
+            val card = fleetCardPool[i]
+            bindFleetCard(card, trip)
+            c.addView(card.root)
+        }
+    }
+
+    /** Bind one dispatch card. Extracted so the pooled card views can be
+     *  rebound on tab switch instead of re-inflated each time. */
+    private fun bindFleetCard(
+        card: com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding,
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        card.tvTripTime.text = listOfNotNull(
+            trip.scheduledDate,
+            (trip.scheduledTime ?: trip.pickupTime)?.takeIf { it.isNotBlank() },
+        ).joinToString(" • ")
+        // Client identity is the primary line. Prefer the resolved clientName
+        // (newer backend), fall back to the lead's contact name (already live on
+        // prod — the same field the web fleet page shows), then "Unknown".
+        card.tvClientName.text =
+            trip.clientName?.trim()?.takeIf { it.isNotBlank() }
+                ?: trip.lead?.contactName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Unknown"
+        card.tvTripAddress.text = trip.pickupAddress?.trim()?.ifBlank { null }
+            ?: trip.project?.name?.let { "Project: $it" }
+            ?: "Address pending"
+        card.tvAttendeesTag.text = trip.expectedAttendeeCount?.toString() ?: "—"
+        // LMO (telecaller who created the visit) in place of the vehicle tag —
+        // just the name (the person icon already conveys "LMO"), or an em-dash
+        // when unresolved.
+        card.tvLmoTag.text = trip.lmoName?.trim()?.takeIf { it.isNotBlank() } ?: "—"
+
+        val isPending = selectedTab != "upcoming" && selectedTab != "completed"
+        // Expired trips live in the Completed tab but keep their own badge.
+        val isExpiredRow = fleetExpired.any { it.id == trip.id }
+        card.tvTripStatus.text = when {
+            isExpiredRow -> "Expired"
+            selectedTab == "completed" -> "Complete"
+            selectedTab == "upcoming" -> "Assigned"
+            else -> "Pending"
+        }
+        // Pooled cards are reused, so always reset the status colour — a card
+        // that last showed a red "Expired" status must not keep it when rebound
+        // to a normal row. #EA580C is the badge's default (from the layout).
+        card.tvTripStatus.setTextColor(
+            if (isExpiredRow) android.graphics.Color.parseColor("#B42318")
+            else android.graphics.Color.parseColor("#EA580C"),
+        )
+        // Allocate only makes sense while the trip has no vehicle.
+        card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
+        if (isPending) {
+            card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
+            card.assignmentInfo.visibility = View.GONE
+            card.root.setOnClickListener { openFleetAllocate(trip) }
+        } else {
+            card.btnAllocate.setOnClickListener(null)
+            // Assigned / Completed: surface who the trip went to and how
+            // far it's progressed, so the admin can track it — whether it
+            // was allocated to the in-house fleet or an external agency.
+            bindFleetAssignmentInfo(card, trip)
+            // Tapping the card opens the manage sheet with the live 5-stage
+            // progress bar (Assigned → Picked from CP → On Site → Picked from
+            // Site → Dropped) + vehicle/driver/agency details.
+            card.root.setOnClickListener { openFleetTripManage(trip) }
+        }
+    }
+
+    /** Map a Home dispatch [TravelDeskTrip] to the admin trip shape the manage
+     *  sheet renders, then open it (progress bar + details + reassign/remove). */
+    private fun openFleetTripManage(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val date = trip.scheduledDate ?: "—"
+        val timePart = trip.scheduledTime ?: trip.pickupTime ?: ""
+        val timeLabel = if (timePart.isBlank()) date else "$date • $timePart"
+        val pickup = trip.pickupAddress?.trim()?.ifBlank { null }
+        val addressLine = pickup ?: trip.project?.name?.let { "Project: $it" } ?: "Address pending"
+        val progress = when {
+            trip.travelDeskEndedAt != null -> "Dropped"
+            trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
+            trip.travelDeskOnSiteAt != null -> "On site"
+            trip.travelDeskStartedAt != null -> "Picked from CP"
+            trip.travelDeskArrivedAt != null -> "Reached client"
+            else -> "Awaiting pickup"
+        }
+        val expired = fleetExpired.any { it.id == trip.id }
+        val adminTrip = com.manjugroups.m_connect.ui.library.AdminFleetTripsFragment.AdminTrip(
+            id = trip.id.orEmpty(),
+            time = timeLabel,
+            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() }
+                ?: trip.lead?.contactName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Unknown",
+            address = addressLine,
+            attendees = trip.expectedAttendeeCount?.toString() ?: "—",
+            vehicleType = trip.vehiclePreference ?: "",
+            lmoName = trip.lmoName?.trim()?.ifBlank { null },
+            status = if (expired) "Expired" else "Assigned",
+            driverName = trip.driverName?.trim()?.ifBlank { null },
+            driverPhone = trip.driverPhone?.trim()?.ifBlank { null },
+            allocatedVehicle = trip.vehicle?.vehicleNumber?.trim()?.ifBlank { null },
+            progressLabel = progress,
+            started = trip.travelDeskStartedAt != null,
+            expired = expired,
+            startKm = trip.travelDeskStartKm,
+            endKm = trip.travelDeskEndKm,
+            startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
+            endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+        )
+        com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet.newInstance(
+            trip = adminTrip,
+            onReassign = { openFleetAllocate(trip) },
+            onRemove = { removeFleetTripDriver(trip) },
+        ).showOnce(parentFragmentManager, "home_fleet_manage")
+    }
+
+    private fun removeFleetTripDriver(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching {
+                fleetApi.unallocate(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(siteVisitId),
+                )
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (resp?.success == true) {
+                android.widget.Toast.makeText(
+                    requireContext(), "Driver removed — back to Pending.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                loadFleetDispatch()
+            } else {
+                android.widget.Toast.makeText(
+                    requireContext(), resp?.error ?: "Could not remove the driver.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Fill the assignment-tracking block on an Assigned/Completed dispatch
+     * card. Works for both allocation sources: the in-house MMS fleet (a
+     * vehicle + its driver, no agency) and an external agency (agency name +
+     * the driver they allotted). Progress is read off the travel-desk stamps,
+     * which both flows write.
+     */
+    private fun bindFleetAssignmentInfo(
+        card: com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding,
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        card.assignmentInfo.visibility = View.VISIBLE
+
+        val vehicleNo = trip.vehicle?.vehicleNumber?.takeIf { it.isNotBlank() }
+        val agency = trip.travelAgency?.name?.takeIf { it.isNotBlank() }
+        card.tvAssignedVehicle.text = listOfNotNull(
+            vehicleNo ?: "Vehicle pending",
+            agency?.let { "· $it" },
+        ).joinToString(" ")
+
+        val driver = trip.driverName?.takeIf { it.isNotBlank() }
+        val phone = trip.driverPhone?.takeIf { it.isNotBlank() }
+        card.tvAssignedDriver.text = when {
+            driver != null && phone != null -> "$driver · $phone"
+            driver != null -> driver
+            else -> "Driver not set"
+        }
+
+        card.tvAssignedProgress.text = when {
+            trip.travelDeskEndedAt != null -> "Dropped"
+            trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
+            trip.travelDeskOnSiteAt != null -> "On site"
+            trip.travelDeskStartedAt != null -> "Picked from CP"
+            trip.travelDeskArrivedAt != null -> "Reached client"
+            else -> "Awaiting pickup"
+        }
+    }
+
+    /**
+     * Agencies for the allocate chooser. Prefer the dispatch/agencies feed;
+     * when that's unavailable (older backend), fall back to the distinct
+     * agencies already referenced by assigned/completed trips so the External
+     * option still lists real agencies to allot to.
+     */
+    private fun fleetAllocateAgencies():
+        List<com.manjugroups.m_connect.ui.library.AllocateAgencyOption> {
+        val fromFeed = fleetAgencies.mapNotNull {
+            val id = it.id?.takeIf { s -> s.isNotBlank() } ?: return@mapNotNull null
+            com.manjugroups.m_connect.ui.library.AllocateAgencyOption(
+                id = id,
+                name = it.name?.takeIf { n -> n.isNotBlank() } ?: "Agency",
+                phone = it.mobileNumber,
+            )
+        }
+        if (fromFeed.isNotEmpty()) return fromFeed
+        // Fallback: distinct travelAgency refs seen on assigned/completed trips.
+        return (fleetAssigned + fleetCompleted)
+            .mapNotNull { it.travelAgency }
+            .mapNotNull { ref ->
+                val id = ref.id?.takeIf { s -> s.isNotBlank() } ?: return@mapNotNull null
+                com.manjugroups.m_connect.ui.library.AllocateAgencyOption(
+                    id = id,
+                    name = ref.name?.takeIf { n -> n.isNotBlank() } ?: "Agency",
+                )
+            }
+            .distinctBy { it.id }
+    }
+
+    private fun openFleetAllocate(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: return
+        val options = fleetVehicles
+            .filter { (it.status ?: "active").equals("active", ignoreCase = true) }
+            .map {
+                com.manjugroups.m_connect.ui.library.AllocateVehicleOption(
+                    vehicleId = it.id,
+                    label = listOfNotNull(it.vehicleNumber, it.type)
+                        .joinToString(" · ")
+                        .ifBlank { "Vehicle" },
+                    defaultDriverName = it.defaultDriverName,
+                    defaultDriverPhone = it.defaultDriverPhone,
+                )
+            }
+        // Block only when there's nothing to assign at all — no vehicles AND no
+        // agencies. With agencies available the dispatcher can still allot
+        // externally even with no MFPL vehicle on file.
+        if (options.isEmpty() && fleetAllocateAgencies().isEmpty()) {
+            android.widget.Toast.makeText(
+                requireContext(), "No active vehicles to allocate.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        com.manjugroups.m_connect.ui.library.AllocateVehicleBottomSheet
+            // Home dispatch is always the internal MMS fleet —
+            // marketing.vehicles.list returns own + internal-agency
+            // vehicles only — so per-trip pricing applies. The driver is fixed
+            // to the vehicle's default (not editable) and the pickup time is
+            // imported from the SV's scheduled time.
+            .newInstance(
+                options,
+                lockDriverToVehicleDefault = true,
+                fixedPickupTime = (trip.scheduledTime ?: trip.pickupTime)
+                    ?.takeIf { it.isNotBlank() },
+                // Always offer the Travel agency / MFPL chooser step.
+                showSourceChoice = true,
+                // Enables the "Assign from" toggle so the dispatcher can send the
+                // trip to an external agency instead of an MFPL vehicle.
+                agencies = fleetAllocateAgencies(),
+            ) { result ->
+                submitFleetAllocate(siteVisitId, result)
+            }
+            .showOnce(parentFragmentManager, "home_allocate_vehicle")
+    }
+
+    private fun submitFleetAllocate(
+        siteVisitId: String,
+        result: com.manjugroups.m_connect.ui.library.AllocateVehicleResult,
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val external = result.assignMode == "external"
+            val resp = runCatching {
+                if (external) {
+                    // Allot to an external agency — sets travelAgencyId on the SV;
+                    // the agency assigns the cab in Travel Desk.
+                    fleetApi.allotMmsAgency(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.AllotAgencyRequest(
+                            siteVisitId = siteVisitId,
+                            travelAgencyId = result.travelAgencyId.orEmpty(),
+                        ),
+                    )
+                } else {
+                    fleetApi.allocateMms(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.AllocateTripRequest(
+                            siteVisitId = siteVisitId,
+                            vehicleId = result.vehicleId,
+                            pickupTime = result.pickupTime,
+                            driverName = result.driverName,
+                            driverPhone = result.driverPhone,
+                        ),
+                    )
+                }
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (resp?.success == true) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    if (external) "Sent to Travel Desk." else "Trip allocated.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                loadFleetDispatch()
+            } else {
+                android.widget.Toast.makeText(
+                    requireContext(), resp?.error ?: "Allocation failed.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     private fun setupDriverTabs() {
         val clickListener = View.OnClickListener { v ->
             selectedTab = when (v.id) {
@@ -2011,40 +2583,78 @@ class HomeFragment : Fragment() {
                 else -> "all"
             }
             updateTabSelectionVisuals()
-            (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+            if (session.isInternalFleetDispatcher) {
+                renderFleetDispatch()
+            } else {
+                (viewModel.uiState.value as? HomeUiState.Loaded)?.let { renderVisitCard(it) }
+            }
         }
         binding.tabAll.setOnClickListener(clickListener)
         binding.tabUpcoming.setOnClickListener(clickListener)
         binding.tabCompleted.setOnClickListener(clickListener)
+
+        // One rounded track with three equal segments — the same segmented
+        // control the fleet screen uses. Transport drivers used to get three
+        // loose pills instead, which read as a different control for the same
+        // job; only the labels differ by role now.
+        binding.layoutDriverTabs.setBackgroundResource(
+            R.drawable.bg_admin_trips_tabs_container,
+        )
+        val tabTrackPad = dpx(4)
+        binding.layoutDriverTabs.setPadding(
+            tabTrackPad, tabTrackPad, tabTrackPad, tabTrackPad,
+        )
+        if (session.isInternalFleetDispatcher) {
+            binding.tabAll.text = "Pending"
+            binding.tabUpcoming.text = "Assigned"
+            binding.tabCompleted.text = "Completed"
+        }
+        listOf(binding.tabAll, binding.tabUpcoming, binding.tabCompleted)
+            .forEach { tab ->
+                tab.layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                )
+            }
+
         updateTabSelectionVisuals()
     }
 
     private fun updateTabSelectionVisuals() {
-        val activeBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_active)
-        val inactiveBg = requireContext().getDrawable(R.drawable.bg_cpv_filter_pill_inactive)
         val white = android.graphics.Color.WHITE
-        val grayText = android.graphics.Color.parseColor("#344054")
-
-        binding.tabAll.background = if (selectedTab == "all") activeBg else inactiveBg
-        binding.tabAll.setTextColor(if (selectedTab == "all") white else grayText)
-        binding.tabAll.typeface = androidx.core.content.res.ResourcesCompat.getFont(
-            requireContext(),
-            if (selectedTab == "all") R.font.inter_semibold else R.font.inter_medium
+        val tabs = listOf(
+            binding.tabAll to "all",
+            binding.tabUpcoming to "upcoming",
+            binding.tabCompleted to "completed",
         )
 
-        binding.tabUpcoming.background = if (selectedTab == "upcoming") activeBg else inactiveBg
-        binding.tabUpcoming.setTextColor(if (selectedTab == "upcoming") white else grayText)
-        binding.tabUpcoming.typeface = androidx.core.content.res.ResourcesCompat.getFont(
-            requireContext(),
-            if (selectedTab == "upcoming") R.font.inter_semibold else R.font.inter_medium
-        )
-
-        binding.tabCompleted.background = if (selectedTab == "completed") activeBg else inactiveBg
-        binding.tabCompleted.setTextColor(if (selectedTab == "completed") white else grayText)
-        binding.tabCompleted.typeface = androidx.core.content.res.ResourcesCompat.getFont(
-            requireContext(),
-            if (selectedTab == "completed") R.font.inter_semibold else R.font.inter_medium
-        )
+        run {
+            // Segmented control: ONE white track (the parent), with only the
+            // active segment drawing a filled pill. Inactive segments must have
+            // no background at all — giving them the bordered "inactive pill"
+            // drawable is what made this read as three separate pills instead
+            // of one switch. Mirrors AdminFleetTripsFragment.applyFilter.
+            val activeText = white
+            val inactiveText = android.graphics.Color.parseColor("#475467")
+            tabs.forEach { (tab, key) ->
+                val isActive = selectedTab == key
+                if (isActive) {
+                    tab.setBackgroundResource(R.drawable.bg_my_trips_tab_active)
+                    tab.backgroundTintList = android.content.res.ColorStateList
+                        .valueOf(android.graphics.Color.parseColor("#0B61CA"))
+                    tab.setTextColor(activeText)
+                } else {
+                    tab.setBackgroundResource(0)
+                    tab.backgroundTintList = null
+                    tab.setTextColor(inactiveText)
+                }
+                tab.typeface = androidx.core.content.res.ResourcesCompat.getFont(
+                    requireContext(),
+                    if (isActive) R.font.inter_semibold else R.font.inter_medium,
+                )
+                val vPad = dpx(8)
+                tab.setPadding(0, vPad, 0, vPad)
+            }
+        }
     }
 
     /**
@@ -2056,8 +2666,15 @@ class HomeFragment : Fragment() {
      * when the current account actually IS a driver.
      */
     private fun setupRoleAdaptiveView() {
+        // Drivers get the Pending/Assigned/Completed pills; so do permission-
+        // based fleet dispatchers (e.g. a Fleet Assistant Manager) who see the
+        // same allocation queue without a driver designation.
         binding.layoutDriverTabs.visibility =
-            if (session.isDriverMode) View.VISIBLE else View.GONE
+            if (session.isDriverMode || session.isInternalFleetDispatcher) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     private fun setupEdgeDragQr() {
@@ -2241,6 +2858,8 @@ class HomeFragment : Fragment() {
         cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
         binding.homeHeader.stopFloatingAnimation()
+        // Pooled dispatch cards hold views bound to this destroyed view tree.
+        fleetCardPool.clear()
         super.onDestroyView()
         _binding = null
     }

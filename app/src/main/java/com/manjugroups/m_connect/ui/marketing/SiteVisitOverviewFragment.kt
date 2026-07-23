@@ -97,11 +97,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var stepLine3: View? = null
     private var stepLine4: View? = null
     private var stepLine5: View? = null
+    private var stepLine6: View? = null
 
     private var circleScheduled: FrameLayout? = null
     private var circleAssigned: FrameLayout? = null
     private var circlePickedUp: FrameLayout? = null
     private var circleOnSite: FrameLayout? = null
+    private var circlePickedFromSite: FrameLayout? = null
     private var circleDropped: FrameLayout? = null
     private var circleDone: FrameLayout? = null
 
@@ -109,6 +111,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var ivAssigned: ImageView? = null
     private var ivPickedUp: ImageView? = null
     private var ivOnSite: ImageView? = null
+    private var ivPickedFromSite: ImageView? = null
     private var ivDropped: ImageView? = null
     private var ivDone: ImageView? = null
 
@@ -116,6 +119,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var labelAssigned: TextView? = null
     private var labelPickedUp: TextView? = null
     private var labelOnSite: TextView? = null
+    private var labelPickedFromSite: TextView? = null
     private var labelDropped: TextView? = null
     private var labelDone: TextView? = null
 
@@ -201,12 +205,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         stepLine3 = view.findViewById(R.id.stepLine3)
         stepLine4 = view.findViewById(R.id.stepLine4)
         stepLine5 = view.findViewById(R.id.stepLine5)
+        stepLine6 = view.findViewById(R.id.stepLine6)
 
         // Stepper circles
         circleScheduled = view.findViewById(R.id.frameStepScheduled)
         circleAssigned = view.findViewById(R.id.frameStepAssigned)
         circlePickedUp = view.findViewById(R.id.frameStepPickedUp)
         circleOnSite = view.findViewById(R.id.frameStepOnSite)
+        circlePickedFromSite = view.findViewById(R.id.frameStepPickedFromSite)
         circleDropped = view.findViewById(R.id.frameStepDropped)
         circleDone = view.findViewById(R.id.frameStepDone)
 
@@ -215,6 +221,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         ivAssigned = view.findViewById(R.id.ivStepAssigned)
         ivPickedUp = view.findViewById(R.id.ivStepPickedUp)
         ivOnSite = view.findViewById(R.id.ivStepOnSite)
+        ivPickedFromSite = view.findViewById(R.id.ivStepPickedFromSite)
         ivDropped = view.findViewById(R.id.ivStepDropped)
         ivDone = view.findViewById(R.id.ivStepDone)
 
@@ -223,6 +230,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         labelAssigned = view.findViewById(R.id.tvStepAssigned)
         labelPickedUp = view.findViewById(R.id.tvStepPickedUp)
         labelOnSite = view.findViewById(R.id.tvStepOnSite)
+        labelPickedFromSite = view.findViewById(R.id.tvStepPickedFromSite)
         labelDropped = view.findViewById(R.id.tvStepDropped)
         labelDone = view.findViewById(R.id.tvStepDone)
 
@@ -313,6 +321,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Cab vehicle circles
         circlePickedUp?.setOnClickListener(hint)
         circleOnSite?.setOnClickListener(hint)
+        circlePickedFromSite?.setOnClickListener(hint)
         circleDropped?.setOnClickListener(hint)
         // Own vehicle circles
         circleOwnClientDeparture?.setOnClickListener(hint)
@@ -366,8 +375,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             else -> "Site Visit"
         }
 
-        // Default to Cab Vehicle initially
-        isOwnVehicleSelected = false
+        // Seed the vehicle mode from the list-row args so the FIRST frame
+        // already shows the right stepper. Defaulting to Cab and flipping in
+        // bindEnriched made the badge/stepper visibly jump between "Own
+        // Vehicle" and "Cab Vehicle" on open. The enriched fetch still
+        // re-asserts this, but now it usually confirms rather than corrects.
+        val argTravelMode = args.getString(ARG_TRAVEL_MODE)
+        val argVehiclePref = args.getString(ARG_VEHICLE_PREFERENCE)
+        isOwnVehicleSelected =
+            argTravelMode == "own_vehicle" || argVehiclePref == "own_vehicle"
         toggleStepperVisibility()
 
         // Stepper state mapping
@@ -395,8 +411,9 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val displayName = when {
             lower in setOf("completed", "complete", "done") -> "COMPLETED"
             lower in setOf("cancelled", "canceled", "no_show") -> "CANCELLED"
-            lower in setOf("picked_up", "client_started") -> "PICKED UP"
+            lower in setOf("picked_up", "client_started") -> "PICKED FROM CP"
             lower in setOf("on_site", "arrived") -> "ON SITE"
+            lower == "picked_from_site" -> "PICKED FROM SITE"
             lower == "dropped" -> "DROPPED"
             lower == "assigned" -> "ASSIGNED"
             else -> "SCHEDULED"
@@ -406,7 +423,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val color = when (displayName) {
             "COMPLETED" -> Color.parseColor("#027A48")
             "CANCELLED" -> Color.parseColor("#B42318")
-            "PICKED UP", "ON SITE", "DROPPED" -> Color.parseColor("#B54708")
+            "PICKED FROM CP", "ON SITE", "PICKED FROM SITE", "DROPPED" ->
+                Color.parseColor("#B54708")
             else -> Color.parseColor("#004EEB")
         }
         tvStatus?.setTextColor(color)
@@ -416,8 +434,9 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private fun mapStatusToStepIndex(status: String): Int {
         val lower = status.lowercase(Locale.US)
         return when (lower) {
-            "completed", "complete", "done", "closed" -> 5
-            "dropped" -> 4
+            "completed", "complete", "done", "closed" -> 6
+            "dropped" -> 5
+            "picked_from_site", "picked from site" -> 4
             "on_site", "on site", "arrived" -> 3
             "picked_up", "picked up", "client_started", "client started" -> 2
             "assigned" -> 1
@@ -430,6 +449,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         return when (lower) {
             "completed", "complete", "done", "closed" -> 3
             "dropped" -> 2
+            "picked_from_site", "picked from site" -> 2
             "on_site", "on site", "arrived" -> 2
             "picked_up", "picked up", "client_started", "client started" -> 1
             "assigned" -> 1
@@ -462,13 +482,16 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
      * Mapping (mobile step indices on the right):
      *   0  Scheduled            — status="scheduled" AND no vehicle yet
      *   1  Assigned             — status="scheduled" AND vehicleId/agency set
-     *   2  Picked Up            — status="picked_up" / "client_started"
+     *   2  Picked from CP       — status="picked_up" / "client_started"
      *                             OR driver tapped "Start trip" (travelDeskStartedAt)
      *   3  On Site              — status="on_site"
      *                             OR driver tapped "Arrived" (travelDeskOnSiteAt)
-     *   4  Dropped              — status="dropped"
+     *   4  Picked from Site     — status="picked_from_site"
+     *                             OR driver tapped "Picked from site"
+     *                             (travelDeskPickedFromSiteAt)
+     *   5  Dropped              — status="dropped"
      *                             OR driver tapped "Ended" (travelDeskEndedAt)
-     *   5  Done                 — status="completed" (or any "done" alias)
+     *   6  Done                 — status="completed" (or any "done" alias)
      *
      * Falling back to bare `mapStatusToStepIndex` when no snapshot is
      * available keeps the legacy initial-args path working before the
@@ -484,7 +507,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // they're ahead. Identical precedence to the web's
         // mergeVisitProgress(base, boost) helper.
         val driverBoost = when {
-            snapshot?.travelDeskEndedAt != null -> 4
+            snapshot?.travelDeskEndedAt != null -> 5
+            snapshot?.travelDeskPickedFromSiteAt != null -> 4
             snapshot?.travelDeskOnSiteAt != null -> 3
             snapshot?.travelDeskStartedAt != null -> 2
             else -> -1
@@ -513,7 +537,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             val ownActiveIndex = when {
                 activeIndex <= 1 -> 0
                 activeIndex == 2 -> 1
-                activeIndex in 3..4 -> 2
+                activeIndex in 3..5 -> 2
                 else -> 3
             }
 
@@ -642,8 +666,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             setStep(circleAssigned, ivAssigned, labelAssigned, 1, R.drawable.ic_car_outline)
             setStep(circlePickedUp, ivPickedUp, labelPickedUp, 2, R.drawable.ic_nav_home)
             setStep(circleOnSite, ivOnSite, labelOnSite, 3, R.drawable.ic_task_building)
-            setStep(circleDropped, ivDropped, labelDropped, 4, R.drawable.ic_map_pin)
-            setStep(circleDone, ivDone, labelDone, 5, R.drawable.ic_check_circle)
+            setStep(
+                circlePickedFromSite,
+                ivPickedFromSite,
+                labelPickedFromSite,
+                4,
+                R.drawable.ic_nav_home,
+            )
+            setStep(circleDropped, ivDropped, labelDropped, 5, R.drawable.ic_map_pin)
+            setStep(circleDone, ivDone, labelDone, 6, R.drawable.ic_check_circle)
 
             // Connector lines progress state
             stepLine1?.setBackgroundColor(if (activeIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
@@ -651,6 +682,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             stepLine3?.setBackgroundColor(if (activeIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
             stepLine4?.setBackgroundColor(if (activeIndex >= 4) blueColor else Color.parseColor("#EAECF0"))
             stepLine5?.setBackgroundColor(if (activeIndex >= 5) blueColor else Color.parseColor("#EAECF0"))
+            stepLine6?.setBackgroundColor(if (activeIndex >= 6) blueColor else Color.parseColor("#EAECF0"))
 
             // Outcome buttons activation gate
             val onSiteReached = activeIndex >= 3
@@ -717,7 +749,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 else -> return@setFragmentResultListener
             }
 
-            updateStepper(5)
+            updateStepper(6)
             bindStatusHeader("completed")
             visitId?.takeIf { it.isNotBlank() }?.let(::loadEnrichedDetail)
             Toast.makeText(
@@ -903,7 +935,38 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 snapshot = proposed,
             )
             updateStepper(stepIndex)
-            bindStatusHeader(effStatus)
+            // Drive the header off the SAME computed step, not the raw
+            // status. Agency trips advance via travelDesk* timestamps while
+            // sv.status stays "scheduled"; binding the header to the raw
+            // status showed "SCHEDULED" over a stepper sitting on DROPPED.
+            bindStatusHeaderForStep(stepIndex, effStatus)
+        }
+    }
+
+    /**
+     * Header label that always agrees with the stepper. Terminal outcomes
+     * (completed / cancelled) keep their own coloured labels; every other
+     * state is synthesised from the computed step index so the header can't
+     * lag the progress bar when the SV row's status trails the driver's taps.
+     */
+    private fun bindStatusHeaderForStep(stepIndex: Int, rawStatus: String) {
+        val lower = rawStatus.lowercase(Locale.US)
+        when {
+            lower in setOf("completed", "complete", "done", "closed") ->
+                bindStatusHeader("completed")
+            lower in setOf("cancelled", "canceled", "no_show") ->
+                bindStatusHeader(rawStatus)
+            else -> bindStatusHeader(
+                when (stepIndex) {
+                    6 -> "completed"
+                    5 -> "dropped"
+                    4 -> "picked_from_site"
+                    3 -> "on_site"
+                    2 -> "picked_up"
+                    1 -> "assigned"
+                    else -> "scheduled"
+                }
+            )
         }
     }
 
@@ -980,7 +1043,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
                 // Stepper visually completes — setOutcome on the
                 // server-side moves status to "completed" (Done step).
-                updateStepper(5)
+                updateStepper(6)
                 bindStatusHeader("completed")
                 Toast.makeText(
                     requireContext(),
@@ -1050,6 +1113,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         private const val ARG_SCHEDULED_START_TIME = "arg_scheduled_start_time"
         private const val ARG_STATUS = "arg_status"
         private const val ARG_VISIT_CATEGORY = "arg_visit_category"
+        private const val ARG_TRAVEL_MODE = "arg_travel_mode"
+        private const val ARG_VEHICLE_PREFERENCE = "arg_vehicle_preference"
 
         fun forVisit(visit: TodayVisit): SiteVisitOverviewFragment {
             return SiteVisitOverviewFragment().apply {
@@ -1064,6 +1129,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     putString(ARG_SCHEDULED_START_TIME, visit.scheduledStartTime)
                     putString(ARG_STATUS, visit.status)
                     putString(ARG_VISIT_CATEGORY, visit.visitCategory)
+                    putString(ARG_TRAVEL_MODE, visit.travelMode)
+                    putString(ARG_VEHICLE_PREFERENCE, visit.vehiclePreference)
                 }
             }
         }

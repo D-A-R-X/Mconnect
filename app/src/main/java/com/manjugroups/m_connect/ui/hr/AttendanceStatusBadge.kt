@@ -63,7 +63,12 @@ object AttendanceStatusBadge {
             "half-day", "halfday" ->
                 return set(pill, "Half-day", FG_HALFDAY, R.drawable.bg_pill_green_light)
             "absent" ->
-                return set(pill, "Absent", FG_ABSENT, R.drawable.bg_pill_red_light)
+                return set(
+                    pill,
+                    if (record.hasAbsentPenalty()) "Absent · Penalty" else "Absent",
+                    FG_ABSENT,
+                    R.drawable.bg_pill_red_light,
+                )
             "weekoff", "week-off" ->
                 return set(pill, "Week Off", FG_NEUTRAL, R.drawable.bg_pill_white)
             "holiday" ->

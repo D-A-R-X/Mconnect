@@ -134,6 +134,53 @@
         </LinearLayout>
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/llAttendancePenaltyBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_fines_banner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="9dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="Attendance penalty"
+            android:src="@drawable/ic_gate_lock"
+            app:tint="#B42318" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Absent attendance penalty"
+                android:textColor="#B42318"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvAttendancePenaltyReason"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#7A271A"
+                android:textSize="12sp"
+                tools:text="Reason: Team approval deadline missed." />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- Fine banner (full-width red bar, same style as My Attendance) -->
     <LinearLayout
         android:id="@+id/llTeamFinesBanner"

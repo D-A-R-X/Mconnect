@@ -209,9 +209,22 @@ class GroupInfoFragment : Fragment() {
                 crossfade(true)
                 transformations(CircleCropTransformation())
             }
+            // Tap the avatar to see it full screen. The circle-cropped 96dp
+            // thumbnail hides most of the picture; same shared viewer the
+            // daily log and punch photos use.
+            binding.ivGroupPhoto.isClickable = true
+            binding.ivGroupPhoto.setOnClickListener {
+                context?.let { ctx ->
+                    com.manjugroups.m_connect.ui.common.ImagePreviewDialog.show(ctx, resolved)
+                }
+            }
         } else {
             binding.ivGroupPhoto.visibility = View.GONE
             binding.tvGroupInitials.visibility = View.VISIBLE
+            // Cleared so a group without a photo can't inherit the previous
+            // group's listener when this fragment is reused.
+            binding.ivGroupPhoto.setOnClickListener(null)
+            binding.ivGroupPhoto.isClickable = false
         }
     }
 

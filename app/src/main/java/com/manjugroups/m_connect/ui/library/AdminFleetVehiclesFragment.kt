@@ -51,6 +51,15 @@ class AdminFleetVehiclesFragment : Fragment() {
      * bug in the screen rather than a backend that hasn't been deployed yet.
      */
     private fun loadErrorMessage(e: Exception): String {
+        // Connectivity first: a DNS/socket failure surfaces as
+        // "Unable to resolve host ...", which reads like a server fault when
+        // the phone simply has no working internet.
+        if (e is java.net.UnknownHostException ||
+            e is java.net.ConnectException ||
+            e is java.net.SocketTimeoutException
+        ) {
+            return "No internet connection. Check the network and pull to refresh."
+        }
         val code = (e as? retrofit2.HttpException)?.code()
         return when (code) {
             404 -> "Fleet dispatch isn't available on this server yet — it needs the latest backend deploy."
@@ -73,16 +82,7 @@ class AdminFleetVehiclesFragment : Fragment() {
         session = SessionManager(requireContext())
 
         binding.rvAdminVehicles.layoutManager = LinearLayoutManager(requireContext())
-        adapter = VehiclesAdapter(vehicles) { _ ->
-            // Travel-desk doesn't expose vehicle update from the agency side
-            // yet — only create + list. Surface that clearly instead of
-            // letting an edit silently no-op.
-            Toast.makeText(
-                requireContext(),
-                "Vehicle edit not available on mobile yet — manage from travel-desk web.",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
+        adapter = VehiclesAdapter(vehicles) { item -> openEditVehicle(item) }
         binding.rvAdminVehicles.adapter = adapter
 
         binding.rvAdminVehicles.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -102,9 +102,8 @@ class AdminFleetVehiclesFragment : Fragment() {
             // anyway default to the caller's own agency when travelAgencyId
             // is omitted, the lock is just to make that explicit in the UI.
             val agencyName = session.userName?.takeIf { it.isNotBlank() } ?: "Your Agency"
-            val bottomSheet = CreateVehicleBottomSheet.newInstanceLockedToAgency(agencyName) {
-                plate, type, capacity, name, phone, _ ->
-                submitCreate(plate, type, capacity, name, phone)
+            val bottomSheet = CreateVehicleBottomSheet.newInstanceLockedToAgency(agencyName) { form ->
+                submitCreate(form)
             }
             bottomSheet.showOnce(parentFragmentManager, "CreateVehicleBottomSheet")
         }
@@ -134,6 +133,8 @@ class AdminFleetVehiclesFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
+                binding.tvVehiclesEmpty.visibility = View.VISIBLE
+                binding.tvVehiclesEmpty.text = loadErrorMessage(e)
                 Toast.makeText(
                     requireContext(),
                     "Couldn't load vehicles: ${loadErrorMessage(e)}",
@@ -143,13 +144,72 @@ class AdminFleetVehiclesFragment : Fragment() {
         }
     }
 
-    private fun submitCreate(
-        plate: String,
-        type: String,
-        capacity: String,
-        driverName: String,
-        driverPhone: String,
-    ) {
+    private fun openEditVehicle(item: VehicleItem) {
+        CreateVehicleBottomSheet.newEditInstance(
+            plate = item.plateNumber.takeIf { it != "—" }.orEmpty(),
+            make = item.make,
+            model = item.model,
+            modelYear = item.modelYear,
+            type = item.name.takeIf { it != "Vehicle" }.orEmpty(),
+            capacity = item.capacity.takeIf { it != "—" }.orEmpty(),
+            name = item.driverName.takeIf { it != "—" }.orEmpty(),
+            phone = item.driverPhone.takeIf { it != "—" }.orEmpty(),
+            whatsapp = item.whatsapp,
+            agency = item.agency,
+        ) { form ->
+            submitUpdate(item.id, form)
+        }.showOnce(parentFragmentManager, "EditVehicleBottomSheet")
+    }
+
+    private fun submitUpdate(id: String, form: VehicleFormResult) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        actionJob?.cancel()
+        actionJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.updateVehicle(
+                    token,
+                    com.manjugroups.m_connect.network.UpdateVehicleRequest(
+                        id = id,
+                        vehicleNumber = form.vehicleNumber.trim().takeIf { it.isNotBlank() },
+                        make = form.make.trim().takeIf { it.isNotBlank() },
+                        model = form.model.trim().takeIf { it.isNotBlank() },
+                        modelYear = form.modelYear.trim().toIntOrNull(),
+                        type = form.type.trim().takeIf { it.isNotBlank() },
+                        capacity = form.capacity.trim().toIntOrNull(),
+                        defaultDriverName = form.driverName.trim().takeIf { it.isNotBlank() },
+                        defaultDriverPhone = form.driverPhone.trim().takeIf { it.isNotBlank() },
+                        defaultDriverWhatsapp = form.driverWhatsapp.trim().takeIf { it.isNotBlank() },
+                    ),
+                )
+                if (_binding == null) return@launch
+                if (!resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Couldn't update vehicle.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                Toast.makeText(requireContext(), "Vehicle updated", Toast.LENGTH_SHORT).show()
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Couldn't update vehicle: ${loadErrorMessage(e)}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    private fun submitCreate(form: VehicleFormResult) {
         val token = session.bearerToken
         if (token.isBlank()) {
             Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
@@ -161,11 +221,15 @@ class AdminFleetVehiclesFragment : Fragment() {
                 val resp = api.createVehicle(
                     token,
                     CreateVehicleRequest(
-                        vehicleNumber = plate.trim(),
-                        type = type.trim().takeIf { it.isNotBlank() },
-                        capacity = capacity.trim().toIntOrNull(),
-                        defaultDriverName = driverName.trim().takeIf { it.isNotBlank() },
-                        defaultDriverPhone = driverPhone.trim().takeIf { it.isNotBlank() },
+                        vehicleNumber = form.vehicleNumber.trim(),
+                        make = form.make.trim().takeIf { it.isNotBlank() },
+                        model = form.model.trim().takeIf { it.isNotBlank() },
+                        modelYear = form.modelYear.trim().toIntOrNull(),
+                        type = form.type.trim().takeIf { it.isNotBlank() },
+                        capacity = form.capacity.trim().toIntOrNull(),
+                        defaultDriverName = form.driverName.trim().takeIf { it.isNotBlank() },
+                        defaultDriverPhone = form.driverPhone.trim().takeIf { it.isNotBlank() },
+                        defaultDriverWhatsapp = form.driverWhatsapp.trim().takeIf { it.isNotBlank() },
                     ),
                 )
                 if (_binding == null) return@launch
@@ -195,6 +259,11 @@ class AdminFleetVehiclesFragment : Fragment() {
     private fun mapVehicle(v: TravelDeskVehicle): VehicleItem {
         val statusLabel = if ((v.status ?: "active").equals("active", ignoreCase = true)) "Available" else "Inactive"
         return VehicleItem(
+            id = v.id,
+            make = v.make ?: "",
+            model = v.model ?: "",
+            modelYear = v.modelYear?.toString() ?: "",
+            whatsapp = v.defaultDriverWhatsapp ?: "",
             name = v.type ?: "Vehicle",
             plateNumber = v.vehicleNumber ?: "—",
             status = statusLabel,
@@ -213,6 +282,11 @@ class AdminFleetVehiclesFragment : Fragment() {
     }
 
     data class VehicleItem(
+        val id: String,
+        val make: String,
+        val model: String,
+        val modelYear: String,
+        val whatsapp: String,
         val name: String,
         val plateNumber: String,
         val status: String,

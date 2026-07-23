@@ -5,6 +5,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -19,6 +20,26 @@ import java.util.concurrent.TimeUnit
 // travelAgencies). See TravelDeskModels.kt for the request/response shapes.
 
 interface TravelDeskApi {
+
+    // ── Auth ──────────────────────────────────────────────────────────────
+    // The dedicated travel-desk auth path recognises agency drivers (rows in
+    // travelDeskDrivers), which the MMS /api/auth/* path does not on the
+    // live backend. The app falls back to these when the MMS login rejects a
+    // phone as "not registered", so an agency-created driver can sign in.
+
+    @POST("api/travel-desk/auth/send-otp")
+    suspend fun sendOtp(@Body body: TravelDeskSendOtpRequest): TravelDeskSendOtpResponse
+
+    // Register the agency driver's FCM token so trip allocations can push
+    // them — they're not staff, so this is their own channel.
+    @POST("api/travel-desk/push/register")
+    suspend fun registerPushToken(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskPushRegisterRequest,
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/auth/verify-otp")
+    suspend fun verifyOtp(@Body body: TravelDeskVerifyOtpRequest): TravelDeskVerifyOtpResponse
 
     @GET("api/travel-desk/trips/pending")
     suspend fun listPending(
@@ -36,6 +57,14 @@ interface TravelDeskApi {
         @Body body: AllocateTripRequest
     ): TravelDeskAllocateResponse
 
+    // Take a trip back off its vehicle/driver — returns it to Pending. The
+    // backend refuses once the driver has set off.
+    @POST("api/travel-desk/trips/unallocate")
+    suspend fun unallocate(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskAllocateResponse
+
     @GET("api/travel-desk/vehicles")
     suspend fun listVehicles(
         @Header("Authorization") token: String
@@ -46,6 +75,14 @@ interface TravelDeskApi {
         @Header("Authorization") token: String,
         @Body body: CreateVehicleRequest
     ): TravelDeskCreateResponse
+
+    // Edit an existing agency vehicle. Needs the vehicles/update backend
+    // route + mutation (added alongside).
+    @POST("api/travel-desk/vehicles/update")
+    suspend fun updateVehicle(
+        @Header("Authorization") token: String,
+        @Body body: UpdateVehicleRequest
+    ): TravelDeskSimpleResponse
 
     // ── Drivers ───────────────────────────────────────────────────────────
 
@@ -72,6 +109,58 @@ interface TravelDeskApi {
         @Body body: SetDriverStatusRequest
     ): TravelDeskSimpleResponse
 
+    // ── Agency-owned driver ───────────────────────────────────────────────
+    // Same bearer token as the agency routes; the backend resolves the
+    // travelDeskSessions row to a *driver* principal and scopes the list to
+    // trips allocated to that driver.
+
+    @GET("api/travel-desk/trips/driver")
+    suspend fun listDriverTrips(
+        @Header("Authorization") token: String
+    ): TravelDeskDriverTripsResponse
+
+    @POST("api/travel-desk/trips/arrive")
+    suspend fun driverMarkArrived(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
+    // Start needs the client OTP (a fixed dummy on this backend), the
+    // dashboard/odometer photo, and the start-km reading — same capture the
+    // MMS fleet driver does, but on the travel-desk route.
+    @POST("api/travel-desk/trips/start")
+    suspend fun driverStartTrip(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskStartTripRequest
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/on-site")
+    suspend fun driverMarkOnSite(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
+    // The return pickup — enabled 60s after "reached site" in the app.
+    @POST("api/travel-desk/trips/picked-from-site")
+    suspend fun driverMarkPickedFromSite(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/end")
+    suspend fun driverEndTrip(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskEndTripRequest
+    ): TravelDeskSimpleResponse
+
+    // Raw-blob upload, mirroring StorageUploader's MMS path. Returns a
+    // storageId to attach to start/end as a photoId.
+    @POST("api/travel-desk/storage/upload")
+    suspend fun uploadStorageFile(
+        @Header("Authorization") token: String,
+        @Body body: RequestBody,
+    ): TravelDeskStorageResponse
+
     // ── MMS (in-house) fleet dispatcher ───────────────────────────────────
     // Same payload shapes as the agency routes above, but authenticated with an
     // ordinary staff token and gated on marketing.fleet.* — the travel-desk
@@ -97,6 +186,19 @@ interface TravelDeskApi {
     suspend fun listMmsVehicles(
         @Header("Authorization") token: String
     ): TravelDeskVehiclesResponse
+
+    @GET("api/mms-fleet/dispatch/agencies")
+    suspend fun listMmsAgencies(
+        @Header("Authorization") token: String
+    ): TravelDeskAgenciesResponse
+
+    // Allot a visit to an external travel agency (sets travelAgencyId; the
+    // agency then assigns the cab in Travel Desk).
+    @POST("api/mms-fleet/dispatch/allot-agency")
+    suspend fun allotMmsAgency(
+        @Header("Authorization") token: String,
+        @Body body: AllotAgencyRequest
+    ): TravelDeskAllocateResponse
 
     @GET("api/mms-fleet/dispatch/drivers")
     suspend fun listMmsDrivers(

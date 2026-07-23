@@ -78,7 +78,10 @@
         android:layout_marginStart="20dp"
         android:layout_marginTop="8dp"
         android:background="@drawable/bg_attendance_history_inner"
-        android:contentDescription="Punch photo"
+        android:contentDescription="Punch photo — tap to view full screen"
+        android:clipToOutline="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground"
         android:scaleType="centerCrop"
         android:visibility="gone" />
 </LinearLayout>

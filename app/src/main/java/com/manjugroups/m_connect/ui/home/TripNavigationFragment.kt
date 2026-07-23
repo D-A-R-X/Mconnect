@@ -212,6 +212,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tripLineSegment2: View? = null
     private var tripLineSegment3: View? = null
     private var arrivalConfirmedForProgress = false
+    /** Driver tapped "Picked from Site" — the return leg has begun. */
+    private var pickedFromSiteConfirmed = false
 
     private val arrivalCameraLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -346,6 +348,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // later until outcome/project conversion is captured.
         cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
 
+        // LMO (telecaller) + deadline — shown only when the caller supplied
+        // them (both are optional args threaded from the visit row).
+        bindTripMeta(
+            view,
+            lmoName = args.getString(ARG_LMO_NAME),
+            deadline = args.getString(ARG_DEADLINE),
+        )
+
         tvTitle?.text = "Trip Details"
         // The "Type" cell on the Trip Details card now surfaces the visit
         // category rather than echoing the client name (which the header
@@ -461,6 +471,27 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 Toast.makeText(requireContext(), "Trip completed successfully", Toast.LENGTH_SHORT).show()
                 navigateUp()
             }
+        }
+    }
+
+    /** Fill (or hide) the LMO + Deadline cells on the Trip Details card. */
+    private fun bindTripMeta(view: View, lmoName: String?, deadline: String?) {
+        val lmoRow = view.findViewById<View>(R.id.rowTripLmo)
+        val lmo = lmoName?.takeIf { it.isNotBlank() }
+        if (lmo != null) {
+            view.findViewById<TextView>(R.id.tvTripLmo)?.text = lmo
+            lmoRow?.visibility = View.VISIBLE
+        } else {
+            lmoRow?.visibility = View.GONE
+        }
+
+        val deadlineRow = view.findViewById<View>(R.id.rowTripDeadline)
+        val dl = deadline?.takeIf { it.isNotBlank() }
+        if (dl != null) {
+            view.findViewById<TextView>(R.id.tvTripDeadline)?.text = dl
+            deadlineRow?.visibility = View.VISIBLE
+        } else {
+            deadlineRow?.visibility = View.GONE
         }
     }
 
@@ -689,7 +720,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         applyTripProgressStage(stage)
     }
 
-    private fun applyTripProgressStage(stage: Int) {
+    private fun applyTripProgressStage(stageRaw: Int) {
+        // The "Complete" step fills only once the visit's OUTCOME decision is
+        // recorded (booking / not interested / postponed / SV outcome).
+        // Physically finishing the trip = "Reached", not "Complete", until the
+        // decision is captured. Driver-mode fleet trips have no outcome sheet,
+        // so they complete as usual.
+        val stage = if (
+            stageRaw >= 4 && !session.isDriverMode && !cpVisitDecisionCaptured
+        ) 3 else stageRaw
+
         // Right-side state label
         val (rightLabel, rightColor) = when (stage) {
             0 -> "Not Started" to "#8E8E93"
@@ -1185,6 +1225,50 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ).show()
             } finally {
                 arrivalInProgress = false
+            }
+        }
+    }
+
+    /**
+     * The return pickup: the client is done at the site and back in the
+     * vehicle. Sits between on-site and end-trip so the SV timeline records
+     * when the return leg actually started instead of inferring it from the
+     * drop.
+     */
+    private fun markDriverPickedFromSite() {
+        val id = visitId ?: run {
+            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            return
+        }
+        btnCompleteCpDetails?.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoApi.markMmsFleetDriverPickedFromSite(
+                    session.bearerToken,
+                    MmsFleetDriverSiteVisitRequest(id),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(
+                        response.error ?: "Failed to mark picked from site"
+                    )
+                }
+                pickedFromSiteConfirmed = true
+                session.saveDriverTripPickedFromSite(id)
+                applyStatusPill("Picked from Site")
+                renderArrivalPhase(alreadyArrived = true)
+                Toast.makeText(
+                    requireContext(),
+                    "Picked from site",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    "Failed to mark picked from site: ${e.message ?: "Network error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                btnCompleteCpDetails?.isEnabled = true
             }
         }
     }
@@ -1967,12 +2051,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         if (session.isDriverMode) {
             if (alreadyArrived) {
+                // A reopened screen has to recover the return-pickup state,
+                // otherwise the driver would be asked to mark it twice.
+                if (!pickedFromSiteConfirmed) {
+                    pickedFromSiteConfirmed = visitId
+                        ?.let { session.getDriverTrip(it)?.status }
+                        ?.equals("picked_from_site", ignoreCase = true) == true
+                }
                 swipeArrived?.visibility = View.GONE
                 btnCompleteCpDetails?.visibility = View.VISIBLE
-                btnCompleteCpDetails?.text = "End Trip"
-                btnCompleteCpDetails?.setOnClickListener {
-                    DriverEndTripBottomSheet.newInstance(visitId!!)
-                        .showOnce(parentFragmentManager, "driver_end_trip")
+                if (pickedFromSiteConfirmed) {
+                    btnCompleteCpDetails?.text = "End Trip"
+                    btnCompleteCpDetails?.setOnClickListener {
+                        DriverEndTripBottomSheet.newInstance(visitId!!)
+                            .showOnce(parentFragmentManager, "driver_end_trip")
+                    }
+                } else {
+                    btnCompleteCpDetails?.text = "Picked from Site"
+                    btnCompleteCpDetails?.setOnClickListener { markDriverPickedFromSite() }
                 }
             } else {
                 btnCompleteCpDetails?.visibility = View.GONE
@@ -2407,6 +2503,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // bookings via /api/postsales/cases/byMobile without going
         // back to a prior creation step.
         private const val ARG_CLIENT_MOBILE = "arg_client_mobile"
+        private const val ARG_LMO_NAME = "arg_lmo_name"
+        private const val ARG_DEADLINE = "arg_deadline"
 
         fun forVisit(
             visitId: String,
@@ -2422,6 +2520,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             visitCategory: String? = null,
             cpType: String? = null,
             clientMobile: String? = null,
+            lmoName: String? = null,
+            deadline: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -2437,6 +2537,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (visitCategory != null) putString(ARG_VISIT_CATEGORY, visitCategory)
                 if (cpType != null) putString(ARG_CP_TYPE, cpType)
                 if (clientMobile != null) putString(ARG_CLIENT_MOBILE, clientMobile)
+                if (lmoName != null) putString(ARG_LMO_NAME, lmoName)
+                if (deadline != null) putString(ARG_DEADLINE, deadline)
             }
         }
 

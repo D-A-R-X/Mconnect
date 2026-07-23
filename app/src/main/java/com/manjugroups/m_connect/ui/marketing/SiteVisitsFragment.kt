@@ -49,7 +49,7 @@ class SiteVisitsFragment : Fragment() {
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
-    private enum class Filter { ALL, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
+    private enum class Filter { ALL, SCHEDULED, STARTED, PICKED_UP, COMPLETED, EXPIRED }
 
     private var allVisits: List<TodayVisit> = emptyList()
     // Gates the skeleton to the first load so refreshes / re-opens don't
@@ -57,6 +57,10 @@ class SiteVisitsFragment : Fragment() {
     private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    // Active date-range filter (yyyy-MM-dd). Null = default −30/+30 window.
+    private var filterFromDate: String? = null
+    private var filterToDate: String? = null
+    private val DATE_FILTER_KEY = "sv_date_filter_result"
     private var pendingEntryAnimation = true
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var svWindowCtx: String? = null
@@ -86,6 +90,7 @@ class SiteVisitsFragment : Fragment() {
 
         setupSearch(view)
         setupFilterPills(view)
+        setupDateFilter(view)
         // Infinite scroll: render the next 20 rows as the user nears the end.
         view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
             svPager.bindNestedScroll(scroll, totalCount = { svVisibleCount })
@@ -139,20 +144,82 @@ class SiteVisitsFragment : Fragment() {
         })
     }
 
+    // ---------- Date-range filter ----------
+
+    private fun setupDateFilter(root: View) {
+        root.findViewById<View>(R.id.btnFilterCalendar)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
+                title = "Filter by date",
+                subtitle = "Pick a day or a date range",
+                initialFrom = filterFromDate,
+                initialTo = filterToDate,
+                resultKey = DATE_FILTER_KEY,
+            ).show(childFragmentManager, "sv_date_filter")
+        }
+        childFragmentManager.setFragmentResultListener(
+            DATE_FILTER_KEY, viewLifecycleOwner,
+        ) { _, bundle ->
+            filterFromDate = bundle.getString(
+                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM,
+            )
+            filterToDate = bundle.getString(
+                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_TO,
+            )
+            updateDateFilterChip()
+            loadVisits()
+        }
+        root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
+            // Tapping the chip clears the filter and reloads the default window.
+            filterFromDate = null
+            filterToDate = null
+            updateDateFilterChip()
+            loadVisits()
+        }
+    }
+
+    private fun updateDateFilterChip() {
+        val chip = rootView?.findViewById<TextView>(R.id.tvDateFilterChip) ?: return
+        val from = filterFromDate
+        val to = filterToDate
+        if (from == null || to == null) {
+            chip.visibility = View.GONE
+            return
+        }
+        chip.visibility = View.VISIBLE
+        chip.text = if (from == to) {
+            "${prettyDate(from)}  ✕"
+        } else {
+            "${prettyDate(from)} – ${prettyDate(to)}  ✕"
+        }
+    }
+
+    private fun prettyDate(iso: String): String {
+        val parsed = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
+        }.getOrNull() ?: return iso
+        return SimpleDateFormat("dd MMM", Locale.getDefault()).format(parsed)
+    }
+
+    /** Keep only visits whose scheduledDate falls in the active range. */
+    private fun inDateRange(v: TodayVisit): Boolean {
+        val from = filterFromDate ?: return true
+        val to = filterToDate ?: return true
+        val d = v.scheduledDate.takeIf { it.isNotBlank() } ?: return true
+        return d in from..to
+    }
+
     // ---------- Filter pills ----------
 
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
         root.findViewById<TextView>(R.id.pillAll) to Filter.ALL,
         root.findViewById<TextView>(R.id.pillScheduled) to Filter.SCHEDULED,
-        root.findViewById<TextView>(R.id.pillInProgress) to Filter.IN_PROGRESS,
+        root.findViewById<TextView>(R.id.pillStarted) to Filter.STARTED,
+        root.findViewById<TextView>(R.id.pillPickedUp) to Filter.PICKED_UP,
         root.findViewById<TextView>(R.id.pillCompleted) to Filter.COMPLETED,
-        root.findViewById<TextView>(R.id.pillCancelled) to Filter.CANCELLED,
+        root.findViewById<TextView>(R.id.pillExpired) to Filter.EXPIRED,
     )
 
     private fun setupFilterPills(root: View) {
-        // SV doesn't carry a "Postponed" state on the trip-status side, so we
-        // hide that pill rather than pretend it works.
-        root.findViewById<View>(R.id.pillPostponed)?.visibility = View.GONE
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill?.setOnClickListener {
                 if (currentFilter != filter) {
@@ -182,27 +249,60 @@ class SiteVisitsFragment : Fragment() {
         }
     }
 
-    private fun isInProgress(status: String): Boolean = status in setOf(
-        "picked_up", "on_site", "dropped", "in-progress", "in_progress",
-        "client_started", "ongoing", "started", "active", "arrived"
+    // Prefer the backend's granular (timestamp-merged) status so we can
+    // separate Started / Picked Up / Completed; fall back to the collapsed
+    // `status` bucket on legacy rows that don't carry rawStatus yet.
+    private fun effStatus(visit: TodayVisit): String =
+        (visit.rawStatus?.takeIf { it.isNotBlank() } ?: visit.status).lowercase(Locale.US)
+
+    // "Client Started" — the trip has begun but the client hasn't been
+    // picked up from the CP yet. "in-progress" is the collapsed-bucket
+    // fallback (covers client_started + picked_up when rawStatus is absent).
+    private fun isStarted(s: String): Boolean = s in setOf(
+        "client_started", "started", "in-progress", "in_progress",
     )
 
-    private fun isCompleted(status: String): Boolean = status in setOf(
-        "completed", "complete", "done", "closed"
+    // "Picked Up" — client collected from the CP and the trip is in transit
+    // through to the site and back. "arrived" is the collapsed-bucket fallback.
+    private fun isPickedUp(s: String): Boolean = s in setOf(
+        "picked_up", "on_site", "picked_from_site", "arrived",
     )
 
-    private fun isCancelled(status: String): Boolean = status in setOf(
-        "cancelled", "canceled", "no_show"
+    private fun isCompleted(s: String): Boolean = s in setOf(
+        "dropped", "completed", "complete", "done", "closed",
     )
+
+    private fun isCancelled(s: String): Boolean = s in setOf(
+        "cancelled", "canceled", "no_show",
+    )
+
+    private fun isPostponed(s: String): Boolean = s == "postponed"
+
+    // Still awaiting its trip — not started, finished, cancelled or postponed.
+    private fun isScheduledState(s: String): Boolean =
+        !isStarted(s) && !isPickedUp(s) && !isCompleted(s) &&
+            !isCancelled(s) && !isPostponed(s)
+
+    // Expired = a still-scheduled visit whose slot has already passed. A
+    // trip that has actually progressed (started/picked up/completed) is
+    // never "expired", even if its scheduled time is in the past.
+    private fun isExpiredVisit(visit: TodayVisit): Boolean {
+        if (!isScheduledState(effStatus(visit))) return false
+        return com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+            visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+        )
+    }
 
     private fun matchesFilter(visit: TodayVisit, filter: Filter): Boolean {
-        val status = visit.status.lowercase(Locale.US)
+        val s = effStatus(visit)
         return when (filter) {
             Filter.ALL -> true
-            Filter.IN_PROGRESS -> isInProgress(status) && !isCancelled(status) && !isCompleted(status)
-            Filter.COMPLETED -> isCompleted(status)
-            Filter.CANCELLED -> isCancelled(status)
-            Filter.SCHEDULED -> !isInProgress(status) && !isCompleted(status) && !isCancelled(status)
+            // Scheduled = genuinely upcoming (not the expired ones).
+            Filter.SCHEDULED -> isScheduledState(s) && !isExpiredVisit(visit)
+            Filter.STARTED -> isStarted(s)
+            Filter.PICKED_UP -> isPickedUp(s)
+            Filter.COMPLETED -> isCompleted(s)
+            Filter.EXPIRED -> isExpiredVisit(visit)
         }
     }
 
@@ -220,12 +320,21 @@ class SiteVisitsFragment : Fragment() {
             list.removeAllViews()
         }
 
+        // Use the active date-range filter when set, otherwise the default
+        // −30/+30 day window.
         val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_YEAR, -30)
-        val from = ymd.format(cal.time)
-        cal.add(Calendar.DAY_OF_YEAR, 60)
-        val to = ymd.format(cal.time)
+        val from: String
+        val to: String
+        if (filterFromDate != null && filterToDate != null) {
+            from = filterFromDate!!
+            to = filterToDate!!
+        } else {
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.DAY_OF_YEAR, -30)
+            from = ymd.format(cal.time)
+            cal.add(Calendar.DAY_OF_YEAR, 60)
+            to = ymd.format(cal.time)
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -276,18 +385,14 @@ class SiteVisitsFragment : Fragment() {
         val emptySubtitle = root.findViewById<TextView>(R.id.tvCpvEmptySubtitle)
         list.removeAllViews()
 
-        val needle = searchQuery.lowercase(Locale.US)
         val visible = allVisits
             .filter { matchesFilter(it, currentFilter) }
-            .filter { v ->
-                if (needle.isBlank()) return@filter true
-                listOf(v.placeName, v.leadName, v.placeAddress)
-                    .any { it?.lowercase(Locale.US)?.contains(needle) == true }
-            }
+            .filter { inDateRange(it) }
+            .filter { com.manjugroups.m_connect.util.VisitSearch.matches(it, searchQuery) }
         svVisibleCount = visible.size
 
         // Reset the scroll window whenever the filter / search / data changes.
-        val windowCtx = "$currentFilter|$needle|${System.identityHashCode(allVisits)}"
+        val windowCtx = "$currentFilter|$searchQuery|${System.identityHashCode(allVisits)}"
         if (windowCtx != svWindowCtx) {
             svWindowCtx = windowCtx
             svPager.reset()
@@ -297,10 +402,11 @@ class SiteVisitsFragment : Fragment() {
             list.visibility = View.GONE
             empty.visibility = View.VISIBLE
             emptyTitle.text = when (currentFilter) {
-                Filter.SCHEDULED -> "No Site Visits Yet"
-                Filter.IN_PROGRESS -> "No Visits In Progress"
+                Filter.SCHEDULED -> "No Scheduled Visits"
+                Filter.STARTED -> "No Started Visits"
+                Filter.PICKED_UP -> "No Picked-Up Visits"
                 Filter.COMPLETED -> "No Completed Visits"
-                Filter.CANCELLED -> "No Cancelled Visits"
+                Filter.EXPIRED -> "No Expired Visits"
                 Filter.ALL -> if (searchQuery.isBlank()) "No Site Visits Yet" else "No Matches Found"
             }
             emptySubtitle.text = if (searchQuery.isNotBlank()) {
@@ -351,6 +457,17 @@ class SiteVisitsFragment : Fragment() {
         val bdoRole = itemView.findViewById<TextView>(R.id.tvVisitItemBdoRole)
         val destination = itemView.findViewById<TextView>(R.id.tvVisitItemDestination)
         val destinationLabel = itemView.findViewById<TextView>(R.id.tvVisitItemDestinationLabel)
+
+        // LMO (telecaller/creator) — shown only when the backend supplies it.
+        val lmoRow = itemView.findViewById<View>(R.id.rowVisitItemLmo)
+        val lmoName = itemView.findViewById<TextView>(R.id.tvVisitItemLmoName)
+        val lmo = visit.lmoName?.takeIf { it.isNotBlank() }
+        if (lmo != null) {
+            lmoName.text = lmo
+            lmoRow.visibility = View.VISIBLE
+        } else {
+            lmoRow.visibility = View.GONE
+        }
 
         // Customer Name — backend now falls back through
         // lead → CP.client → CP.clientPlace, so a real name almost
@@ -403,39 +520,42 @@ class SiteVisitsFragment : Fragment() {
             ?: "—"
         destinationLabel.text = "ORIGIN"
 
-        // Status pill binding
-        val status = visit.status.lowercase(Locale.US)
+        // Status pill binding — driven by the same granular status the
+        // filters use so the pill and the category the card lives under
+        // always agree (an agency trip that progressed via travelDesk*
+        // timestamps no longer reads "Expired" here).
+        val s = effStatus(visit)
+        fun paintPill(label: String, bg: Int, text: String, dot: String) {
+            statusText.text = label
+            statusPill.background = ContextCompat.getDrawable(requireContext(), bg)
+            statusText.setTextColor(Color.parseColor(text))
+            statusDot.backgroundTintList =
+                android.content.res.ColorStateList.valueOf(Color.parseColor(dot))
+        }
         when {
-            isCancelled(status) -> {
-                statusText.text = "Cancelled"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_red)
-                statusText.setTextColor(Color.parseColor("#B42318"))
-                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B42318"))
-            }
-            isCompleted(status) -> {
-                statusText.text = "Completed"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_green)
-                statusText.setTextColor(Color.parseColor("#027A48"))
-                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#027A48"))
-            }
-            isInProgress(status) -> {
-                statusText.text = when (status) {
-                    "picked_up" -> "Picked up"
+            isCancelled(s) ->
+                paintPill("Cancelled", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
+            isPostponed(s) ->
+                paintPill("Postponed", R.drawable.bg_sv_status_orange, "#B54708", "#F79009")
+            isCompleted(s) ->
+                paintPill("Completed", R.drawable.bg_sv_status_green, "#027A48", "#027A48")
+            isStarted(s) ->
+                paintPill("Client Started", R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
+            isPickedUp(s) -> {
+                val label = when (s) {
                     "on_site" -> "On site"
-                    "dropped" -> "Dropped"
-                    "arrived" -> "Arrived"
-                    else -> "Enroute"
+                    "picked_from_site" -> "Picked from site"
+                    "arrived" -> "Reaching"
+                    else -> "Picked up"
                 }
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_orange)
-                statusText.setTextColor(Color.parseColor("#B54708"))
-                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#B54708"))
+                paintPill(label, R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
             }
-            else -> {
-                statusText.text = "Scheduled"
-                statusPill.background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_sv_status_orange)
-                statusText.setTextColor(Color.parseColor("#B54708"))
-                statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F79009"))
-            }
+            // A still-scheduled visit whose slot has already passed is expired,
+            // not "Scheduled" — that stale "Scheduled/Start" was the bug.
+            isExpiredVisit(visit) ->
+                paintPill("Expired", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
+            else ->
+                paintPill("Scheduled", R.drawable.bg_sv_status_orange, "#B54708", "#F79009")
         }
 
         // Vehicle Assignment Pill binding.

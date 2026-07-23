@@ -1,104 +1,148 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Sticky-hero scroll, matching the rest of the app: the blue banner is PINNED
+  behind the content, and the trips panel slides up over it with rounded top
+  corners. Previously the banner sat inside the scroller and simply scrolled
+  away, which is why this page felt different from every other screen.
+
+  Structure: hero in the background layer of a FrameLayout, the scroller on
+  top of it with a transparent spacer the height of the hero so the panel
+  starts below it and then travels over it as you scroll.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/scrollAdminTrips"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F1F3F8"
-    android:fillViewport="true">
+    android:background="#F1F3F8">
 
-    <LinearLayout
+    <!-- Pinned banner (background layer, does not scroll) -->
+    <com.manjugroups.m_connect.ui.custom.HomeHeaderView
+        android:id="@+id/homeHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_gravity="top" />
 
-        <!-- Reusable Header Component -->
-        <com.manjugroups.m_connect.ui.custom.HomeHeaderView
-            android:id="@+id/homeHeader"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollAdminTrips"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
-        <!-- Content area: "Todays Trips" -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="20dp"
-            android:paddingBottom="100dp">
+            android:orientation="vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_bold"
-                android:text="Todays Trips"
-                android:textColor="#111827"
-                android:textSize="18sp" />
+            <!-- Transparent spacer sized to the pinned hero at runtime, so the
+                 panel below starts under the banner and then slides over it. -->
+            <View
+                android:id="@+id/heroSpacer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp" />
 
-            <!-- Toggle selector tabs: Pending / Assigned / Completed -->
+            <!-- Content panel: page grey with rounded top corners, pulled up
+                 over the blue so it overlays the banner as it rises. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_admin_trips_tabs_container"
-                android:orientation="horizontal"
-                android:padding="4dp">
+                android:layout_marginTop="-28dp"
+                android:background="@drawable/bg_loans_sheet"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="120dp">
 
                 <TextView
-                    android:id="@+id/btnTabPending"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_my_trips_tab_active"
-                    android:backgroundTint="#0B61CA"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="@font/inter_medium"
-                    android:gravity="center"
-                    android:paddingVertical="8dp"
-                    android:text="Pending"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp" />
+                    android:fontFamily="@font/inter_bold"
+                    android:text="Todays Trips"
+                    android:textColor="#111827"
+                    android:textSize="18sp" />
 
-                <TextView
-                    android:id="@+id/btnTabAssigned"
-                    android:layout_width="0dp"
+                <!-- Toggle selector tabs: Pending / Assigned / Completed -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="@font/inter_medium"
-                    android:gravity="center"
-                    android:paddingVertical="8dp"
-                    android:text="Assigned"
-                    android:textColor="#475467"
-                    android:textSize="13sp" />
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_admin_trips_tabs_container"
+                    android:orientation="horizontal"
+                    android:padding="4dp">
 
-                <TextView
-                    android:id="@+id/btnTabCompleted"
-                    android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/btnTabPending"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_my_trips_tab_active"
+                        android:backgroundTint="#0B61CA"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:paddingVertical="8dp"
+                        android:text="Pending"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnTabAssigned"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:paddingVertical="8dp"
+                        android:text="Assigned"
+                        android:textColor="#475467"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnTabCompleted"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:paddingVertical="8dp"
+                        android:text="Completed"
+                        android:textColor="#475467"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- Trips RecyclerView -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvAdminTrips"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true"
+                    android:layout_marginTop="16dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false" />
+
+                <!-- Why the list is empty. This screen had no empty state at all,
+                     so a permission failure or a genuinely empty tab both rendered
+                     as blank space with the reason only in a toast that fades. -->
+                <TextView
+                    android:id="@+id/tvTripsEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="24dp"
+                    android:layout_marginTop="48dp"
                     android:fontFamily="@font/inter_medium"
                     android:gravity="center"
-                    android:paddingVertical="8dp"
-                    android:text="Completed"
-                    android:textColor="#475467"
-                    android:textSize="13sp" />
+                    android:text="No trips in this tab."
+                    android:textColor="#667085"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
-            <!-- Trips RecyclerView -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvAdminTrips"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:clipToPadding="false"
-                android:nestedScrollingEnabled="false" />
-
         </LinearLayout>
-
-    </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+    </androidx.core.widget.NestedScrollView>
+</FrameLayout>

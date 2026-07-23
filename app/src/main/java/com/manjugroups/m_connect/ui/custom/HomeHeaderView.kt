@@ -124,12 +124,33 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.tvBtnViewSummary.text = text
     }
 
+    /**
+     * Bottom edge of the profile row (avatar / name / bell), in px.
+     *
+     * Screens that pin this header behind a scrolling panel use it as the
+     * stop line: the panel may rise until it meets this, so the banner art
+     * scrolls away but the profile row stays put.
+     */
+    fun profileRowBottom(): Int =
+        binding.homeProfileRow.let { it.top + it.height }
+
     fun setFleetBannerMode() {
         isFleetBannerMode = true
         binding.bannerTextContent.visibility = View.GONE
         binding.bannerIllustrationContainer.visibility = View.GONE
         binding.ivCustomBannerIllustration.visibility = View.GONE
         binding.layoutFleetBanner.visibility = View.VISIBLE
+        // The fleet banner packs more than the default one (title + subtitle +
+        // "View My Summary" + two stat cards), and the shared 180dp wrapper
+        // clipped the button under the trips panel. Give it the room it needs;
+        // the trips screen sizes its hero spacer from the measured height, so
+        // this adapts automatically.
+        val params = binding.cardWorkSummary.layoutParams
+        val target = (216 * resources.displayMetrics.density).toInt()
+        if (params.height != target) {
+            params.height = target
+            binding.cardWorkSummary.layoutParams = params
+        }
     }
 
     /**
@@ -181,8 +202,12 @@ class HomeHeaderView @JvmOverloads constructor(
         }
         androidx.core.view.ViewCompat.requestApplyInsets(binding.homeHeaderContainer)
 
-        // Set up click listeners for profile and notifications
-        binding.btnHomeProfile.setOnClickListener {
+        // Set up click listeners for profile and notifications. The whole
+        // profile row is tappable — not just the 44dp avatar circle — so tapping
+        // the name / role also opens the profile (the small avatar-only target
+        // was easy to miss). The bell is a child with its own listener, so its
+        // taps are consumed there and never fall through to this.
+        val openProfile = View.OnClickListener {
             onProfileClickListener?.invoke() ?: run {
                 val resolvedFragment = fragment ?: getFragment(this)
                 resolvedFragment?.parentFragmentManager?.beginTransaction()
@@ -196,6 +221,8 @@ class HomeHeaderView @JvmOverloads constructor(
                     }
             }
         }
+        binding.btnHomeProfile.setOnClickListener(openProfile)
+        binding.homeProfileRow.setOnClickListener(openProfile)
 
         binding.btnHomeBell.setOnClickListener {
             onBellClickListener?.invoke() ?: run {
@@ -228,10 +255,21 @@ class HomeHeaderView @JvmOverloads constructor(
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
         binding.tvHeaderName.text = name
         binding.tvAvatarInitial.text = name.first().uppercase().toString()
+        // Prefer the designation/department already cached on the session over
+        // a generic placeholder. This used to fall straight through to "Staff"
+        // and only became the real role once the getStaffDetail refresh below
+        // returned — so whenever that call failed (no network, DNS down) the
+        // header silently regressed to "Staff" for someone who is, say,
+        // "Driver • Administration", even though both values were on hand.
+        val cachedRole = listOfNotNull(
+            session.designation?.trim()?.takeIf { it.isNotEmpty() },
+            session.department?.trim()?.takeIf { it.isNotEmpty() },
+        ).joinToString(" • ")
         binding.tvHeaderRole.text = when {
             session.designation
                 ?.trim()
                 ?.equals("External Fleet", ignoreCase = true) == true -> "Agency"
+            cachedRole.isNotEmpty() -> cachedRole
             session.isAdmin -> "Administrator"
             else -> "Staff"
         }

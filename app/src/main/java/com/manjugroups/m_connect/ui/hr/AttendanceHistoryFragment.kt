@@ -229,23 +229,25 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     private fun buildAttendanceTabs() {
-        val canApprove = session.hasPermission("attendance.approve")
+        val canApproveTeam = session.hasPermission("attendance.teamApprove") ||
+            session.hasPermission("attendance.approve")
         val canViewAllAppr = session.hasPermission("attendance.viewAllApprovals")
+        // `attendance.hrReview` is the dedicated IAM grant. Keep
+        // viewAllApprovals as a compatibility fallback for existing roles
+        // that received HR Review before the permission was split.
+        val canHrReview = session.hasPermission("attendance.hrReview") ||
+            session.hasPermission("attendance.viewAllApprovals")
         val canViewAll = session.hasPermission("attendance.viewAll")
 
         // (logical id, label). Order mirrors the existing screen.
         val logical = mutableListOf<Pair<Int, String>>()
         logical.add(0 to "My Attendance")
-        if (canApprove || isReportingOfficer) {
+        if (canApproveTeam || isReportingOfficer) {
             logical.add(1 to "Team Attendance")
             logical.add(2 to "Team Approval")
         }
         if (canViewAllAppr) logical.add(3 to "All Approval")
-        // HR Review is an HR surface (final company-wide reclassification).
-        // Gate it on viewAllApprovals, NOT approve — managers/reporting
-        // officers legitimately hold attendance.approve for their own team
-        // and must not see the HR queue.
-        if (canViewAllAppr) logical.add(4 to "HR Review")
+        if (canHrReview) logical.add(4 to "HR Review")
         if (canViewAll) logical.add(5 to "All")
 
         visibleLogicalTabs = logical.map { it.first }
@@ -351,8 +353,8 @@ class AttendanceHistoryFragment : Fragment() {
             attCount = teamApprovalAttendanceRows().size
             reqCount = teamApprovalRequestRows().size
         } else {
-            attCount = cachedHrReview.count { it.requestType != "remarks" && it.requestType != "correction" }
-            reqCount = cachedHrReview.count { it.requestType == "remarks" || it.requestType == "correction" }
+            attCount = hrReviewAttendanceRows().size
+            reqCount = hrReviewRequestRows().size
         }
         binding.subTabAttendance.text = String.format(Locale.US, "Attendance (%02d)", attCount)
         binding.subTabRequest.text = String.format(Locale.US, "Requests (%02d)", reqCount)
@@ -402,25 +404,25 @@ class AttendanceHistoryFragment : Fragment() {
                 }
                 val approvalsDeferred = async {
                     if (cachedApprovals.isNotEmpty()) null
-                    // subtree, not the server's "direct" default: a reporting
-                    // officer must see pending approvals for EVERYONE below
-                    // them, not just direct reports — a manager-of-managers
-                    // otherwise gets an empty Team Approval tab.
+                    // Team Approval matches the web's My Team scope: only
+                    // employees who report directly to the current officer.
                     else runCatching {
                         api.getPendingAttendanceApprovals(
-                            token, scope = "subtree", requests = true,
+                            token, scope = "direct", requests = true,
                         )
                     }.getOrNull()
                 }
                 // Company-wide surfaces are HR-only — skip the guaranteed-403
                 // fetches when the caller doesn't hold the permission.
                 val canViewAllApprovals = session.hasPermission("attendance.viewAllApprovals")
+                val canHrReview = session.hasPermission("attendance.hrReview") ||
+                    canViewAllApprovals
                 val allApprovalsDeferred = async {
                     if (cachedAllApprovals.isNotEmpty() || !canViewAllApprovals) null
                     else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
                 }
                 val hrReviewDeferred = async {
-                    if (cachedHrReview.isNotEmpty() || !canViewAllApprovals) null
+                    if (cachedHrReview.isNotEmpty() || !canHrReview) null
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
                 val allDeferred = async {
@@ -555,11 +557,8 @@ class AttendanceHistoryFragment : Fragment() {
             )
             3 -> renderApprovals(cachedAllApprovals.filterNot(::isRequestLinked), "")
             4 -> {
-                val source = if (activeSubTab == 0) {
-                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
-                } else {
-                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
-                }
+                val source = if (activeSubTab == 0) hrReviewAttendanceRows()
+                else hrReviewRequestRows()
                 renderApprovals(source, "")
             }
             5 -> renderTeamAttendance(cachedAllAttendance, showFines = true, "")
@@ -599,8 +598,55 @@ class AttendanceHistoryFragment : Fragment() {
      * one, otherwise the request rows carried inside the approvals feed.
      */
     private fun teamApprovalRequestRows(): List<AttendanceApprovalRecord> =
-        if (teamRequestsSourced) cachedTeamRequests
-        else cachedApprovals.filter(::isRequestLinked)
+        dedupeRequestRows(
+            if (teamRequestsSourced) cachedTeamRequests
+            else cachedApprovals.filter(::isRequestLinked)
+        )
+
+    /** HR Review · Attendance sub-tab rows (non-request punch records). */
+    private fun hrReviewAttendanceRows(): List<AttendanceApprovalRecord> =
+        cachedHrReview.filter {
+            it.requestType != "remarks" && it.requestType != "correction"
+        }
+
+    /** HR Review · Requests sub-tab rows, deduped (see [dedupeRequestRows]). */
+    private fun hrReviewRequestRows(): List<AttendanceApprovalRecord> =
+        dedupeRequestRows(
+            cachedHrReview.filter {
+                it.requestType == "remarks" || it.requestType == "correction"
+            }
+        )
+
+    /**
+     * Collapse duplicate request rows for the SAME staff + date. A single
+     * correction/remark can surface twice in the pending feed — the real
+     * attendanceRequests doc PLUS a biometric "shadow" of the same day —
+     * which showed as two identical cards for one person. Keep the one
+     * that's actually actionable: prefer a true request row (requestStage
+     * set), then one that carries the reason, else the first seen. Rows with
+     * no staffId are never collapsed (keyed by their own id) so we can't
+     * accidentally merge unrelated records.
+     */
+    private fun dedupeRequestRows(
+        rows: List<AttendanceApprovalRecord>,
+    ): List<AttendanceApprovalRecord> {
+        fun score(r: AttendanceApprovalRecord): Int =
+            (if (!r.requestStage.isNullOrBlank()) 2 else 0) +
+                (if (!r.requestReason.isNullOrBlank()) 1 else 0)
+
+        val byKey = LinkedHashMap<String, AttendanceApprovalRecord>()
+        for (r in rows) {
+            val staff = r.staffId?.trim().orEmpty()
+            val key = if (staff.isBlank()) "id:${r.id}" else "$staff|${r.date.orEmpty()}"
+            val existing = byKey[key]
+            byKey[key] = when {
+                existing == null -> r
+                score(r) > score(existing) -> r
+                else -> existing
+            }
+        }
+        return byKey.values.toList()
+    }
 
     /** Whether the ACTIVE tab's backing cache has nothing to show yet. */
     private fun activeTabBackingIsEmpty(): Boolean = when (activeTab) {
@@ -758,6 +804,7 @@ class AttendanceHistoryFragment : Fragment() {
                 card.findViewById(R.id.tvHistoryItemStatus),
                 record,
             )
+            bindPenaltyNotice(card, record.resolvedPenaltyReason())
 
             // Open the punch-event log sheet on tap — mirrors the web
             // popup that lists every individual IN/OUT event with its
@@ -1394,11 +1441,8 @@ class AttendanceHistoryFragment : Fragment() {
                  else teamApprovalAttendanceRows()
             3 -> cachedAllApprovals.filterNot(::isRequestLinked)
             4 -> {
-                if (activeSubTab == 0) {
-                    cachedHrReview.filter { it.requestType != "remarks" && it.requestType != "correction" }
-                } else {
-                    cachedHrReview.filter { it.requestType == "remarks" || it.requestType == "correction" }
-                }
+                if (activeSubTab == 0) hrReviewAttendanceRows()
+                else hrReviewRequestRows()
             }
             5 -> cachedAllAttendance
             else -> emptyList()
@@ -1576,13 +1620,19 @@ class AttendanceHistoryFragment : Fragment() {
             // no fine). Now a day with no fine shows no banner.
             val fineBanner = card.findViewById<View>(R.id.llTeamFinesBanner)
             val tvFineAmount = card.findViewById<TextView>(R.id.tvTeamFineAmount)
+            val tvFineText = card.findViewById<TextView>(R.id.tvTeamFineText)
             val fineAmt = (record.lateFineDeduction ?: record.fineAmount) ?: 0.0
             if (showFines && fineAmt > 0.0) {
                 fineBanner.visibility = View.VISIBLE
+                tvFineText.text = record.lateMinutes?.takeIf { it > 0 }
+                    ?.let { "Late by ${it} min" }
+                    ?: "Attendance fine"
                 tvFineAmount.text = String.format(Locale.getDefault(), "Fine : ₹%.0f", fineAmt)
             } else {
                 fineBanner.visibility = View.GONE
             }
+
+            bindPenaltyNotice(card, record.resolvedPenaltyReason())
 
             // Name + employee id so two DIFFERENT staff who share a name (e.g.
             // duplicate "DHIVAGAR.B" accounts) are distinguishable — each row's
@@ -1612,8 +1662,8 @@ class AttendanceHistoryFragment : Fragment() {
                 tv.setTextColor(Color.parseColor("#067647"))
             }
             "absent" -> {
-                tv.text = "Absent"
-                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.text = if (record.hasAbsentPenalty()) "Absent · Penalty" else "Absent"
+                tv.setBackgroundResource(R.drawable.bg_pill_red_light)
                 tv.setTextColor(Color.parseColor("#B42318"))
             }
             "weekoff" -> {
@@ -1631,6 +1681,17 @@ class AttendanceHistoryFragment : Fragment() {
                 tv.setBackgroundResource(R.drawable.bg_chip_inactive)
                 tv.setTextColor(Color.parseColor("#475467"))
             }
+        }
+    }
+
+    private fun bindPenaltyNotice(card: View, reason: String?) {
+        val banner = card.findViewById<View>(R.id.llAttendancePenaltyBanner) ?: return
+        val reasonView = card.findViewById<TextView>(R.id.tvAttendancePenaltyReason)
+        if (reason.isNullOrBlank()) {
+            banner.visibility = View.GONE
+        } else {
+            banner.visibility = View.VISIBLE
+            reasonView.text = "Reason: $reason"
         }
     }
 

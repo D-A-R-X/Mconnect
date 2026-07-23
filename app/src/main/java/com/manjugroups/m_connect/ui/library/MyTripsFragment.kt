@@ -364,14 +364,9 @@ class MyTripsFragment : Fragment() {
                 TabType.COMPLETED -> isCompleted
             }
 
-            // Search Query Filter
-            val matchesSearch = if (searchQuery.isEmpty()) {
-                true
-            } else {
-                val placeName = visit.placeName.orEmpty().lowercase(Locale.getDefault())
-                val leadName = visit.leadName.orEmpty().lowercase(Locale.getDefault())
-                placeName.contains(searchQuery) || leadName.contains(searchQuery)
-            }
+            // Search Query Filter — client name OR phone number.
+            val matchesSearch =
+                com.manjugroups.m_connect.util.VisitSearch.matches(visit, searchQuery)
 
             matchesTab && matchesSearch
         }
@@ -429,7 +424,8 @@ class MyTripsFragment : Fragment() {
         val status = visit.status.lowercase(Locale.getDefault())
         val isCompleted = status in setOf("completed", "complete", "done", "closed")
         val isInProgress = status in setOf(
-            "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+            "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
+                    "on_site", "on-site", "picked_from_site"
         )
 
         if (session.isDriverMode) {
@@ -477,6 +473,11 @@ class MyTripsFragment : Fragment() {
             visitCategory = visit.visitCategory,
             cpType = visit.cpVisit?.cpType,
             clientMobile = visit.leadPhone,
+            lmoName = visit.lmoName,
+            deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                visit.scheduledDate,
+                visit.scheduledEndTime ?: visit.scheduledStartTime,
+            ),
         )
         parentFragmentManager.beginTransaction()
             .applySmoothTransitions()
@@ -600,7 +601,8 @@ class MyTripsFragment : Fragment() {
                 val status = visit.status.lowercase(Locale.getDefault())
                 val isCompleted = status in setOf("completed", "complete", "done", "closed")
                 val isInProgress = status in setOf(
-                    "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+                    "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
+                    "on_site", "on-site", "picked_from_site"
                 )
                 val isUpcoming = visit.scheduledDate > todayStr && !isCompleted
 
@@ -665,13 +667,23 @@ class MyTripsFragment : Fragment() {
                         btnTripAction.isEnabled = true // Clickable for reading details
                     }
                     isInProgress -> {
-                        val label = if (status == "arrived") "Reaching" else "Enroute"
+                        val label = when (status) {
+                            "arrived" -> "Reaching"
+                            "on_site", "on-site" -> "On Site"
+                            "picked_from_site" -> "Picked from Site"
+                            else -> "Enroute"
+                        }
                         tvStatus.text = label
                         statusPill.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
                         tvStatus.setTextColor(Color.parseColor("#B54708"))
                         statusDot.setBackgroundResource(R.drawable.bg_home_trip_status_dot)
 
-                        tvTripActionLabel.text = if (status == "arrived") "Complete Trip" else "Enroute"
+                        tvTripActionLabel.text = when (status) {
+                            "arrived" -> "Complete Trip"
+                            "on_site", "on-site" -> "Picked from Site"
+                            "picked_from_site" -> "End Trip"
+                            else -> "Enroute"
+                        }
                         btnTripAction.setBackgroundResource(R.drawable.bg_home_trip_action_ready)
                         ivTripActionIcon.visibility = View.GONE
                     }

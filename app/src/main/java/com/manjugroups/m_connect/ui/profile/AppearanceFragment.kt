@@ -34,7 +34,9 @@ class AppearanceFragment : Fragment() {
         }
 
         view.findViewById<View>(R.id.btnAppearanceBack).setOnClickListener {
-            parentFragmentManager.popBackStackImmediate()
+            // Async pop — popBackStackImmediate() rebuilds the destination on the
+            // tap and makes the back arrow feel frozen.
+            parentFragmentManager.popBackStack()
         }
     }
 }

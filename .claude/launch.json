@@ -1,0 +1,38 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "C:\\Users\\surya\\Projects\\manjusitedevelopment\\node_modules\\next\\dist\\bin\\next",
+        "dev",
+        "C:\\Users\\surya\\Projects\\manjusitedevelopment",
+        "--port",
+        "3100"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "travel-desk-dev",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "C:\\Users\\surya\\Projects\\travel-desk\\node_modules\\next\\dist\\bin\\next",
+        "dev",
+        "C:\\Users\\surya\\Projects\\travel-desk",
+        "--port",
+        "3200"
+      ],
+      "port": 3200
+    },
+    {
+      "name": "convex-dev",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": [
+        "/c",
+        "set \"PATH=C:\\Program Files\\nodejs;C:\\Users\\surya\\AppData\\Roaming\\npm;%PATH%\" && cd /d C:\\Users\\surya\\Projects\\manjusitedevelopment && set \"CONVEX_DEPLOY_KEY=dev:colorful-grouse-456|eyJ2MiI6IjcxZGE1ZGY4ZWVhMjRkMzU5OWVhNmFiNjZlMmE4ZTg2In0=\" && npx convex dev"
+      ],
+      "port": 3210
+    }
+  ]
+}

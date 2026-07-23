@@ -70,6 +70,7 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         val sessionsJson = arguments?.getString(ARG_SESSIONS).orEmpty()
         val hasOpen = arguments?.getBoolean(ARG_HAS_OPEN, false) ?: false
         val totalMinutes = arguments?.getInt(ARG_TOTAL_MIN, 0) ?: 0
+        val penaltyReason = arguments?.getString(ARG_PENALTY_REASON)
 
         // Sessions are handed in as a Gson JSON blob (carries every field —
         // source, address/machine, photo — without brittle pipe encoding).
@@ -85,7 +86,18 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         }
 
         renderHeader(view, dateIso, sessions, hasOpen, totalMinutes)
+        renderPenalty(view, penaltyReason)
         renderEvents(view, sessions)
+    }
+
+    private fun renderPenalty(root: View, reason: String?) {
+        val banner = root.findViewById<View>(R.id.llPunchLogPenalty)
+        if (reason.isNullOrBlank()) {
+            banner.visibility = View.GONE
+            return
+        }
+        banner.visibility = View.VISIBLE
+        root.findViewById<TextView>(R.id.tvPunchLogPenaltyReason).text = "Reason: $reason"
     }
 
     private fun renderHeader(
@@ -159,17 +171,28 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
                 addr.visibility = View.GONE
             }
 
-            // Captured punch photo (mobile clock in/out).
+            // Captured punch photo (mobile clock in/out). Tapping opens the
+            // shared full-screen viewer — the thumbnail is too small to verify
+            // who actually punched, which is the whole point of capturing it.
             val photo = row.findViewById<ImageView>(R.id.ivPunchEventPhoto)
             val pid = ev.photoId
             if (!pid.isNullOrBlank()) {
                 photo.visibility = View.VISIBLE
-                photo.load(
-                    com.manjugroups.m_connect.BuildConfig.BASE_URL +
-                        "api/storage/serve?storageId=" + pid,
-                )
+                // resolve() handles both a bare storageId and an already-
+                // resolved URL, and repairs dev/localhost storage hosts.
+                val url = com.manjugroups.m_connect.ui.common.ProfilePhotos
+                    .resolve(pid) ?: pid
+                photo.load(url)
+                photo.isClickable = true
+                photo.setOnClickListener {
+                    context?.let { ctx ->
+                        com.manjugroups.m_connect.ui.common.ImagePreviewDialog.show(ctx, url)
+                    }
+                }
             } else {
                 photo.visibility = View.GONE
+                photo.setOnClickListener(null)
+                photo.isClickable = false
             }
 
             list.addView(row)
@@ -240,6 +263,7 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         private const val ARG_SESSIONS = "sessions"
         private const val ARG_HAS_OPEN = "has_open"
         private const val ARG_TOTAL_MIN = "total_min"
+        private const val ARG_PENALTY_REASON = "penalty_reason"
 
         fun newInstance(record: AttendanceRecord): AttendancePunchLogSheet {
             // SessionData isn't Parcelable — hand the sessions through as a
@@ -252,6 +276,7 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
                     ARG_SESSIONS to json,
                     ARG_HAS_OPEN to (record.hasOpenSession == true),
                     ARG_TOTAL_MIN to (record.totalMinutes ?: 0),
+                    ARG_PENALTY_REASON to record.resolvedPenaltyReason(),
                 )
             }
         }

@@ -14,7 +14,7 @@ data class DriverTrip(
     val endKm: String,
     val endImage: String,
     val endTime: String,
-    val status: String, // "started", "reached", "completed"
+    val status: String, // "started", "reached", "picked_from_site", "completed"
     val totalDistance: String
 )
 
@@ -218,17 +218,94 @@ class SessionManager(context: Context) {
      * the Admin Fleet portal instead. Designation alone can't tell them apart,
      * which is why department is now persisted on the session.
      */
+    /**
+     * The external travel agency itself. The backend has no `staff` row for
+     * an agency, so it synthesises this designation on the auth payload —
+     * it is the only signal the client gets.
+     */
+    val isExternalFleetAgency: Boolean
+        get() = (designation ?: "").trim()
+            .equals("External Fleet", ignoreCase = true)
+
+    /**
+     * A driver created BY an external agency. Same synthesised-designation
+     * trick as [isExternalFleetAgency]. Deliberately distinct from
+     * [isDriverMode]: an agency driver has no staff record, no attendance and
+     * no fleet permissions, so they get a stripped shell (assigned trips
+     * only, no bottom nav / bell / clock-in).
+     */
+    val isExternalFleetDriver: Boolean
+        get() = (designation ?: "").trim()
+            .equals("External Fleet Driver", ignoreCase = true)
+
+    /** Either external principal — neither has a staff record to look up. */
+    val isExternalFleetPrincipal: Boolean
+        get() = isExternalFleetAgency || isExternalFleetDriver
+
     val isFleetAdminDriver: Boolean
-        get() = (designation ?: "").trim().equals("Driver", ignoreCase = true) &&
+        get() = isDriverDesignation(designation) &&
             (department ?: "").trim().equals("Administration", ignoreCase = true)
 
+    /**
+     * Who gets the internal fleet-dispatch Home (the Pending / Assigned /
+     * Completed allocation queue). Two populations:
+     *   1. Driver • Administration by designation ([isFleetAdminDriver]).
+     *   2. Any internal staff (e.g. a Fleet Assistant Manager) who explicitly
+     *      holds the fleet permission in IAM — mirroring the web, where the
+     *      fleet page is gated on marketing.fleet.view / .assign.
+     *
+     * Permission is read from the EXPLICIT [iamPermissions] set (not
+     * hasPermission), so the blanket `isAdmin` flag doesn't pull every admin
+     * into the dispatcher Home — the same phantom-key caution as
+     * [canViewVpDashboard]. VP / GM / super-admin users keep their company
+     * dashboard even if they also hold a fleet key.
+     */
+    val isInternalFleetDispatcher: Boolean
+        get() {
+            if (isExternalFleetPrincipal) return false
+            // Driver • Administration IS the designation-based dispatcher.
+            if (isFleetAdminDriver) return true
+            // Any OTHER driver (e.g. Driver • Transport) only drives the trips
+            // assigned to them — they never get the dispatch queue / Allocate,
+            // even if a fleet permission is present. They fall through to the
+            // driver's own-trips Home instead.
+            if (isDriverMode) return false
+            if (canViewVpDashboard()) return false
+            return iamPermissions.contains("marketing.fleet.assign") ||
+                iamPermissions.contains("marketing.fleet.view")
+        }
+
+    /**
+     * An internal staff driver (e.g. Driver • Transport) who DRIVES fleet trips
+     * assigned to them — they get the same granular Start → Reached → Picked →
+     * End flow the external agency driver has, backed by the mms-fleet driver
+     * endpoints. Excludes the dispatcher (Driver • Administration) and the
+     * external agency principals.
+     */
+    val isInternalFleetDriver: Boolean
+        get() = !isExternalFleetPrincipal && isDriverMode && !isFleetAdminDriver
+
     val isDriverMode: Boolean
-        // A fleet administrator is never in driver mode — they have no trips of
-        // their own, and driver mode would put them on the "No Driver Trips"
-        // home instead of their portal.
-        get() = !isFleetAdminDriver &&
-            (fleetDriverByBackend ||
-                (designation ?: "").trim().equals("Driver", ignoreCase = true))
+        // Both driver populations get the driver screen. "Driver • Transport"
+        // sees only their own assigned trips; "Driver • Administration" sees
+        // the same UI plus the dispatch list and the Allocate action
+        // (isFleetAdminDriver). The Admin Fleet portal is NOT for either of
+        // them — it belongs to external agencies.
+        get() = fleetDriverByBackend || isDriverDesignation(designation)
+
+    /**
+     * True for any driver designation, including qualified forms like
+     * "Driver (Transport)" / "Driver - Transport" — not just the bare
+     * "Driver". Matching only the exact word left internal transport drivers
+     * out of the driver shell and the fleet-trip routes.
+     */
+    private fun isDriverDesignation(value: String?): Boolean {
+        val d = (value ?: "").trim().lowercase(java.util.Locale.US)
+        return d == "driver" ||
+            d.startsWith("driver ") ||
+            d.startsWith("driver(") ||
+            d.startsWith("driver-")
+    }
 
     var isNotificationEnabled: Boolean
         get() = getCachedBoolean(KEY_IS_NOTIFICATION_ENABLED, true)
@@ -374,6 +451,19 @@ class SessionManager(context: Context) {
                 trip.put("totalDistance", "0.0")
             }
             
+            obj.put(visitId, trip)
+            setCachedString(KEY_DRIVER_TRIPS, obj.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun saveDriverTripPickedFromSite(visitId: String) {
+        val tripsJson = getCachedString(KEY_DRIVER_TRIPS, "{}") ?: "{}"
+        try {
+            val obj = org.json.JSONObject(tripsJson)
+            val trip = obj.optJSONObject(visitId) ?: org.json.JSONObject()
+            trip.put("status", "picked_from_site")
             obj.put(visitId, trip)
             setCachedString(KEY_DRIVER_TRIPS, obj.toString())
         } catch (e: Exception) {

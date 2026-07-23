@@ -57,9 +57,14 @@ object PushTokenManager {
         "chat-dm", "chat-channel" -> CHANNEL_CHAT
         // Tasks / daily work
         "task-assigned", "daily-task", "task-due" -> CHANNEL_TASKS
-        // Visits (CP / SV)
+        // Visits (CP / SV) + fleet trip allocation. The fleet-assigner alert
+        // fires when a new trip lands in the dispatcher's queue awaiting a
+        // vehicle — it rides the visits channel so it bubbles a heads-up
+        // instead of the quiet general fallback.
         "cp-visit-assigned", "site-visit-assigned", "field-visit",
-        "client-place-visit" -> CHANNEL_VISITS
+        "client-place-visit",
+        "marketing-fleet-new-trip-assigner",
+        "marketing-fleet-unassigned-reporting-officer" -> CHANNEL_VISITS
         // Approvals / requests (leave, permission, WFH, attendance)
         "leave-request", "leave-decision",
         "permission-request", "permission-decision",
@@ -166,6 +171,33 @@ object PushTokenManager {
             true
         } catch (e: Exception) {
             Log.e("PushTokenManager", "syncCurrentToken: failed to sync token", e)
+            false
+        }
+    }
+
+    /**
+     * Register the FCM token for an external-agency driver via the travel-desk
+     * route. They have no staff record, so the MMS registerPushDevice path
+     * would 401 (and trip the logout) — this is their own channel, so trip
+     * allocations can push them.
+     */
+    suspend fun syncAgencyDriverToken(context: Context, session: SessionManager): Boolean {
+        if (!session.isLoggedIn) return false
+        if (!hasNotificationPermission(context)) return false
+        if (!ensureFirebaseInitialized(context)) return false
+        return try {
+            val token = FirebaseMessaging.getInstance().token.await()
+            com.manjugroups.m_connect.network.TravelDeskApi.create().registerPushToken(
+                session.bearerToken,
+                com.manjugroups.m_connect.network.TravelDeskPushRegisterRequest(
+                    pushToken = token,
+                    platform = "android",
+                ),
+            )
+            session.pushToken = token
+            true
+        } catch (e: Exception) {
+            Log.e("PushTokenManager", "syncAgencyDriverToken failed", e)
             false
         }
     }

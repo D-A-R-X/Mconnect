@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_leave_sheet"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="24dp">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="#E4E7EC" />
+
+        <TextView
+            android:id="@+id/tvManageTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvManageWhen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:textColor="#667085"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvManageAddress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvManageVehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvManageDriver"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:fontFamily="@font/inter_regular"
+            android:textColor="#667085"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Progress"
+            android:textColor="#667085"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvManageProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_home_trip_status_progress"
+            android:fontFamily="@font/inter_semibold"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:textColor="#B54708"
+            android:textSize="12sp" />
+
+        <!-- Trip stats bar — the 5-stage progress the driver advances live.
+             Segments fill green up to the current stage; labels sit under. -->
+        <LinearLayout
+            android:id="@+id/manageStatsBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/statSeg0"
+                android:layout_width="0dp"
+                android:layout_height="5dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_progress_line_inactive" />
+
+            <View
+                android:id="@+id/statSeg1"
+                android:layout_width="0dp"
+                android:layout_height="5dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_progress_line_inactive" />
+
+            <View
+                android:id="@+id/statSeg2"
+                android:layout_width="0dp"
+                android:layout_height="5dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_progress_line_inactive" />
+
+            <View
+                android:id="@+id/statSeg3"
+                android:layout_width="0dp"
+                android:layout_height="5dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_progress_line_inactive" />
+
+            <View
+                android:id="@+id/statSeg4"
+                android:layout_width="0dp"
+                android:layout_height="5dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_progress_line_inactive" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/statLbl0"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="start"
+                android:text="Assigned"
+                android:textColor="#98A2B3"
+                android:textSize="8.5sp" />
+
+            <TextView
+                android:id="@+id/statLbl1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Picked CP"
+                android:textColor="#98A2B3"
+                android:textSize="8.5sp" />
+
+            <TextView
+                android:id="@+id/statLbl2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="On Site"
+                android:textColor="#98A2B3"
+                android:textSize="8.5sp" />
+
+            <TextView
+                android:id="@+id/statLbl3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Picked Site"
+                android:textColor="#98A2B3"
+                android:textSize="8.5sp" />
+
+            <TextView
+                android:id="@+id/statLbl4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="end"
+                android:text="Dropped"
+                android:textColor="#98A2B3"
+                android:textSize="8.5sp" />
+        </LinearLayout>
+
+        <!-- Trip record: the driver's start/end odometer photos + km. Shown
+             for started/completed trips; each half falls back to an empty
+             state when its photo/km wasn't captured. -->
+        <LinearLayout
+            android:id="@+id/tripRecord"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="12dp"
+                android:background="#EEF0F4" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Trip record"
+                android:textColor="#111827"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Start"
+                        android:textColor="#667085"
+                        android:textSize="11sp" />
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="120dp"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/bg_trip_detail_map_card"
+                        android:clipToOutline="true">
+
+                        <ImageView
+                            android:id="@+id/ivStartPhoto"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/tvStartPhotoEmpty"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_regular"
+                            android:text="No start photo"
+                            android:textColor="#98A2B3"
+                            android:textSize="11sp" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tvStartKm"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#344054"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="End"
+                        android:textColor="#667085"
+                        android:textSize="11sp" />
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="120dp"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/bg_trip_detail_map_card"
+                        android:clipToOutline="true">
+
+                        <ImageView
+                            android:id="@+id/ivEndPhoto"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/tvEndPhotoEmpty"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="@font/inter_regular"
+                            android:text="No end photo"
+                            android:textColor="#98A2B3"
+                            android:textSize="11sp" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tvEndKm"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:textColor="#344054"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvTotalKm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#667085"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvManageNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_regular"
+            android:textColor="#667085"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/manageActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnManageReassign"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_button_primary"
+                android:backgroundTint="#0B61CA"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Reassign"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnManageRemove"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_btn_reject_outline_red"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Remove driver"
+                android:textAllCaps="false"
+                android:textColor="#B42318"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -195,7 +195,7 @@ class LeavesFragment : Fragment() {
             binding.dotScopeBadge.visibility = if (state.pendingApprovals.isNotEmpty()) View.VISIBLE else View.GONE
         }
 
-        // My Leaves = own history. Team Leaves = reporting subtree only. All
+        // My Leaves = own history. Team Leaves = direct reports only. All
         // Leaves = every org leave (viewAll). Team and All are now DISTINCT
         // datasets (previously both showed the all-leaves set, so Team was
         // wrong for viewAll users).
@@ -316,7 +316,7 @@ class LeavesFragment : Fragment() {
     }
 
     /** The approver dataset for the active scope: Team Leaves draws from the
-     *  reporting-subtree set, All Leaves from the full (viewAll) set. */
+     *  direct-report set, All Leaves from the full (viewAll) set. */
     private fun scopedApprovals(state: LeavesState): List<LeaveData> =
         if (activeScope == LeaveScope.TEAM) state.teamLeaves else state.pendingApprovals
 
