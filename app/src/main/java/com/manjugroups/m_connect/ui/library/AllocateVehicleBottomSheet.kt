@@ -339,9 +339,9 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.rowAssignSource.visibility = View.VISIBLE
         binding.btnSourceInternal.setOnClickListener { applyAssignMode("internal") }
         binding.btnSourceExternal.setOnClickListener {
+            // Just reveal the agency field — the picker opens only when the user
+            // taps "Select agency", not automatically.
             applyAssignMode("external")
-            // Next step: surface the available agencies right away.
-            openAgencyDropdown()
         }
         binding.agencySelector.setOnClickListener { openAgencyDropdown() }
         applyAssignMode("none")
@@ -399,8 +399,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
                 selectedAgencyId = a.id
                 selectedAgencyName = a.name
                 binding.tvAgencyValue.text = a.name
-                // Clicking an agency assigns the trip to it immediately.
-                submitExternalAllot()
+                // Just fill the field — the visible "Allot" button confirms.
             }
         }
     }
