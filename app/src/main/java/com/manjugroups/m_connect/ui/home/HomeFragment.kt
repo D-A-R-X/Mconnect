@@ -870,14 +870,29 @@ class HomeFragment : Fragment() {
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
+            // Same rule as the card badge: a trip never started whose slot has
+            // passed is "expired". It belongs in Completed (badged Expired), NOT
+            // in Upcoming — a lost trip can't still read as pending work.
+            val doneSet = setOf("completed", "complete", "done", "closed")
+            val inProgressSet = setOf(
+                "in-progress", "in_progress", "ongoing", "started", "active",
+                "arrived", "on_site", "on-site", "picked_from_site",
+            )
+            fun isExpired(v: TodayVisit): Boolean {
+                val s = v.status.lowercase(Locale.getDefault())
+                return s !in doneSet && s !in inProgressSet &&
+                    com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                        v.scheduledDate, v.scheduledStartTime, isDone = false,
+                    )
+            }
             when (selectedTab) {
                 "upcoming" -> unfilteredVisits.filter {
                     val s = it.status.lowercase(Locale.getDefault())
-                    s !in setOf("completed", "complete", "done", "closed")
+                    s !in doneSet && !isExpired(it)
                 }
                 "completed" -> unfilteredVisits.filter {
                     val s = it.status.lowercase(Locale.getDefault())
-                    s in setOf("completed", "complete", "done", "closed")
+                    s in doneSet || isExpired(it)
                 }
                 else -> unfilteredVisits
             }
