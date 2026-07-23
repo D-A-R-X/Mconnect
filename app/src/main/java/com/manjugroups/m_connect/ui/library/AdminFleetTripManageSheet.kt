@@ -35,7 +35,13 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 it.setBackgroundResource(android.R.color.transparent)
+                // The host defaults to match_parent, so an EXPANDED sheet leaves
+                // a white gap below short content. Wrap it to the content height.
+                it.layoutParams = it.layoutParams.apply {
+                    height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                }
                 BottomSheetBehavior.from(it).apply {
+                    isFitToContents = true
                     state = BottomSheetBehavior.STATE_EXPANDED
                     skipCollapsed = true
                 }

@@ -66,9 +66,18 @@ object SearchableSelectionDialog {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(Color.parseColor("#667085"))
         }
-        val scroll = RecyclerView(context).apply {
+        // Cap the list at 460dp but let it WRAP to the actual content — a short
+        // list (e.g. one agency) no longer leaves a big empty gap below it.
+        val maxListHeight = dp(context, 460)
+        val scroll = object : RecyclerView(context) {
+            override fun onMeasure(widthSpec: Int, heightSpec: Int) {
+                super.onMeasure(
+                    widthSpec,
+                    MeasureSpec.makeMeasureSpec(maxListHeight, MeasureSpec.AT_MOST),
+                )
+            }
+        }.apply {
             layoutManager = LinearLayoutManager(context)
-            setHasFixedSize(true)
             this.adapter = adapter
         }
         val search = EditText(context).apply {
@@ -129,7 +138,7 @@ object SearchableSelectionDialog {
             ))
             addView(scroll, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(context, 460)
+                LinearLayout.LayoutParams.WRAP_CONTENT,
             ))
         }
 

@@ -108,7 +108,13 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             it.elevation = 0f
             it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            // Wrap the sheet to its content — the host defaults to match_parent,
+            // which leaves a white gap below short content (e.g. external mode).
+            it.layoutParams = it.layoutParams.apply {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
             val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
+            behavior.isFitToContents = true
             behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
             behavior.skipCollapsed = true
         }
@@ -344,7 +350,9 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             applyAssignMode("external")
         }
         binding.agencySelector.setOnClickListener { openAgencyDropdown() }
-        applyAssignMode("none")
+        // Open on Internal (MFPL) by default — the vehicle form shows straight
+        // away; the dispatcher taps "External agency" only when they want it.
+        applyAssignMode("internal")
     }
 
     private fun applyAssignMode(mode: String) {
