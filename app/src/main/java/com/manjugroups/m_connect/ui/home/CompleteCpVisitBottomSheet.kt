@@ -31,6 +31,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.util.ongoingOnly
 import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
 import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
@@ -3431,7 +3432,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = "Select project",
-            options = items.map { p ->
+            // Site visits are scheduled only against ongoing projects.
+            options = items.ongoingOnly().map { p ->
                 SearchableOption(
                     item = p,
                     title = p.name ?: "Unnamed project",

@@ -322,10 +322,10 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         // "Add project" action is reachable even with an empty list.
         if (projects.isEmpty() && !projectsLoading) loadProjects()
 
-        // A new log can only be filed against an active project — completed
-        // projects are excluded from the picker (you don't log progress on a
-        // finished job). Missing/unknown projects can be created inline.
-        val selectable = projects.filterNot { it.status.equals("completed", ignoreCase = true) }
+        // A new log is filed only against an ongoing project — matches the
+        // booking/CP/SV pickers and the web's "Ongoing" filter. Completed (and
+        // proposed/other) projects are hidden; missing ones can be created inline.
+        val selectable = projects.filter { it.status.equals("ongoing", ignoreCase = true) }
         val options = selectable.map { SearchableOption(it, it.name ?: "Untitled project", it.status) }
         SearchableSelectionDialog.show(
             requireContext(),
