@@ -437,7 +437,9 @@ class MainActivity : AppCompatActivity() {
         // the first tab reads "Trips" with a trip icon for them. Only the
         // label and icon change; it still opens HomeFragment, which already
         // renders the driver's Today's Trip surface.
-        val homeIsTrips = session.isDriverMode
+        // Drivers AND the internal fleet dispatcher (incl. a fleet manager)
+        // have a trip-list Home, so their first tab reads "Trips".
+        val homeIsTrips = session.isDriverMode || session.isInternalFleetDispatcher
         val homeIcon = if (homeIsTrips) R.drawable.ic_admin_tab_trips else R.drawable.ic_nav_home
         tabs = listOf(
             TabConfig(
